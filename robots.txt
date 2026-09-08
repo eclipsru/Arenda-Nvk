@@ -1,0 +1,8 @@
+User-agent: *
+Allow: /
+Disallow: /admin.php
+
+User-agent: Yandex
+Allow: /
+
+Sitemap: https://Arenda.Nvk.ru/sitemap.xml
