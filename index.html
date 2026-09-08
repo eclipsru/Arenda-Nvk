@@ -216,23 +216,8 @@
   .forgot-back:hover{color:var(--dark)}
   .field input[readonly]{opacity:.75}
 
-  /* ===== ЛИЧНЫЙ КАБИНЕТ ===== */
-  #userName{cursor:pointer;transition:.15s;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:inline-block;vertical-align:middle}
-  #userName:hover{color:var(--orange)}
-  #userName::after{content:" ▾";color:var(--orange);font-size:12px}
-  .modal-cab{max-width:520px;max-height:88vh;overflow-y:auto}
-  .field input[type="date"]{color-scheme:dark}
-  .cab-note{display:flex;gap:9px;align-items:flex-start;background:rgba(255,143,31,.08);border:1px solid rgba(255,143,31,.25);border-radius:8px;padding:10px 12px;font-size:13px;color:#e0b98c;margin-bottom:18px;line-height:1.45}
-  .cab-note .ic{flex:none;margin-top:2px;width:16px;height:16px}
-  .cab-row{display:flex;gap:10px}
-  .cab-row .field{flex:1;min-width:0}
-  .order-card{background:#171a21;border:1px solid var(--line);border-radius:10px;padding:14px 16px;margin-bottom:12px}
-  .order-card .oc-top{display:flex;justify-content:space-between;gap:10px;align-items:baseline;margin-bottom:6px}
-  .order-card .oc-badge{flex:none;font-size:12px;font-weight:700;color:#7ee08a;background:rgba(46,160,67,.15);border:1px solid rgba(46,160,67,.35);border-radius:20px;padding:2px 10px;white-space:nowrap}
-  .order-card .oc-date{font-size:13px;color:var(--gray);white-space:nowrap}
-  .order-card .oc-tools{font-weight:700;font-size:15px;margin-bottom:4px}
-  .order-card .oc-meta{font-size:13px;color:var(--gray);line-height:1.5}
-  .cab-empty{text-align:center;color:var(--gray);padding:26px 10px;font-size:14px;line-height:1.6}
+  /* ===== ЛИЧНЫЙ КАБИНЕТ (на отдельной странице kabinet.html) ===== */
+  #userName{max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:inline-block;vertical-align:middle}
   .modal .field:last-of-type{margin-bottom:20px}
 
   /* ORDER MODAL (заявка на аренду) */
@@ -294,11 +279,10 @@
       <a href="#contact">Контакты</a>
     </nav>
     <div class="nav-phone">
-      <a href="tel:+79081731410" class="tel">+7 (908) 173-14-10</a>
       <button class="btn outline" id="authBtn" type="button">Войти</button>
       <span id="userBox" style="display:none;align-items:center;gap:10px">
-        <span id="userName" style="font-weight:700" title="Открыть личный кабинет" role="button" tabindex="0"></span>
-        <button class="btn outline" id="cabBtn" type="button">Кабинет</button>
+        <span id="userName" style="font-weight:700"></span>
+        <a class="btn outline" id="cabBtn" href="kabinet.html">Кабинет</a>
         <button class="btn outline" id="logoutBtn" type="button">Выйти</button>
       </span>
     </div>
@@ -314,7 +298,7 @@
       <p>Электро-, строительный и садовый инструмент в аренду посуточно. Исправная техника, честные цены, выдача в день обращения.</p>
       <div class="hero-actions">
         <a href="#catalog" class="btn big">Смотреть каталог</a>
-        <a href="tel:+79081731410" class="btn big outline" style="color:#fff;border-color:#fff">Позвонить</a>
+        <a href="tel:+79081732475" class="btn big outline" style="color:#fff;border-color:#fff">Позвонить</a>
       </div>
       <div class="badges">
         <div class="badge"><span class="ico"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M21.8 10A10 10 0 1 1 17 3.34"/><path d="m9 11 3 3L22 4"/></svg></span> Проверенный инструмент</div>
@@ -352,7 +336,7 @@
         <div class="cat-help">
           <b>Не нашли нужное?</b>
           <p>Позвоните — скорее всего, инструмент есть на складе.</p>
-          <a href="tel:+79081731410" class="btn outline">Позвонить</a>
+          <a href="tel:+79081732475" class="btn outline">Позвонить</a>
         </div>
       </aside>
 
@@ -408,10 +392,22 @@
     <div>
       <h2>Свяжитесь с нами</h2>
       <p class="lead">Оставьте заявку или позвоните — поможем подобрать инструмент и забронируем его для вас.</p>
-      <div class="contact-item"><span class="ico"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg></span><div><b>+7 (908) 173-14-10</b><span>Ежедневно, приём заявок</span></div></div>
-      <div class="contact-item"><span class="ico"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 10c0 4.99-5.54 10.19-7.4 11.8a1 1 0 0 1-1.2 0C9.54 20.19 4 14.99 4 10a8 8 0 0 1 16 0"/><circle cx="12" cy="10" r="3"/></svg></span><div><b>г. Новочеркасск, ул. Примерная, 1</b><span>Самовывоз и доставка по городу</span></div></div>
+      <div class="contact-item"><span class="ico"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg></span><div><b>+7 (908) 173-24-75</b><span>Ежедневно, приём заявок</span></div></div>
+      <div class="contact-item"><span class="ico"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 10c0 4.99-5.54 10.19-7.4 11.8a1 1 0 0 1-1.2 0C9.54 20.19 4 14.99 4 10a8 8 0 0 1 16 0"/><circle cx="12" cy="10" r="3"/></svg></span><div><b>г. Новочеркасск, ул. Маресьева, д. 36</b><span>Самовывоз и доставка по городу</span></div></div>
       <div class="contact-item"><span class="ico"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></span><div><b>Пн–Вс: 8:00 – 20:00</b><span>Без выходных</span></div></div>
       <div class="contact-item"><span class="ico"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><rect width="20" height="16" x="2" y="4" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/></svg></span><div><b><a href="/cdn-cgi/l/email-protection" class="__cf_email__" data-cfemail="a2cbccc4cde2d2d0cdc9c3d68fccd4c98cd0d7">[email&#160;protected]</a></b><span>Ответим на письмо в течение дня</span></div></div>
+      <div class="pickup-map" style="height:260px;margin-top:8px">
+        <div class="pm-fallback">
+          <div class="pm-pin"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 10c0 4.99-5.54 10.19-7.4 11.8a1 1 0 0 1-1.2 0C9.54 20.19 4 14.99 4 10a8 8 0 0 1 16 0"/><circle cx="12" cy="10" r="3"/></svg></div>
+          <b>г. Новочеркасск, ул. Маресьева, д. 36</b>
+          <p>Карта загрузится при подключении к интернету</p>
+        </div>
+        <iframe title="Как нас найти: г. Новочеркасск, ул. Маресьева, д. 36" loading="lazy"
+          src="https://www.openstreetmap.org/export/embed.html?bbox=40.0918652%2C47.4476182%2C40.1098652%2C47.4576182&amp;layer=mapnik&amp;marker=47.4526182%2C40.1008652"></iframe>
+      </div>
+      <p class="pm-caption"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 10c0 4.99-5.54 10.19-7.4 11.8a1 1 0 0 1-1.2 0C9.54 20.19 4 14.99 4 10a8 8 0 0 1 16 0"/><circle cx="12" cy="10" r="3"/></svg> Наш склад: г. Новочеркасск, ул. Маресьева, д. 36 ·
+        <a href="https://yandex.ru/maps/?pt=40.1008652%2C47.4526182&amp;z=17" target="_blank" rel="noopener">Открыть в Яндекс Картах</a></p>
+
     </div>
 
     <div class="cta-card">
@@ -419,7 +415,7 @@
       <h3>Заявка на аренду</h3>
       <p>Заполните короткую форму — можно выбрать сразу несколько инструментов. Перезвоним и подтвердим бронь.</p>
       <button type="button" class="btn" id="openOrderBtn">Оставить заявку</button>
-      <p class="form-note">Или позвоните: <a href="tel:+79081731410" style="color:var(--orange);font-weight:700">+7 (908) 173-14-10</a></p>
+      <p class="form-note">Или позвоните: <a href="tel:+79081732475" style="color:var(--orange);font-weight:700">+7 (908) 173-24-75</a></p>
     </div>
   </div>
 </section>
@@ -460,65 +456,6 @@
       <button type="submit" class="btn" id="authSubmit">Войти</button>
       <a href="#" id="backToLogin" class="forgot-back" style="display:none">← Вернуться ко входу</a>
     </form>
-  </div>
-</div>
-
-<!-- ЛИЧНЫЙ КАБИНЕТ -->
-<div class="modal-overlay" id="cabModal">
-  <div class="modal modal-cab">
-    <button class="close" id="cabClose" type="button">&times;</button>
-    <h3>Личный кабинет</h3>
-    <p class="msub" id="cabGreet"></p>
-
-    <div class="tabs">
-      <button class="tab active" id="cabTabData" type="button">Мои данные</button>
-      <button class="tab" id="cabTabHist" type="button">История аренды</button>
-    </div>
-
-    <!-- ВКЛАДКА: МОИ ДАННЫЕ -->
-    <div id="cabDataPane">
-      <div class="cab-note">
-        <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
-        <span>Паспортные данные нужны для оформления договора аренды — заполните один раз, и на складе не придётся переписывать их вручную. Данные видны только вам и менеджеру проката.</span>
-      </div>
-      <div class="auth-err" id="cabErr"></div>
-      <div class="auth-ok" id="cabOk"></div>
-      <form id="cabForm">
-        <div class="field">
-          <label for="cabName">Имя</label>
-          <input type="text" id="cabName" placeholder="Иван" autocomplete="name" />
-        </div>
-        <div class="field">
-          <label for="cabPhone">Телефон</label>
-          <input type="tel" id="cabPhone" placeholder="+7 (900) 000-00-00" autocomplete="tel" />
-        </div>
-        <label class="tools-label" style="margin-top:20px">Паспортные данные</label>
-        <div class="cab-row">
-          <div class="field">
-            <label for="cabPassNum">Серия и номер</label>
-            <input type="text" id="cabPassNum" placeholder="4510 123456" maxlength="11" inputmode="numeric" />
-          </div>
-          <div class="field">
-            <label for="cabPassDate">Дата выдачи</label>
-            <input type="date" id="cabPassDate" />
-          </div>
-        </div>
-        <div class="field">
-          <label for="cabPassBy">Кем выдан</label>
-          <input type="text" id="cabPassBy" placeholder="Отделом МВД по г. Новочеркасску" />
-        </div>
-        <div class="field">
-          <label for="cabPassAddr">Адрес регистрации</label>
-          <input type="text" id="cabPassAddr" placeholder="г. Новочеркасск, ул. Московская, д. 1" autocomplete="street-address" />
-        </div>
-        <button type="submit" class="btn" id="cabSave">Сохранить</button>
-      </form>
-    </div>
-
-    <!-- ВКЛАДКА: ИСТОРИЯ АРЕНДЫ -->
-    <div id="cabHistPane" style="display:none">
-      <div id="cabOrders"></div>
-    </div>
   </div>
 </div>
 
@@ -596,7 +533,7 @@
       <li><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg> <b>Поломка:</b> мелкий расходник (диски, коронки, леска) — за счёт арендатора. Капремонт неисправного по вине арендатора инструмента — тоже.</li>
       <li><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M14 18V6a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v11a1 1 0 0 0 1 1h2"/><path d="M15 18H9"/><path d="M19 18h2a1 1 0 0 0 1-1v-3.65a1 1 0 0 0-.22-.62l-3.48-4.35A1 1 0 0 0 17.52 8H14"/><circle cx="17" cy="18" r="2"/><circle cx="7" cy="18" r="2"/></svg> <b>Доставка:</b> по Новочеркасску — оформляется в заявке, стоимость уточнит менеджер.</li>
     </ul>
-    <a href="tel:+79081731410" class="btn" style="width:100%;text-align:center">Позвонить и уточнить</a>
+    <a href="tel:+79081732475" class="btn" style="width:100%;text-align:center">Позвонить и уточнить</a>
   </div>
 </div>
 
@@ -604,7 +541,7 @@
 <footer>
   <div class="container foot">
     <div>© <span id="year"></span> ПрокатИнструмента, Новочеркасск. Все права защищены.</div>
-    <div><a href="#catalog">Каталог</a> &nbsp;·&nbsp; <a href="#contact">Контакты</a> &nbsp;·&nbsp; <a href="tel:+79081731410">+7 (908) 173-14-10</a></div>
+    <div><a href="#catalog">Каталог</a> &nbsp;·&nbsp; <a href="#contact">Контакты</a> &nbsp;·&nbsp; <a href="tel:+79081732475">+7 (908) 173-24-75</a></div>
   </div>
 </footer>
 
@@ -696,7 +633,7 @@ const TOOLS = [
         '<div style="margin-bottom:12px;color:var(--gray)"><svg class="ic" style="width:46px;height:46px" viewBox="0 0 24 24" aria-hidden="true"><path d="m15 12-8.373 8.373a1 1 0 1 1-3-3L12 9"/><path d="m18 15 4-4"/><path d="m21.5 11.5-1.914-1.914A2 2 0 0 1 19 8.172V7l-2.26-2.26a6 6 0 0 0-4.202-1.756L9 2.96l.92.82A6.18 6.18 0 0 1 12 8.4V10l2 2h1.172a2 2 0 0 1 1.414.586L18.5 14.5"/></svg></div>' +
         '<h3 style="margin-bottom:8px">Инструменты этой категории скоро появятся</h3>' +
         '<p style="color:var(--gray);margin-bottom:18px">Уже сейчас их можно забронировать по телефону — уточните наличие.</p>' +
-        '<a href="tel:+79081731410" class="btn outline">Позвонить</a></div>';
+        '<a href="tel:+79081732475" class="btn outline">Позвонить</a></div>';
       }
       return;
     }
@@ -1179,14 +1116,14 @@ const TOOLS = [
           if(!name){ showErr('Введите имя.'); return; }
           const { data, error } = await sb.auth.signUp({ email: login, password: pass, options:{ data:{ name: name } } });
           if(error) throw error;
-          if(data.session){ sbUser = data.user; showOk('Готово! Аккаунт создан.'); setTimeout(()=>{ closeModal(); refreshUI(); }, 800); }
+          if(data.session){ sbUser = data.user; showOk('Готово! Аккаунт создан.'); finishAuth(800); }
           else { showOk('Аккаунт создан! Подтвердите e-mail по письму и войдите.'); }
         }else{
           const { data, error } = await sb.auth.signInWithPassword({ email: login, password: pass });
           if(error) throw error;
           sbUser = data.user;
           showOk('Вход выполнен!');
-          setTimeout(()=>{ closeModal(); refreshUI(); }, 600);
+          finishAuth(600);
         }
       }catch(err){
         showErr(authErrorText(err.message));
@@ -1205,13 +1142,13 @@ const TOOLS = [
       saveUsers(users);
       store.set(SESSION_KEY, login);
       showOk('Готово! Аккаунт создан.');
-      setTimeout(()=>{ closeModal(); refreshUI(); }, 800);
+      finishAuth(800);
     }else{
       if(!users[login]){ showErr('Пользователь не найден. Зарегистрируйтесь.'); return; }
       if(users[login].pass !== pass){ showErr('Неверный пароль.'); return; }
       store.set(SESSION_KEY, login);
       showOk('Вход выполнен!');
-      setTimeout(()=>{ closeModal(); refreshUI(); }, 600);
+      finishAuth(600);
     }
   });
 
@@ -1233,19 +1170,9 @@ const TOOLS = [
   }
 
   // ================== ЛИЧНЫЙ КАБИНЕТ ==================
-  // Профиль (телефон + паспорт) и история аренды.
-  // Supabase: профиль хранится в user_metadata пользователя, история — в таблице 'orders'.
-  // Демо-режим: и профиль, и история — в этом браузере (localStorage).
-  const cabModal = document.getElementById('cabModal');
-  const cabGreet = document.getElementById('cabGreet');
-  const cabTabData = document.getElementById('cabTabData');
-  const cabTabHist = document.getElementById('cabTabHist');
-  const cabDataPane = document.getElementById('cabDataPane');
-  const cabHistPane = document.getElementById('cabHistPane');
-  const cabForm = document.getElementById('cabForm');
-  const cabErr = document.getElementById('cabErr');
-  const cabOk = document.getElementById('cabOk');
-  const cabOrders = document.getElementById('cabOrders');
+  // Сам кабинет находится на отдельной странице kabinet.html.
+  // Здесь остаются только общие помощники: кто вошёл, его профиль
+  // (для автозаполнения заявки) и сохранение заявок в историю.
 
   // Логин текущего пользователя (e-mail в нижнем регистре) или ''
   function currentLogin(){
@@ -1255,117 +1182,11 @@ const TOOLS = [
   const profileKey = () => 'prokat_profile_' + currentLogin();
   const ordersKey  = () => 'prokat_orders_' + currentLogin();
 
-  // --- Профиль: чтение ---
+  // --- Профиль: чтение (нужен для автозаполнения заявки) ---
   function getProfile(){
     if(sb && sbUser) return (sbUser.user_metadata || {});
     try { return JSON.parse(store.get(profileKey()) || '{}'); } catch(e){ return {}; }
   }
-
-  // --- Телефон: нормализация "+7..." и валидация ---
-  function normPhone(v){
-    const d = (v || '').replace(/\D/g, '');
-    if(!d) return '';
-    if(d.length === 11 && d[0] === '8') return '+7' + d.slice(1);
-    if(d.length === 11 && d[0] === '7') return '+' + d;
-    if(d.length === 10) return '+7' + d;
-    return null; // не похоже на телефон
-  }
-
-  function esc(s){
-    return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-  }
-
-  // --- Открытие/закрытие ---
-  function openCab(){
-    if(!currentLogin()) return; // кабинет доступен только после входа
-    cabGreet.textContent = 'Привет, ' + (currentUserName || 'клиент') + '! Ваши данные и заявки.';
-    cabErr.style.display = 'none';
-    cabOk.style.display = 'none';
-    cabModal.classList.add('open');
-    loadProfileToForm();
-    switchCabTab('data');
-  }
-  function closeCab(){ cabModal.classList.remove('open'); }
-  document.getElementById('cabClose').addEventListener('click', closeCab);
-  cabModal.addEventListener('click', (e)=>{ if(e.target === cabModal) closeCab(); });
-  userName.addEventListener('click', openCab);
-  userName.addEventListener('keydown', (e)=>{ if(e.key === 'Enter' || e.key === ' '){ e.preventDefault(); openCab(); } });
-  document.getElementById('cabBtn').addEventListener('click', openCab);
-
-  function switchCabTab(t){
-    if(t === 'data'){
-      cabTabData.classList.add('active'); cabTabHist.classList.remove('active');
-      cabDataPane.style.display = 'block'; cabHistPane.style.display = 'none';
-    }else{
-      cabTabHist.classList.add('active'); cabTabData.classList.remove('active');
-      cabDataPane.style.display = 'none'; cabHistPane.style.display = 'block';
-      loadHistory();
-    }
-  }
-  cabTabData.addEventListener('click', ()=>switchCabTab('data'));
-  cabTabHist.addEventListener('click', ()=>switchCabTab('hist'));
-
-  // --- Профиль: заполнение формы ---
-  function loadProfileToForm(){
-    const p = getProfile();
-    document.getElementById('cabName').value = p.name || currentUserName || '';
-    document.getElementById('cabPhone').value = p.phone || '';
-    document.getElementById('cabPassNum').value = p.pass_num || '';
-    document.getElementById('cabPassDate').value = p.pass_date || '';
-    document.getElementById('cabPassBy').value = p.pass_by || '';
-    document.getElementById('cabPassAddr').value = p.pass_addr || '';
-  }
-
-  // --- Профиль: сохранение ---
-  cabForm.addEventListener('submit', async function(e){
-    e.preventDefault();
-    cabErr.style.display = 'none';
-    cabOk.style.display = 'none';
-
-    const p = {
-      name: document.getElementById('cabName').value.trim(),
-      phone: normPhone(document.getElementById('cabPhone').value),
-      pass_num: document.getElementById('cabPassNum').value.trim(),
-      pass_date: document.getElementById('cabPassDate').value,
-      pass_by: document.getElementById('cabPassBy').value.trim(),
-      pass_addr: document.getElementById('cabPassAddr').value.trim()
-    };
-
-    if(!p.name){ cabErr.textContent = 'Введите имя.'; cabErr.style.display = 'block'; return; }
-    if(p.phone === null){ cabErr.textContent = 'Телефон в формате +7 (900) 000-00-00.'; cabErr.style.display = 'block'; return; }
-    if(p.pass_num && !/^\d{4}\s?\d{6}$/.test(p.pass_num)){
-      cabErr.textContent = 'Серия и номер паспорта — 10 цифр, например 4510 123456.';
-      cabErr.style.display = 'block';
-      return;
-    }
-
-    // Supabase: профиль в user_metadata (доступ только у владельца аккаунта)
-    if(sb && sbUser){
-      try{
-        document.getElementById('cabSave').disabled = true;
-        const { data, error } = await sb.auth.updateUser({ data: p });
-        if(error) throw error;
-        if(data && data.user) sbUser = data.user;
-        cabOk.textContent = 'Сохранено! Данные обновлены.';
-        cabOk.style.display = 'block';
-        refreshUI();
-      }catch(err){
-        cabErr.textContent = authErrorText(err.message);
-        cabErr.style.display = 'block';
-      }finally{
-        document.getElementById('cabSave').disabled = false;
-      }
-      return;
-    }
-
-    // Демо-режим
-    store.set(profileKey(), JSON.stringify(p));
-    cabOk.textContent = 'Сохранено! Данные обновлены.';
-    cabOk.style.display = 'block';
-    const users = getUsers();
-    if(users[currentLogin()]){ users[currentLogin()].name = p.name; saveUsers(users); }
-    refreshUI();
-  });
 
   // --- История аренды: локальная копия (для демо-режима и как запасной вариант) ---
   function saveLocalOrder(o){
@@ -1374,58 +1195,6 @@ const TOOLS = [
     try { arr = JSON.parse(store.get(ordersKey()) || '[]'); } catch(e){ arr = []; }
     arr.push(o);
     store.set(ordersKey(), JSON.stringify(arr));
-  }
-
-  function fmtDate(v){
-    const d = new Date(v);
-    if(isNaN(d)) return '';
-    const p2 = n => String(n).padStart(2, '0');
-    return p2(d.getDate()) + '.' + p2(d.getMonth()+1) + '.' + d.getFullYear() + ' ' + p2(d.getHours()) + ':' + p2(d.getMinutes());
-  }
-
-  function orderCard(o){
-    return '<div class="order-card">'
-      + '<div class="oc-top"><span class="oc-date">' + esc(fmtDate(o.ts)) + '</span><span class="oc-badge">Заявка принята</span></div>'
-      + '<div class="oc-tools">' + esc(o.tools) + '</div>'
-      + '<div class="oc-meta">' + esc(o.get || '')
-      + (o.comment ? '<br>Комментарий: ' + esc(o.comment) : '')
-      + '</div></div>';
-  }
-
-  async function loadHistory(){
-    const login = currentLogin();
-    if(!login){
-      cabOrders.innerHTML = '<p class="cab-empty">Войдите, чтобы видеть историю заявок.</p>';
-      return;
-    }
-    cabOrders.innerHTML = '<p class="cab-empty">Загружаем историю…</p>';
-
-    let rows = [];
-    // Supabase: заявки из таблицы 'orders' по e-mail пользователя
-    if(sb && sbUser){
-      try{
-        const { data, error } = await sb.from('orders').select('*').eq('user_email', login);
-        if(!error && data && data.length){
-          rows = data.map(r => ({
-            ts: r.created_at || r.id || '',
-            tools: r.tools, get: r.get_method, comment: r.comment
-          }));
-        }
-      }catch(e){ /* база недоступна — покажем локальную историю */ }
-    }
-
-    // Демо-режим (или база недоступна/пуста) — локальная история
-    if(rows.length === 0){
-      try { rows = JSON.parse(store.get(ordersKey()) || '[]'); } catch(e){ rows = []; }
-    }
-
-    rows.sort((a,b)=> new Date(b.ts) - new Date(a.ts));
-
-    if(rows.length === 0){
-      cabOrders.innerHTML = '<p class="cab-empty">Здесь появится история ваших заявок на аренду.<br>Выберите инструмент в каталоге и нажмите «Арендовать»!</p>';
-      return;
-    }
-    cabOrders.innerHTML = rows.map(orderCard).join('');
   }
 
   // --- Подстановка имени и телефона из профиля в форму заявки ---
@@ -1438,10 +1207,21 @@ const TOOLS = [
     if(!phoneEl.value && p.phone) phoneEl.value = p.phone;
   }
 
+  // Пришли по ссылке «Войти» со страницы кабинета (index.html#login) — откроем окно входа
+  if(window.location.hash === '#login'){ openModal(); }
+
+  // После успешного входа/регистрации: если пришли с кабинета — вернём пользователя туда
+  function finishAuth(delay){
+    setTimeout(()=>{
+      closeModal(); refreshUI();
+      if(window.location.hash === '#login'){ window.location.href = 'kabinet.html'; }
+    }, delay || 700);
+  }
+
   // Если пользователь вошёл — подставим его имя в форму заявки
   refreshUI();
 </script>
 <script>(function(){function c(){var b=a.contentDocument||(a.contentWindow&&a.contentWindow.document);if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a37b4c3cfa66f115',t:'MTc4ODg0MjY2NA=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script><script type="module" src="https://static.cloudflareinsights.com/beacon.min.js/v31edd6df95cf4e85bb4c19e7a9bdbcba1788362987495" integrity="sha512-iIg7k2xntmwu6/uSb5tpc/hySgZc4eoL31yB29W6tJFo2akwjPWcEqnCEdJvGexCL0KEQwVYv5BlowfhVz26hg==" data-cf-beacon='{"version":"2024.11.0","token":"1954b47c125f43f8b4338b3c4f804e4f","spa":2}' crossorigin="anonymous"></script>
 <script type="module" src="https://static.cloudflareinsights.com/beacon.min.js/v31edd6df95cf4e85bb4c19e7a9bdbcba1788362987495" integrity="sha512-iIg7k2xntmwu6/uSb5tpc/hySgZc4eoL31yB29W6tJFo2akwjPWcEqnCEdJvGexCL0KEQwVYv5BlowfhVz26hg==" data-cf-beacon='{"version":"2024.11.0","token":"1954b47c125f43f8b4338b3c4f804e4f","spa":2}' crossorigin="anonymous"></script>
-<script>(function(){function c(){var b=a.contentDocument||(a.contentWindow&&a.contentWindow.document);if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a37da1a8ae6d9d8b',t:'MTc4ODg2NzEzNA=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
+</body>
 </html>
