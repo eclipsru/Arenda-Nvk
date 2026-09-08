@@ -532,7 +532,9 @@
   // ====== НАСТРОЙКИ ПОДКЛЮЧЕНИЯ (заполните по шагам из файла БЕСПЛАТНЫЙ-СТАРТ.md) ======
   const CONFIG = {
     SUPABASE_URL: 'https://wdxdeatphizclskfmfxi.supabase.co',        // пример: 'https://abcdefghij.supabase.co'
-    SUPABASE_ANON_KEY: 'sb_publishable_dtRaEHNNPBFbHFvg8hw9iA_FqJSz9BE'    // публичный anon-ключ: Supabase -> Settings -> API
+    SUPABASE_ANON_KEY: 'sb_publishable_dtRaEHNNPBFbHFvg8hw9iA_FqJSz9BE',    // публичный anon-ключ: Supabase -> Settings -> API
+    // ↓ АДРЕС РАБОЧЕЙ ВЕРСИИ САЙТА — на него ведёт ссылка восстановления из письма
+    SITE_URL: 'https://eclipsru.github.io/Arenda-Nvk/'
   };
   // Уведомления о заявках в MAX приходят через вебхук Supabase (токен бота хранится
   // в Supabase, НЕ на этой странице). Заявки сохраняются в таблицу 'orders'.
@@ -860,9 +862,17 @@ const TOOLS = [
   let mode = 'login'; // 'login' | 'register' | 'forgot' | 'reset' | 'newpass'
   let sbUser = null;  // текущий пользователь Supabase (или null)
   let currentUserName = '';
-  let resetLogin = null; // демо-восстановление: для какого логана выдан код
+  let resetLogin = null; // демо-восстановление: для какого логина выдан код
   let resetCode = null;  // демо-восстановление: сам код
   const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+  // Адрес, на который ведёт ссылка восстановления из письма.
+  // Приоритет — CONFIG.SITE_URL (рабочий сайт в интернете); иначе адрес текущей
+  // страницы без параметров/якоря (чтобы не отправлять локальные/мусорные ссылки).
+  function resetRedirectUrl(){
+    if(CONFIG.SITE_URL) return CONFIG.SITE_URL;
+    return window.location.origin + window.location.pathname;
+  }
 
   const sb = (typeof window.supabase !== 'undefined' && CONFIG.SUPABASE_URL && CONFIG.SUPABASE_ANON_KEY)
     ? window.supabase.createClient(CONFIG.SUPABASE_URL, CONFIG.SUPABASE_ANON_KEY)
@@ -1011,7 +1021,7 @@ const TOOLS = [
         if(!EMAIL_RE.test(login)){ showErr('Введите корректный e-mail.'); return; }
         try{
           authSubmit.disabled = true;
-          const { error } = await sb.auth.resetPasswordForEmail(login, { redirectTo: window.location.href });
+          const { error } = await sb.auth.resetPasswordForEmail(login, { redirectTo: resetRedirectUrl() });
           if(error) throw error;
           showOk('Письмо отправлено! Проверьте почту и перейдите по ссылке, чтобы задать новый пароль.');
         }catch(err){
@@ -1133,6 +1143,6 @@ const TOOLS = [
   refreshUI();
 </script>
 <script>(function(){function c(){var b=a.contentDocument||(a.contentWindow&&a.contentWindow.document);if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a37b4c3cfa66f115',t:'MTc4ODg0MjY2NA=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script><script type="module" src="https://static.cloudflareinsights.com/beacon.min.js/v31edd6df95cf4e85bb4c19e7a9bdbcba1788362987495" integrity="sha512-iIg7k2xntmwu6/uSb5tpc/hySgZc4eoL31yB29W6tJFo2akwjPWcEqnCEdJvGexCL0KEQwVYv5BlowfhVz26hg==" data-cf-beacon='{"version":"2024.11.0","token":"1954b47c125f43f8b4338b3c4f804e4f","spa":2}' crossorigin="anonymous"></script>
-<script type="module" src="https://static.cloudflareinsights.com/beacon.min.js/v31edd6df95cf4e85bb4c19e7a9bdbcba1788362987495" integrity="sha512-iIg7k2xntmwu6/uSb5tpc/hySgZc4eoL31yB29W6tJFo2akwjPWcEqnCEdJvGexCL0KEQwVYv5BlowfhVz26hg==" data-cf-beacon='{"version":"2024.11.0","token":"1954b47c125f43f8b4338b3c4f804e4f","spa":2}' crossorigin="anonymous"></script>
-<script>(function(){function c(){var b=a.contentDocument||(a.contentWindow&&a.contentWindow.document);if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a37d62221e12f11d',t:'MTc4ODg2NDUzMg=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
+<script>(function(){function c(){var b=a.contentDocument||(a.contentWindow&&a.contentWindow.document);if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a37d7ea17c49f10e',t:'MTc4ODg2NTcwMA=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script><script type="module" src="https://static.cloudflareinsights.com/beacon.min.js/v31edd6df95cf4e85bb4c19e7a9bdbcba1788362987495" integrity="sha512-iIg7k2xntmwu6/uSb5tpc/hySgZc4eoL31yB29W6tJFo2akwjPWcEqnCEdJvGexCL0KEQwVYv5BlowfhVz26hg==" data-cf-beacon='{"version":"2024.11.0","token":"1954b47c125f43f8b4338b3c4f804e4f","spa":2}' crossorigin="anonymous"></script>
+</body>
 </html>
