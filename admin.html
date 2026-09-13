@@ -60,6 +60,9 @@
   .hidden-flag{color:var(--err);font-size:11px;font-weight:700;border:1px solid rgba(255,93,93,.4);border-radius:6px;padding:1px 6px;margin-left:6px}
   .switch{display:flex;align-items:center;gap:6px;font-size:12.5px;color:var(--gray);cursor:pointer;flex:none;font-weight:600}
   .switch input{width:17px;height:17px;margin:0;accent-color:var(--orange)}
+  .loaderr{display:none;background:rgba(255,93,93,.10);border:1.5px solid rgba(255,93,93,.45);border-radius:12px;padding:12px 14px;margin-bottom:14px;font-size:13.5px;line-height:1.5}
+  .loaderr b{color:var(--err)}
+  .loaderr code{word-break:break-all}
   .toast{position:fixed;left:50%;bottom:22px;transform:translateX(-50%) translateY(90px);background:var(--orange);color:#fff;font-weight:700;font-size:14px;padding:12px 22px;border-radius:12px;transition:.25s;opacity:0;z-index:99;max-width:90vw;text-align:center}
   .toast.show{transform:translateX(-50%) translateY(0);opacity:1}
   ol{margin:10px 0 0 20px}
@@ -131,6 +134,7 @@
 
   <!-- 4. Кабинет -->
   <section id="vMain" style="display:none">
+    <div id="loadErr" class="loaderr"></div>
     <div class="stats">
       <div class="stat"><b id="stTools">0</b><span>инструментов</span></div>
       <div class="stat"><b id="stCats">0</b><span>категорий</span></div>
@@ -298,19 +302,33 @@
 
   // ====== ЗАГРУЗКА ДАННЫХ ======
   async function refresh(){
-    try{
-      const [c, t, s] = await Promise.all([
-        sb.from('cats').select('*').order('sort'),
-        sb.from('tools').select('*').order('sort'),
-        sb.from('subcats').select('*').order('sort').catch(()=>({data:[]}))
-      ]);
-      if(c.error) throw c.error;
-      if(t.error) throw t.error;
-      CATS = c.data || []; TOOLS = t.data || [];
-      SUBCATS = (s && s.error) ? [] : (s.data || []);
-      renderAll();
-    }catch(err){
-      toast('Ошибка загрузки: ' + err.message);
+    const box = $('loadErr');
+    box.style.display = 'none';
+    const problems = [];
+    const results = await Promise.allSettled([
+      sb.from('cats').select('*').order('sort'),
+      sb.from('tools').select('*').order('sort'),
+      sb.from('subcats').select('*').order('sort')
+    ]);
+    const get = (r) => r.status === 'fulfilled' ? r.value : { error: { message: 'нет соединения' }, data: [] };
+    const c = get(results[0]), t = get(results[1]), s = get(results[2]);
+    if(c.error){ problems.push('Категории: ' + c.error.message); CATS = []; } else { CATS = c.data || []; }
+    if(t.error){ problems.push('Инструменты: ' + t.error.message); TOOLS = []; } else { TOOLS = t.data || []; }
+    let subsMissing = false;
+    if(s.error){
+      SUBCATS = [];
+      if(/does not exist|не существует|schema cache/i.test(s.error.message)){
+        subsMissing = true;
+      } else {
+        problems.push('Подкатегории: ' + s.error.message);
+      }
+    } else { SUBCATS = s.data || []; }
+    renderAll(subsMissing);
+    if(problems.length){
+      box.innerHTML = '<b>Не удалось загрузить данные из базы.</b><br>' +
+        problems.map(p=>'<code>'+esc(p)+'</code>').join('<br>') +
+        '<br><br>Чаще всего помогает: выполнить обновлённый <b>КАБИНЕТ-SQL.sql</b> (Supabase → SQL Editor → вставить весь файл → Run) и обновить эту страницу. Если не помогло — пришлите текст из серых полей выше.';
+      box.style.display = 'block';
     }
   }
 
@@ -333,7 +351,7 @@
       subs.map(s=>'<option value="'+esc(s.key)+'">'+(s.icon?s.icon+' ':'')+esc(s.title)+'</option>').join('');
   }
 
-  function renderAll(){
+  function renderAll(subsMissing){
     $('stTools').textContent = TOOLS.length;
     $('stCats').textContent = CATS.length;
     $('stHidden').textContent = TOOLS.filter(t=>t.active===false).length;
@@ -366,6 +384,10 @@
 
     // список подкатегорий
     $('subsCount').textContent = '— ' + SUBCATS.length + ' шт.';
+    if(subsMissing){
+      $('subsBox').innerHTML = '<p class="muted">Таблица подкатегорий ещё не создана в базе. Выполните обновлённый <b>КАБИНЕТ-SQL.sql</b> (Supabase → SQL Editor → Run) и обновите страницу.</p>';
+      return;
+    }
     $('subsBox').innerHTML = SUBCATS.length ? SUBCATS.map(s=>
       '<div class="row">' +
         (s.icon ? '<div class="ph" style="font-size:20px">'+esc(s.icon)+'</div>' : '<div class="ph">'+WRENCH+'</div>') +
