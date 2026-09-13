@@ -357,9 +357,13 @@
     $('stHidden').textContent = TOOLS.filter(t=>t.active===false).length;
     $('importBox').style.display = TOOLS.length ? 'none' : 'block';
 
-    // селекты категорий (форма инструмента и форма подкатегории)
+    // селекты категорий (форма инструмента и форма подкатегории);
+    // сохраняем выбранные значения — обновление списка не должно сбрасывать выбор
+    const prevToolCat = $('tCat').value, prevSubCat = $('sCat').value;
     $('tCat').innerHTML = CATS.map(c=>'<option value="'+esc(c.key)+'">'+esc(c.title)+'</option>').join('');
     $('sCat').innerHTML = CATS.map(c=>'<option value="'+esc(c.key)+'">'+esc(c.title)+'</option>').join('');
+    if(prevToolCat && [].some.call($('tCat').options, o=>o.value===prevToolCat)) $('tCat').value = prevToolCat;
+    if(prevSubCat && [].some.call($('sCat').options, o=>o.value===prevSubCat)) $('sCat').value = prevSubCat;
     onCatChange();
     fillSubSelect();
 

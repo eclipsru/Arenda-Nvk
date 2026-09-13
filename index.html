@@ -798,12 +798,13 @@ const TOOLS = [
   }
   function mPick(cat){
     mMarkTile(cat);
-    const subWrap = document.getElementById('subPower');
-    const hasSubs = (cat === 'power') && subWrap;
-    if(hasSubs){
-      // Экран подкатегорий: чипы строим из десктопного меню
+    // Свое меню подкатегорий у каждой категории (у старого статичного — категория power)
+    const menu = document.querySelector('#filters .subfilters[data-for="'+cat+'"]')
+              || (cat === 'power' ? document.getElementById('subPower') : null);
+    if(menu && menu.querySelector('.subchip')){
+      // Экран подкатегорий: чипы строим из десктопного меню этой категории
       mSubChips.innerHTML = '';
-      subWrap.querySelectorAll('.subchip').forEach((sc, idx)=>{
+      menu.querySelectorAll('.subchip').forEach((sc, idx)=>{
         const b = document.createElement('button');
         b.type = 'button';
         b.className = 'm-subchip' + (idx === 0 ? ' active' : '');
@@ -812,13 +813,13 @@ const TOOLS = [
         b.addEventListener('click', ()=>{
           mSubChips.querySelectorAll('.m-subchip').forEach(x=>x.classList.remove('active'));
           b.classList.add('active');
-          render('power', b.dataset.sub);
+          render(cat, b.dataset.sub);
         });
         mSubChips.appendChild(b);
       });
       mTiles.style.display = 'none';
       mSubs.style.display = 'block';
-      render('power', 'all');
+      render(cat, 'all');
     }else{
       // У категории нет подкатегорий — фильтруем сразу, плитки остаются
       mShowTiles();
@@ -1178,50 +1179,71 @@ const TOOLS = [
     auto:'<svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M19 17h2c.6 0 1-.4 1-1v-3c0-.9-.7-1.7-1.5-1.9C18.7 10.6 16 10 16 10s-1.3-1.4-2.2-2.3c-.5-.4-1.1-.7-1.8-.7H5c-.6 0-1.1.4-1.4.9l-1.4 2.9A3.7 3.7 0 0 0 2 12v4c0 .6.4 1 1 1h2"/><circle cx="7" cy="17" r="2"/><path d="M9 17h6"/><circle cx="17" cy="17" r="2"/></svg>',
     _default:'<svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>'
   };
+  let DB_SUBS = []; // подкатегории из базы: {cat, key, title, icon}
+  function subMenuHTML(catKey, subs){
+    let html = '<div class="subfilters" data-for="'+catKey+'"'+(currentCat===catKey?'':' style="display:none"')+'>';
+    html += '<button class="subchip'+(currentSub==='all'?' active':'')+'" data-sub="all">Все</button>';
+    (subs||[]).forEach(s=>{
+      html += '<button class="subchip'+(currentSub===s.key?' active':'')+'" data-sub="'+s.key+'">'+(s.icon ? s.icon+' ' : '')+(s.title||s.key)+'</button>';
+    });
+    return html + '</div>';
+  }
   function bindChipHandlers(){
-    const sp = document.getElementById('subPower');
     document.querySelectorAll('#filters .chip').forEach(chip=>{
+      if(chip.dataset.bound) return;
+      chip.dataset.bound = '1';
       chip.addEventListener('click', ()=>{
         document.querySelectorAll('.chip').forEach(c=>c.classList.remove('active'));
         chip.classList.add('active');
         const cat = chip.dataset.cat;
-        if(sp) sp.style.display = (cat === 'power') ? 'flex' : 'none';
-        const spAll = document.querySelector('#subPower .subchip[data-sub="all"]');
-        document.querySelectorAll('#subPower .subchip').forEach(s=>s.classList.remove('active'));
-        if(spAll) spAll.classList.add('active');
+        document.querySelectorAll('#filters .subfilters').forEach(sm=>{
+          const forCat = sm.dataset.for || 'power';
+          sm.style.display = (forCat === cat) ? 'flex' : 'none';
+          sm.querySelectorAll('.subchip').forEach(s=>s.classList.remove('active'));
+          const all = sm.querySelector('.subchip[data-sub="all"]');
+          if(all) all.classList.add('active');
+        });
         render(cat, 'all');
       });
     });
-    document.querySelectorAll('#subPower .subchip').forEach(sc=>{
+    document.querySelectorAll('#filters .subfilters .subchip').forEach(sc=>{
+      if(sc.dataset.bound) return;
+      sc.dataset.bound = '1';
       sc.addEventListener('click', (e)=>{
         e.stopPropagation();
-        document.querySelectorAll('#subPower .subchip').forEach(s=>s.classList.remove('active'));
+        const menu = sc.closest('.subfilters');
+        const cat = (menu && menu.dataset.for) || 'power';
+        menu.querySelectorAll('.subchip').forEach(s=>s.classList.remove('active'));
         sc.classList.add('active');
-        render('power', sc.dataset.sub);
+        render(cat, sc.dataset.sub);
       });
     });
   }
   function rebuildChips(cats){
     const filters = document.getElementById('filters');
-    const subEl = document.getElementById('subPower');
+    const subElStatic = document.getElementById('subPower');
     let html = '<button class="chip'+(currentCat==='all'?' active':'')+'" data-cat="all">'+CAT_ICONS.all+' Все инструменты</button>';
     (cats||[]).forEach(c=>{
       const ico = c.icon ? '<span class="ico-e">'+c.icon+'</span>' : (CAT_ICONS[c.key] || CAT_ICONS._default);
       html += '<button class="chip'+(currentCat===c.key?' active':'')+'" data-cat="'+c.key+'">'+ico+' '+(c.title||c.key)+'</button>';
-      if(c.key==='power' && subEl) html += subEl.outerHTML;
+      const subs = (DB_SUBS||[]).filter(s=>s.cat===c.key);
+      if(subs.length) html += subMenuHTML(c.key, subs);
+      else if(c.key==='power' && subElStatic) html += subElStatic.outerHTML; // пока база не загрузилась
     });
     filters.innerHTML = html;
     bindChipHandlers();
   }
-  // Подкатегории из базы: пересобираем десктопное меню #subPower (мобильные плитки читают его сами)
+  // Подкатегории из базы: обновляем подменю у уже построенных чипов (у каждой категории свои)
   function rebuildSubs(subs){
-    const sp = document.getElementById('subPower');
-    if(!sp || !subs || !subs.length) return;
-    let html = '<button class="subchip'+(currentSub==='all'?' active':'')+'" data-sub="all">Все электроинструменты</button>';
-    subs.forEach(s=>{
-      html += '<button class="subchip'+(currentSub===s.key?' active':'')+'" data-sub="'+s.key+'">'+(s.icon ? s.icon+' ' : '')+(s.title||s.key)+'</button>';
+    DB_SUBS = subs || [];
+    const filters = document.getElementById('filters');
+    if(!filters || !filters.querySelector('.chip[data-cat]')) return;
+    filters.querySelectorAll('.subfilters').forEach(el=>el.remove());
+    filters.querySelectorAll('.chip[data-cat]').forEach(chip=>{
+      const s2 = (DB_SUBS||[]).filter(s=>s.cat===chip.dataset.cat);
+      if(s2.length) chip.insertAdjacentHTML('afterend', subMenuHTML(chip.dataset.cat, s2));
     });
-    sp.innerHTML = html;
+    bindChipHandlers();
   }
   async function loadCatalogFromDB(){
     if(!sb) return; // Supabase не подключён — работаем со встроенным каталогом
@@ -1239,8 +1261,9 @@ const TOOLS = [
       }));
       const cats = (cR.data || []).filter(c=>c.active !== false);
       const subs = (sR.data || []).filter(s=>s.active !== false);
-      if(sR.data && sR.data.length) rebuildSubs(subs);   // сначала подкатегории…
-      if(cats.length) rebuildChips(cats);                // …потом категории (забирают свежее меню подкатегорий)
+      DB_SUBS = subs;                       // категории строятся сразу со своими подменю
+      if(cats.length) rebuildChips(cats);
+      else rebuildSubs(subs);
       render(currentCat, currentSub);
       // Перестраиваем мобильные плитки под новые категории
       const mT = document.getElementById('mTiles');
