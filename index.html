@@ -254,17 +254,14 @@
   /* ===== МОБИЛЬНЫЙ ФИЛЬТР-ПЛИТКИ В ШАПКЕ (виден только на телефоне) ===== */
   .m-catalog{display:none}
   @media(max-width:768px){
-    /* Шапка: убираем весь текст */
-    .logo > span:last-child{display:none}
+    /* Шапка: остаются только название и кнопка «Войти» */
     .nav-links{display:none}
     .nav-phone .tel{display:none}
-    .nav-phone #authBtn,
     .nav-phone #userBox{display:none !important}
-    header{position:static}
-    .nav{padding-bottom:8px}
+    .nav-phone #authBtn{display:inline-flex !important}
 
-    /* Блок: поиск + плитки категорий */
-    .m-catalog{display:block;padding:12px 0 6px;border-top:1px solid var(--line)}
+    /* Поиск + плитки — поверх картинки шапки (hero) */
+    .m-catalog{display:block;position:relative;z-index:2;padding:16px 0 26px}
     .m-search{position:relative;margin-bottom:12px}
     .m-search input{width:100%;background:var(--card);border:1px solid var(--line);border-radius:12px;color:var(--dark);font-size:16px;padding:12px 42px 12px 42px;outline:none;transition:.15s}
     .m-search input:focus{border-color:var(--orange);box-shadow:0 0 0 3px rgba(255,143,31,.15)}
@@ -291,8 +288,8 @@
     .m-subchip{background:var(--bg-2);border:2px solid var(--line);color:var(--gray);font-weight:600;font-size:13.5px;padding:10px 14px;border-radius:30px;cursor:pointer;transition:.15s;font-family:inherit}
     .m-subchip.active{background:var(--orange);border-color:var(--orange);color:#fff}
 
-    /* Под шапкой — только фильтр и карточки: прячем всё лишнее */
-    .hero{display:none}
+    /* Под шапкой — только фильтр и карточки: прячем текст hero и лишние секции */
+    .hero-inner{display:none}
     #how{display:none}
     #why{display:none}
     #catalog .sec-head{display:none}
@@ -334,8 +331,12 @@
       </span>
     </div>
   </div>
+</header>
 
-  <!-- МОБИЛЬНЫЙ ФИЛЬТР: поиск + плитки категорий (на десктопе скрыт) -->
+<!-- ГЛАВНЫЙ ЭКРАН -->
+<section class="hero" style="padding:0">
+  <div class="hero-bg"></div>
+  <!-- МОБИЛЬНЫЙ ФИЛЬТР: поиск + плитки категорий поверх картинки (на десктопе скрыт) -->
   <div class="container m-catalog" id="mCatalog">
     <div class="m-search">
       <span class="m-ico"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg></span>
@@ -348,11 +349,6 @@
       <div class="m-subchips" id="mSubChips"></div>
     </div>
   </div>
-</header>
-
-<!-- ГЛАВНЫЙ ЭКРАН -->
-<section class="hero" style="padding:0">
-  <div class="hero-bg"></div>
   <div class="container">
     <div class="hero-inner">
       <h1>Прокат инструмента <em>в Новочеркасске</em></h1>
