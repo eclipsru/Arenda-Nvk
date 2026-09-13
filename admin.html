@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex, nofollow">
-<title>Личный кабинет — ПрокатИнструмента</title>
+<title>Илюхина зона управления — ПрокатИнструмента</title>
 <style>
   :root{--bg:#101217;--card:#1b1e26;--bg-2:#16181f;--line:rgba(255,255,255,.09);--orange:#ff8f1f;--gray:#9aa0ae;--dark:#eef0f4;--ok:#3ecf6f;--err:#ff5d5d}
   *{box-sizing:border-box;margin:0;padding:0}
@@ -41,7 +41,7 @@
   .msg{font-size:13px;margin-left:6px}
   .msg.err{color:var(--err);display:block;margin:8px 0 0}
   .msg.ok{color:var(--ok)}
-  .stats{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:16px}
+  .stats{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:16px}
   .stat{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px;text-align:center}
   .stat b{display:block;font-size:26px;color:var(--orange)}
   .stat span{font-size:12.5px;color:var(--gray)}
@@ -76,11 +76,22 @@
   @media(max-width:640px){
     .emoji-grid{grid-template-columns:repeat(8,1fr)}
     .form-grid{grid-template-columns:1fr}
-    .stats{grid-template-columns:repeat(3,1fr);gap:8px}
-    .stat b{font-size:20px}
+    /* 4 плашки в один ряд, компактно */
+    .stats{grid-template-columns:repeat(4,1fr);gap:6px;margin-bottom:12px}
+    .stat{padding:9px 2px;border-radius:11px}
+    .stat b{font-size:16px}
+    .stat span{font-size:9.5px;line-height:1.25}
+    /* Шапка в один ряд: надпись слева, кнопки справа на том же уровне */
+    .top{height:auto;padding:9px 0;flex-wrap:nowrap;gap:8px}
+    .logo{flex:1;min-width:0}
+    .logo .mark{flex:none}
+    .logo > span:last-child{display:block;min-width:0}
+    .logo > span:last-child small{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
+    .who{flex:none;gap:6px}
+    .who #whoEmail{display:none}
+    .who .btn.sm{padding:6px 9px;font-size:11.5px;white-space:nowrap}
     .row{flex-wrap:wrap}
     .row .info{flex:1 1 100%;order:-1}
-    .top{height:auto;padding:10px 0;flex-wrap:wrap}
   }
 </style>
 </head>
@@ -89,7 +100,7 @@
   <div class="container top">
     <a class="logo" href="index.html">
       <span class="mark"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg></span>
-      <span>Прокат<b>Инструмента</b><small>ЛИЧНЫЙ КАБИНЕТ</small></span>
+      <span>Прокат<b>Инструмента</b><small>ИЛЮХИНА ЗОНА УПРАВЛЕНИЯ</small></span>
     </a>
     <div class="who">
       <span id="whoEmail"></span>
@@ -138,6 +149,7 @@
     <div class="stats">
       <div class="stat"><b id="stTools">0</b><span>инструментов</span></div>
       <div class="stat"><b id="stCats">0</b><span>категорий</span></div>
+      <div class="stat"><b id="stSubs">0</b><span>подкатегорий</span></div>
       <div class="stat"><b id="stHidden">0</b><span>скрыто с сайта</span></div>
     </div>
 
@@ -354,6 +366,7 @@
   function renderAll(subsMissing){
     $('stTools').textContent = TOOLS.length;
     $('stCats').textContent = CATS.length;
+    $('stSubs').textContent = SUBCATS.length;
     $('stHidden').textContent = TOOLS.filter(t=>t.active===false).length;
     $('importBox').style.display = TOOLS.length ? 'none' : 'block';
 
