@@ -257,18 +257,20 @@
   @media(max-width:768px){
     /* Шапка: название + «В Новочеркасске» + кнопка «Войти», всё компактнее */
     .container{padding:0 12px}
-    .nav{height:56px;gap:10px}
+    .nav{height:52px;gap:8px;min-width:0}
     .nav-links{display:none}
     .nav-phone .tel{display:none}
+    .nav-phone #userBox{gap:8px}
     .nav-phone #userBox span{display:none}
     .nav-phone #userBox #cabLink,
-    .nav-phone #userBox #logoutBtn{display:inline-flex !important;padding:8px 12px;font-size:13px}
-    .nav-phone #authBtn{display:inline-flex !important;padding:8px 14px;font-size:13px}
-    .logo{font-size:15px;gap:8px}
-    .logo .mark{width:30px;height:30px;border-radius:8px}
-    .logo .mark svg.ic{width:16px;height:16px}
-    .logo > span:last-child{display:block;line-height:1.15}
-    .logo > span:last-child small{display:block;font-weight:700;font-size:11px;color:var(--orange);letter-spacing:.03em}
+    .nav-phone #userBox #logoutBtn{display:inline-flex;padding:7px 10px;font-size:12.5px;flex:none}
+    .nav-phone{gap:8px;flex:none}
+    .nav-phone #authBtn{display:inline-flex;padding:7px 10px;font-size:12.5px;flex:none}
+    .logo{font-size:14px;gap:7px;min-width:0}
+    .logo .mark{width:28px;height:28px;border-radius:8px;flex:none}
+    .logo .mark svg.ic{width:15px;height:15px}
+    .logo > span:last-child{display:block;line-height:1.15;white-space:nowrap}
+    .logo > span:last-child small{display:block;font-weight:700;font-size:9.5px;color:var(--orange);letter-spacing:.03em}
 
     /* Поиск + плитки — поверх картинки шапки (hero) */
     .m-catalog{display:block;position:relative;z-index:2;padding:12px 0 18px}
@@ -286,6 +288,7 @@
     .m-tiles{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px}
     .m-tile{min-width:0;aspect-ratio:1/1;background:rgba(255,255,255,.14);border:1.5px solid rgba(255,255,255,.45);border-radius:12px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;color:#fff;font-weight:600;font-size:10px;line-height:1.15;cursor:pointer;padding:4px 2px;text-align:center;transition:.15s;font-family:inherit;overflow-wrap:break-word}
     .m-tile svg{width:22px;height:22px;color:var(--orange)}
+    .chip .ico-e{font-size:15px;margin-right:1px}
     .m-tile:active{transform:scale(.96)}
     .m-tile.active{border-color:var(--orange);background:rgba(255,143,31,.30)}
 
@@ -773,7 +776,9 @@ const TOOLS = [
       b.className = 'm-tile' + (cat === 'all' ? ' active' : '');
       b.dataset.cat = cat;
       const svg = chip.querySelector('svg');
+      const emo = chip.querySelector('.ico-e');
       if(svg) b.innerHTML = svg.outerHTML;
+      else if(emo){ const s = document.createElement('span'); s.className='ico-e'; s.style.fontSize='24px'; s.textContent = emo.textContent; b.appendChild(s); }
       const lbl = document.createElement('span');
       lbl.textContent = M_LABELS[cat] || chip.textContent.trim();
       b.appendChild(lbl);
@@ -1164,6 +1169,7 @@ const TOOLS = [
   }
 
   // ====== КАТАЛОГ ИЗ БАЗЫ (управляется в личном кабинете admin.html) ======
+  // Значок категории: если задан эмодзи — показываем его, иначе строгую SVG-иконку
   const CAT_ICONS = {
     all:'<svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>',
     power:'<svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>',
@@ -1200,19 +1206,30 @@ const TOOLS = [
     const subEl = document.getElementById('subPower');
     let html = '<button class="chip'+(currentCat==='all'?' active':'')+'" data-cat="all">'+CAT_ICONS.all+' Все инструменты</button>';
     (cats||[]).forEach(c=>{
-      const ico = CAT_ICONS[c.key] || CAT_ICONS._default;
+      const ico = c.icon ? '<span class="ico-e">'+c.icon+'</span>' : (CAT_ICONS[c.key] || CAT_ICONS._default);
       html += '<button class="chip'+(currentCat===c.key?' active':'')+'" data-cat="'+c.key+'">'+ico+' '+(c.title||c.key)+'</button>';
       if(c.key==='power' && subEl) html += subEl.outerHTML;
     });
     filters.innerHTML = html;
     bindChipHandlers();
   }
+  // Подкатегории из базы: пересобираем десктопное меню #subPower (мобильные плитки читают его сами)
+  function rebuildSubs(subs){
+    const sp = document.getElementById('subPower');
+    if(!sp || !subs || !subs.length) return;
+    let html = '<button class="subchip'+(currentSub==='all'?' active':'')+'" data-sub="all">Все электроинструменты</button>';
+    subs.forEach(s=>{
+      html += '<button class="subchip'+(currentSub===s.key?' active':'')+'" data-sub="'+s.key+'">'+(s.icon ? s.icon+' ' : '')+(s.title||s.key)+'</button>';
+    });
+    sp.innerHTML = html;
+  }
   async function loadCatalogFromDB(){
     if(!sb) return; // Supabase не подключён — работаем со встроенным каталогом
     try{
-      const [cR, tR] = await Promise.all([
-        sb.from('cats').select('key,title,sort,active').order('sort'),
-        sb.from('tools').select('name,cat,sub,cat_label,img,descr,price,active,sort').order('sort')
+      const [cR, tR, sR] = await Promise.all([
+        sb.from('cats').select('key,title,icon,sort,active').order('sort'),
+        sb.from('tools').select('name,cat,sub,cat_label,img,descr,price,active,sort').order('sort'),
+        sb.from('subcats').select('cat,key,title,icon,sort,active').order('sort')
       ]);
       if(cR.error || tR.error){ console.warn('Каталог из базы недоступен:', (cR.error||tR.error).message); return; }
       if(!tR.data || !tR.data.length) return; // база пуста — показываем встроенный каталог
@@ -1220,7 +1237,10 @@ const TOOLS = [
       tR.data.filter(t=>t.active !== false).forEach(t=>TOOLS.push({
         name:t.name||'', cat:t.cat||'', sub:t.sub||'', catLabel:t.cat_label||'', img:t.img||'', desc:t.descr||'', price:t.price||0
       }));
-      if(cR.data && cR.data.length) rebuildChips(cR.data.filter(c=>c.active !== false));
+      const cats = (cR.data || []).filter(c=>c.active !== false);
+      const subs = (sR.data || []).filter(s=>s.active !== false);
+      if(sR.data && sR.data.length) rebuildSubs(subs);   // сначала подкатегории…
+      if(cats.length) rebuildChips(cats);                // …потом категории (забирают свежее меню подкатегорий)
       render(currentCat, currentSub);
       // Перестраиваем мобильные плитки под новые категории
       const mT = document.getElementById('mTiles');

@@ -65,7 +65,13 @@
   ol{margin:10px 0 0 20px}
   ol li{margin-bottom:6px;font-size:14.5px}
   code{background:var(--bg-2);border:1px solid var(--line);border-radius:6px;padding:1px 6px;font-size:13px;color:var(--orange);word-break:break-all}
+  .emoji-grid{display:grid;grid-template-columns:repeat(10,1fr);gap:4px;margin-top:8px}
+  .emoji-grid button{background:var(--bg-2);border:1.5px solid var(--line);border-radius:8px;font-size:16px;padding:4px 0;cursor:pointer;line-height:1.3}
+  .emoji-grid button:hover{border-color:var(--orange)}
+  .emoji-grid button.sel{border-color:var(--orange);background:rgba(255,143,31,.15)}
+  .ico-e{margin-right:5px}
   @media(max-width:640px){
+    .emoji-grid{grid-template-columns:repeat(8,1fr)}
     .form-grid{grid-template-columns:1fr}
     .stats{grid-template-columns:repeat(3,1fr);gap:8px}
     .stat b{font-size:20px}
@@ -171,12 +177,29 @@
         <h3>Добавить категорию</h3>
         <form id="catForm" class="form-grid">
           <label>Название<input id="cTitle" required placeholder="Например: Сварочное оборудование"></label>
-          <div style="display:flex;align-items:center;gap:10px;padding-top:18px"><button class="btn" type="submit">Добавить</button><span id="cMsg" class="msg"></span></div>
+          <label class="full">Значок категории (необязательно)<div style="display:flex;align-items:center;gap:8px;margin-top:5px"><button type="button" class="btn outline sm" id="cEmojiBtn">Выбрать эмодзи</button><span id="cEmojiVal" style="font-size:19px;min-width:24px"></span><button type="button" class="btn outline sm" id="cEmojiClear" style="display:none">Убрать</button></div></label>
+          <div class="emoji-grid full" id="cEmojiGrid" style="display:none"></div>
+          <div style="display:flex;align-items:center;gap:10px;grid-column:1/-1"><button class="btn" type="submit">Добавить</button><span id="cMsg" class="msg"></span></div>
+        </form>
+      </div>
+      <div class="panel">
+        <h3>Добавить подкатегорию</h3>
+        <p class="muted">Подкатегории показываются внутри категории — как «На аккумуляторе» и «От сети 220В» внутри Электроинструмента. У каждой категории свои подкатегории.</p>
+        <form id="subForm" class="form-grid">
+          <label>Категория<select id="sCat" required></select></label>
+          <label>Название<input id="sTitle" required placeholder="Например: От сети 220В"></label>
+          <label class="full">Значок подкатегории (необязательно)<div style="display:flex;align-items:center;gap:8px;margin-top:5px"><button type="button" class="btn outline sm" id="sEmojiBtn">Выбрать эмодзи</button><span id="sEmojiVal" style="font-size:19px;min-width:24px"></span><button type="button" class="btn outline sm" id="sEmojiClear" style="display:none">Убрать</button></div></label>
+          <div class="emoji-grid full" id="sEmojiGrid" style="display:none"></div>
+          <div style="display:flex;align-items:center;gap:10px;grid-column:1/-1"><button class="btn" type="submit">Добавить</button><span id="sMsg" class="msg"></span></div>
         </form>
       </div>
       <div class="panel">
         <h3>Категории</h3>
         <div id="catsBox"></div>
+      </div>
+      <div class="panel">
+        <h3>Подкатегории <span class="muted" id="subsCount"></span></h3>
+        <div id="subsBox"></div>
       </div>
     </section>
   </section>
@@ -199,7 +222,36 @@
   const $ = id => document.getElementById(id);
   const SUB_LABELS = {battery:'На аккумуляторе', corded:'От сети 220В'};
   const WRENCH = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>';
-  let sb = null, user = null, CATS = [], TOOLS = [];
+  let sb = null, user = null, CATS = [], TOOLS = [], SUBCATS = [];
+
+  // ====== 100 ЗНАЧКОВ В СТИЛЕ САЙТА (тема: инструмент, стройка, сад, авто, дом) ======
+  const EMOJIS = ['🔧', '🪛', '🔨', '⚒️', '🛠️', '⛏️', '🪚', '🔩', '⚙️', '🧰', '🧱', '🪨', '🪵', '🏗️', '🚧', '🪜', '📏', '📐', '📋', '🗝️', '💡', '🔌', '🔋', '🪫', '⚡', '🔦', '🧲', '📡', '🎛️', '📟', '🚿', '🛁', '🚽', '🧻', '🧼', '🧹', '🧺', '🗑️', '🚰', '💧', '🌱', '🌿', '🍀', '🌳', '🌲', '🌵', '🌾', '🌸', '🌻', '🌹', '🍎', '🍐', '🍇', '🥕', '🌽', '🥔', '🧄', '🧅', '🍄', '🌰', '🚗', '🚙', '🛻', '🚚', '🚛', '🛵', '🚲', '⛽', '🛞', '🚦', '❄️', '🌡️', '💨', '🔥', '🕯️', '🧊', '☀️', '🌪️', '🌊', '🏜️', '🏠', '🏡', '🏢', '🏭', '🪟', '🛏️', '🛋️', '🪑', '🧳', '🖼️', '🗄️', '📦', '🗃️', '🎁', '🛒', '🛍️', '💰', '🧾', '🏷️', '📌'];
+
+  // Переключатель набора эмодзи: btn — кнопка «Выбрать», grid — сетка, val — куда пишем выбор
+  function makeEmojiPicker(btn, grid, val, clearBtn){
+    btn = document.getElementById(btn); grid = document.getElementById(grid); val = document.getElementById(val);
+    if(clearBtn) clearBtn = document.getElementById(clearBtn);
+    if(!btn || !grid || !val || grid.dataset.built) return;
+    grid.innerHTML = EMOJIS.map(e=>'<button type="button" data-e="'+e+'">'+e+'</button>').join('');
+    grid.dataset.built = '1';
+    btn.addEventListener('click', ()=>{ grid.style.display = grid.style.display==='none' ? 'grid' : 'none'; });
+    grid.addEventListener('click', e=>{
+      const b = e.target.closest('[data-e]');
+      if(!b) return;
+      grid.querySelectorAll('button').forEach(x=>x.classList.remove('sel'));
+      b.classList.add('sel');
+      val.textContent = b.dataset.e;
+      if(clearBtn) clearBtn.style.display = 'inline-block';
+      grid.style.display = 'none';
+    });
+    if(clearBtn) clearBtn.addEventListener('click', ()=>{
+      val.textContent = '';
+      grid.querySelectorAll('button').forEach(x=>x.classList.remove('sel'));
+      clearBtn.style.display = 'none';
+    });
+  }
+  makeEmojiPicker('cEmojiBtn','cEmojiGrid','cEmojiVal','cEmojiClear');
+  makeEmojiPicker('sEmojiBtn','sEmojiGrid','sEmojiVal','sEmojiClear');
 
   function toast(t){ const el=$('toast'); el.textContent=t; el.classList.add('show'); setTimeout(()=>el.classList.remove('show'), 2600); }
   function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
@@ -247,13 +299,15 @@
   // ====== ЗАГРУЗКА ДАННЫХ ======
   async function refresh(){
     try{
-      const [c, t] = await Promise.all([
+      const [c, t, s] = await Promise.all([
         sb.from('cats').select('*').order('sort'),
-        sb.from('tools').select('*').order('sort')
+        sb.from('tools').select('*').order('sort'),
+        sb.from('subcats').select('*').order('sort').catch(()=>({data:[]}))
       ]);
       if(c.error) throw c.error;
       if(t.error) throw t.error;
       CATS = c.data || []; TOOLS = t.data || [];
+      SUBCATS = (s && s.error) ? [] : (s.data || []);
       renderAll();
     }catch(err){
       toast('Ошибка загрузки: ' + err.message);
@@ -263,6 +317,21 @@
   // ====== ОТРИСОВКА ======
   function catTitle(key){ const c = CATS.find(x=>x.key===key); return c ? c.title : key; }
   function toolsIn(key){ return TOOLS.filter(t=>t.cat===key).length; }
+  function subTitle(cat,key){
+    const s = SUBCATS.find(x=>x.cat===cat && x.key===key);
+    return s ? (' · '+(s.icon?s.icon+' ':'')+s.title) : '';
+  }
+  function toolsInSub(cat,key){ return TOOLS.filter(t=>t.cat===cat && t.sub===key).length; }
+  // Заполняем выбор подкатегории в форме инструмента по выбранной категории
+  function fillSubSelect(){
+    const cat = $('tCat').value;
+    const subs = SUBCATS.filter(s=>s.cat===cat);
+    const wrap = $('tSubWrap');
+    if(!subs.length){ wrap.style.display='none'; $('tSub').innerHTML='<option value=""></option>'; return; }
+    wrap.style.display='block';
+    $('tSub').innerHTML = '<option value="">Все '+esc(catTitle(cat).toLowerCase())+'</option>' +
+      subs.map(s=>'<option value="'+esc(s.key)+'">'+(s.icon?s.icon+' ':'')+esc(s.title)+'</option>').join('');
+  }
 
   function renderAll(){
     $('stTools').textContent = TOOLS.length;
@@ -270,9 +339,11 @@
     $('stHidden').textContent = TOOLS.filter(t=>t.active===false).length;
     $('importBox').style.display = TOOLS.length ? 'none' : 'block';
 
-    // селект категории в форме
+    // селекты категорий (форма инструмента и форма подкатегории)
     $('tCat').innerHTML = CATS.map(c=>'<option value="'+esc(c.key)+'">'+esc(c.title)+'</option>').join('');
+    $('sCat').innerHTML = CATS.map(c=>'<option value="'+esc(c.key)+'">'+esc(c.title)+'</option>').join('');
     onCatChange();
+    fillSubSelect();
 
     // список инструментов
     $('toolsCount').textContent = '— ' + TOOLS.length + ' шт.';
@@ -280,7 +351,7 @@
       '<div class="row">' +
         (t.img ? '<img class="thumb" src="'+esc(t.img)+'" alt="" onerror="this.style.display=\'none\'">' : '<div class="ph">'+WRENCH+'</div>') +
         '<div class="info"><b>'+esc(t.name)+(t.active===false?'<span class="hidden-flag">скрыт</span>':'')+'</b>' +
-        '<span>'+esc(catTitle(t.cat))+(t.sub&&SUB_LABELS[t.sub]?' · '+SUB_LABELS[t.sub]:'')+' · '+esc(t.price)+' ₽/сутки</span></div>' +
+        '<span>'+esc(catTitle(t.cat))+(t.sub?subTitle(t.cat,t.sub):'')+' · '+esc(t.price)+' ₽/сутки</span></div>' +
         '<label class="switch"><input type="checkbox" data-toggle="'+esc(t.id)+'"'+(t.active!==false?' checked':'')+'>показывать</label>' +
         '<button class="btn danger sm" type="button" data-del="'+esc(t.id)+'">Удалить</button>' +
       '</div>').join('') : '<p class="muted">Пока пусто.</p>';
@@ -288,10 +359,19 @@
     // список категорий
     $('catsBox').innerHTML = CATS.length ? CATS.map(c=>
       '<div class="row">' +
-        '<div class="ph">'+WRENCH+'</div>' +
-        '<div class="info"><b>'+esc(c.title)+'</b><span>код: '+esc(c.key)+' · инструментов: '+toolsIn(c.key)+'</span></div>' +
+        (c.icon ? '<div class="ph" style="font-size:20px">'+esc(c.icon)+'</div>' : '<div class="ph">'+WRENCH+'</div>') +
+        '<div class="info"><b>'+esc(c.title)+'</b><span>код: '+esc(c.key)+' · инструментов: '+toolsIn(c.key)+(SUBCATS.some(s=>s.cat===c.key)?' · подкатегорий: '+SUBCATS.filter(s=>s.cat===c.key).length:'')+'</span></div>' +
         '<button class="btn danger sm" type="button" data-delcat="'+esc(c.key)+'">Удалить</button>' +
       '</div>').join('') : '<p class="muted">Пока пусто.</p>';
+
+    // список подкатегорий
+    $('subsCount').textContent = '— ' + SUBCATS.length + ' шт.';
+    $('subsBox').innerHTML = SUBCATS.length ? SUBCATS.map(s=>
+      '<div class="row">' +
+        (s.icon ? '<div class="ph" style="font-size:20px">'+esc(s.icon)+'</div>' : '<div class="ph">'+WRENCH+'</div>') +
+        '<div class="info"><b>'+esc(s.title)+'</b><span>в категории: '+esc(catTitle(s.cat))+' · инструментов: '+toolsInSub(s.cat,s.key)+'</span></div>' +
+        '<button class="btn danger sm" type="button" data-delsub="'+esc(s.id)+'">Удалить</button>' +
+      '</div>').join('') : '<p class="muted">Пока пусто. Добавьте первую выше.</p>';
   }
 
   // ====== ВКЛАДКИ ======
@@ -305,7 +385,7 @@
   });
 
   // ====== ДОБАВЛЕНИЕ ИНСТРУМЕНТА ======
-  function onCatChange(){ $('tSubWrap').style.display = $('tCat').value==='power' ? 'block' : 'none'; }
+  function onCatChange(){ fillSubSelect(); }
   $('tCat').addEventListener('change', onCatChange);
   $('tPhoto').addEventListener('change', ()=>{
     const f = $('tPhoto').files[0];
@@ -382,12 +462,43 @@
     if(!title) return;
     const key = translit(title);
     if(CATS.some(c=>c.key===key)){ $('cMsg').className='msg err'; $('cMsg').textContent='Похожая категория уже есть.'; return; }
-    const { error } = await sb.from('cats').insert({key:key, title:title, sort:CATS.length+1, active:true});
+    const { error } = await sb.from('cats').insert({key:key, title:title, icon:$('cEmojiVal').textContent||'', sort:CATS.length+1, active:true});
     if(error){ $('cMsg').className='msg err'; $('cMsg').textContent='Не получилось: '+error.message; return; }
     $('cTitle').value='';
     toast('Категория добавлена');
     await refresh();
   });
+  $('subForm').addEventListener('submit', async e=>{
+    e.preventDefault();
+    $('sMsg').textContent=''; $('sMsg').className='msg';
+    const cat = $('sCat').value, title = $('sTitle').value.trim();
+    if(!cat || !title) return;
+    let key = translit(title);
+    let n = 2;
+    while(SUBCATS.some(s=>s.cat===cat && s.key===key)){ key = translit(title) + '-' + n; n++; }
+    const { error } = await sb.from('subcats').insert({
+      cat:cat, key:key, title:title, icon:$('sEmojiVal').textContent||'',
+      sort:SUBCATS.filter(s=>s.cat===cat).length+1, active:true
+    });
+    if(error){ $('sMsg').className='msg err'; $('sMsg').textContent='Не получилось: '+error.message; return; }
+    $('sTitle').value=''; $('sEmojiVal').textContent=''; $('sEmojiClear').style.display='none';
+    toast('Подкатегория добавлена — она уже на сайте');
+    await refresh();
+  });
+  $('subsBox').addEventListener('click', async e=>{
+    const btn = e.target.closest('[data-delsub]');
+    if(!btn) return;
+    const s = SUBCATS.find(x=>String(x.id)===btn.dataset.delsub);
+    if(!s) return;
+    const n = toolsInSub(s.cat, s.key);
+    if(n){ alert('Сначала удалите или перенесите инструменты этой подкатегории ('+n+' шт.).'); return; }
+    if(!confirm('Удалить подкатегорию «'+s.title+'»?')) return;
+    const { error } = await sb.from('subcats').delete().eq('id', s.id);
+    if(error){ toast('Ошибка: '+error.message); return; }
+    toast('Подкатегория удалена');
+    await refresh();
+  });
+
   $('catsBox').addEventListener('click', async e=>{
     const btn = e.target.closest('[data-delcat]');
     if(!btn) return;
