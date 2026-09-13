@@ -319,6 +319,8 @@
     .card .price{font-size:13px}
     .card .btn{padding:9px;font-size:13.5px}
   }
+  .chip .ico-svg svg{width:15px;height:15px;vertical-align:-2.5px}
+  .subchip .ico-svg svg,.m-subchip .ico-svg svg{width:14px;height:14px;vertical-align:-2px}
 </style>
 </head>
 <body>
@@ -775,9 +777,11 @@ const TOOLS = [
       b.type = 'button';
       b.className = 'm-tile' + (cat === 'all' ? ' active' : '');
       b.dataset.cat = cat;
+      const icoSvg = chip.querySelector('.ico-svg');
       const svg = chip.querySelector('svg');
       const emo = chip.querySelector('.ico-e');
-      if(svg) b.innerHTML = svg.outerHTML;
+      if(icoSvg) b.innerHTML = icoSvg.outerHTML;
+      else if(svg) b.innerHTML = svg.outerHTML;
       else if(emo){ const s = document.createElement('span'); s.className='ico-e'; s.style.fontSize='24px'; s.textContent = emo.textContent; b.appendChild(s); }
       const lbl = document.createElement('span');
       lbl.textContent = M_LABELS[cat] || chip.textContent.trim();
@@ -809,7 +813,7 @@ const TOOLS = [
         b.type = 'button';
         b.className = 'm-subchip' + (idx === 0 ? ' active' : '');
         b.dataset.sub = sc.dataset.sub;
-        b.textContent = sc.textContent.replace('↳ ', '');
+        b.innerHTML = sc.innerHTML.replace('↳ ', '');
         b.addEventListener('click', ()=>{
           mSubChips.querySelectorAll('.m-subchip').forEach(x=>x.classList.remove('active'));
           b.classList.add('active');
@@ -1180,11 +1184,16 @@ const TOOLS = [
     _default:'<svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>'
   };
   let DB_SUBS = []; // подкатегории из базы: {cat, key, title, icon}
+  // Значок может быть SVG-картинкой (новые) или эмодзи (старые записи) — рисуем оба варианта
+  function icoHTML(ic){
+    if(!ic) return '';
+    return ic.indexOf('<svg') === 0 ? '<span class="ico-svg">'+ic+'</span>' : '<span class="ico-e">'+ic+'</span>';
+  }
   function subMenuHTML(catKey, subs){
     let html = '<div class="subfilters" data-for="'+catKey+'"'+(currentCat===catKey?'':' style="display:none"')+'>';
     html += '<button class="subchip'+(currentSub==='all'?' active':'')+'" data-sub="all">Все</button>';
     (subs||[]).forEach(s=>{
-      html += '<button class="subchip'+(currentSub===s.key?' active':'')+'" data-sub="'+s.key+'">'+(s.icon ? s.icon+' ' : '')+(s.title||s.key)+'</button>';
+      html += '<button class="subchip'+(currentSub===s.key?' active':'')+'" data-sub="'+s.key+'">'+(s.icon ? icoHTML(s.icon)+' ' : '')+(s.title||s.key)+'</button>';
     });
     return html + '</div>';
   }
@@ -1224,7 +1233,7 @@ const TOOLS = [
     const subElStatic = document.getElementById('subPower');
     let html = '<button class="chip'+(currentCat==='all'?' active':'')+'" data-cat="all">'+CAT_ICONS.all+' Все инструменты</button>';
     (cats||[]).forEach(c=>{
-      const ico = c.icon ? '<span class="ico-e">'+c.icon+'</span>' : (CAT_ICONS[c.key] || CAT_ICONS._default);
+      const ico = c.icon ? icoHTML(c.icon) : (CAT_ICONS[c.key] || CAT_ICONS._default);
       html += '<button class="chip'+(currentCat===c.key?' active':'')+'" data-cat="'+c.key+'">'+ico+' '+(c.title||c.key)+'</button>';
       const subs = (DB_SUBS||[]).filter(s=>s.cat===c.key);
       if(subs.length) html += subMenuHTML(c.key, subs);
