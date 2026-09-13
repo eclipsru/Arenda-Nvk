@@ -265,13 +265,13 @@
     .logo{font-size:15px;gap:8px}
     .logo .mark{width:30px;height:30px;border-radius:8px}
     .logo .mark svg.ic{width:16px;height:16px}
-    .logo > span:last-child{display:flex;flex-direction:column;line-height:1.15}
+    .logo > span:last-child{display:block;line-height:1.15}
     .logo > span:last-child small{display:block;font-weight:700;font-size:10px;color:var(--orange);letter-spacing:.03em}
 
     /* Поиск + плитки — поверх картинки шапки (hero) */
     .m-catalog{display:block;position:relative;z-index:2;padding:12px 0 18px}
     .m-search{position:relative;margin-bottom:8px}
-    .m-search input{width:100%;background:rgba(255,255,255,.14);border:1.5px solid rgba(255,255,255,.45);border-radius:12px;color:#fff;font-size:16px;padding:10px 40px 10px 38px;outline:none;transition:.15s;-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px)}
+    .m-search input{width:100%;background:rgba(255,255,255,.14);border:1.5px solid rgba(255,255,255,.45);border-radius:12px;color:#fff;font-size:16px;padding:10px 40px 10px 38px;outline:none;transition:.15s}
     .m-search input:focus{border-color:var(--orange);box-shadow:0 0 0 3px rgba(255,143,31,.25)}
     .m-search input::placeholder{color:rgba(255,255,255,.75)}
     .m-search .m-ico{position:absolute;left:12px;top:50%;transform:translateY(-50%);color:rgba(255,255,255,.85);pointer-events:none}
@@ -282,18 +282,18 @@
 
     /* Плитки категорий: квадратные, прозрачные, 4 в ряд (2 ряда на 8 ячеек) */
     .m-tiles{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px}
-    .m-tile{min-width:0;aspect-ratio:1/1;background:rgba(255,255,255,.14);border:1.5px solid rgba(255,255,255,.45);border-radius:12px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;color:#fff;font-weight:600;font-size:10px;line-height:1.15;cursor:pointer;padding:4px 2px;text-align:center;transition:.15s;font-family:inherit;overflow-wrap:break-word;-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px)}
+    .m-tile{min-width:0;aspect-ratio:1/1;background:rgba(255,255,255,.14);border:1.5px solid rgba(255,255,255,.45);border-radius:12px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;color:#fff;font-weight:600;font-size:10px;line-height:1.15;cursor:pointer;padding:4px 2px;text-align:center;transition:.15s;font-family:inherit;overflow-wrap:break-word}
     .m-tile svg{width:22px;height:22px;color:var(--orange)}
     .m-tile:active{transform:scale(.96)}
     .m-tile.active{border-color:var(--orange);background:rgba(255,143,31,.30)}
 
     /* Экран подкатегорий с кнопкой «Назад» */
     .m-subs{margin-top:2px}
-    .m-back{display:flex;align-items:center;gap:8px;width:100%;background:rgba(255,255,255,.14);border:1.5px solid rgba(255,255,255,.45);border-radius:12px;color:#fff;font-weight:600;font-size:13px;padding:10px 12px;cursor:pointer;transition:.15s;font-family:inherit;-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px)}
+    .m-back{display:flex;align-items:center;gap:8px;width:100%;background:rgba(255,255,255,.14);border:1.5px solid rgba(255,255,255,.45);border-radius:12px;color:#fff;font-weight:600;font-size:13px;padding:10px 12px;cursor:pointer;transition:.15s;font-family:inherit}
     .m-back svg{width:17px;height:17px;color:var(--orange)}
     .m-back:active{background:rgba(255,143,31,.25)}
     .m-subchips{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
-    .m-subchip{background:rgba(255,255,255,.14);border:1.5px solid rgba(255,255,255,.45);color:#fff;font-weight:600;font-size:12.5px;padding:8px 12px;border-radius:30px;cursor:pointer;transition:.15s;font-family:inherit;-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px)}
+    .m-subchip{background:rgba(255,255,255,.14);border:1.5px solid rgba(255,255,255,.45);color:#fff;font-weight:600;font-size:12.5px;padding:8px 12px;border-radius:30px;cursor:pointer;transition:.15s;font-family:inherit}
     .m-subchip.active{background:var(--orange);border-color:var(--orange);color:#fff}
 
     /* Под шапкой — только фильтр и карточки: прячем текст hero и лишние секции */
@@ -814,8 +814,6 @@ const TOOLS = [
       mShowTiles();
       render(cat, 'all');
     }
-    const catEl = document.getElementById('catalog');
-    if(catEl && catEl.scrollIntoView) catEl.scrollIntoView({behavior:'smooth'});
   }
   // «Назад» — возвращаемся к плиткам и сбрасываем фильтр
   mBack.addEventListener('click', ()=>{
