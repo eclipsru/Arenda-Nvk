@@ -210,14 +210,6 @@
   .tab.active{background:var(--orange);color:#fff}
   .auth-err{display:none;background:rgba(229,57,53,.15);color:#ff8a80;border:1px solid rgba(229,57,53,.4);border-radius:8px;padding:10px 12px;font-size:14px;margin-bottom:14px}
   .auth-ok{display:none;background:rgba(46,160,67,.18);color:#7ee08a;border:1px solid rgba(46,160,67,.4);border-radius:8px;padding:10px 12px;font-size:14px;margin-bottom:14px}
-  .forgot-link{display:inline-block;margin-top:8px;font-size:14px;font-weight:600;color:var(--orange);text-decoration:none}
-  .forgot-link:hover{text-decoration:underline}
-  .forgot-back{display:block;margin-top:16px;text-align:center;font-size:14px;color:var(--gray);text-decoration:none}
-  .forgot-back:hover{color:var(--dark)}
-  .field input[readonly]{opacity:.75}
-
-  /* ===== ЛИЧНЫЙ КАБИНЕТ (на отдельной странице kabinet.html) ===== */
-  #userName{max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:inline-block;vertical-align:middle}
   .modal .field:last-of-type{margin-bottom:20px}
 
   /* ORDER MODAL (заявка на аренду) */
@@ -255,11 +247,66 @@
   }
   @media(max-width:560px){
     .grid,.steps{grid-template-columns:1fr}
-    .nav-phone{gap:8px}
-    .nav-phone .tel{display:none}   /* номер телефона доступен в разделе «Контакты» */
-    .nav-phone .btn{padding:8px 12px;font-size:13px}
-    #userName{display:none}         /* на узком экране кабинет открывает кнопка «Кабинет» */
+    .nav-phone .btn{display:none}
     .hero-inner{padding:60px 0}
+  }
+
+  /* ===== МОБИЛЬНЫЙ ФИЛЬТР-ПЛИТКИ В ШАПКЕ (виден только на телефоне) ===== */
+  .m-catalog{display:none}
+  @media(max-width:768px){
+    /* Шапка: убираем весь текст */
+    .logo > span:last-child{display:none}
+    .nav-links{display:none}
+    .nav-phone .tel{display:none}
+    .nav-phone #authBtn,
+    .nav-phone #userBox{display:none !important}
+    header{position:static}
+    .nav{padding-bottom:8px}
+
+    /* Блок: поиск + плитки категорий */
+    .m-catalog{display:block;padding:12px 0 6px;border-top:1px solid var(--line)}
+    .m-search{position:relative;margin-bottom:12px}
+    .m-search input{width:100%;background:var(--card);border:1px solid var(--line);border-radius:12px;color:var(--dark);font-size:16px;padding:12px 42px 12px 42px;outline:none;transition:.15s}
+    .m-search input:focus{border-color:var(--orange);box-shadow:0 0 0 3px rgba(255,143,31,.15)}
+    .m-search input::placeholder{color:var(--gray)}
+    .m-search .m-ico{position:absolute;left:13px;top:50%;transform:translateY(-50%);color:var(--gray);pointer-events:none}
+    .m-search .m-ico svg{width:18px;height:18px;display:block}
+    .m-search .m-clear{position:absolute;right:6px;top:50%;transform:translateY(-50%);background:none;border:none;color:var(--gray);cursor:pointer;padding:8px;display:none}
+    .m-search .m-clear svg{width:13px;height:13px;display:block}
+    .m-search .m-clear.visible{display:block}
+
+    /* Плитки категорий: квадратные, 4 в ряд (2 ряда на 8 ячеек) */
+    .m-tiles{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+    .m-tile{aspect-ratio:1/1;background:var(--card);border:2px solid var(--line);border-radius:14px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;color:var(--dark);font-weight:600;font-size:11px;line-height:1.15;cursor:pointer;padding:6px 3px;text-align:center;transition:.15s;font-family:inherit;overflow-wrap:break-word}
+    .m-tile svg{width:24px;height:24px;color:var(--orange)}
+    .m-tile:active{transform:scale(.96)}
+    .m-tile.active{border-color:var(--orange);background:rgba(255,143,31,.12)}
+
+    /* Экран подкатегорий с кнопкой «Назад» */
+    .m-subs{margin-top:2px}
+    .m-back{display:flex;align-items:center;gap:8px;width:100%;background:var(--card);border:2px solid var(--line);border-radius:12px;color:var(--dark);font-weight:600;font-size:14px;padding:12px 14px;cursor:pointer;transition:.15s;font-family:inherit}
+    .m-back svg{width:18px;height:18px;color:var(--orange)}
+    .m-back:active{background:rgba(255,143,31,.10)}
+    .m-subchips{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
+    .m-subchip{background:var(--bg-2);border:2px solid var(--line);color:var(--gray);font-weight:600;font-size:13.5px;padding:10px 14px;border-radius:30px;cursor:pointer;transition:.15s;font-family:inherit}
+    .m-subchip.active{background:var(--orange);border-color:var(--orange);color:#fff}
+
+    /* Под шапкой — только фильтр и карточки: прячем всё лишнее */
+    .hero{display:none}
+    #how{display:none}
+    #why{display:none}
+    #catalog .sec-head{display:none}
+    .cat-sidebar{display:none}
+    .catalog-content .search-box{display:none}
+    .catalog-layout{gap:0}
+
+    /* Карточки в два ряда */
+    .grid{grid-template-columns:repeat(2,1fr);gap:12px}
+    .card .body{padding:12px}
+    .card h3{font-size:14.5px}
+    .card .desc{font-size:12px}
+    .card .price{font-size:13px}
+    .card .btn{padding:9px;font-size:13.5px}
   }
 </style>
 </head>
@@ -279,12 +326,26 @@
       <a href="#contact">Контакты</a>
     </nav>
     <div class="nav-phone">
+      <a href="tel:+79081731410" class="tel">+7 (908) 173-14-10</a>
       <button class="btn outline" id="authBtn" type="button">Войти</button>
       <span id="userBox" style="display:none;align-items:center;gap:10px">
         <span id="userName" style="font-weight:700"></span>
-        <a class="btn outline" id="cabBtn" href="kabinet.html">Кабинет</a>
         <button class="btn outline" id="logoutBtn" type="button">Выйти</button>
       </span>
+    </div>
+  </div>
+
+  <!-- МОБИЛЬНЫЙ ФИЛЬТР: поиск + плитки категорий (на десктопе скрыт) -->
+  <div class="container m-catalog" id="mCatalog">
+    <div class="m-search">
+      <span class="m-ico"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg></span>
+      <input type="text" id="mSearch" placeholder="Поиск инструмента…" autocomplete="off">
+      <button class="m-clear" id="mClear" type="button" aria-label="Очистить поиск"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></button>
+    </div>
+    <div class="m-tiles" id="mTiles"><!-- плитки подставляются скриптом --></div>
+    <div class="m-subs" id="mSubs" style="display:none">
+      <button class="m-back" id="mBack" type="button"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="m12 19-7-7 7-7"/><path d="M19 12H5"/></svg>Назад к категориям</button>
+      <div class="m-subchips" id="mSubChips"></div>
     </div>
   </div>
 </header>
@@ -298,7 +359,7 @@
       <p>Электро-, строительный и садовый инструмент в аренду посуточно. Исправная техника, честные цены, выдача в день обращения.</p>
       <div class="hero-actions">
         <a href="#catalog" class="btn big">Смотреть каталог</a>
-        <a href="tel:+79081732475" class="btn big outline" style="color:#fff;border-color:#fff">Позвонить</a>
+        <a href="tel:+79081731410" class="btn big outline" style="color:#fff;border-color:#fff">Позвонить</a>
       </div>
       <div class="badges">
         <div class="badge"><span class="ico"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M21.8 10A10 10 0 1 1 17 3.34"/><path d="m9 11 3 3L22 4"/></svg></span> Проверенный инструмент</div>
@@ -336,7 +397,7 @@
         <div class="cat-help">
           <b>Не нашли нужное?</b>
           <p>Позвоните — скорее всего, инструмент есть на складе.</p>
-          <a href="tel:+79081732475" class="btn outline">Позвонить</a>
+          <a href="tel:+79081731410" class="btn outline">Позвонить</a>
         </div>
       </aside>
 
@@ -392,22 +453,10 @@
     <div>
       <h2>Свяжитесь с нами</h2>
       <p class="lead">Оставьте заявку или позвоните — поможем подобрать инструмент и забронируем его для вас.</p>
-      <div class="contact-item"><span class="ico"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg></span><div><b>+7 (908) 173-24-75</b><span>Ежедневно, приём заявок</span></div></div>
-      <div class="contact-item"><span class="ico"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 10c0 4.99-5.54 10.19-7.4 11.8a1 1 0 0 1-1.2 0C9.54 20.19 4 14.99 4 10a8 8 0 0 1 16 0"/><circle cx="12" cy="10" r="3"/></svg></span><div><b>г. Новочеркасск, ул. Маресьева, д. 36</b><span>Самовывоз и доставка по городу</span></div></div>
+      <div class="contact-item"><span class="ico"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg></span><div><b>+7 (908) 173-14-10</b><span>Ежедневно, приём заявок</span></div></div>
+      <div class="contact-item"><span class="ico"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 10c0 4.99-5.54 10.19-7.4 11.8a1 1 0 0 1-1.2 0C9.54 20.19 4 14.99 4 10a8 8 0 0 1 16 0"/><circle cx="12" cy="10" r="3"/></svg></span><div><b>г. Новочеркасск, ул. Примерная, 1</b><span>Самовывоз и доставка по городу</span></div></div>
       <div class="contact-item"><span class="ico"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></span><div><b>Пн–Вс: 8:00 – 20:00</b><span>Без выходных</span></div></div>
       <div class="contact-item"><span class="ico"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><rect width="20" height="16" x="2" y="4" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/></svg></span><div><b><a href="/cdn-cgi/l/email-protection" class="__cf_email__" data-cfemail="a2cbccc4cde2d2d0cdc9c3d68fccd4c98cd0d7">[email&#160;protected]</a></b><span>Ответим на письмо в течение дня</span></div></div>
-      <div class="pickup-map" style="height:260px;margin-top:8px">
-        <div class="pm-fallback">
-          <div class="pm-pin"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 10c0 4.99-5.54 10.19-7.4 11.8a1 1 0 0 1-1.2 0C9.54 20.19 4 14.99 4 10a8 8 0 0 1 16 0"/><circle cx="12" cy="10" r="3"/></svg></div>
-          <b>г. Новочеркасск, ул. Маресьева, д. 36</b>
-          <p>Карта загрузится при подключении к интернету</p>
-        </div>
-        <iframe title="Как нас найти: г. Новочеркасск, ул. Маресьева, д. 36" loading="lazy"
-          src="https://www.openstreetmap.org/export/embed.html?bbox=40.0918652%2C47.4476182%2C40.1098652%2C47.4576182&amp;layer=mapnik&amp;marker=47.4526182%2C40.1008652"></iframe>
-      </div>
-      <p class="pm-caption"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 10c0 4.99-5.54 10.19-7.4 11.8a1 1 0 0 1-1.2 0C9.54 20.19 4 14.99 4 10a8 8 0 0 1 16 0"/><circle cx="12" cy="10" r="3"/></svg> Наш склад: г. Новочеркасск, ул. Маресьева, д. 36 ·
-        <a href="https://yandex.ru/maps/?pt=40.1008652%2C47.4526182&amp;z=17" target="_blank" rel="noopener">Открыть в Яндекс Картах</a></p>
-
     </div>
 
     <div class="cta-card">
@@ -415,7 +464,7 @@
       <h3>Заявка на аренду</h3>
       <p>Заполните короткую форму — можно выбрать сразу несколько инструментов. Перезвоним и подтвердим бронь.</p>
       <button type="button" class="btn" id="openOrderBtn">Оставить заявку</button>
-      <p class="form-note">Или позвоните: <a href="tel:+79081732475" style="color:var(--orange);font-weight:700">+7 (908) 173-24-75</a></p>
+      <p class="form-note">Или позвоните: <a href="tel:+79081731410" style="color:var(--orange);font-weight:700">+7 (908) 173-14-10</a></p>
     </div>
   </div>
 </section>
@@ -427,7 +476,7 @@
     <h3 id="modalTitle">Вход в личный кабинет</h3>
     <p class="msub" id="modalSub">Войдите, чтобы отслеживать свои заявки на аренду.</p>
 
-    <div class="tabs" id="authTabs">
+    <div class="tabs">
       <button class="tab active" id="tabLogin" type="button">Вход</button>
       <button class="tab" id="tabReg" type="button">Регистрация</button>
     </div>
@@ -440,21 +489,15 @@
         <label for="rName">Имя</label>
         <input type="text" id="rName" placeholder="Иван" autocomplete="name" />
       </div>
-      <div class="field" id="fieldEmail">
+      <div class="field">
         <label for="rEmail">E-mail или телефон</label>
         <input type="text" id="rEmail" placeholder="you@mail.ru" autocomplete="username" />
       </div>
-      <div class="field" id="fieldPass">
-        <label for="rPass" id="rPassLabel">Пароль</label>
+      <div class="field">
+        <label for="rPass">Пароль</label>
         <input type="password" id="rPass" placeholder="Не менее 6 символов" autocomplete="current-password" />
-        <a href="#" id="forgotLink" class="forgot-link">Забыли пароль?</a>
-      </div>
-      <div class="field" id="fieldCode" style="display:none">
-        <label for="rCode">Код подтверждения</label>
-        <input type="text" id="rCode" placeholder="6 цифр из письма" inputmode="numeric" maxlength="6" autocomplete="one-time-code" />
       </div>
       <button type="submit" class="btn" id="authSubmit">Войти</button>
-      <a href="#" id="backToLogin" class="forgot-back" style="display:none">← Вернуться ко входу</a>
     </form>
   </div>
 </div>
@@ -533,7 +576,7 @@
       <li><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg> <b>Поломка:</b> мелкий расходник (диски, коронки, леска) — за счёт арендатора. Капремонт неисправного по вине арендатора инструмента — тоже.</li>
       <li><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M14 18V6a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v11a1 1 0 0 0 1 1h2"/><path d="M15 18H9"/><path d="M19 18h2a1 1 0 0 0 1-1v-3.65a1 1 0 0 0-.22-.62l-3.48-4.35A1 1 0 0 0 17.52 8H14"/><circle cx="17" cy="18" r="2"/><circle cx="7" cy="18" r="2"/></svg> <b>Доставка:</b> по Новочеркасску — оформляется в заявке, стоимость уточнит менеджер.</li>
     </ul>
-    <a href="tel:+79081732475" class="btn" style="width:100%;text-align:center">Позвонить и уточнить</a>
+    <a href="tel:+79081731410" class="btn" style="width:100%;text-align:center">Позвонить и уточнить</a>
   </div>
 </div>
 
@@ -541,7 +584,7 @@
 <footer>
   <div class="container foot">
     <div>© <span id="year"></span> ПрокатИнструмента, Новочеркасск. Все права защищены.</div>
-    <div><a href="#catalog">Каталог</a> &nbsp;·&nbsp; <a href="#contact">Контакты</a> &nbsp;·&nbsp; <a href="tel:+79081732475">+7 (908) 173-24-75</a></div>
+    <div><a href="#catalog">Каталог</a> &nbsp;·&nbsp; <a href="#contact">Контакты</a> &nbsp;·&nbsp; <a href="tel:+79081731410">+7 (908) 173-14-10</a></div>
   </div>
 </footer>
 
@@ -549,10 +592,8 @@
 <script data-cfasync="false" src="/cdn-cgi/scripts/5c5dd728/cloudflare-static/email-decode.min.js"></script><script>
   // ====== НАСТРОЙКИ ПОДКЛЮЧЕНИЯ (заполните по шагам из файла БЕСПЛАТНЫЙ-СТАРТ.md) ======
   const CONFIG = {
-    SUPABASE_URL: 'https://wdxdeatphizclskfmfxi.supabase.co',        // пример: 'https://abcdefghij.supabase.co'
-    SUPABASE_ANON_KEY: 'sb_publishable_dtRaEHNNPBFbHFvg8hw9iA_FqJSz9BE',    // публичный anon-ключ: Supabase -> Settings -> API
-    // ↓ АДРЕС РАБОЧЕЙ ВЕРСИИ САЙТА — на него ведёт ссылка восстановления из письма
-    SITE_URL: 'https://eclipsru.github.io/Arenda-Nvk/'
+    SUPABASE_URL: '',        // пример: 'https://abcdefghij.supabase.co'
+    SUPABASE_ANON_KEY: ''    // публичный anon-ключ: Supabase -> Settings -> API
   };
   // Уведомления о заявках в MAX приходят через вебхук Supabase (токен бота хранится
   // в Supabase, НЕ на этой странице). Заявки сохраняются в таблицу 'orders'.
@@ -633,7 +674,7 @@ const TOOLS = [
         '<div style="margin-bottom:12px;color:var(--gray)"><svg class="ic" style="width:46px;height:46px" viewBox="0 0 24 24" aria-hidden="true"><path d="m15 12-8.373 8.373a1 1 0 1 1-3-3L12 9"/><path d="m18 15 4-4"/><path d="m21.5 11.5-1.914-1.914A2 2 0 0 1 19 8.172V7l-2.26-2.26a6 6 0 0 0-4.202-1.756L9 2.96l.92.82A6.18 6.18 0 0 1 12 8.4V10l2 2h1.172a2 2 0 0 1 1.414.586L18.5 14.5"/></svg></div>' +
         '<h3 style="margin-bottom:8px">Инструменты этой категории скоро появятся</h3>' +
         '<p style="color:var(--gray);margin-bottom:18px">Уже сейчас их можно забронировать по телефону — уточните наличие.</p>' +
-        '<a href="tel:+79081732475" class="btn outline">Позвонить</a></div>';
+        '<a href="tel:+79081731410" class="btn outline">Позвонить</a></div>';
       }
       return;
     }
@@ -704,6 +745,94 @@ const TOOLS = [
   });
   searchClear.addEventListener('click', clearSearch);
 
+  // ====== МОБИЛЬНЫЙ ФИЛЬТР: плитки в шапке ======
+  const mTiles = document.getElementById('mTiles');
+  const mSubs = document.getElementById('mSubs');
+  const mSubChips = document.getElementById('mSubChips');
+  const mBack = document.getElementById('mBack');
+  const mSearch = document.getElementById('mSearch');
+  const mClear = document.getElementById('mClear');
+  const M_LABELS = {all:'Все категории', power:'Электро\u00ADинструмент', construction:'Строй\u00ADоборудование', garden:'Садовый инструмент', auto:'Для авто'};
+
+  // Плитки строим из существующих кнопок категорий — один источник иконок и подписей
+  function buildMobileTiles(){
+    if(!mTiles || mTiles.dataset.built) return;
+    document.querySelectorAll('#filters .chip').forEach(chip=>{
+      const cat = chip.dataset.cat;
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'm-tile' + (cat === 'all' ? ' active' : '');
+      b.dataset.cat = cat;
+      const svg = chip.querySelector('svg');
+      if(svg) b.innerHTML = svg.outerHTML;
+      const lbl = document.createElement('span');
+      lbl.textContent = M_LABELS[cat] || chip.textContent.trim();
+      b.appendChild(lbl);
+      b.addEventListener('click', ()=> mPick(cat));
+      mTiles.appendChild(b);
+    });
+    mTiles.dataset.built = '1';
+  }
+  buildMobileTiles();
+
+  function mMarkTile(cat){
+    mTiles.querySelectorAll('.m-tile').forEach(t=>t.classList.toggle('active', t.dataset.cat === cat));
+  }
+  function mShowTiles(){
+    mSubs.style.display = 'none';
+    mTiles.style.display = 'grid';
+  }
+  function mPick(cat){
+    mMarkTile(cat);
+    const subWrap = document.getElementById('subPower');
+    const hasSubs = (cat === 'power') && subWrap;
+    if(hasSubs){
+      // Экран подкатегорий: чипы строим из десктопного меню
+      mSubChips.innerHTML = '';
+      subWrap.querySelectorAll('.subchip').forEach((sc, idx)=>{
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.className = 'm-subchip' + (idx === 0 ? ' active' : '');
+        b.dataset.sub = sc.dataset.sub;
+        b.textContent = sc.textContent.replace('↳ ', '');
+        b.addEventListener('click', ()=>{
+          mSubChips.querySelectorAll('.m-subchip').forEach(x=>x.classList.remove('active'));
+          b.classList.add('active');
+          render('power', b.dataset.sub);
+        });
+        mSubChips.appendChild(b);
+      });
+      mTiles.style.display = 'none';
+      mSubs.style.display = 'block';
+      render('power', 'all');
+    }else{
+      // У категории нет подкатегорий — фильтруем сразу, плитки остаются
+      mShowTiles();
+      render(cat, 'all');
+    }
+    const catEl = document.getElementById('catalog');
+    if(catEl && catEl.scrollIntoView) catEl.scrollIntoView({behavior:'smooth'});
+  }
+  // «Назад» — возвращаемся к плиткам и сбрасываем фильтр
+  mBack.addEventListener('click', ()=>{
+    mShowTiles();
+    mMarkTile('all');
+    render('all', 'all');
+  });
+  // Мобильный поиск — тот же механизм, что и на десктопе
+  mSearch.addEventListener('input', ()=>{
+    query = mSearch.value.trim();
+    mClear.classList.toggle('visible', query.length > 0);
+    render(currentCat, currentSub);
+  });
+  mClear.addEventListener('click', ()=>{
+    mSearch.value = '';
+    query = '';
+    mClear.classList.remove('visible');
+    render(currentCat, currentSub);
+    mSearch.focus();
+  });
+
   // ================== ЗАЯВКА НА АРЕНДУ (модальное окно) ==================
   // Список инструментов для выпадающего списка (одно место — легко дополнять)
   const TOOL_OPTIONS = [
@@ -747,7 +876,6 @@ const TOOLS = [
   function openOrder(){
     orderErr.style.display='none';
     orderModal.classList.add('open');
-    prefillOrderFromProfile(); // если пользователь вошёл — подставим имя и телефон
     document.getElementById('name').focus();
   }
   function closeOrder(){ orderModal.classList.remove('open'); }
@@ -819,17 +947,6 @@ const TOOLS = [
         user_email: sbUser ? (sbUser.email || '') : ''
       }).then(({ error })=>{ if(error) console.warn('Заявка не сохранена в базу:', error.message); });
     }
-    // Если пользователь вошёл — сохраняем заявку в историю его личного кабинета
-    if(currentLogin()){
-      saveLocalOrder({
-        ts: Date.now(),
-        name: document.getElementById('name').value.trim(),
-        phone: document.getElementById('phone').value.trim(),
-        tools: chosen.map(s=>s.value).join(', '),
-        get: getMethodValue === 'delivery' ? 'Доставка: ' + addressInput.value.trim() : 'Самовывоз, ул. Маресьева, 36',
-        comment: document.getElementById('comment').value.trim()
-      });
-    }
     // Пока сайт без сервера — заявка показывает подтверждение.
     // Как подключить реальную отправку — описано в инструкции (файл ИНСТРУКЦИЯ.md).
     const okIcon = '<svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>';
@@ -873,15 +990,6 @@ const TOOLS = [
   const tabLogin = document.getElementById('tabLogin');
   const tabReg = document.getElementById('tabReg');
   const fieldName = document.getElementById('fieldName');
-  const fieldEmail = document.getElementById('fieldEmail');
-  const fieldPass = document.getElementById('fieldPass');
-  const fieldPassLabel = document.getElementById('rPassLabel');
-  const fieldCode = document.getElementById('fieldCode');
-  const forgotLink = document.getElementById('forgotLink');
-  const backToLogin = document.getElementById('backToLogin');
-  const rEmail = document.getElementById('rEmail');
-  const rPass = document.getElementById('rPass');
-  const rCode = document.getElementById('rCode');
   const authForm = document.getElementById('authForm');
   const authSubmit = document.getElementById('authSubmit');
   const authErr = document.getElementById('authErr');
@@ -889,20 +997,9 @@ const TOOLS = [
   const modalTitle = document.getElementById('modalTitle');
   const modalSub = document.getElementById('modalSub');
 
-  let mode = 'login'; // 'login' | 'register' | 'forgot' | 'reset' | 'newpass'
+  let mode = 'login'; // 'login' или 'register'
   let sbUser = null;  // текущий пользователь Supabase (или null)
   let currentUserName = '';
-  let resetLogin = null; // демо-восстановление: для какого логина выдан код
-  let resetCode = null;  // демо-восстановление: сам код
-  const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-
-  // Адрес, на который ведёт ссылка восстановления из письма.
-  // Приоритет — CONFIG.SITE_URL (рабочий сайт в интернете); иначе адрес текущей
-  // страницы без параметров/якоря (чтобы не отправлять локальные/мусорные ссылки).
-  function resetRedirectUrl(){
-    if(CONFIG.SITE_URL) return CONFIG.SITE_URL;
-    return window.location.origin + window.location.pathname;
-  }
 
   const sb = (typeof window.supabase !== 'undefined' && CONFIG.SUPABASE_URL && CONFIG.SUPABASE_ANON_KEY)
     ? window.supabase.createClient(CONFIG.SUPABASE_URL, CONFIG.SUPABASE_ANON_KEY)
@@ -920,67 +1017,18 @@ const TOOLS = [
   function setMode(m){
     mode = m;
     clearMsg();
-    const isAuth = (m==='login' || m==='register');
-    authTabs.style.display = isAuth ? 'flex' : 'none';   // при восстановлении вкладки не нужны
-    backToLogin.style.display = isAuth ? 'none' : 'block';
-    // подпись поля пароля по умолчанию
-    fieldPassLabel.textContent = 'Пароль';
-    rPass.setAttribute('placeholder', 'Не менее 6 символов');
-    rPass.setAttribute('autocomplete', 'current-password');
-    rEmail.readOnly = (m==='reset'); // на шаге ввода кода e-mail менять нельзя
     if(m==='login'){
       tabLogin.classList.add('active'); tabReg.classList.remove('active');
       fieldName.style.display='none';
-      fieldEmail.style.display='block';
-      fieldPass.style.display='block';
-      fieldCode.style.display='none';
-      forgotLink.style.display='inline-block';
       modalTitle.textContent='Вход в личный кабинет';
       modalSub.textContent='Войдите, чтобы отслеживать свои заявки на аренду.';
       authSubmit.textContent='Войти';
-    }else if(m==='register'){
+    }else{
       tabReg.classList.add('active'); tabLogin.classList.remove('active');
       fieldName.style.display='block';
-      fieldEmail.style.display='block';
-      fieldPass.style.display='block';
-      fieldCode.style.display='none';
-      forgotLink.style.display='none';
       modalTitle.textContent='Регистрация';
       modalSub.textContent='Создайте аккаунт — это займёт меньше минуты.';
       authSubmit.textContent='Зарегистрироваться';
-    }else if(m==='forgot'){
-      fieldName.style.display='none';
-      fieldEmail.style.display='block';
-      fieldPass.style.display='none';
-      fieldCode.style.display='none';
-      forgotLink.style.display='none';
-      modalTitle.textContent='Восстановление пароля';
-      modalSub.textContent='Введите e-mail — отправим инструкции по восстановлению.';
-      authSubmit.textContent='Отправить инструкции';
-    }else if(m==='reset'){
-      fieldName.style.display='none';
-      fieldEmail.style.display='block';
-      fieldPass.style.display='block';
-      fieldCode.style.display='block';
-      forgotLink.style.display='none';
-      fieldPassLabel.textContent='Новый пароль';
-      rPass.setAttribute('placeholder', 'Придумайте новый пароль');
-      rPass.setAttribute('autocomplete', 'new-password');
-      modalTitle.textContent='Новый пароль';
-      modalSub.textContent='Введите код подтверждения и придумайте новый пароль.';
-      authSubmit.textContent='Сохранить новый пароль';
-    }else if(m==='newpass'){
-      fieldName.style.display='none';
-      fieldEmail.style.display='none';
-      fieldPass.style.display='block';
-      fieldCode.style.display='none';
-      forgotLink.style.display='none';
-      fieldPassLabel.textContent='Новый пароль';
-      rPass.setAttribute('placeholder', 'Придумайте новый пароль');
-      rPass.setAttribute('autocomplete', 'new-password');
-      modalTitle.textContent='Новый пароль';
-      modalSub.textContent='Придумайте новый пароль для вашего аккаунта.';
-      authSubmit.textContent='Сохранить пароль';
     }
   }
 
@@ -1021,15 +1069,6 @@ const TOOLS = [
   modal.addEventListener('click', (e)=>{ if(e.target===modal) closeModal(); });
   tabLogin.addEventListener('click', ()=>setMode('login'));
   tabReg.addEventListener('click', ()=>setMode('register'));
-  forgotLink.addEventListener('click', (e)=>{
-    e.preventDefault();
-    setMode('forgot');
-    setTimeout(()=>rEmail.focus(), 50);
-  });
-  backToLogin.addEventListener('click', (e)=>{
-    e.preventDefault();
-    setMode('login');
-  });
   logoutBtn.addEventListener('click', ()=>{
     if(sb){ sb.auth.signOut(); sbUser = null; }
     store.del(SESSION_KEY);
@@ -1040,70 +1079,8 @@ const TOOLS = [
     e.preventDefault();
     clearMsg();
     const name = document.getElementById('rName').value.trim();
-    const login = rEmail.value.trim().toLowerCase();
-    const pass = rPass.value;
-    const code = rCode.value.trim();
-
-    // ===== ВОССТАНОВЛЕНИЕ, ШАГ 1: отправка инструкций на e-mail =====
-    if(mode==='forgot'){
-      if(!login){ showErr('Введите e-mail.'); return; }
-      if(sb){
-        if(!EMAIL_RE.test(login)){ showErr('Введите корректный e-mail.'); return; }
-        try{
-          authSubmit.disabled = true;
-          const { error } = await sb.auth.resetPasswordForEmail(login, { redirectTo: resetRedirectUrl() });
-          if(error) throw error;
-          showOk('Письмо отправлено! Проверьте почту и перейдите по ссылке, чтобы задать новый пароль.');
-        }catch(err){
-          showErr(authErrorText(err.message));
-        }finally{
-          authSubmit.disabled = false;
-        }
-      }else{
-        // Демо-режим: реального сервера нет, письмо уйти не может —
-        // выдаём код подтверждения прямо на экран.
-        const users = getUsers();
-        if(!users[login]){ showErr('Пользователь не найден. Зарегистрируйтесь.'); return; }
-        resetLogin = login;
-        resetCode = String(Math.floor(100000 + Math.random() * 900000));
-        setMode('reset');
-        showOk('Код подтверждения: ' + resetCode + ' (демо-режим — в рабочем код придёт на почту).');
-      }
-      return;
-    }
-
-    // ===== ВОССТАНОВЛЕНИЕ, ШАГ 2 (демо-режим): код + новый пароль =====
-    if(mode==='reset'){
-      if(login !== resetLogin){ showErr('Не меняйте e-mail — код выдавался для указанного адреса.'); return; }
-      if(!code || code !== resetCode){ showErr('Неверный код подтверждения.'); return; }
-      if(pass.length < 6){ showErr('Пароль должен быть не менее 6 символов.'); return; }
-      const users = getUsers();
-      if(!users[login]){ showErr('Пользователь не найден.'); return; }
-      users[login].pass = pass;
-      saveUsers(users);
-      resetLogin = null; resetCode = null;
-      rPass.value = ''; rCode.value = '';
-      setMode('login');
-      showOk('Пароль обновлён! Теперь войдите с новым паролем.');
-      return;
-    }
-
-    // ===== НОВЫЙ ПАРОЛЬ (пришли по ссылке из письма Supabase) =====
-    if(mode==='newpass'){
-      if(pass.length < 6){ showErr('Пароль должен быть не менее 6 символов.'); return; }
-      try{
-        authSubmit.disabled = true;
-        const { error } = await sb.auth.updateUser({ password: pass });
-        if(error) throw error;
-        showOk('Пароль обновлён!');
-        setTimeout(()=>{ closeModal(); refreshUI(); }, 800);
-      }catch(err){
-        showErr(authErrorText(err.message));
-      }finally{
-        authSubmit.disabled = false;
-      }
-      return;
-    }
+    const login = document.getElementById('rEmail').value.trim().toLowerCase();
+    const pass = document.getElementById('rPass').value;
 
     if(!login){ showErr('Введите e-mail.'); return; }
     if(pass.length < 6){ showErr('Пароль должен быть не менее 6 символов.'); return; }
@@ -1116,14 +1093,14 @@ const TOOLS = [
           if(!name){ showErr('Введите имя.'); return; }
           const { data, error } = await sb.auth.signUp({ email: login, password: pass, options:{ data:{ name: name } } });
           if(error) throw error;
-          if(data.session){ sbUser = data.user; showOk('Готово! Аккаунт создан.'); finishAuth(800); }
+          if(data.session){ sbUser = data.user; showOk('Готово! Аккаунт создан.'); setTimeout(()=>{ closeModal(); refreshUI(); }, 800); }
           else { showOk('Аккаунт создан! Подтвердите e-mail по письму и войдите.'); }
         }else{
           const { data, error } = await sb.auth.signInWithPassword({ email: login, password: pass });
           if(error) throw error;
           sbUser = data.user;
           showOk('Вход выполнен!');
-          finishAuth(600);
+          setTimeout(()=>{ closeModal(); refreshUI(); }, 600);
         }
       }catch(err){
         showErr(authErrorText(err.message));
@@ -1142,86 +1119,25 @@ const TOOLS = [
       saveUsers(users);
       store.set(SESSION_KEY, login);
       showOk('Готово! Аккаунт создан.');
-      finishAuth(800);
+      setTimeout(()=>{ closeModal(); refreshUI(); }, 800);
     }else{
       if(!users[login]){ showErr('Пользователь не найден. Зарегистрируйтесь.'); return; }
       if(users[login].pass !== pass){ showErr('Неверный пароль.'); return; }
       store.set(SESSION_KEY, login);
       showOk('Вход выполнен!');
-      finishAuth(600);
+      setTimeout(()=>{ closeModal(); refreshUI(); }, 600);
     }
   });
 
   // Подписка на состояние входа Supabase
   if(sb){
-    sb.auth.getSession().then(({ data })=>{
-      sbUser = data.session ? data.session.user : null;
-      // если страницу открыли по ссылке восстановления пароля из письма
-      if(/(type=recovery|#.*recovery)/i.test(window.location.href)){
-        setMode('newpass'); openModal();
-      }
-      refreshUI();
-    });
-    sb.auth.onAuthStateChange((event, session)=>{
-      if(event === 'PASSWORD_RECOVERY'){ setMode('newpass'); openModal(); }
-      sbUser = session ? session.user : null;
-      refreshUI();
-    });
-  }
-
-  // ================== ЛИЧНЫЙ КАБИНЕТ ==================
-  // Сам кабинет находится на отдельной странице kabinet.html.
-  // Здесь остаются только общие помощники: кто вошёл, его профиль
-  // (для автозаполнения заявки) и сохранение заявок в историю.
-
-  // Логин текущего пользователя (e-mail в нижнем регистре) или ''
-  function currentLogin(){
-    if(sb && sbUser) return (sbUser.email || '').toLowerCase();
-    return (store.get(SESSION_KEY) || '').toLowerCase();
-  }
-  const profileKey = () => 'prokat_profile_' + currentLogin();
-  const ordersKey  = () => 'prokat_orders_' + currentLogin();
-
-  // --- Профиль: чтение (нужен для автозаполнения заявки) ---
-  function getProfile(){
-    if(sb && sbUser) return (sbUser.user_metadata || {});
-    try { return JSON.parse(store.get(profileKey()) || '{}'); } catch(e){ return {}; }
-  }
-
-  // --- История аренды: локальная копия (для демо-режима и как запасной вариант) ---
-  function saveLocalOrder(o){
-    if(!currentLogin()) return;
-    let arr = [];
-    try { arr = JSON.parse(store.get(ordersKey()) || '[]'); } catch(e){ arr = []; }
-    arr.push(o);
-    store.set(ordersKey(), JSON.stringify(arr));
-  }
-
-  // --- Подстановка имени и телефона из профиля в форму заявки ---
-  function prefillOrderFromProfile(){
-    if(!currentLogin()) return;
-    const p = getProfile();
-    const nameEl = document.getElementById('name');
-    const phoneEl = document.getElementById('phone');
-    if(!nameEl.value) nameEl.value = p.name || currentUserName || '';
-    if(!phoneEl.value && p.phone) phoneEl.value = p.phone;
-  }
-
-  // Пришли по ссылке «Войти» со страницы кабинета (index.html#login) — откроем окно входа
-  if(window.location.hash === '#login'){ openModal(); }
-
-  // После успешного входа/регистрации: если пришли с кабинета — вернём пользователя туда
-  function finishAuth(delay){
-    setTimeout(()=>{
-      closeModal(); refreshUI();
-      if(window.location.hash === '#login'){ window.location.href = 'kabinet.html'; }
-    }, delay || 700);
+    sb.auth.getSession().then(({ data })=>{ sbUser = data.session ? data.session.user : null; refreshUI(); });
+    sb.auth.onAuthStateChange((_event, session)=>{ sbUser = session ? session.user : null; refreshUI(); });
   }
 
   // Если пользователь вошёл — подставим его имя в форму заявки
   refreshUI();
 </script>
 <script>(function(){function c(){var b=a.contentDocument||(a.contentWindow&&a.contentWindow.document);if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a37b4c3cfa66f115',t:'MTc4ODg0MjY2NA=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script><script type="module" src="https://static.cloudflareinsights.com/beacon.min.js/v31edd6df95cf4e85bb4c19e7a9bdbcba1788362987495" integrity="sha512-iIg7k2xntmwu6/uSb5tpc/hySgZc4eoL31yB29W6tJFo2akwjPWcEqnCEdJvGexCL0KEQwVYv5BlowfhVz26hg==" data-cf-beacon='{"version":"2024.11.0","token":"1954b47c125f43f8b4338b3c4f804e4f","spa":2}' crossorigin="anonymous"></script>
-<script type="module" src="https://static.cloudflareinsights.com/beacon.min.js/v31edd6df95cf4e85bb4c19e7a9bdbcba1788362987495" integrity="sha512-iIg7k2xntmwu6/uSb5tpc/hySgZc4eoL31yB29W6tJFo2akwjPWcEqnCEdJvGexCL0KEQwVYv5BlowfhVz26hg==" data-cf-beacon='{"version":"2024.11.0","token":"1954b47c125f43f8b4338b3c4f804e4f","spa":2}' crossorigin="anonymous"></script>
 </body>
 </html>
