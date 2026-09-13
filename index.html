@@ -663,7 +663,7 @@ const TOOLS = [
     const q = query.toLowerCase();
     const list = TOOLS.filter(t => {
       if(cat !== 'all' && t.cat !== cat) return false;
-      if(cat === 'power' && sub !== 'all' && t.sub !== sub) return false;
+      if(sub !== 'all' && t.sub !== sub) return false;
       // Поиск: по названию, описанию и категории инструмента (с транслитерацией «макита»→«makita» и нормализацией ё→е)
       if(q){
         const norm = s => s.toLowerCase().replace(/ё/g, 'е');
