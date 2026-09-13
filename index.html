@@ -260,7 +260,9 @@
     .nav{height:56px;gap:10px}
     .nav-links{display:none}
     .nav-phone .tel{display:none}
-    .nav-phone #userBox{display:none !important}
+    .nav-phone #userBox span{display:none}
+    .nav-phone #userBox #cabLink,
+    .nav-phone #userBox #logoutBtn{display:inline-flex !important;padding:8px 12px;font-size:13px}
     .nav-phone #authBtn{display:inline-flex !important;padding:8px 14px;font-size:13px}
     .logo{font-size:15px;gap:8px}
     .logo .mark{width:30px;height:30px;border-radius:8px}
@@ -1056,6 +1058,7 @@ const TOOLS = [
 
   function refreshUI(){
     const session = sbUser ? (sbUser.email || 'user') : store.get(SESSION_KEY);
+    const demoAdmin = !sbUser && session && CONFIG.ADMIN_EMAIL && String(session).toLowerCase() === String(CONFIG.ADMIN_EMAIL).toLowerCase();
     if(session){
       let name;
       if(sbUser){
@@ -1068,7 +1071,7 @@ const TOOLS = [
       userName.textContent = 'Привет, ' + name + '!';
       authBtn.style.display='none';
       userBox.style.display='flex';
-      cabLink.style.display = isAdminUser() ? 'inline-block' : 'none';
+      cabLink.style.display = (isAdminUser() || demoAdmin) ? 'inline-block' : 'none';
     }else{
       currentUserName = '';
       authBtn.style.display='inline-block';
@@ -1114,6 +1117,7 @@ const TOOLS = [
           sbUser = data.user;
           if(isAdminUser()){
             showOk('Вход выполнен! Открываем личный кабинет…');
+            refreshUI();
             setTimeout(()=>{ location.href = 'admin.html'; }, 700);
             return;
           }
@@ -1142,6 +1146,12 @@ const TOOLS = [
       if(!users[login]){ showErr('Пользователь не найден. Зарегистрируйтесь.'); return; }
       if(users[login].pass !== pass){ showErr('Неверный пароль.'); return; }
       store.set(SESSION_KEY, login);
+      if(CONFIG.ADMIN_EMAIL && login === String(CONFIG.ADMIN_EMAIL).toLowerCase()){
+        showOk('Вход выполнен! Открываем личный кабинет…');
+        refreshUI();
+        setTimeout(()=>{ location.href = 'admin.html'; }, 700);
+        return;
+      }
       showOk('Вход выполнен!');
       setTimeout(()=>{ closeModal(); refreshUI(); }, 600);
     }
