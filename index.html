@@ -266,7 +266,7 @@
     .logo .mark{width:30px;height:30px;border-radius:8px}
     .logo .mark svg.ic{width:16px;height:16px}
     .logo > span:last-child{display:block;line-height:1.15}
-    .logo > span:last-child small{display:block;font-weight:700;font-size:10px;color:var(--orange);letter-spacing:.03em}
+    .logo > span:last-child small{display:block;font-weight:700;font-size:11px;color:var(--orange);letter-spacing:.03em}
 
     /* Поиск + плитки — поверх картинки шапки (hero) */
     .m-catalog{display:block;position:relative;z-index:2;padding:12px 0 18px}
@@ -304,12 +304,13 @@
     .cat-sidebar{display:none}
     .catalog-content .search-box{display:none}
     .catalog-layout{gap:0}
+    #catalog{padding-top:22px}
 
     /* Карточки в два ряда */
     .grid{grid-template-columns:repeat(2,1fr);gap:12px}
     .card .body{padding:12px}
     .card h3{font-size:14.5px}
-    .card .desc{font-size:12px}
+    .card .desc{display:none}
     .card .price{font-size:13px}
     .card .btn{padding:9px;font-size:13.5px}
   }
@@ -454,15 +455,6 @@
 <!-- КОНТАКТЫ + ФОРМА -->
 <section id="contact" class="contact-wrap">
   <div class="container contact">
-    <div>
-      <h2>Свяжитесь с нами</h2>
-      <p class="lead">Оставьте заявку или позвоните — поможем подобрать инструмент и забронируем его для вас.</p>
-      <div class="contact-item"><span class="ico"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg></span><div><b>+7 (908) 173-14-10</b><span>Ежедневно, приём заявок</span></div></div>
-      <div class="contact-item"><span class="ico"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 10c0 4.99-5.54 10.19-7.4 11.8a1 1 0 0 1-1.2 0C9.54 20.19 4 14.99 4 10a8 8 0 0 1 16 0"/><circle cx="12" cy="10" r="3"/></svg></span><div><b>г. Новочеркасск, ул. Примерная, 1</b><span>Самовывоз и доставка по городу</span></div></div>
-      <div class="contact-item"><span class="ico"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></span><div><b>Пн–Вс: 8:00 – 20:00</b><span>Без выходных</span></div></div>
-      <div class="contact-item"><span class="ico"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><rect width="20" height="16" x="2" y="4" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/></svg></span><div><b><a href="/cdn-cgi/l/email-protection" class="__cf_email__" data-cfemail="a2cbccc4cde2d2d0cdc9c3d68fccd4c98cd0d7">[email&#160;protected]</a></b><span>Ответим на письмо в течение дня</span></div></div>
-    </div>
-
     <div class="cta-card">
       <div class="cta-ico"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M10 9H8"/><path d="M16 13H8"/><path d="M16 17H8"/></svg></div>
       <h3>Заявка на аренду</h3>
@@ -471,7 +463,16 @@
       <p class="form-note">Или позвоните: <a href="tel:+79081731410" style="color:var(--orange);font-weight:700">+7 (908) 173-14-10</a></p>
     </div>
   </div>
-</section>
+
+    <div>
+      <h2>Свяжитесь с нами</h2>
+      <p class="lead">Оставьте заявку или позвоните — поможем подобрать инструмент и забронируем его для вас.</p>
+      <div class="contact-item"><span class="ico"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg></span><div><b>+7 (908) 173-14-10</b><span>Ежедневно, приём заявок</span></div></div>
+      <div class="contact-item"><span class="ico"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 10c0 4.99-5.54 10.19-7.4 11.8a1 1 0 0 1-1.2 0C9.54 20.19 4 14.99 4 10a8 8 0 0 1 16 0"/><circle cx="12" cy="10" r="3"/></svg></span><div><b>г. Новочеркасск, ул. Маресьева, д. 36</b><span>Самовывоз и доставка по городу</span></div></div>
+      <div class="contact-item"><span class="ico"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></span><div><b>Пн–Вс: 8:00 – 20:00</b><span>Без выходных</span></div></div>
+      <div class="contact-item"><span class="ico"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><rect width="20" height="16" x="2" y="4" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/></svg></span><div><b><a href="/cdn-cgi/l/email-protection" class="__cf_email__" data-cfemail="a2cbccc4cde2d2d0cdc9c3d68fccd4c98cd0d7">[email&#160;protected]</a></b><span>Ответим на письмо в течение дня</span></div></div>
+    </div>
+  </section>
 
 <!-- ОКНО ВХОДА / РЕГИСТРАЦИИ -->
 <div class="modal-overlay" id="authModal">
