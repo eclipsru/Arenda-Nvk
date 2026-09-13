@@ -336,6 +336,7 @@
       <button class="btn outline" id="authBtn" type="button">Войти</button>
       <span id="userBox" style="display:none;align-items:center;gap:10px">
         <span id="userName" style="font-weight:700"></span>
+        <a href="admin.html" id="cabLink" class="btn outline" style="display:none;text-decoration:none">Кабинет</a>
         <button class="btn outline" id="logoutBtn" type="button">Выйти</button>
       </span>
     </div>
@@ -598,7 +599,8 @@
   // ====== НАСТРОЙКИ ПОДКЛЮЧЕНИЯ (заполните по шагам из файла БЕСПЛАТНЫЙ-СТАРТ.md) ======
   const CONFIG = {
     SUPABASE_URL: '',        // пример: 'https://abcdefghij.supabase.co'
-    SUPABASE_ANON_KEY: ''    // публичный anon-ключ: Supabase -> Settings -> API
+    SUPABASE_ANON_KEY: '',   // публичный anon-ключ: Supabase -> Settings -> API
+    ADMIN_EMAIL: 'eclips.ru@mail.ru'  // e-mail владельца: вход под ним открывает личный кабинет (admin.html)
   };
   // Уведомления о заявках в MAX приходят через вебхук Supabase (токен бота хранится
   // в Supabase, НЕ на этой странице). Заявки сохраняются в таблицу 'orders'.
@@ -1003,6 +1005,12 @@ const TOOLS = [
   let mode = 'login'; // 'login' или 'register'
   let sbUser = null;  // текущий пользователь Supabase (или null)
   let currentUserName = '';
+  const cabLink = document.getElementById('cabLink');
+
+  // Владелец сайта — тот, чей e-mail совпадает с CONFIG.ADMIN_EMAIL
+  function isAdminUser(){
+    return !!(sbUser && CONFIG.ADMIN_EMAIL && (sbUser.email || '').toLowerCase() === String(CONFIG.ADMIN_EMAIL).toLowerCase());
+  }
 
   const sb = (typeof window.supabase !== 'undefined' && CONFIG.SUPABASE_URL && CONFIG.SUPABASE_ANON_KEY)
     ? window.supabase.createClient(CONFIG.SUPABASE_URL, CONFIG.SUPABASE_ANON_KEY)
@@ -1060,10 +1068,12 @@ const TOOLS = [
       userName.textContent = 'Привет, ' + name + '!';
       authBtn.style.display='none';
       userBox.style.display='flex';
+      cabLink.style.display = isAdminUser() ? 'inline-block' : 'none';
     }else{
       currentUserName = '';
       authBtn.style.display='inline-block';
       userBox.style.display='none';
+      cabLink.style.display='none';
     }
   }
 
@@ -1102,6 +1112,11 @@ const TOOLS = [
           const { data, error } = await sb.auth.signInWithPassword({ email: login, password: pass });
           if(error) throw error;
           sbUser = data.user;
+          if(isAdminUser()){
+            showOk('Вход выполнен! Открываем личный кабинет…');
+            setTimeout(()=>{ location.href = 'admin.html'; }, 700);
+            return;
+          }
           showOk('Вход выполнен!');
           setTimeout(()=>{ closeModal(); refreshUI(); }, 600);
         }
@@ -1137,6 +1152,72 @@ const TOOLS = [
     sb.auth.getSession().then(({ data })=>{ sbUser = data.session ? data.session.user : null; refreshUI(); });
     sb.auth.onAuthStateChange((_event, session)=>{ sbUser = session ? session.user : null; refreshUI(); });
   }
+
+  // ====== КАТАЛОГ ИЗ БАЗЫ (управляется в личном кабинете admin.html) ======
+  const CAT_ICONS = {
+    all:'<svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>',
+    power:'<svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>',
+    construction:'<svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M2 18a1 1 0 0 0 1 1h18a1 1 0 0 0 1-1v-2a1 1 0 0 0-1-1H3a1 1 0 0 0-1 1Z"/><path d="M10 10V5a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v5"/><path d="M4 15v-3a6 6 0 0 1 6-6"/><path d="M14 6a6 6 0 0 1 6 6v3"/></svg>',
+    garden:'<svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M11 20A7 7 0 0 1 9.8 6.1C15.5 5 17 4.48 19 2c1 2 2 4.18 2 8 0 5.5-4.78 10-10 10Z"/><path d="M2 21c0-3 1.85-5.36 5.08-6C9.5 14.52 12 13 13 12"/></svg>',
+    auto:'<svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M19 17h2c.6 0 1-.4 1-1v-3c0-.9-.7-1.7-1.5-1.9C18.7 10.6 16 10 16 10s-1.3-1.4-2.2-2.3c-.5-.4-1.1-.7-1.8-.7H5c-.6 0-1.1.4-1.4.9l-1.4 2.9A3.7 3.7 0 0 0 2 12v4c0 .6.4 1 1 1h2"/><circle cx="7" cy="17" r="2"/><path d="M9 17h6"/><circle cx="17" cy="17" r="2"/></svg>',
+    _default:'<svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>'
+  };
+  function bindChipHandlers(){
+    const sp = document.getElementById('subPower');
+    document.querySelectorAll('#filters .chip').forEach(chip=>{
+      chip.addEventListener('click', ()=>{
+        document.querySelectorAll('.chip').forEach(c=>c.classList.remove('active'));
+        chip.classList.add('active');
+        const cat = chip.dataset.cat;
+        if(sp) sp.style.display = (cat === 'power') ? 'flex' : 'none';
+        const spAll = document.querySelector('#subPower .subchip[data-sub="all"]');
+        document.querySelectorAll('#subPower .subchip').forEach(s=>s.classList.remove('active'));
+        if(spAll) spAll.classList.add('active');
+        render(cat, 'all');
+      });
+    });
+    document.querySelectorAll('#subPower .subchip').forEach(sc=>{
+      sc.addEventListener('click', (e)=>{
+        e.stopPropagation();
+        document.querySelectorAll('#subPower .subchip').forEach(s=>s.classList.remove('active'));
+        sc.classList.add('active');
+        render('power', sc.dataset.sub);
+      });
+    });
+  }
+  function rebuildChips(cats){
+    const filters = document.getElementById('filters');
+    const subEl = document.getElementById('subPower');
+    let html = '<button class="chip'+(currentCat==='all'?' active':'')+'" data-cat="all">'+CAT_ICONS.all+' Все инструменты</button>';
+    (cats||[]).forEach(c=>{
+      const ico = CAT_ICONS[c.key] || CAT_ICONS._default;
+      html += '<button class="chip'+(currentCat===c.key?' active':'')+'" data-cat="'+c.key+'">'+ico+' '+(c.title||c.key)+'</button>';
+      if(c.key==='power' && subEl) html += subEl.outerHTML;
+    });
+    filters.innerHTML = html;
+    bindChipHandlers();
+  }
+  async function loadCatalogFromDB(){
+    if(!sb) return; // Supabase не подключён — работаем со встроенным каталогом
+    try{
+      const [cR, tR] = await Promise.all([
+        sb.from('cats').select('key,title,sort,active').order('sort'),
+        sb.from('tools').select('name,cat,sub,cat_label,img,descr,price,active,sort').order('sort')
+      ]);
+      if(cR.error || tR.error){ console.warn('Каталог из базы недоступен:', (cR.error||tR.error).message); return; }
+      if(!tR.data || !tR.data.length) return; // база пуста — показываем встроенный каталог
+      TOOLS.length = 0;
+      tR.data.filter(t=>t.active !== false).forEach(t=>TOOLS.push({
+        name:t.name||'', cat:t.cat||'', sub:t.sub||'', catLabel:t.cat_label||'', img:t.img||'', desc:t.descr||'', price:t.price||0
+      }));
+      if(cR.data && cR.data.length) rebuildChips(cR.data.filter(c=>c.active !== false));
+      render(currentCat, currentSub);
+      // Перестраиваем мобильные плитки под новые категории
+      const mT = document.getElementById('mTiles');
+      if(mT){ mT.innerHTML=''; delete mT.dataset.built; buildMobileTiles(); }
+    }catch(e){ console.warn('Каталог из базы недоступен, работаем со встроенным:', e); }
+  }
+  if(sb) loadCatalogFromDB();
 
   // Если пользователь вошёл — подставим его имя в форму заявки
   refreshUI();
