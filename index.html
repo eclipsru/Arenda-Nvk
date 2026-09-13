@@ -40,6 +40,7 @@
   .logo{display:flex;align-items:center;gap:10px;font-weight:800;font-size:20px}
   .logo .mark{background:var(--orange);color:#fff;width:36px;height:36px;border-radius:9px;display:grid;place-items:center;font-size:20px}
   .logo span b{color:var(--orange)}
+  .logo small{display:none}
   .nav-links{display:flex;gap:26px;font-weight:600;font-size:15px}
   .nav-links a:hover{color:var(--orange)}
   .nav-phone{display:flex;align-items:center;gap:14px}
@@ -254,38 +255,45 @@
   /* ===== МОБИЛЬНЫЙ ФИЛЬТР-ПЛИТКИ В ШАПКЕ (виден только на телефоне) ===== */
   .m-catalog{display:none}
   @media(max-width:768px){
-    /* Шапка: остаются только название и кнопка «Войти» */
+    /* Шапка: название + «В Новочеркасске» + кнопка «Войти», всё компактнее */
+    .container{padding:0 12px}
+    .nav{height:56px;gap:10px}
     .nav-links{display:none}
     .nav-phone .tel{display:none}
     .nav-phone #userBox{display:none !important}
-    .nav-phone #authBtn{display:inline-flex !important}
+    .nav-phone #authBtn{display:inline-flex !important;padding:8px 14px;font-size:13px}
+    .logo{font-size:15px;gap:8px}
+    .logo .mark{width:30px;height:30px;border-radius:8px}
+    .logo .mark svg.ic{width:16px;height:16px}
+    .logo > span:last-child{display:flex;flex-direction:column;line-height:1.15}
+    .logo > span:last-child small{display:block;font-weight:700;font-size:10px;color:var(--orange);letter-spacing:.03em}
 
     /* Поиск + плитки — поверх картинки шапки (hero) */
-    .m-catalog{display:block;position:relative;z-index:2;padding:16px 0 26px}
-    .m-search{position:relative;margin-bottom:12px}
-    .m-search input{width:100%;background:var(--card);border:1px solid var(--line);border-radius:12px;color:var(--dark);font-size:16px;padding:12px 42px 12px 42px;outline:none;transition:.15s}
-    .m-search input:focus{border-color:var(--orange);box-shadow:0 0 0 3px rgba(255,143,31,.15)}
-    .m-search input::placeholder{color:var(--gray)}
-    .m-search .m-ico{position:absolute;left:13px;top:50%;transform:translateY(-50%);color:var(--gray);pointer-events:none}
-    .m-search .m-ico svg{width:18px;height:18px;display:block}
-    .m-search .m-clear{position:absolute;right:6px;top:50%;transform:translateY(-50%);background:none;border:none;color:var(--gray);cursor:pointer;padding:8px;display:none}
+    .m-catalog{display:block;position:relative;z-index:2;padding:12px 0 18px}
+    .m-search{position:relative;margin-bottom:8px}
+    .m-search input{width:100%;background:rgba(255,255,255,.14);border:1.5px solid rgba(255,255,255,.45);border-radius:12px;color:#fff;font-size:16px;padding:10px 40px 10px 38px;outline:none;transition:.15s;-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px)}
+    .m-search input:focus{border-color:var(--orange);box-shadow:0 0 0 3px rgba(255,143,31,.25)}
+    .m-search input::placeholder{color:rgba(255,255,255,.75)}
+    .m-search .m-ico{position:absolute;left:12px;top:50%;transform:translateY(-50%);color:rgba(255,255,255,.85);pointer-events:none}
+    .m-search .m-ico svg{width:17px;height:17px;display:block}
+    .m-search .m-clear{position:absolute;right:4px;top:50%;transform:translateY(-50%);background:none;border:none;color:rgba(255,255,255,.85);cursor:pointer;padding:8px;display:none}
     .m-search .m-clear svg{width:13px;height:13px;display:block}
     .m-search .m-clear.visible{display:block}
 
-    /* Плитки категорий: квадратные, 4 в ряд (2 ряда на 8 ячеек) */
-    .m-tiles{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
-    .m-tile{aspect-ratio:1/1;background:var(--card);border:2px solid var(--line);border-radius:14px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;color:var(--dark);font-weight:600;font-size:11px;line-height:1.15;cursor:pointer;padding:6px 3px;text-align:center;transition:.15s;font-family:inherit;overflow-wrap:break-word}
-    .m-tile svg{width:24px;height:24px;color:var(--orange)}
+    /* Плитки категорий: квадратные, прозрачные, 4 в ряд (2 ряда на 8 ячеек) */
+    .m-tiles{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px}
+    .m-tile{min-width:0;aspect-ratio:1/1;background:rgba(255,255,255,.14);border:1.5px solid rgba(255,255,255,.45);border-radius:12px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;color:#fff;font-weight:600;font-size:10px;line-height:1.15;cursor:pointer;padding:4px 2px;text-align:center;transition:.15s;font-family:inherit;overflow-wrap:break-word;-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px)}
+    .m-tile svg{width:22px;height:22px;color:var(--orange)}
     .m-tile:active{transform:scale(.96)}
-    .m-tile.active{border-color:var(--orange);background:rgba(255,143,31,.12)}
+    .m-tile.active{border-color:var(--orange);background:rgba(255,143,31,.30)}
 
     /* Экран подкатегорий с кнопкой «Назад» */
     .m-subs{margin-top:2px}
-    .m-back{display:flex;align-items:center;gap:8px;width:100%;background:var(--card);border:2px solid var(--line);border-radius:12px;color:var(--dark);font-weight:600;font-size:14px;padding:12px 14px;cursor:pointer;transition:.15s;font-family:inherit}
-    .m-back svg{width:18px;height:18px;color:var(--orange)}
-    .m-back:active{background:rgba(255,143,31,.10)}
-    .m-subchips{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
-    .m-subchip{background:var(--bg-2);border:2px solid var(--line);color:var(--gray);font-weight:600;font-size:13.5px;padding:10px 14px;border-radius:30px;cursor:pointer;transition:.15s;font-family:inherit}
+    .m-back{display:flex;align-items:center;gap:8px;width:100%;background:rgba(255,255,255,.14);border:1.5px solid rgba(255,255,255,.45);border-radius:12px;color:#fff;font-weight:600;font-size:13px;padding:10px 12px;cursor:pointer;transition:.15s;font-family:inherit;-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px)}
+    .m-back svg{width:17px;height:17px;color:var(--orange)}
+    .m-back:active{background:rgba(255,143,31,.25)}
+    .m-subchips{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+    .m-subchip{background:rgba(255,255,255,.14);border:1.5px solid rgba(255,255,255,.45);color:#fff;font-weight:600;font-size:12.5px;padding:8px 12px;border-radius:30px;cursor:pointer;transition:.15s;font-family:inherit;-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px)}
     .m-subchip.active{background:var(--orange);border-color:var(--orange);color:#fff}
 
     /* Под шапкой — только фильтр и карточки: прячем текст hero и лишние секции */
@@ -314,7 +322,7 @@
   <div class="container nav">
     <a href="#" class="logo">
       <span class="mark"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg></span>
-      <span>Прокат<b>Инструмента</b></span>
+      <span>Прокат<b>Инструмента</b><small>В Новочеркасске</small></span>
     </a>
     <nav class="nav-links">
       <a href="#catalog">Каталог</a>
