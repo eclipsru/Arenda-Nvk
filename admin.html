@@ -231,6 +231,7 @@
           <label class="full" id="tExtraCatsWrap" style="display:none">Дополнительно показывать в категориях<div id="tExtraCats" style="margin-top:5px"></div><span class="muted" style="font-size:11.5px;display:block;margin-top:5px">Инструмент появится и в этих разделах — помимо основной категории.</span></label>
           <label class="full" id="tExtraSubsWrap" style="display:none">Дополнительно показывать в подкатегориях<div id="tExtraSubs" style="margin-top:5px"></div></label>
           <label>Цена, ₽/сутки<input id="tPrice" type="number" min="0" required placeholder="400"></label>
+          <label class="full">Сумма залога, ₽ (необязательно)<input id="tDeposit" type="number" min="0" placeholder="не указан — автоматически 5 × цена за сутки"></label>
           <label class="full">Краткое описание<input id="tDesc" placeholder="Мощность, комплект, особенности"></label>
           <label class="full">Фотография<input id="tPhoto" type="file" accept="image/*"></label>
           <div class="full" style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
@@ -643,7 +644,7 @@
       '<div class="row">' +
         (t.img ? '<img class="thumb" src="'+esc(t.img)+'" alt="" onerror="this.style.display=\'none\'">' : '<div class="ph">'+WRENCH+'</div>') +
         '<div class="info"><b>'+esc(t.name)+(t.active===false?'<span class="hidden-flag">скрыт</span>':'')+'</b>' +
-        '<span>'+esc([t.cat].concat(t.cats||[]).map(catTitle).join(' · '))+(t.sub?subTitle(t.cat,t.sub):'')+((t.subs&&t.subs.length)?' · '+esc(t.subs.map(subPairTitle).join(' · ')):'')+' · '+esc(t.price)+' ₽/сутки</span></div>' +
+        '<span>'+esc([t.cat].concat(t.cats||[]).map(catTitle).join(' · '))+(t.sub?subTitle(t.cat,t.sub):'')+((t.subs&&t.subs.length)?' · '+esc(t.subs.map(subPairTitle).join(' · ')):'')+' · '+esc(t.price)+' ₽/сутки · залог '+esc((t.deposit!==null && t.deposit!==undefined && t.deposit!=='') ? Number(t.deposit) : (t.price||0)*5)+' ₽</span></div>' +
         '<label class="switch"><input type="checkbox" data-toggle="'+esc(t.id)+'"'+(t.active!==false?' checked':'')+'>показывать</label>' +
         '<button class="btn outline sm" type="button" data-edit="'+esc(t.id)+'">Изменить</button>' +
         '<button class="btn danger sm" type="button" data-del="'+esc(t.id)+'">Удалить</button>' +
@@ -742,6 +743,7 @@
     rebuildExtraMultis();
     syncCombo('tCat'); syncCombo('tSub');
     $('tPrice').value = t.price||0;
+    $('tDeposit').value = (t.deposit !== null && t.deposit !== undefined && t.deposit !== '') ? t.deposit : '';
     $('tDesc').value = t.descr||'';
     if(t.img){ $('tPreview').src = t.img; $('tPreview').style.display='inline-block'; } else { $('tPreview').style.display='none'; }
     $('tBtn').textContent='Сохранить изменения'; $('tCancel').style.display='inline-block';
@@ -776,7 +778,8 @@
         sub:$('tSub').value||'',
         cat_label:catTitle(cat),
         img:img, descr:$('tDesc').value.trim(),
-        price:parseInt($('tPrice').value,10)||0
+        price:parseInt($('tPrice').value,10)||0,
+        deposit:($('tDeposit').value===''?null:(parseInt($('tDeposit').value,10)||0))
       };
       if(editing){
         const { error } = await sb.from('tools').update(row).eq('id', editing.id);
