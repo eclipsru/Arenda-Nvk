@@ -206,6 +206,16 @@
   .modal .close:hover{color:var(--dark)}
   .modal h3{font-size:24px;margin-bottom:6px}
   .modal .msub{color:var(--gray);font-size:14px;margin-bottom:22px}
+  .pass-wrap{position:relative;display:block}
+  .pass-wrap input{width:100%;padding-right:46px}
+  .pass-eye{position:absolute;right:6px;top:50%;transform:translateY(-50%);background:none;border:none;color:var(--gray);cursor:pointer;padding:6px;display:flex}
+  .pass-eye:hover{color:var(--orange)}
+  .pass-eye svg{width:18px;height:18px;display:block}
+  .pass-eye .eye-off{display:none}
+  .pass-eye.on .eye-off{display:block}
+  .pass-eye.on .eye{display:none}
+  .forgot-link{background:none;border:none;color:var(--orange);font-size:13px;font-weight:600;cursor:pointer;padding:0;margin-top:8px;font-family:inherit}
+  .forgot-link:hover{text-decoration:underline}
   .tabs{display:flex;gap:8px;margin-bottom:22px;background:#171a21;padding:5px;border-radius:10px}
   .tab{flex:1;padding:10px;border:none;background:none;color:var(--gray);font-weight:700;border-radius:8px;cursor:pointer;font-size:15px;transition:.15s}
   .tab.active{background:var(--orange);color:#fff}
@@ -514,16 +524,35 @@
         <label for="rName">Имя</label>
         <input type="text" id="rName" placeholder="Иван" autocomplete="name" />
       </div>
+      <div class="field" id="fieldPhone" style="display:none">
+        <label for="rPhone">Телефон (для заявок)</label>
+        <input type="tel" id="rPhone" placeholder="+7 (900) 123-45-67" autocomplete="tel" inputmode="tel" />
+      </div>
       <div class="field">
         <label for="rEmail">E-mail или телефон</label>
         <input type="text" id="rEmail" placeholder="you@mail.ru" autocomplete="username" />
       </div>
       <div class="field">
         <label for="rPass">Пароль</label>
-        <input type="password" id="rPass" placeholder="Не менее 6 символов" autocomplete="current-password" />
+        <div class="pass-wrap">
+          <input type="password" id="rPass" placeholder="Не менее 6 символов" autocomplete="current-password" />
+          <button type="button" class="pass-eye" id="passEye" tabindex="-1" aria-label="Показать пароль"><svg class="ic eye" viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/></svg><svg class="ic eye-off" viewBox="0 0 24 24" aria-hidden="true"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg></button>
+        </div>
+        <button type="button" class="forgot-link" id="forgotBtn">Забыли пароль?</button>
       </div>
       <button type="submit" class="btn" id="authSubmit">Войти</button>
     </form>
+
+    <div id="recoveryBox" style="display:none">
+      <div class="field">
+        <label for="newPass">Новый пароль</label>
+        <div class="pass-wrap">
+          <input type="password" id="newPass" placeholder="Не менее 6 символов" autocomplete="new-password" />
+          <button type="button" class="pass-eye" id="newPassEye" tabindex="-1" aria-label="Показать пароль"><svg class="ic eye" viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/></svg><svg class="ic eye-off" viewBox="0 0 24 24" aria-hidden="true"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg></button>
+        </div>
+      </div>
+      <button type="button" class="btn" id="newPassBtn">Сохранить пароль</button>
+    </div>
   </div>
 </div>
 
@@ -904,6 +933,8 @@ const TOOLS = [
 
   function openOrder(){
     orderErr.style.display='none';
+    const ph = document.getElementById('phone');
+    if(ph && !ph.value && currentUserPhone) ph.value = currentUserPhone;
     orderModal.classList.add('open');
     document.getElementById('name').focus();
   }
@@ -1025,10 +1056,14 @@ const TOOLS = [
   const authOk = document.getElementById('authOk');
   const modalTitle = document.getElementById('modalTitle');
   const modalSub = document.getElementById('modalSub');
+  const fieldPhone = document.getElementById('fieldPhone');
+  const forgotBtn = document.getElementById('forgotBtn');
+  const recoveryBoxEl = document.getElementById('recoveryBox');
 
   let mode = 'login'; // 'login' или 'register'
   let sbUser = null;  // текущий пользователь Supabase (или null)
   let currentUserName = '';
+  let currentUserPhone = '';
   const cabLink = document.getElementById('cabLink');
 
   // Владелец сайта — тот, чей e-mail совпадает с CONFIG.ADMIN_EMAIL
@@ -1044,7 +1079,15 @@ const TOOLS = [
   const saveUsers = (u) => store.set(AUTH_KEY, JSON.stringify(u));
 
   function openModal(){ modal.classList.add('open'); clearMsg(); }
-  function closeModal(){ modal.classList.remove('open'); authForm.reset(); }
+  function closeModal(){
+    modal.classList.remove('open');
+    authForm.reset();
+    recoveryBoxEl.style.display='none';
+    authForm.style.display='block';
+    tabLogin.style.display=''; tabReg.style.display='';
+    document.getElementById('newPass').value='';
+    setMode('login');
+  }
   function clearMsg(){ authErr.style.display='none'; authOk.style.display='none'; }
   function showErr(t){ authErr.textContent=t; authErr.style.display='block'; authOk.style.display='none'; }
   function showOk(t){ authOk.textContent=t; authOk.style.display='block'; authErr.style.display='none'; }
@@ -1052,18 +1095,23 @@ const TOOLS = [
   function setMode(m){
     mode = m;
     clearMsg();
+    tabLogin.classList.toggle('active', m==='login');
+    tabReg.classList.toggle('active', m==='register');
+    fieldName.style.display = (m==='register') ? 'block' : 'none';
+    fieldPhone.style.display = (m==='register') ? 'block' : 'none';
+    forgotBtn.style.display = (m==='login') ? 'inline-block' : 'none';
     if(m==='login'){
-      tabLogin.classList.add('active'); tabReg.classList.remove('active');
-      fieldName.style.display='none';
       modalTitle.textContent='Вход в личный кабинет';
       modalSub.textContent='Войдите, чтобы отслеживать свои заявки на аренду.';
       authSubmit.textContent='Войти';
-    }else{
-      tabReg.classList.add('active'); tabLogin.classList.remove('active');
-      fieldName.style.display='block';
+    }else if(m==='register'){
       modalTitle.textContent='Регистрация';
       modalSub.textContent='Создайте аккаунт — это займёт меньше минуты.';
       authSubmit.textContent='Зарегистрироваться';
+    }else{
+      modalTitle.textContent='Восстановление пароля';
+      modalSub.textContent='Введите e-mail — пришлём письмо со ссылкой для смены пароля.';
+      authSubmit.textContent='Отправить ссылку';
     }
   }
 
@@ -1085,9 +1133,11 @@ const TOOLS = [
       let name;
       if(sbUser){
         name = (sbUser.user_metadata && sbUser.user_metadata.name) || sbUser.email || 'клиент';
+        currentUserPhone = (sbUser.user_metadata && sbUser.user_metadata.phone) || '';
       }else{
         const users = getUsers();
         name = (users[session] && users[session].name) || session;
+        currentUserPhone = (users[session] && users[session].phone) || '';
       }
       currentUserName = name;
       userName.textContent = 'Привет, ' + name + '!';
@@ -1096,13 +1146,56 @@ const TOOLS = [
       cabLink.style.display = (isAdminUser() || demoAdmin) ? 'inline-block' : 'none';
     }else{
       currentUserName = '';
+      currentUserPhone = '';
       authBtn.style.display='inline-block';
       userBox.style.display='none';
       cabLink.style.display='none';
     }
+    const phoneInput = document.getElementById('phone');
+    if(phoneInput && !phoneInput.value && currentUserPhone) phoneInput.value = currentUserPhone;
   }
 
   authBtn.addEventListener('click', ()=>{ setMode('login'); openModal(); });
+
+  // ====== Показать/скрыть пароль (глазок) ======
+  function bindEye(btnId, inputId){
+    const btn = document.getElementById(btnId), input = document.getElementById(inputId);
+    if(!btn || !input) return;
+    btn.addEventListener('click', ()=>{
+      const show = input.type === 'password';
+      input.type = show ? 'text' : 'password';
+      btn.classList.toggle('on', show);
+    });
+  }
+  bindEye('passEye', 'rPass');
+  bindEye('newPassEye', 'newPass');
+
+  // ====== Восстановление пароля ======
+  forgotBtn.addEventListener('click', ()=>{ setMode('recovery'); clearMsg(); });
+  function openNewPass(){
+    modal.classList.add('open');
+    clearMsg();
+    tabLogin.style.display='none'; tabReg.style.display='none';
+    authForm.style.display='none';
+    recoveryBoxEl.style.display='block';
+    modalTitle.textContent='Придумайте новый пароль';
+    modalSub.textContent='Ссылка из письма подтверждена — задайте новый пароль.';
+  }
+  document.getElementById('newPassBtn').addEventListener('click', async ()=>{
+    const np = document.getElementById('newPass').value;
+    if(np.length < 6){ clearMsg(); showErr('Пароль должен быть не менее 6 символов.'); return; }
+    if(!sb){ clearMsg(); showErr('Смена пароля доступна после подключения базы.'); return; }
+    document.getElementById('newPassBtn').disabled = true;
+    try{
+      const { error } = await sb.auth.updateUser({ password: np });
+      if(error) throw error;
+      clearMsg(); showOk('Пароль изменён! Теперь войдите с новым паролем.');
+      setTimeout(()=>{ closeModal(); }, 1500);
+    }catch(err){ showErr(authErrorText(err.message)); }
+    document.getElementById('newPassBtn').disabled = false;
+  });
+  // Если пользователь вернулся из письма (в адресе есть type=recovery) — сразу форма нового пароля
+  if(location.hash.indexOf('type=recovery') !== -1){ openNewPass(); }
   document.getElementById('modalClose').addEventListener('click', closeModal);
   modal.addEventListener('click', (e)=>{ if(e.target===modal) closeModal(); });
   tabLogin.addEventListener('click', ()=>setMode('login'));
@@ -1119,9 +1212,30 @@ const TOOLS = [
     const name = document.getElementById('rName').value.trim();
     const login = document.getElementById('rEmail').value.trim().toLowerCase();
     const pass = document.getElementById('rPass').value;
+    const phone = document.getElementById('rPhone') ? document.getElementById('rPhone').value.trim() : '';
 
     if(!login){ showErr('Введите e-mail.'); return; }
+
+    // Восстановление: отправляем письмо со ссылкой
+    if(mode==='recovery'){
+      if(!sb){ showErr('Восстановление заработает после подключения Supabase (ШАГ 2 инструкции).'); return; }
+      authSubmit.disabled = true;
+      try{
+        const { error } = await sb.auth.resetPasswordForEmail(login, { redirectTo: location.origin + location.pathname });
+        if(error) throw error;
+        showOk('Письмо отправлено! Откройте ссылку из письма — там зададите новый пароль. Не пришло — проверьте «Спам».');
+      }catch(err){
+        showErr(/rate limit/i.test(err.message) ? 'Слишком часто. Подождите пару минут и попробуйте ещё раз.' : authErrorText(err.message));
+      }
+      authSubmit.disabled = false;
+      return;
+    }
+
     if(pass.length < 6){ showErr('Пароль должен быть не менее 6 символов.'); return; }
+    if(mode==='register' && phone.replace(/\D/g,'').length < 10){
+      showErr('Укажите телефон (не менее 10 цифр) — он будет подставляться в заявку автоматически.');
+      return;
+    }
 
     // --- Supabase: настоящие аккаунты ---
     if(sb){
@@ -1129,7 +1243,7 @@ const TOOLS = [
         authSubmit.disabled = true;
         if(mode==='register'){
           if(!name){ showErr('Введите имя.'); return; }
-          const { data, error } = await sb.auth.signUp({ email: login, password: pass, options:{ data:{ name: name } } });
+          const { data, error } = await sb.auth.signUp({ email: login, password: pass, options:{ data:{ name: name, phone: phone } } });
           if(error) throw error;
           if(data.session){ sbUser = data.user; showOk('Готово! Аккаунт создан.'); setTimeout(()=>{ closeModal(); refreshUI(); }, 800); }
           else { showOk('Аккаунт создан! Подтвердите e-mail по письму и войдите.'); }
@@ -1159,7 +1273,7 @@ const TOOLS = [
     if(mode==='register'){
       if(!name){ showErr('Введите имя.'); return; }
       if(users[login]){ showErr('Такой пользователь уже зарегистрирован. Войдите.'); return; }
-      users[login] = { name: name, pass: pass };
+      users[login] = { name: name, pass: pass, phone: phone };
       saveUsers(users);
       store.set(SESSION_KEY, login);
       showOk('Готово! Аккаунт создан.');
@@ -1182,7 +1296,10 @@ const TOOLS = [
   // Подписка на состояние входа Supabase
   if(sb){
     sb.auth.getSession().then(({ data })=>{ sbUser = data.session ? data.session.user : null; refreshUI(); });
-    sb.auth.onAuthStateChange((_event, session)=>{ sbUser = session ? session.user : null; refreshUI(); });
+    sb.auth.onAuthStateChange((event, session)=>{
+      if(event === 'PASSWORD_RECOVERY'){ sbUser = session ? session.user : null; openNewPass(); return; }
+      sbUser = session ? session.user : null; refreshUI();
+    });
   }
 
   // ====== КАТАЛОГ ИЗ БАЗЫ (управляется в личном кабинете admin.html) ======
