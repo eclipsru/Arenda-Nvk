@@ -76,6 +76,8 @@
   .emoji-grid button svg{width:18px;height:18px;display:block;margin:0 auto}
   #cEmojiVal svg,#sEmojiVal svg{width:20px;height:20px;vertical-align:middle}
   .info svg{width:14px;height:14px;vertical-align:-2px}
+  .cats-select{width:100%;margin-top:7px;padding:8px 10px;background:var(--bg-2);color:var(--dark);border:1.5px solid var(--line);border-radius:9px;font-size:13.5px;font-family:inherit}
+  .cats-select option{padding:6px 8px;border-radius:6px}
   .cats-multi{display:flex;flex-wrap:wrap;gap:6px;margin-top:7px}
   .cats-multi label{display:flex;align-items:center;gap:6px;background:var(--bg-2);border:1px solid var(--line);border-radius:9px;padding:7px 11px;font-size:13px;font-weight:600;color:var(--dark);cursor:pointer;margin:0}
   .cats-multi label:hover{border-color:var(--orange)}
@@ -180,7 +182,7 @@
         <form id="toolForm" class="form-grid">
           <label>Название<input id="tName" required placeholder="Например: Перфоратор Bosch GBH 2-26"></label>
           <label>Категория<select id="tCat" required></select></label>
-          <label class="full" id="tCatsWrap" style="display:none">Дополнительно показывать в категориях и подкатегориях<div id="tCatsBox" class="cats-multi"></div><div id="tSubsExtraWrap" style="display:none;margin-top:12px"><b style="font-size:12.5px;display:block;margin-bottom:1px">Подкатегории:</b><div id="tSubsBox" class="cats-multi"></div></div><span class="muted" style="font-size:11.5px;display:block;margin-top:5px">Отметьте другие категории и подкатегории — инструмент будет виден в них тоже (для удобного поиска)</span></label>
+          <label class="full" id="tCatsWrap" style="display:none">Дополнительно показывать в категориях и подкатегориях<select id="tCatsBox" class="cats-select" multiple size="6" title="Удерживайте Ctrl (Cmd), чтобы выбрать несколько"></select><div id="tSubsExtraWrap" style="display:none;margin-top:12px"><b style="font-size:12.5px;display:block;margin-bottom:1px">Подкатегории:</b><select id="tSubsBox" class="cats-select" multiple size="6" title="Удерживайте Ctrl (Cmd), чтобы выбрать несколько"></select></div><span class="muted" style="font-size:11.5px;display:block;margin-top:5px">В списках можно выбрать несколько: удерживайте Ctrl (на Mac — Cmd) и щёлкайте по нужным. Инструмент будет виден во всех выбранных разделах.</span></label>
           <label id="tSubWrap" style="display:none">Подкатегория<select id="tSub"><option value="">Все электроинструменты</option><option value="battery">На аккумуляторе</option><option value="corded">От сети 220В</option></select></label>
           <label>Цена, ₽/сутки<input id="tPrice" type="number" min="0" required placeholder="400"></label>
           <label class="full">Краткое описание<input id="tDesc" placeholder="Мощность, комплект, особенности"></label>
@@ -436,20 +438,20 @@
     const subsWrap = $('tSubsExtraWrap'), subsBox = $('tSubsBox');
     if(subsBox){
       subsBox.innerHTML = subsAll.map(s2=>
-        '<label><input type="checkbox" value="'+esc(s2.cat+'/'+s2.key)+'"'+((selSubs||[]).indexOf(s2.cat+'/'+s2.key)!==-1?' checked':'')+'>'+esc(catTitle(s2.cat)+' › '+s2.title)+'</label>'
+        '<option value="'+esc(s2.cat+'/'+s2.key)+'"'+((selSubs||[]).indexOf(s2.cat+'/'+s2.key)!==-1?' selected':'')+'>'+esc(catTitle(s2.cat)+' › '+s2.title)+'</option>'
       ).join('');
       if(subsWrap) subsWrap.style.display = subsAll.length ? 'block' : 'none';
     }
     wrap.style.display = (others.length || subsAll.length) ? 'block' : 'none';
-    box.innerHTML = others.map(c=>'<label><input type="checkbox" value="'+esc(c.key)+'"'+((selected||[]).indexOf(c.key)!==-1?' checked':'')+'>'+esc(c.title)+'</label>').join('');
+    box.innerHTML = others.map(c=>'<option value="'+esc(c.key)+'"'+((selected||[]).indexOf(c.key)!==-1?' selected':'')+'>'+esc(c.title)+'</option>').join('');
   }
-  function extraCatsSelected(){ return [...$('tCatsBox').querySelectorAll('input:checked')].map(i=>i.value); }
+  function extraCatsSelected(){ return [...$('tCatsBox').selectedOptions].map(function(o){ return o.value; }); }
   // Отмеченные доп. подкатегории («cat/key»); текущая основная пара исключается
   function extraSubsSelected(){
     const sbox = document.getElementById('tSubsBox');
     if(!sbox) return [];
     const pair = currentSubPair();
-    return [...sbox.querySelectorAll('input:checked')].map(i=>i.value).filter(v=>v!==pair);
+    return [...sbox.selectedOptions].map(function(o){ return o.value; }).filter(function(v){ return v!==pair; });
   }
 
   // Заполняем выбор подкатегории в форме инструмента по выбранной категории
