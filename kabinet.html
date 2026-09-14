@@ -536,9 +536,9 @@
       userBox.style.display = 'flex';
       var _em = (sb && sbUser && sbUser.email ? sbUser.email : login).toLowerCase();
       var _adm = _em === 'eclips.ru@mail.ru';
-      document.getElementById('servLink').style.display = 'inline-block';
+      document.getElementById('servLink').style.display = 'inline-flex';
       document.getElementById('cabLink').href = _adm ? 'admin.html' : 'kabinet.html';
-      document.getElementById('cabLink').style.display = 'inline-block';
+      document.getElementById('cabLink').style.display = 'inline-flex';
       cabGuest.style.display = 'none';
       cabLogged.style.display = 'block';
       cabGreet.textContent = 'Ваши данные для быстрого оформления аренды и история заявок.';
