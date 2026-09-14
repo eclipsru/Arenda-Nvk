@@ -284,6 +284,38 @@
   .cab-empty{text-align:center;color:var(--gray);padding:26px 10px;font-size:14px;line-height:1.6}
   @media(max-width:560px){ .cab-row{flex-direction:column;gap:0} .cab-card{padding:20px 18px} }
 </style>
+  <style>
+    /* Шапка как на главной: скрыть меню на планшете, компактные кнопки на телефоне */
+    @media(max-width:980px){ .nav-links{display:none} }
+    @media(max-width:768px){
+      .nav{height:52px;gap:8px;min-width:0}
+      .logo{flex:1 1 0;min-width:0;overflow:hidden;font-size:14px;gap:7px}
+      .logo .mark{width:28px;height:28px;border-radius:8px;flex:none}
+      .logo .mark svg.ic{width:15px;height:15px}
+      .logo > span:last-child{display:block;line-height:1.15;min-width:0;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+      .logo > span:last-child small{display:block;font-weight:700;font-size:9.5px;color:var(--orange);letter-spacing:.03em;overflow:hidden;text-overflow:ellipsis}
+      .nav-phone{gap:6px;flex:none;flex-shrink:0}
+      .nav-phone #userBox{gap:8px;flex-wrap:nowrap}
+      .nav-phone #userBox span{display:none}
+      .nav-phone #authBtn,
+      .nav-phone #userBox #servLink,
+      .nav-phone #userBox #cabLink,
+      .nav-phone #userBox #logoutBtn{display:inline-flex;align-items:center;justify-content:center;padding:7px 10px;font-size:12.5px;line-height:1.2;white-space:nowrap;flex:0 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis}
+    }
+    @media(max-width:430px){
+      .nav-phone #userBox{gap:5px}
+      .nav-phone #authBtn,
+      .nav-phone #userBox #servLink,
+      .nav-phone #userBox #cabLink,
+      .nav-phone #userBox #logoutBtn{padding:6px 7px;font-size:11.5px}
+    }
+    @media(max-width:374px){
+      .nav-phone #userBox #servLink,
+      .nav-phone #userBox #cabLink,
+      .nav-phone #userBox #logoutBtn,
+      .nav-phone #authBtn{padding:5px 6px;font-size:11px}
+    }
+  </style>
 </head>
 <body>
 
@@ -292,18 +324,19 @@
   <div class="container nav">
     <a href="index.html" class="logo">
       <span class="mark"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg></span>
-      <span>Прокат<b>Инструмента</b></span>
+      <span>Прокат<b>Инструмента</b><small>В Новочеркасске</small></span>
     </a>
     <nav class="nav-links">
       <a href="index.html#catalog">Каталог</a>
-      <a href="index.html#how">Как это работает</a>
-      <a href="index.html#why">Почему мы</a>
+      <a href="uslugi.html">Услуги от нас</a>
       <a href="index.html#contact">Контакты</a>
     </nav>
     <div class="nav-phone">
       <button class="btn outline" id="authBtn" type="button">Войти</button>
       <span id="userBox" style="display:none;align-items:center;gap:10px">
         <span id="userName" style="font-weight:700"></span>
+        <a href="uslugi.html" id="servLink" class="btn outline" style="display:none;text-decoration:none">Услуги</a>
+        <a href="admin.html" id="cabLink" class="btn outline" style="display:none;text-decoration:none">Кабинет</a>
         <button class="btn outline" id="logoutBtn" type="button">Выйти</button>
       </span>
     </div>
@@ -339,6 +372,10 @@
             <div class="field">
               <label for="cabName">Имя</label>
               <input type="text" id="cabName" placeholder="Иван" autocomplete="name" />
+            </div>
+            <div class="field">
+              <label for="cabFio">Фамилия и отчество</label>
+              <input type="text" id="cabFio" placeholder="Петров Сергеевич" />
             </div>
             <div class="field">
               <label for="cabPhone">Телефон</label>
@@ -488,6 +525,11 @@
       userName.textContent = 'Привет, ' + name + '!';
       authBtn.style.display = 'none';
       userBox.style.display = 'flex';
+      var _em = (sb && sbUser && sbUser.email ? sbUser.email : login).toLowerCase();
+      var _adm = _em === 'eclips.ru@mail.ru';
+      document.getElementById('servLink').style.display = 'inline-block';
+      document.getElementById('cabLink').href = _adm ? 'admin.html' : 'kabinet.html';
+      document.getElementById('cabLink').style.display = 'inline-block';
       cabGuest.style.display = 'none';
       cabLogged.style.display = 'block';
       cabGreet.textContent = 'Ваши данные для быстрого оформления аренды и история заявок.';
@@ -513,6 +555,7 @@
   function loadProfileToForm(){
     const p = getProfile();
     document.getElementById('cabName').value = p.name || currentUserName || '';
+    document.getElementById('cabFio').value = p.fio || '';
     document.getElementById('cabPhone').value = p.phone || '';
     document.getElementById('cabPassNum').value = p.pass_num || '';
     document.getElementById('cabPassDate').value = p.pass_date || '';
@@ -527,6 +570,7 @@
 
     const p = {
       name: document.getElementById('cabName').value.trim(),
+      fio: document.getElementById('cabFio').value.trim(),
       phone: normPhone(document.getElementById('cabPhone').value),
       pass_num: document.getElementById('cabPassNum').value.trim(),
       pass_date: document.getElementById('cabPassDate').value,
