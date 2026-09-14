@@ -48,6 +48,8 @@
   .nav-phone .tel{font-weight:800;font-size:17px;white-space:nowrap}
   /* Таблички в шапке — одного размера на всех страницах (десктоп) */
   @media(min-width:769px){ .nav-phone .btn{width:108px;padding-left:0;padding-right:0;display:inline-flex;align-items:center;justify-content:center} }
+  /* «Инструмент» — только на телефоне; на десктопе в шапке Кабинет и Выйти */
+  #userBox #toolsLink{display:none}
   .btn{display:inline-block;background:var(--orange);color:#fff;font-weight:700;padding:11px 20px;border-radius:10px;border:none;cursor:pointer;transition:.15s;font-size:15px}
   .btn:hover{background:var(--orange-dark)}
   .btn.outline{background:transparent;color:var(--orange);border:2px solid var(--orange)}
@@ -291,9 +293,9 @@
     .nav-phone .tel{display:none}
     .nav-phone #userBox{gap:8px}
     .nav-phone #userBox span{display:none}
-    .nav-phone #userBox #servLink,
+    .nav-phone #userBox #toolsLink,
     .nav-phone #userBox #cabLink,
-    .nav-phone #userBox #logoutBtn{display:inline-flex;padding:7px 10px;font-size:12.5px;flex:none}
+    .nav-phone #userBox #logoutBtn{display:inline-flex;align-items:center;justify-content:center;width:80px;padding:7px 4px;font-size:12.5px;flex:none;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
     .nav-phone{gap:6px;flex:none;flex-shrink:0}
     .nav-phone #authBtn{display:inline-flex;padding:7px 10px;font-size:12.5px;flex:none;white-space:nowrap}
     /* Лого занимает оставшееся место и ОБРЕЗАЕТСЯ, но никогда не выталкивает кнопки за экран */
@@ -308,8 +310,9 @@
       .nav{gap:6px}
       .nav-phone{gap:4px}
       .nav-phone #authBtn,
+      .nav-phone #userBox #toolsLink,
       .nav-phone #userBox #cabLink,
-      .nav-phone #userBox #logoutBtn{padding:6px 7px;font-size:11.5px}
+      .nav-phone #userBox #logoutBtn{width:74px;padding:6px 3px;font-size:11.5px}
       .logo{font-size:13px;gap:6px}
       .logo .mark{width:26px;height:26px}
     }
@@ -398,7 +401,7 @@
       <button class="btn outline" id="authBtn" type="button">Войти</button>
       <span id="userBox" style="display:none;align-items:center;gap:10px">
         <span id="userName" style="font-weight:700"></span>
-        <a href="uslugi.html" id="servLink" class="btn outline" style="display:none;text-decoration:none">Услуги</a>
+        <a href="index.html" id="toolsLink" class="btn outline" style="text-decoration:none">Инструмент</a>
         <a href="admin.html" id="cabLink" class="btn outline" style="display:none;text-decoration:none">Кабинет</a>
         <button class="btn outline" id="logoutBtn" type="button">Выйти</button>
       </span>
@@ -520,13 +523,11 @@
         document.getElementById('userName').textContent = 'Привет, ' + nm + '!';
         document.getElementById('authBtn').style.display = 'none';
         document.getElementById('userBox').style.display = 'flex';
-        document.getElementById('servLink').style.display = 'inline-block';
         document.getElementById('cabLink').href = (u.email && u.email.toLowerCase() === ADMIN_EMAIL) ? 'admin.html' : 'kabinet.html';
         document.getElementById('cabLink').style.display = 'inline-block';
         document.getElementById('logoutBtn').addEventListener('click', async ()=>{
           try{ await sb.auth.signOut(); }catch(e){}
           document.getElementById('userBox').style.display = 'none';
-          document.getElementById('servLink').style.display = 'none';
           document.getElementById('cabLink').style.display = 'none';
           document.getElementById('authBtn').style.display = 'inline-block';
         });
