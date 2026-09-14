@@ -363,6 +363,19 @@
   .chip .ico-svg svg{width:15px;height:15px;vertical-align:-2.5px}
   .subchip .ico-svg svg,.m-subchip .ico-svg svg{width:14px;height:14px;vertical-align:-2px}
 </style>
+  <style>
+    /* Кнопка «Инструменты» видна и на телефоне (в отличие от обычных .btn), поджимается на узких экранах */
+    @media(max-width:560px){
+      .nav-phone #toolsBtn{display:inline-flex;align-items:center;padding:7px 10px;font-size:12.5px;flex:none;white-space:nowrap}
+    }
+    @media(max-width:430px){
+      .nav-phone #toolsBtn{padding:6px 7px;font-size:11.5px}
+      .nav-phone{gap:5px}
+    }
+    @media(max-width:374px){
+      .nav-phone #toolsBtn{padding:5px 6px;font-size:11px}
+    }
+  </style>
 </head>
 <body>
 
@@ -380,7 +393,11 @@
     </nav>
     <div class="nav-phone">
       <a href="tel:+79081731410" class="tel">+7 (908) 173-14-10</a>
-      <a href="index.html#contact" class="btn" style="text-decoration:none">Оставить заявку</a>
+      <a href="index.html" id="toolsBtn" class="btn" style="text-decoration:none">Инструменты</a>
+      <span id="userBox" style="display:none;align-items:center;gap:10px">
+        <a href="admin.html" id="cabLink" class="btn outline" style="display:none;text-decoration:none">Кабинет</a>
+        <button class="btn outline" id="logoutBtn" type="button">Выйти</button>
+      </span>
     </div>
   </div>
 </header>
@@ -459,5 +476,25 @@
   })();
 </script>
 
+<script>
+  // Авторизация в шапке: «Кабинет» и «Выйти» — только для вошедших; «Кабинет» — владельцу
+  (async function(){
+    const ADMIN_EMAIL = 'eclips.ru@mail.ru';
+    try{
+      if(!window.supabase) return;
+      const sb = supabase.createClient('https://wdxdeatphizclskfmfxi.supabase.co', 'sb_publishable_dtRaEHNNPBFbHFvg8hw9iA_FqJSz9BE');
+      const { data } = await sb.auth.getSession();
+      const u = data && data.session && data.session.user;
+      if(u){
+        document.getElementById('userBox').style.display = 'flex';
+        document.getElementById('cabLink').style.display = (u.email && u.email.toLowerCase() === ADMIN_EMAIL) ? 'inline-block' : 'none';
+        document.getElementById('logoutBtn').addEventListener('click', async ()=>{
+          try{ await sb.auth.signOut(); }catch(e){}
+          document.getElementById('userBox').style.display = 'none';
+        });
+      }
+    }catch(e){}
+  })();
+</script>
 </body>
 </html>
