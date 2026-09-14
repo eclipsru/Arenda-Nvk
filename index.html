@@ -1141,7 +1141,22 @@ const TOOLS = [
     updateSum();
   }
 
+  let pendingOrder = false; // пользователь пытался оформить заявку до входа
+  function isAuthed(){ return !!(sbUser || store.get(SESSION_KEY)); }
+  function maybeResumeOrder(){
+    if(!pendingOrder) return;
+    pendingOrder = false;
+    setTimeout(()=>{ resetOrderTools(); openOrder(); }, 400);
+  }
   function openOrder(){
+    // Заявки принимаются только от зарегистрированных пользователей
+    if(!isAuthed()){
+      pendingOrder = true;
+      setMode('login');
+      showErr('Заявки принимаются только от зарегистрированных пользователей. Войдите или зарегистрируйтесь — форма заявки откроется сразу после входа.');
+      openModal();
+      return;
+    }
     orderErr.style.display='none';
     const ph = document.getElementById('phone');
     if(ph && !ph.value && currentUserPhone) ph.value = currentUserPhone;
@@ -1695,7 +1710,7 @@ const TOOLS = [
           if(!name){ showErr('Введите имя.'); return; }
           const { data, error } = await sb.auth.signUp({ email: login, password: pass, options:{ data:{ name: name, phone: phone } } });
           if(error) throw error;
-          if(data.session){ sbUser = data.user; showOk('Готово! Аккаунт создан.'); setTimeout(()=>{ closeModal(); refreshUI(); }, 800); }
+          if(data.session){ sbUser = data.user; showOk('Готово! Аккаунт создан.'); setTimeout(()=>{ closeModal(); refreshUI(); maybeResumeOrder(); }, 800); }
           else { showOk('Аккаунт создан! Подтвердите e-mail по письму и войдите.'); }
         }else{
           const { data, error } = await sb.auth.signInWithPassword({ email: login, password: pass });
@@ -1708,7 +1723,7 @@ const TOOLS = [
             return;
           }
           showOk('Вход выполнен!');
-          setTimeout(()=>{ closeModal(); refreshUI(); }, 600);
+          setTimeout(()=>{ closeModal(); refreshUI(); maybeResumeOrder(); }, 600);
         }
       }catch(err){
         showErr(authErrorText(err.message));
@@ -1727,7 +1742,7 @@ const TOOLS = [
       saveUsers(users);
       store.set(SESSION_KEY, login);
       showOk('Готово! Аккаунт создан.');
-      setTimeout(()=>{ closeModal(); refreshUI(); }, 800);
+      setTimeout(()=>{ closeModal(); refreshUI(); maybeResumeOrder(); }, 800);
     }else{
       if(!users[login]){ showErr('Пользователь не найден. Зарегистрируйтесь.'); return; }
       if(users[login].pass !== pass){ showErr('Неверный пароль.'); return; }
@@ -1739,7 +1754,7 @@ const TOOLS = [
         return;
       }
       showOk('Вход выполнен!');
-      setTimeout(()=>{ closeModal(); refreshUI(); }, 600);
+      setTimeout(()=>{ closeModal(); refreshUI(); maybeResumeOrder(); }, 600);
     }
   });
 
@@ -1751,6 +1766,11 @@ const TOOLS = [
       sbUser = session ? session.user : null; refreshUI();
     });
   }
+  // Ссылки вида index.html?login=1 (например, со страницы Услуг) — сразу открываем вход
+  try{
+    const qs = new URLSearchParams(location.search);
+    if(qs.has('login') && !isAuthed()){ setMode('login'); openModal(); }
+  }catch(e){}
 
   // ====== КАТАЛОГ ИЗ БАЗЫ (управляется в личном кабинете admin.html) ======
   // Значок категории: если задан эмодзи — показываем его, иначе строгую SVG-иконку
