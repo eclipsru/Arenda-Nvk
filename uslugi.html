@@ -229,6 +229,17 @@
 
   /* ORDER MODAL (заявка на аренду) */
   .modal-order{max-width:520px;max-height:88vh;overflow-y:auto}
+  /* Окно карточки с полной информацией */
+  .modal-tool{max-width:420px;max-height:88vh;overflow-y:auto}
+  .modal-tool .tm-img{aspect-ratio:4/3;background:#14161c;border-radius:12px;overflow:hidden;margin-bottom:12px;display:grid;place-items:center}
+  .modal-tool .tm-img img{width:100%;height:100%;object-fit:cover;display:block}
+  .modal-tool .tm-cat{font-size:12px;font-weight:700;color:var(--orange);text-transform:uppercase;letter-spacing:.5px}
+  .modal-tool h3{font-size:20px;margin:4px 0 2px}
+  .modal-tool .tm-price{font-size:14px;color:var(--gray);margin-bottom:8px}
+  .modal-tool .tm-price b{font-size:22px;color:var(--dark)}
+  .modal-tool .tm-desc{font-size:14.5px;line-height:1.55;margin-bottom:12px}
+  .modal-tool .tm-sub{font-size:15px;margin:8px 0 8px}
+  @media(max-width:768px){ .grid .card{cursor:pointer} #servInfoModal{padding:8px} #servInfoModal .modal-tool{max-width:none;max-height:94vh;border-radius:16px} }
   .tools-label{display:block;font-weight:600;font-size:14px;margin-bottom:8px}
   .tool-row{display:flex;gap:8px;align-items:center;margin-bottom:10px}
   .tool-row .tool-select{flex:1;min-width:0;padding:12px 14px;background:#171a21;color:var(--dark);border:2px solid var(--line);border-radius:10px;font-size:15px;font-family:inherit;transition:.15s}
@@ -489,10 +500,32 @@
           '<div class="price">'+(s.price ? '<b>'+esc(s.price)+'</b>' : '&nbsp;')+'</div>' +
           '<div class="card-btns"><button type="button" class="btn serv-order" data-serv="'+esc(s.title)+'">Заказать</button></div>' +
         '</div>';
+      card.addEventListener('click', function(e){
+        if(e.target.closest('.card-btns')) return;
+        if(!(window.matchMedia && window.matchMedia('(max-width:768px)').matches)) return;
+        if(window.openServInfo) window.openServInfo(s);
+      });
       grid.appendChild(card);
     });
   })();
 </script>
+
+<!-- Модалка карточки услуги (полная информация) -->
+<div class="modal-overlay" id="servInfoModal">
+  <div class="modal modal-tool">
+    <button type="button" class="close" id="servInfoClose" aria-label="Закрыть">&times;</button>
+    <div class="tm-img" id="siImg" style="display:none"></div>
+    <div class="tm-cat">Услуга</div>
+    <h3 id="siTitle"></h3>
+    <div class="tm-price" id="siPrice"></div>
+    <p class="tm-desc" id="siDesc"></p>
+    <p class="tm-desc" style="color:var(--gray)">Сроки и точную стоимость согласуем по телефону.</p>
+    <div class="card-btns" style="margin-top:6px">
+      <button type="button" class="btn" id="siOrder">Заказать услугу</button>
+      <a href="tel:+79081731410" class="btn outline" style="text-decoration:none">Позвонить</a>
+    </div>
+  </div>
+</div>
 
 <!-- Модалка заказа услуги -->
 <div class="modal-overlay" id="servModal">
@@ -556,6 +589,24 @@
     var okBox = document.getElementById('soOk');
     var btn = document.getElementById('soBtn');
     var soSb = null, soUser = null, soTitle = '';
+
+    // Окно карточки услуги (мобильная версия: тап по карточке)
+    var infoModal = document.getElementById('servInfoModal');
+    var infoTitle = '';
+    window.openServInfo = function(sv){
+      infoTitle = sv.title || '';
+      var imgEl = document.getElementById('siImg');
+      imgEl.style.display = (sv.img || (sv.icon && String(sv.icon).indexOf('<svg')===0)) ? 'grid' : 'none';
+      imgEl.innerHTML = sv.img ? '<img src="'+esc(sv.img)+'" alt="'+esc(infoTitle)+'" loading="lazy">' : (sv.icon && String(sv.icon).indexOf('<svg')===0 ? sv.icon : '');
+      document.getElementById('siTitle').textContent = infoTitle;
+      document.getElementById('siPrice').innerHTML = sv.price ? 'от <b>'+esc(sv.price)+'</b>' : 'Цену уточняйте по телефону';
+      document.getElementById('siDesc').textContent = sv.descr || 'Расскажем подробнее по телефону.';
+      infoModal.classList.add('open');
+    };
+    function closeServInfo(){ infoModal.classList.remove('open'); }
+    document.getElementById('servInfoClose').addEventListener('click', closeServInfo);
+    infoModal.addEventListener('click', function(e){ if(e.target === infoModal) closeServInfo(); });
+    document.getElementById('siOrder').addEventListener('click', function(){ closeServInfo(); openServ(infoTitle); });
 
     function openServ(title){
       soTitle = title || '';
