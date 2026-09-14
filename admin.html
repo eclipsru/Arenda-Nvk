@@ -24,6 +24,7 @@
   .btn.outline{background:transparent;border:1.5px solid var(--line);color:var(--dark)}
   .btn.outline:hover{border-color:var(--orange);color:var(--orange)}
   .btn.sm{padding:7px 12px;font-size:12.5px}
+  @media(max-width:768px){ .who .btn.sm{line-height:1.2} }
   .btn.danger{background:transparent;border:1.5px solid rgba(255,93,93,.4);color:var(--err)}
   .btn.danger:hover{border-color:var(--err)}
   main{padding:22px 0 60px}
@@ -117,7 +118,13 @@
     .logo > span:last-child small{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
     .who{flex:none;gap:6px}
     .who #whoEmail{display:none}
-    .who .btn.sm{padding:6px 9px;font-size:11.5px;white-space:nowrap}
+    .who .btn.sm{padding:7px 9px;font-size:12.5px;line-height:1.2;white-space:nowrap}
+    @media(max-width:430px){
+      .who .btn.sm{padding:6px 9px;font-size:11.5px;line-height:1.2}
+    }
+    @media(max-width:374px){
+      .who .btn.sm{padding:5px 9px;font-size:11px;line-height:1.2}
+    }
     .row{flex-wrap:wrap}
     .row .info{flex:1 1 100%;order:-1}
   }
