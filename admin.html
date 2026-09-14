@@ -236,10 +236,11 @@
         <form id="servForm" class="form-grid">
           <label>Название<input id="svName" required placeholder="Например: Доставка инструмента"></label>
           <label>Цена (можно текстом)<input id="svPrice" placeholder="Например: от 300 ₽"></label>
-          <label class="full">Описание<textarea id="svDesc" rows="2" placeholder="Что входит в услугу"></textarea></label>
+          <label>Описание<input id="svDesc" placeholder="Что входит в услугу"></label>
+          <label class="full">Фотография<input id="svPhoto" type="file" accept="image/*"></label>
           <label class="full">Значок услуги (необязательно)<div style="display:flex;align-items:center;gap:8px;margin-top:5px"><button type="button" class="btn outline sm" id="svEmojiBtn">Выбрать значок</button><span id="svEmojiVal" style="font-size:19px;min-width:24px"></span><button type="button" class="btn outline sm" id="svEmojiClear" style="display:none">Убрать</button></div></label>
           <div class="emoji-grid full" id="svEmojiGrid" style="display:none"></div>
-          <div style="display:flex;align-items:center;gap:10px;grid-column:1/-1"><button class="btn" type="submit" id="svBtn">Добавить</button><button class="btn outline" type="button" id="svCancel" style="display:none">Отмена</button><span id="svMsg" class="msg"></span></div>
+          <div style="display:flex;align-items:center;gap:10px;grid-column:1/-1"><img id="svPreview" style="display:none;height:64px;border-radius:8px" alt=""><button class="btn" type="submit" id="svBtn">Добавить</button><button class="btn outline" type="button" id="svCancel" style="display:none">Отмена</button><span id="svMsg" class="msg"></span></div>
         </form>
       </div>
       <div class="panel">
@@ -508,7 +509,7 @@
     } else {
       $('servBox').innerHTML = SVS.length ? SVS.map(sv2=>
         '<div class="row">' +
-          (sv2.icon ? (sv2.icon.indexOf('<svg')===0 ? '<div class="ph">'+sv2.icon+'</div>' : '<div class="ph" style="font-size:20px">'+esc(sv2.icon)+'</div>') : '<div class="ph">'+WRENCH+'</div>') +
+          (sv2.img ? '<img class="thumb" src="'+esc(sv2.img)+'" alt="" onerror="this.style.display=\'none\'">' : (sv2.icon ? (sv2.icon.indexOf('<svg')===0 ? '<div class="ph">'+sv2.icon+'</div>' : '<div class="ph" style="font-size:20px">'+esc(sv2.icon)+'</div>') : '<div class="ph">'+WRENCH+'</div>')) +
           '<div class="info"><b>'+esc(sv2.title)+(sv2.active===false?'<span class="hidden-flag">скрыта</span>':'')+'</b><span>'+esc(sv2.descr||'')+(sv2.descr&&sv2.price?' · ':'')+esc(sv2.price||'')+'</span></div>' +
           '<label class="switch"><input type="checkbox" data-svtoggle="'+esc(String(sv2.id))+'"'+(sv2.active!==false?' checked':'')+'>показывать</label>' +
           '<button class="btn outline sm" type="button" data-svedit="'+esc(String(sv2.id))+'">Изменить</button>' +
@@ -556,6 +557,11 @@
   $('tCat').addEventListener('change', onCatChange);
   // Сменилась основная подкатегория — перестраиваем блок доп. подкатегорий (выбор сохраняем)
   $('tSub').addEventListener('change', ()=>buildExtraCats(extraCatsSelected(), $('tCat').value, extraSubsSelected(), currentSubPair()));
+  $('svPhoto').addEventListener('change', ()=>{
+    const f = $('svPhoto').files[0];
+    if(f){ $('svPreview').src = URL.createObjectURL(f); $('svPreview').style.display='inline-block'; }
+    else { $('svPreview').style.display='none'; }
+  });
   $('tPhoto').addEventListener('change', ()=>{
     const f = $('tPhoto').files[0];
     if(f){ $('tPreview').src = URL.createObjectURL(f); $('tPreview').style.display='inline-block'; }
@@ -792,7 +798,7 @@
   // ====== УСЛУГИ (страница «Услуги от нас») ======
   function resetServForm(){
     editMode = null;
-    $('servForm').reset();
+    $('servForm').reset(); $('svPreview').style.display='none';
     delete $('svEmojiGrid').dataset.icon; $('svEmojiVal').innerHTML=''; $('svEmojiClear').style.display='none';
     $('svBtn').textContent='Добавить'; $('svCancel').style.display='none';
     $('svHead').textContent='Добавить услугу';
@@ -808,6 +814,7 @@
     $('svDesc').value = sv3.descr||'';
     if(sv3.icon){ $('svEmojiGrid').dataset.icon = sv3.icon; $('svEmojiVal').innerHTML = (sv3.icon.indexOf('<svg')===0 ? sv3.icon : esc(sv3.icon)); $('svEmojiClear').style.display='inline-block'; }
     else { delete $('svEmojiGrid').dataset.icon; $('svEmojiVal').innerHTML=''; $('svEmojiClear').style.display='none'; }
+    if(sv3.img){ $('svPreview').src = sv3.img; $('svPreview').style.display='inline-block'; } else { $('svPreview').style.display='none'; }
     $('svBtn').textContent='Сохранить изменения'; $('svCancel').style.display='inline-block';
     $('svHead').textContent='Редактирование услуги';
     $('svMsg').textContent=''; $('svMsg').className='msg';
@@ -822,11 +829,21 @@
     $('svBtn').disabled = true;
     try{
       $('svMsg').textContent = 'Сохраняю…';
+      let img = editing ? (editing.img||'') : '';
+      const file = $('svPhoto').files[0];
+      if(file){
+        const ext = (file.name.split('.').pop() || 'jpg').toLowerCase().replace(/[^a-z0-9]/g,'') || 'jpg';
+        const path = 'services/' + Date.now() + '-' + Math.random().toString(36).slice(2,8) + '.' + ext;
+        const { error:upErr } = await sb.storage.from('tool-photos').upload(path, file, {contentType:file.type||'image/jpeg', upsert:true});
+        if(upErr) throw upErr;
+        img = sb.storage.from('tool-photos').getPublicUrl(path).data.publicUrl;
+      }
       const row = {
         title:title,
         descr:$('svDesc').value.trim(),
         price:$('svPrice').value.trim(),
-        icon:$('svEmojiGrid').dataset.icon||''
+        icon:$('svEmojiGrid').dataset.icon||'',
+        img:img
       };
       if(editing){
         const { error } = await sb.from('services').update(row).eq('id', editing.id);
