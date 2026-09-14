@@ -35,6 +35,9 @@
   .muted{color:var(--gray);font-size:14px}
   label{display:block;font-size:13px;font-weight:600;color:var(--gray);margin-bottom:10px}
   input,select{width:100%;background:var(--bg-2);border:1px solid var(--line);border-radius:10px;color:var(--dark);font-size:15px;padding:10px 12px;outline:none;margin-top:5px;font-family:inherit}
+  select{-webkit-appearance:none;-moz-appearance:none;appearance:none;background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'><path d='M1 1l5 5 5-5' fill='none' stroke='%236b7080' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/></svg>");background-repeat:no-repeat;background-position:right 12px center;padding-right:38px}
+  select:focus{border-color:var(--orange)}
+  @media(max-width:768px){ input,select{font-size:16px;padding:12px 14px} select{padding-right:40px} }
   input:focus,select:focus{border-color:var(--orange)}
   .form-grid{display:grid;grid-template-columns:1fr 1fr;gap:0 14px}
   .form-grid .full{grid-column:1/-1}
@@ -76,12 +79,6 @@
   .emoji-grid button svg{width:18px;height:18px;display:block;margin:0 auto}
   #cEmojiVal svg,#sEmojiVal svg{width:20px;height:20px;vertical-align:middle}
   .info svg{width:14px;height:14px;vertical-align:-2px}
-  .cats-select{width:100%;margin-top:7px;padding:8px 10px;background:var(--bg-2);color:var(--dark);border:1.5px solid var(--line);border-radius:9px;font-size:13.5px;font-family:inherit}
-  .cats-select option{padding:6px 8px;border-radius:6px}
-  .cats-multi{display:flex;flex-wrap:wrap;gap:6px;margin-top:7px}
-  .cats-multi label{display:flex;align-items:center;gap:6px;background:var(--bg-2);border:1px solid var(--line);border-radius:9px;padding:7px 11px;font-size:13px;font-weight:600;color:var(--dark);cursor:pointer;margin:0}
-  .cats-multi label:hover{border-color:var(--orange)}
-  .cats-multi input{width:15px;height:15px;margin:0;accent-color:var(--orange)}
   @media(max-width:640px){
     .emoji-grid{grid-template-columns:repeat(8,1fr)}
     .form-grid{grid-template-columns:1fr}
@@ -182,7 +179,6 @@
         <form id="toolForm" class="form-grid">
           <label>Название<input id="tName" required placeholder="Например: Перфоратор Bosch GBH 2-26"></label>
           <label>Категория<select id="tCat" required></select></label>
-          <label class="full" id="tCatsWrap" style="display:none">Дополнительно показывать в категориях и подкатегориях<select id="tCatsBox" class="cats-select" multiple size="6" title="Удерживайте Ctrl (Cmd), чтобы выбрать несколько"></select><div id="tSubsExtraWrap" style="display:none;margin-top:12px"><b style="font-size:12.5px;display:block;margin-bottom:1px">Подкатегории:</b><select id="tSubsBox" class="cats-select" multiple size="6" title="Удерживайте Ctrl (Cmd), чтобы выбрать несколько"></select></div><span class="muted" style="font-size:11.5px;display:block;margin-top:5px">В списках можно выбрать несколько: удерживайте Ctrl (на Mac — Cmd) и щёлкайте по нужным. Инструмент будет виден во всех выбранных разделах.</span></label>
           <label id="tSubWrap" style="display:none">Подкатегория<select id="tSub"><option value="">Все электроинструменты</option><option value="battery">На аккумуляторе</option><option value="corded">От сети 220В</option></select></label>
           <label>Цена, ₽/сутки<input id="tPrice" type="number" min="0" required placeholder="400"></label>
           <label class="full">Краткое описание<input id="tDesc" placeholder="Мощность, комплект, особенности"></label>
@@ -418,42 +414,6 @@
     return s ? (' · '+(s.icon && s.icon.indexOf('<svg')!==0 ? s.icon+' ' : '')+s.title) : '';
   }
   function toolsInSub(cat,key){ return TOOLS.filter(t=>t.cat===cat && t.sub===key).length; }
-  // ===== Дополнительные категории И подкатегории инструмента (мультикатегории) =====
-  // Заголовок доп. подкатегории по паре «cat/key» в виде «Категория › Подкатегория»
-  function subPairTitle(pair){
-    const i = pair.indexOf('/'), c = pair.slice(0,i), k = pair.slice(i+1);
-    const sub = SUBCATS.find(x=>x.cat===c && x.key===k);
-    return sub ? (catTitle(c)+' › '+sub.title) : pair;
-  }
-  // Пара «категория/подкатегория», выбранная в форме как основная
-  function currentSubPair(){
-    const c = $('tCat').value, s = $('tSub').value;
-    return s ? (c+'/'+s) : '';
-  }
-  function buildExtraCats(selected, primary, selSubs, primarySubPair){
-    const box = $('tCatsBox'), wrap = $('tCatsWrap');
-    if(!box || !wrap) return;
-    const others = CATS.filter(c=>c.key!==primary);
-    const subsAll = SUBCATS.filter(s2=>(s2.cat+'/'+s2.key)!==(primarySubPair||''));
-    const subsWrap = $('tSubsExtraWrap'), subsBox = $('tSubsBox');
-    if(subsBox){
-      subsBox.innerHTML = subsAll.map(s2=>
-        '<option value="'+esc(s2.cat+'/'+s2.key)+'"'+((selSubs||[]).indexOf(s2.cat+'/'+s2.key)!==-1?' selected':'')+'>'+esc(catTitle(s2.cat)+' › '+s2.title)+'</option>'
-      ).join('');
-      if(subsWrap) subsWrap.style.display = subsAll.length ? 'block' : 'none';
-    }
-    wrap.style.display = (others.length || subsAll.length) ? 'block' : 'none';
-    box.innerHTML = others.map(c=>'<option value="'+esc(c.key)+'"'+((selected||[]).indexOf(c.key)!==-1?' selected':'')+'>'+esc(c.title)+'</option>').join('');
-  }
-  function extraCatsSelected(){ return [...$('tCatsBox').selectedOptions].map(function(o){ return o.value; }); }
-  // Отмеченные доп. подкатегории («cat/key»); текущая основная пара исключается
-  function extraSubsSelected(){
-    const sbox = document.getElementById('tSubsBox');
-    if(!sbox) return [];
-    const pair = currentSubPair();
-    return [...sbox.selectedOptions].map(function(o){ return o.value; }).filter(function(v){ return v!==pair; });
-  }
-
   // Заполняем выбор подкатегории в форме инструмента по выбранной категории
   function fillSubSelect(){
     const cat = $('tCat').value;
@@ -489,7 +449,7 @@
       '<div class="row">' +
         (t.img ? '<img class="thumb" src="'+esc(t.img)+'" alt="" onerror="this.style.display=\'none\'">' : '<div class="ph">'+WRENCH+'</div>') +
         '<div class="info"><b>'+esc(t.name)+(t.active===false?'<span class="hidden-flag">скрыт</span>':'')+'</b>' +
-        '<span>'+esc([t.cat].concat(t.cats||[]).map(catTitle).join(' · '))+(t.sub?subTitle(t.cat,t.sub):'')+((t.subs&&t.subs.length)?' · '+esc(t.subs.map(subPairTitle).join(' · ')):'')+' · '+esc(t.price)+' ₽/сутки</span></div>' +
+        '<span>'+esc(catTitle(t.cat))+(t.sub?subTitle(t.cat,t.sub):'')+' · '+esc(t.price)+' ₽/сутки</span></div>' +
         '<label class="switch"><input type="checkbox" data-toggle="'+esc(t.id)+'"'+(t.active!==false?' checked':'')+'>показывать</label>' +
         '<button class="btn outline sm" type="button" data-edit="'+esc(t.id)+'">Изменить</button>' +
         '<button class="btn danger sm" type="button" data-del="'+esc(t.id)+'">Удалить</button>' +
@@ -555,10 +515,8 @@
   });
 
   // ====== ДОБАВЛЕНИЕ ИНСТРУМЕНТА ======
-  function onCatChange(){ fillSubSelect(); buildExtraCats(extraCatsSelected(), $('tCat').value, extraSubsSelected(), currentSubPair()); }
+  function onCatChange(){ fillSubSelect(); }
   $('tCat').addEventListener('change', onCatChange);
-  // Сменилась основная подкатегория — перестраиваем блок доп. подкатегорий (выбор сохраняем)
-  $('tSub').addEventListener('change', ()=>buildExtraCats(extraCatsSelected(), $('tCat').value, extraSubsSelected(), currentSubPair()));
   $('svPhoto').addEventListener('change', ()=>{
     const f = $('svPhoto').files[0];
     if(f){ $('svPreview').src = URL.createObjectURL(f); $('svPreview').style.display='inline-block'; }
@@ -573,7 +531,7 @@
   function resetToolForm(){
     editMode = null;
     $('toolForm').reset(); $('tPreview').style.display='none';
-    fillSubSelect(); buildExtraCats([], $('tCat').value, [], '');
+    fillSubSelect();
     $('tBtn').textContent='Добавить'; $('tCancel').style.display='none';
     $('tHead').textContent='Добавить инструмент';
     $('tMsg').textContent=''; $('tMsg').className='msg';
@@ -583,7 +541,7 @@
     if(!t) return;
     editMode = {type:'tool', id:String(id)};
     $('tName').value = t.name||'';
-    $('tCat').value = t.cat||''; fillSubSelect(); buildExtraCats(t.cats||[], t.cat, t.subs||[], t.sub?(t.cat+'/'+t.sub):'');
+    $('tCat').value = t.cat||''; fillSubSelect();
     $('tSub').value = t.sub||'';
     $('tPrice').value = t.price||0;
     $('tDesc').value = t.descr||'';
@@ -615,8 +573,8 @@
       }
       const row = {
         name:$('tName').value.trim(), cat:cat,
-        cats:extraCatsSelected(),
-        subs:extraSubsSelected(),
+        cats:[],
+        subs:[],
         sub:$('tSub').value||'',
         cat_label:catTitle(cat),
         img:img, descr:$('tDesc').value.trim(),
