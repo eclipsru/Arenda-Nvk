@@ -256,6 +256,17 @@
 
   /* ORDER MODAL (заявка на аренду) */
   .modal-order{max-width:520px;max-height:88vh;overflow-y:auto}
+  /* Окно карточки с полной информацией */
+  .modal-tool{max-width:420px;max-height:88vh;overflow-y:auto}
+  .modal-tool .tm-img{aspect-ratio:4/3;background:#14161c;border-radius:12px;overflow:hidden;margin-bottom:12px;display:grid;place-items:center}
+  .modal-tool .tm-img img{width:100%;height:100%;object-fit:cover;display:block}
+  .modal-tool .tm-cat{font-size:12px;font-weight:700;color:var(--orange);text-transform:uppercase;letter-spacing:.5px}
+  .modal-tool h3{font-size:20px;margin:4px 0 2px}
+  .modal-tool .tm-price{font-size:14px;color:var(--gray);margin-bottom:8px}
+  .modal-tool .tm-price b{font-size:22px;color:var(--dark)}
+  .modal-tool .tm-desc{font-size:14.5px;line-height:1.55;margin-bottom:12px}
+  .modal-tool .tm-sub{font-size:15px;margin:8px 0 8px}
+  @media(max-width:768px){ .grid .card{cursor:pointer} #toolModal{padding:8px} #toolModal .modal-tool{max-width:none;max-height:94vh;border-radius:16px} }
   /* Мобильная заявка: все поля на всю ширину окна, крупнее и удобнее */
   @media(max-width:768px){
     #orderModal{padding:8px}
@@ -731,6 +742,33 @@
   </div>
 </div>
 
+<!-- ОКНО КАРТОЧКИ ИНСТРУМЕНТА (полная информация) -->
+<div class="modal-overlay" id="toolModal">
+  <div class="modal modal-tool">
+    <button class="close" id="toolClose" type="button">&times;</button>
+    <div class="tm-img" id="tmImg" style="display:none"></div>
+    <div class="tm-cat" id="tmCat"></div>
+    <h3 id="tmName"></h3>
+    <div class="tm-price" id="tmPrice"></div>
+    <p class="tm-desc" id="tmDesc"></p>
+    <h4 class="tm-sub">Условия аренды</h4>
+    <ul class="cond-list">
+      <li><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M16 10h2"/><path d="M16 14h2"/><path d="M6.17 15a3 3 0 0 1 5.66 0"/><circle cx="9" cy="11" r="2"/><rect x="2" y="5" width="20" height="14" rx="2"/></svg> <b>Документы:</b> паспорт РФ. Оформляем договор аренды за пару минут.</li>
+      <li><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1 1 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/></svg> <b>Залог:</b> возвращается полностью при исправном возврате инструмента.</li>
+      <li><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 2v4"/><path d="M16 2v4"/><rect width="18" height="18" x="3" y="4" rx="2"/><path d="M3 10h18"/></svg> <b>Срок:</b> от одних суток. Последующие дни — дешевле, уточняйте при бронировании.</li>
+      <li><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><rect width="20" height="14" x="2" y="5" rx="2"/><line x1="2" x2="22" y1="10" y2="10"/></svg> <b>Оплата:</b> за сутки вперёд, наличными или переводом.</li>
+      <li><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><line x1="3" x2="15" y1="22" y2="22"/><line x1="4" x2="14" y1="9" y2="9"/><path d="M14 22V4a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v18"/><path d="M14 13h2a2 2 0 0 1 2 2v2a2 2 0 0 0 2 2h0a2 2 0 0 0 2-2V9.83a2 2 0 0 0-.59-1.42L18 5"/></svg> <b>Бензотехника:</b> выдаётся с полным баком — возвращать тоже с полным.</li>
+      <li><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg> <b>Возврат:</b> в чистом виде и исправности, как получили.</li>
+      <li><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg> <b>Поломка:</b> мелкий расходник (диски, коронки, леска) — за счёт арендатора. Капремонт неисправного по вине арендатора инструмента — тоже.</li>
+      <li><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M14 18V6a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v11a1 1 0 0 0 1 1h2"/><path d="M15 18H9"/><path d="M19 18h2a1 1 0 0 0 1-1v-3.65a1 1 0 0 0-.22-.62l-3.48-4.35A1 1 0 0 0 17.52 8H14"/><circle cx="17" cy="18" r="2"/><circle cx="7" cy="18" r="2"/></svg> <b>Доставка:</b> по Новочеркасску — оформляется в заявке, стоимость уточнит менеджер.</li>
+    </ul>
+    <div class="card-btns" style="margin-top:14px">
+      <button type="button" class="btn" id="tmRent">Арендовать</button>
+      <a href="tel:+79081731410" class="btn outline" style="text-decoration:none">Позвонить</a>
+    </div>
+  </div>
+</div>
+
 <!-- ОКНО УСЛОВИЙ АРЕНДЫ -->
 <div class="modal-overlay" id="conditionsModal">
   <div class="modal modal-conditions">
@@ -865,6 +903,11 @@ const TOOLS = [
             <button type="button" class="btn outline" onclick="openConditions()">Условия аренды</button>
           </div>
         </div>`;
+      card.addEventListener('click', (e)=>{
+        if(e.target.closest('.card-btns')) return;
+        if(!(window.matchMedia && window.matchMedia('(max-width:768px)').matches)) return;
+        openToolInfo(t);
+      });
       grid.appendChild(card);
     });
   }
@@ -1365,6 +1408,26 @@ const TOOLS = [
   function closeConditions(){ conditionsModal.classList.remove('open'); }
   document.getElementById('conditionsClose').addEventListener('click', closeConditions);
   conditionsModal.addEventListener('click', (e)=>{ if(e.target === conditionsModal) closeConditions(); });
+
+  // ====== ОКНО КАРТОЧКИ ИНСТРУМЕНТА (мобильная версия: тап по карточке) ======
+  const toolModal = document.getElementById('toolModal');
+  let tmCurrent = '';
+  function openToolInfo(t){
+    tmCurrent = t.name;
+    const catEl = document.getElementById('tmCat');
+    const imgEl = document.getElementById('tmImg');
+    catEl.textContent = t.catLabel || '';
+    imgEl.style.display = t.img ? 'grid' : 'none';
+    imgEl.innerHTML = t.img ? '<img src="'+t.img+'" alt="'+t.name+'" loading="lazy">' : '';
+    document.getElementById('tmName').textContent = t.name;
+    document.getElementById('tmPrice').innerHTML = 'от <b>'+t.price+' ₽</b> / сутки';
+    document.getElementById('tmDesc').textContent = t.desc || 'Описание уточняйте по телефону — подскажем и поможем выбрать.';
+    toolModal.classList.add('open');
+  }
+  function closeToolInfo(){ toolModal.classList.remove('open'); }
+  document.getElementById('toolClose').addEventListener('click', closeToolInfo);
+  toolModal.addEventListener('click', (e)=>{ if(e.target === toolModal) closeToolInfo(); });
+  document.getElementById('tmRent').addEventListener('click', ()=>{ closeToolInfo(); pick(tmCurrent); });
 
   document.getElementById('year').textContent = new Date().getFullYear();
 
