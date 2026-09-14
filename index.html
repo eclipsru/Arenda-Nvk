@@ -76,9 +76,6 @@
   .catalog-layout{display:grid;grid-template-columns:260px 1fr;gap:28px;align-items:start}
 
   /* Поиск по каталогу */
-  .order-tool-search{width:100%;padding:11px 14px;background:#171a21;color:var(--dark);border:2px solid var(--line);border-radius:10px;font-size:15px;font-family:inherit;margin-bottom:10px;transition:.15s}
-  .order-tool-search:focus{outline:none;border-color:var(--orange)}
-  .order-tool-search::placeholder{color:#6b7080}
   .search-box{position:relative;margin-bottom:18px}
   .search-box input{width:100%;background:var(--card);border:1px solid var(--line);border-radius:12px;color:var(--dark);font-size:15px;padding:13px 46px 13px 46px;outline:none;transition:.15s}
   .search-box input:focus{border-color:var(--orange);box-shadow:0 0 0 3px rgba(255,143,31,.15)}
@@ -231,8 +228,20 @@
   .modal-order{max-width:520px;max-height:88vh;overflow-y:auto}
   .tools-label{display:block;font-weight:600;font-size:14px;margin-bottom:8px}
   .tool-row{display:flex;gap:8px;align-items:center;margin-bottom:10px}
-  .tool-row .tool-select{flex:1;min-width:0;padding:12px 14px;background:#171a21;color:var(--dark);border:2px solid var(--line);border-radius:10px;font-size:15px;font-family:inherit;transition:.15s}
-  .tool-row .tool-select:focus{outline:none;border-color:var(--orange)}
+  .tool-row .combo{position:relative;flex:1;min-width:0}
+  .tool-row .combo-input{width:100%;padding:12px 38px 12px 14px;background:#171a21;color:var(--dark);border:2px solid var(--line);border-radius:10px;font-size:16px;font-family:inherit;cursor:pointer;transition:.15s;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .tool-row .combo-input::placeholder{color:#6b7080}
+  .tool-row .combo-input:focus{outline:none;border-color:var(--orange)}
+  .tool-row .combo::after{content:'';position:absolute;right:14px;top:50%;width:9px;height:9px;border-right:2px solid #6b7080;border-bottom:2px solid #6b7080;transform:translateY(-70%) rotate(45deg);pointer-events:none}
+  .combo-menu{display:none;position:absolute;top:calc(100% + 6px);left:0;right:0;background:#171a21;border:2px solid var(--line);border-radius:12px;z-index:80;box-shadow:0 14px 36px rgba(0,0,0,.5);overflow:hidden}
+  .combo-menu.open{display:block}
+  .combo-search{display:block;width:100%;padding:12px 14px;background:#10131a;color:var(--dark);border:none;border-bottom:2px solid var(--line);font-size:16px;font-family:inherit}
+  .combo-search:focus{outline:none}
+  .combo-list{max-height:235px;overflow:auto;-webkit-overflow-scrolling:touch}
+  .combo-item{padding:12px 14px;font-size:15px;color:var(--dark);cursor:pointer;border-bottom:1px solid rgba(255,255,255,.07)}
+  .combo-item:last-child{border-bottom:none}
+  .combo-item:hover{background:rgba(255,143,31,.16);color:#fff}
+  .combo-empty{padding:13px 14px;color:#6b7080;font-size:13.5px}
   .tool-row .tool-qty{width:64px;flex:none;padding:12px 8px;text-align:center;background:#171a21;color:var(--dark);border:2px solid var(--line);border-radius:10px;font-size:15px;font-family:inherit}
   .tool-row .tool-qty:focus{outline:none;border-color:var(--orange)}
   .tool-row .tool-remove{flex:none;width:40px;height:44px;border:2px solid var(--line);background:#171a21;color:var(--gray);border-radius:10px;font-size:22px;line-height:1;cursor:pointer;transition:.15s}
@@ -640,7 +649,6 @@
       </div>
 
       <label class="tools-label">Что нужно взять</label>
-      <input type="text" id="orderToolSearch" class="order-tool-search" placeholder="Поиск инструмента…" autocomplete="off">
       <div id="toolsList">
         <!-- строки инструментов подставляются скриптом -->
       </div>
@@ -954,42 +962,65 @@ const TOOLS = [
   function makeToolRow(preselect){
     const row = document.createElement('div');
     row.className = 'tool-row';
-    const opts = ['<option value="">— выберите инструмент —</option>']
-      .concat(TOOL_OPTIONS.map(o=>`<option${preselect===o?' selected':''}>${o}</option>`))
-      .join('');
+    const opts = TOOL_OPTIONS.length
+      ? TOOL_OPTIONS.map(o=>'<div class="combo-item'+(o===preselect?' sel':'')+'">'+o+'</div>').join('')
+      : '<div class="combo-empty">Список загружается…</div>';
     row.innerHTML = `
-      <select class="tool-select">${opts}</select>
+      <div class="combo">
+        <input type="text" class="combo-input" placeholder="— выберите инструмент —" autocomplete="off" readonly>
+        <input type="hidden" class="tool-value" value="${preselect||''}">
+        <div class="combo-menu">
+          <input type="text" class="combo-search" placeholder="Поиск инструмента…" autocomplete="off">
+          <div class="combo-list">${opts}</div>
+        </div>
+      </div>
       <input type="number" class="tool-qty" min="1" value="1" title="Количество">
       <button type="button" class="tool-remove" title="Убрать">&times;</button>`;
+    const input = row.querySelector('.combo-input');
+    const value = row.querySelector('.tool-value');
+    const menu = row.querySelector('.combo-menu');
+    const search = row.querySelector('.combo-search');
+    const list = row.querySelector('.combo-list');
+    if(preselect){ input.value = preselect; }
+    input.addEventListener('click', ()=>{
+      document.querySelectorAll('#toolsList .combo-menu.open').forEach(m=>{ if(m!==menu) m.classList.remove('open'); });
+      menu.classList.add('open');
+      search.value = '';
+      [...list.querySelectorAll('.combo-item')].forEach(i=>i.style.display='');
+      search.focus();
+    });
+    search.addEventListener('input', ()=>{
+      const q = search.value.trim().toLowerCase();
+      [...list.querySelectorAll('.combo-item')].forEach(i=>{
+        i.style.display = (!q || i.textContent.toLowerCase().indexOf(q)!==-1) ? '' : 'none';
+      });
+    });
+    list.addEventListener('click', (e)=>{
+      const it = e.target.closest('.combo-item');
+      if(!it) return;
+      value.value = it.textContent;
+      input.value = it.textContent;
+      menu.classList.remove('open');
+    });
     row.querySelector('.tool-remove').addEventListener('click', ()=>{
       // Не даём удалить последнюю строку — просто очищаем её
       if(toolsList.children.length > 1){ row.remove(); }
-      else { row.querySelector('.tool-select').value=''; row.querySelector('.tool-qty').value=1; }
+      else { value.value=''; input.value=''; }
     });
     return row;
   }
+  // Клик мимо — закрыть открытые списки
+  document.addEventListener('click', (e)=>{
+    if(!e.target.closest('.combo')) document.querySelectorAll('#toolsList .combo-menu.open').forEach(m=>m.classList.remove('open'));
+  });
 
   function resetOrderTools(preselect){
     toolsList.innerHTML='';
     toolsList.appendChild(makeToolRow(preselect));
   }
 
-  // Поиск инструмента в заявке: прячет неподходящие пункты списков
-  const orderToolSearch = document.getElementById('orderToolSearch');
-  function filterToolOptions(){
-    if(!orderToolSearch) return;
-    const q = orderToolSearch.value.trim().toLowerCase();
-    document.querySelectorAll('#toolsList .tool-select').forEach(sel=>{
-      [...sel.options].forEach(o=>{
-        o.style.display = (!q || o.value === '' || o.textContent.toLowerCase().indexOf(q) !== -1) ? '' : 'none';
-      });
-    });
-  }
-  if(orderToolSearch) orderToolSearch.addEventListener('input', filterToolOptions);
-
   function openOrder(){
     orderErr.style.display='none';
-    if(orderToolSearch){ orderToolSearch.value=''; filterToolOptions(); }
     const ph = document.getElementById('phone');
     if(ph && !ph.value && currentUserPhone) ph.value = currentUserPhone;
     const nm = document.getElementById('name');
@@ -1006,8 +1037,7 @@ const TOOLS = [
   orderModal.addEventListener('click', (e)=>{ if(e.target===orderModal) closeOrder(); });
   document.getElementById('addToolBtn').addEventListener('click', ()=>{
     toolsList.appendChild(makeToolRow());
-    filterToolOptions();
-    toolsList.lastElementChild.querySelector('.tool-select').focus();
+    toolsList.lastElementChild.querySelector('.combo-input').focus();
   });
 
   // ====== КЛИК "АРЕНДОВАТЬ" в каталоге -> открыть окно с выбранным инструментом ======
@@ -1046,7 +1076,7 @@ const TOOLS = [
   orderForm.addEventListener('submit', function(e){
     e.preventDefault();
     // Проверяем, что выбран хотя бы один инструмент
-    const chosen = Array.from(toolsList.querySelectorAll('.tool-select')).filter(s=>s.value);
+    const chosen = Array.from(toolsList.querySelectorAll('.tool-value')).filter(s=>s.value);
     if(chosen.length === 0){
       orderErr.textContent='Выберите хотя бы один инструмент.';
       orderErr.style.display='block';
@@ -1501,10 +1531,12 @@ const TOOLS = [
       if(TOOLS.length){
         TOOL_OPTIONS.length = 0; TOOLS.forEach(t=>TOOL_OPTIONS.push(t.name));
         // Если заявка уже открыта — обновляем её списки, сохраняя выбор
-        document.querySelectorAll('#toolsList .tool-select').forEach(sel=>{
-          const cur = sel.value;
-          sel.innerHTML = ['<option value="">— выберите инструмент —</option>']
-            .concat(TOOL_OPTIONS.map(o=>`<option${cur===o?' selected':''}>${o}</option>`)).join('');
+        document.querySelectorAll('#toolsList .combo').forEach(c=>{
+          const val = c.querySelector('.tool-value');
+          const inp = c.querySelector('.combo-input');
+          const list = c.querySelector('.combo-list');
+          if(val && TOOL_OPTIONS.indexOf(val.value) === -1){ val.value=''; inp.value=''; }
+          if(list) list.innerHTML = TOOL_OPTIONS.map(o=>'<div class="combo-item">'+o+'</div>').join('');
         });
       }
       const cats = (cR.data || []).filter(c=>c.active !== false);
