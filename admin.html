@@ -38,6 +38,28 @@
   select{-webkit-appearance:none;-moz-appearance:none;appearance:none;background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'><path d='M1 1l5 5 5-5' fill='none' stroke='%236b7080' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/></svg>");background-repeat:no-repeat;background-position:right 12px center;padding-right:38px}
   select:focus{border-color:var(--orange)}
   @media(max-width:768px){ input,select{font-size:16px;padding:12px 14px} select{padding-right:40px} }
+  /* ==== Кастомные тёмные выпадающие списки (как в заявке на главной) ==== */
+  .combo{position:relative}
+  .combo select{display:none}
+  .combo-input{cursor:pointer;background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'><path d='M1 1l5 5 5-5' fill='none' stroke='%236b7080' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/></svg>");background-repeat:no-repeat;background-position:right 12px center;padding-right:38px}
+  .combo-menu{display:none;position:absolute;top:calc(100% + 6px);left:0;right:0;background:#171a21;border:2px solid var(--line);border-radius:12px;z-index:300;box-shadow:0 14px 36px rgba(0,0,0,.5);overflow:hidden}
+  .combo-menu.open{display:block}
+  .combo-search{display:block;width:100%;padding:12px 14px;background:#10131a;color:var(--dark);border:none;border-bottom:2px solid var(--line);font-size:16px;font-family:inherit}
+  .combo-search::placeholder{color:#6b7080}
+  .combo-list{max-height:235px;overflow:auto;-webkit-overflow-scrolling:touch}
+  .combo-item{padding:11px 14px;font-size:15px;color:var(--dark);cursor:pointer;border-bottom:1px solid rgba(255,255,255,.07)}
+  .combo-item:last-child{border-bottom:none}
+  .combo-item:hover{background:rgba(255,255,255,.06)}
+  .combo-item.sel{color:var(--orange);font-weight:700}
+  .combo-empty{padding:12px 14px;color:var(--gray);font-size:14px}
+  .combo-item .box{display:inline-block;width:18px;height:18px;border:2px solid var(--line);border-radius:5px;margin-right:10px;vertical-align:-4px;position:relative;flex:none}
+  .combo-item .box svg{display:none;width:12px;height:12px;position:absolute;left:1px;top:1px;stroke:#fff;fill:none;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}
+  .combo-item.on .box{background:var(--orange);border-color:var(--orange)}
+  .combo-item.on .box svg{display:block}
+  @media(max-width:560px){
+    .combo-menu.open{position:fixed;left:10px;right:10px;top:50%;transform:translateY(-50%);max-height:70vh;z-index:300}
+    .combo-menu.open .combo-list{max-height:calc(70vh - 54px)}
+  }
   input:focus,select:focus{border-color:var(--orange)}
   .form-grid{display:grid;grid-template-columns:1fr 1fr;gap:0 14px}
   .form-grid .full{grid-column:1/-1}
@@ -180,6 +202,8 @@
           <label>Название<input id="tName" required placeholder="Например: Перфоратор Bosch GBH 2-26"></label>
           <label>Категория<select id="tCat" required></select></label>
           <label id="tSubWrap" style="display:none">Подкатегория<select id="tSub"><option value="">Все электроинструменты</option><option value="battery">На аккумуляторе</option><option value="corded">От сети 220В</option></select></label>
+          <label class="full" id="tExtraCatsWrap" style="display:none">Дополнительно показывать в категориях<div id="tExtraCats" style="margin-top:5px"></div><span class="muted" style="font-size:11.5px;display:block;margin-top:5px">Инструмент появится и в этих разделах — помимо основной категории.</span></label>
+          <label class="full" id="tExtraSubsWrap" style="display:none">Дополнительно показывать в подкатегориях<div id="tExtraSubs" style="margin-top:5px"></div></label>
           <label>Цена, ₽/сутки<input id="tPrice" type="number" min="0" required placeholder="400"></label>
           <label class="full">Краткое описание<input id="tDesc" placeholder="Мощность, комплект, особенности"></label>
           <label class="full">Фотография<input id="tPhoto" type="file" accept="image/*"></label>
@@ -414,6 +438,132 @@
     return s ? (' · '+(s.icon && s.icon.indexOf('<svg')!==0 ? s.icon+' ' : '')+s.title) : '';
   }
   function toolsInSub(cat,key){ return TOOLS.filter(t=>t.cat===cat && t.sub===key).length; }
+  // ====== КАСТОМНЫЕ ТЁМНЫЕ СПИСКИ (как в заявке) + МУЛЬТИВЫБОР КАТЕГОРИЙ/ПОДКАТЕГОРИЙ ======
+  const COMBOS = {};
+  const MULTIS = [];
+  function makeCombo(selId){
+    const sel = $(selId);
+    if(!sel || COMBOS[selId]) return;
+    const wrap = document.createElement('div'); wrap.className = 'combo';
+    sel.parentNode.insertBefore(wrap, sel);
+    const input = document.createElement('input'); input.type='text'; input.readOnly = true; input.className='combo-input'; input.placeholder='— выберите —'; input.autocomplete='off';
+    const menu = document.createElement('div'); menu.className='combo-menu';
+    const search = document.createElement('input'); search.type='text'; search.className='combo-search'; search.placeholder='Поиск…'; search.autocomplete='off';
+    const list = document.createElement('div'); list.className='combo-list';
+    menu.appendChild(search); menu.appendChild(list);
+    wrap.appendChild(input); wrap.appendChild(sel); wrap.appendChild(menu);
+    const c = { sel, input, menu, search, list, skipToggle:false };
+    COMBOS[selId] = c;
+    input.addEventListener('click', function(e){
+      e.stopPropagation();
+      if(c.skipToggle) return;
+      closeAllCombos(menu); menu.classList.toggle('open'); if(menu.classList.contains('open')){ buildComboList(selId); c.search.value=''; filterCombo(selId); }
+    });
+    search.addEventListener('input', function(){ filterCombo(selId); });
+    menu.addEventListener('click', function(e){ e.stopPropagation(); });
+    list.addEventListener('click', function(e){
+      const it = e.target.closest('.combo-item'); if(!it) return;
+      e.preventDefault(); e.stopPropagation();
+      c.skipToggle = true; setTimeout(function(){ c.skipToggle = false; }, 0);
+      c.sel.value = it.getAttribute('data-v');
+      syncCombo(selId);
+      menu.classList.remove('open');
+      c.sel.dispatchEvent(new Event('change', {bubbles:true}));
+    });
+    new MutationObserver(function(){ syncCombo(selId); if(menu.classList.contains('open')) buildComboList(selId); }).observe(sel, {childList:true});
+    syncCombo(selId);
+  }
+  function buildComboList(selId){
+    const c = COMBOS[selId]; if(!c) return;
+    const opts = [].map.call(c.sel.options, function(o){ return {v:o.value, t:o.textContent || '— не выбрано —'}; });
+    c.list.innerHTML = opts.length ? opts.map(function(o){
+      return '<div class="combo-item'+(String(c.sel.value)===String(o.v)?' sel':'')+'" data-v="'+esc(o.v)+'">'+esc(o.t)+'</div>';
+    }).join('') : '<div class="combo-empty">Нет вариантов</div>';
+  }
+  function filterCombo(selId){
+    const c = COMBOS[selId]; if(!c) return;
+    const q = c.search.value.trim().toLowerCase(); let vis = 0;
+    [].forEach.call(c.list.querySelectorAll('.combo-item'), function(it){
+      const hit = !q || it.textContent.toLowerCase().indexOf(q)!==-1;
+      it.style.display = hit?'block':'none'; if(hit) vis++;
+    });
+    let empty = c.list.querySelector('.combo-empty');
+    if(!vis && !empty) c.list.insertAdjacentHTML('beforeend','<div class="combo-empty">Ничего не найдено</div>');
+    if(empty) empty.style.display = vis?'none':'block';
+  }
+  function syncCombo(selId){
+    const c = COMBOS[selId]; if(!c) return;
+    const o = c.sel.options[c.sel.selectedIndex];
+    c.input.value = o ? o.textContent : '';
+  }
+  const CHECK = '<span class="box"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 13 4 4 10-10"/></svg></span>';
+  function makeMulti(hostId, placeholder){
+    const host = $(hostId); if(!host) return null;
+    const wrap = document.createElement('div'); wrap.className='combo mcombo';
+    const input = document.createElement('input'); input.type='text'; input.readOnly=true; input.className='combo-input'; input.placeholder=placeholder; input.autocomplete='off';
+    const menu = document.createElement('div'); menu.className='combo-menu';
+    const search = document.createElement('input'); search.type='text'; search.className='combo-search'; search.placeholder='Поиск…'; search.autocomplete='off';
+    const list = document.createElement('div'); list.className='combo-list';
+    menu.appendChild(search); menu.appendChild(list); wrap.appendChild(input); wrap.appendChild(menu); host.appendChild(wrap);
+    const M = { host, input, menu, search, list, vals: [], skipToggle:false, getOptions: function(){return [];}, oneTitle: function(v){return v;} };
+    MULTIS.push(M);
+    input.addEventListener('click', function(e){
+      e.stopPropagation();
+      if(M.skipToggle) return;
+      closeAllCombos(menu); menu.classList.toggle('open'); if(menu.classList.contains('open')){ buildMultiList(M); M.search.value=''; filterMulti(M); }
+    });
+    search.addEventListener('input', function(){ filterMulti(M); });
+    menu.addEventListener('click', function(e){ e.stopPropagation(); });
+    list.addEventListener('click', function(e){
+      const it = e.target.closest('.combo-item'); if(!it) return;
+      e.preventDefault(); e.stopPropagation();
+      M.skipToggle = true; setTimeout(function(){ M.skipToggle = false; }, 0);
+      const v = it.getAttribute('data-v');
+      const i = M.vals.indexOf(v);
+      if(i===-1) M.vals.push(v); else M.vals.splice(i,1);
+      it.classList.toggle('on', i===-1);
+      syncMulti(M);
+    });
+    return M;
+  }
+  function buildMultiList(M){
+    const opts = M.getOptions();
+    M.list.innerHTML = opts.length ? opts.map(function(o){
+      return '<div class="combo-item'+(M.vals.indexOf(o.v)!==-1?' on':'')+'" data-v="'+esc(o.v)+'">'+CHECK+esc(o.t)+'</div>';
+    }).join('') : '<div class="combo-empty">Нет вариантов</div>';
+  }
+  function filterMulti(M){
+    const q = M.search.value.trim().toLowerCase(); let vis = 0;
+    [].forEach.call(M.list.querySelectorAll('.combo-item'), function(it){
+      const hit = !q || it.textContent.toLowerCase().indexOf(q)!==-1;
+      it.style.display = hit?'block':'none'; if(hit) vis++;
+    });
+  }
+  function syncMulti(M){
+    M.input.value = M.vals.length ? (M.vals.length===1 ? M.oneTitle(M.vals[0]) : 'Выбрано: '+M.vals.length) : '';
+  }
+  function clearMultis(){ MULTIS.forEach(function(M){ M.vals = []; buildMultiList(M); syncMulti(M); }); }
+  function closeAllCombos(except){
+    Object.keys(COMBOS).forEach(function(k){ if(COMBOS[k].menu!==except) COMBOS[k].menu.classList.remove('open'); });
+    MULTIS.forEach(function(M){ if(M.menu!==except) M.menu.classList.remove('open'); });
+  }
+  document.addEventListener('click', function(e){ if(!e.target.closest('.combo')) closeAllCombos(null); });
+  ['tCat','tSub','sCat'].forEach(makeCombo);
+  const mCats = makeMulti('tExtraCats', '— выберите категории —');
+  const mSubs = makeMulti('tExtraSubs', '— выберите подкатегории —');
+  if(mCats){ mCats.getOptions = function(){ return CATS.filter(function(c){ return c.key!==$('tCat').value; }).map(function(c){ return {v:c.key, t:c.title}; }); }; mCats.oneTitle = catTitle; }
+  if(mSubs){ mSubs.getOptions = function(){ return SUBCATS.filter(function(sn){ return sn.cat!==$('tCat').value; }).map(function(sn){ return {v:sn.cat+'/'+sn.key, t:catTitle(sn.cat)+' · '+sn.title}; }); }; mSubs.oneTitle = subPairTitle; }
+  function subPairTitle(pp){
+    const i = pp.indexOf('/'); const cat = i===-1?pp:pp.slice(0,i), key = i===-1?'':pp.slice(i+1);
+    const sn = SUBCATS.find(function(x){ return x.cat===cat && x.key===key; });
+    return catTitle(cat) + (sn ? ' · '+sn.title : ' · '+key);
+  }
+  function rebuildExtraMultis(){
+    $('tExtraCatsWrap').style.display = CATS.length>1 ? 'block' : 'none';
+    $('tExtraSubsWrap').style.display = SUBCATS.length ? 'block' : 'none';
+    if(mCats){ mCats.vals = mCats.vals.filter(function(v){ return v!==$('tCat').value && CATS.some(function(c){ return c.key===v; }); }); buildMultiList(mCats); syncMulti(mCats); }
+    if(mSubs){ mSubs.vals = mSubs.vals.filter(function(v){ return v.indexOf($('tCat').value+'/')!==0 && SUBCATS.some(function(sn){ return sn.cat+'/'+sn.key===v; }); }); buildMultiList(mSubs); syncMulti(mSubs); }
+  }
   // Заполняем выбор подкатегории в форме инструмента по выбранной категории
   function fillSubSelect(){
     const cat = $('tCat').value;
@@ -449,7 +599,7 @@
       '<div class="row">' +
         (t.img ? '<img class="thumb" src="'+esc(t.img)+'" alt="" onerror="this.style.display=\'none\'">' : '<div class="ph">'+WRENCH+'</div>') +
         '<div class="info"><b>'+esc(t.name)+(t.active===false?'<span class="hidden-flag">скрыт</span>':'')+'</b>' +
-        '<span>'+esc(catTitle(t.cat))+(t.sub?subTitle(t.cat,t.sub):'')+' · '+esc(t.price)+' ₽/сутки</span></div>' +
+        '<span>'+esc([t.cat].concat(t.cats||[]).map(catTitle).join(' · '))+(t.sub?subTitle(t.cat,t.sub):'')+((t.subs&&t.subs.length)?' · '+esc(t.subs.map(subPairTitle).join(' · ')):'')+' · '+esc(t.price)+' ₽/сутки</span></div>' +
         '<label class="switch"><input type="checkbox" data-toggle="'+esc(t.id)+'"'+(t.active!==false?' checked':'')+'>показывать</label>' +
         '<button class="btn outline sm" type="button" data-edit="'+esc(t.id)+'">Изменить</button>' +
         '<button class="btn danger sm" type="button" data-del="'+esc(t.id)+'">Удалить</button>' +
@@ -515,7 +665,7 @@
   });
 
   // ====== ДОБАВЛЕНИЕ ИНСТРУМЕНТА ======
-  function onCatChange(){ fillSubSelect(); }
+  function onCatChange(){ fillSubSelect(); rebuildExtraMultis(); }
   $('tCat').addEventListener('change', onCatChange);
   $('svPhoto').addEventListener('change', ()=>{
     const f = $('svPhoto').files[0];
@@ -531,7 +681,7 @@
   function resetToolForm(){
     editMode = null;
     $('toolForm').reset(); $('tPreview').style.display='none';
-    fillSubSelect();
+    fillSubSelect(); clearMultis(); rebuildExtraMultis();
     $('tBtn').textContent='Добавить'; $('tCancel').style.display='none';
     $('tHead').textContent='Добавить инструмент';
     $('tMsg').textContent=''; $('tMsg').className='msg';
@@ -543,6 +693,10 @@
     $('tName').value = t.name||'';
     $('tCat').value = t.cat||''; fillSubSelect();
     $('tSub').value = t.sub||'';
+    if(mCats) mCats.vals = (t.cats||[]).slice();
+    if(mSubs) mSubs.vals = (t.subs||[]).slice();
+    rebuildExtraMultis();
+    syncCombo('tCat'); syncCombo('tSub');
     $('tPrice').value = t.price||0;
     $('tDesc').value = t.descr||'';
     if(t.img){ $('tPreview').src = t.img; $('tPreview').style.display='inline-block'; } else { $('tPreview').style.display='none'; }
@@ -573,8 +727,8 @@
       }
       const row = {
         name:$('tName').value.trim(), cat:cat,
-        cats:[],
-        subs:[],
+        cats:(mCats?mCats.vals.slice():[]),
+        subs:(mSubs?mSubs.vals.slice():[]),
         sub:$('tSub').value||'',
         cat_label:catTitle(cat),
         img:img, descr:$('tDesc').value.trim(),
