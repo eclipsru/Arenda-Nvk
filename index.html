@@ -323,7 +323,7 @@
     .nav-phone #userBox #cabLink,
     .nav-phone #userBox #logoutBtn{display:inline-flex;align-items:center;justify-content:center;padding:7px 10px;font-size:12.5px;line-height:1.2;white-space:nowrap;flex:0 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis}
     .nav-phone{gap:6px;flex:none;flex-shrink:0}
-    .nav-phone #authBtn{display:inline-flex;padding:7px 10px;font-size:12.5px;flex:none;white-space:nowrap}
+    .nav-phone #authBtn{display:inline-flex;align-items:center;justify-content:center;padding:7px 10px;font-size:12.5px;line-height:1.2;flex:none;white-space:nowrap}
     /* Лого занимает оставшееся место и ОБРЕЗАЕТСЯ, но никогда не выталкивает кнопки за экран */
     .logo{flex:1 1 0;min-width:0;overflow:hidden;font-size:14px;gap:7px}
     .logo .mark{width:28px;height:28px;border-radius:8px;flex:none}
@@ -334,9 +334,10 @@
     /* Тесные экраны: «Услуги», «Кабинет» и «Выйти» в один ряд — уменьшаем, чтобы поместились */
     @media(max-width:430px){
       .nav-phone #userBox{gap:5px}
+      .nav-phone #authBtn,
       .nav-phone #userBox #servLink,
       .nav-phone #userBox #cabLink,
-      .nav-phone #userBox #logoutBtn{padding:6px 7px;font-size:11.5px}
+      .nav-phone #userBox #logoutBtn{padding:6px 7px;font-size:11.5px;line-height:1.2}
     }
 
     /* Очень узкие экраны: поджимаем кнопки, чтобы «Услуги», «Кабинет» и «Выйти» всегда были видны */
@@ -346,7 +347,7 @@
       .nav-phone #authBtn,
       .nav-phone #userBox #servLink,
       .nav-phone #userBox #cabLink,
-      .nav-phone #userBox #logoutBtn{padding:5px 6px;font-size:11px}
+      .nav-phone #userBox #logoutBtn{padding:5px 6px;font-size:11px;line-height:1.2}
       .logo{font-size:13px;gap:6px}
       .logo .mark{width:26px;height:26px}
     }
