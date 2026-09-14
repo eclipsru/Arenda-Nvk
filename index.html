@@ -116,6 +116,7 @@
   .card .desc{color:var(--gray);font-size:14px;margin-bottom:16px;flex:1}
   .card .price{font-size:14px;color:var(--gray);margin-bottom:14px}
   .card .price b{font-size:22px;color:var(--dark)}
+  .card-dep{margin:-6px 0 14px;font-size:13px;color:var(--gray)}
   .card .btn{width:100%;text-align:center}
   .card-btns{display:flex;flex-direction:column;gap:8px;margin-top:auto}
 
@@ -739,9 +740,10 @@
         </div>
         <div class="sum-line"><span>Аренда инструментов</span><b id="sumRent">0 ₽</b></div>
         <div class="sum-line" id="sumConsLine" style="display:none"><span>Расходники</span><b id="sumCons">0 ₽</b></div>
+        <div class="sum-line" id="sumDepLine" style="display:none"><span>Залог (возвратный)</span><b id="sumDep">0 ₽</b></div>
         <div class="sum-line" id="sumDistLine" style="display:none"><span>Доставка</span><b id="sumDist">—</b></div>
         <div class="sum-line sum-total"><span>Итого</span><b id="sumTotal">0 ₽</b></div>
-        <div class="sum-note">Сумма предварительная — оплата при получении инструмента.</div>
+        <div class="sum-note">Сумма предварительная — оплата при получении инструмента. Залог возвращается при возврате и проверке инструмента.</div>
       </div>
       <button type="submit" class="btn">Отправить заявку</button>
       <p class="form-note">Нажимая кнопку, вы соглашаетесь на обработку персональных данных.</p>
@@ -758,6 +760,7 @@
     <div class="tm-cat" id="tmCat"></div>
     <h3 id="tmName"></h3>
     <div class="tm-price" id="tmPrice"></div>
+    <div class="tm-price" id="tmDeposit" style="font-size:13.5px"></div>
     <p class="tm-desc" id="tmDesc"></p>
     <h4 class="tm-sub">Условия аренды</h4>
     <ul class="cond-list">
@@ -906,6 +909,7 @@ const TOOLS = [
           <h3>${t.name}</h3>
           <div class="desc">${t.desc}</div>
           <div class="price">от <b>${t.price} ₽</b> / сутки</div>
+          <div class="card-dep">Залог: ${(Number(t.deposit) > 0 ? Number(t.deposit) : t.price * 5).toLocaleString('ru-RU')} ₽</div>
           <div class="card-btns">
             <a href="#contact" class="btn" onclick="pick('${t.name.replace(/'/g,"")}')">Арендовать</a>
             <button type="button" class="btn outline" onclick="openConditions()">Условия аренды</button>
@@ -1069,7 +1073,14 @@ const TOOLS = [
     'Набор ключей и головок','Другое (напишу в комментарии)'
   ];
 
-  const TOOL_PRICE = {}; // название -> {price, cons} — заполняется из базы
+  const TOOL_PRICE = {}; // название -> {price, cons, dep} — из базы; залог: указан в админке или 5 × цена/сутки
+  function buildToolPrice(){
+    Object.keys(TOOL_PRICE).forEach(function(k){ delete TOOL_PRICE[k]; });
+    TOOLS.forEach(function(t){
+      TOOL_PRICE[t.name] = { price: t.price || 0, cons: /расходник/i.test(t.catLabel || '') || /расходник/i.test(t.catsLabel || ''), dep: (t.deposit && Number(t.deposit) > 0) ? Number(t.deposit) : (t.price || 0) * 5 };
+    });
+  }
+  buildToolPrice();
   const orderModal = document.getElementById('orderModal');
   const orderForm = document.getElementById('orderForm');
   const orderErr = document.getElementById('orderErr');
@@ -1360,7 +1371,7 @@ const TOOLS = [
   function updateSum(){
     const dEl = document.getElementById('daysVal');
     if(dEl) dEl.textContent = daysLabel(rentDays);
-    let rent = 0, cons = 0, unknown = false;
+    let rent = 0, cons = 0, dep = 0, unknown = false;
     toolsList.querySelectorAll('.tool-row').forEach(function(r){
       const name = (r.querySelector('.tool-value')||{}).value || '';
       const qty = parseInt((r.querySelector('.tool-qty')||{}).value, 10) || 1;
@@ -1369,10 +1380,14 @@ const TOOLS = [
       if(!info){ unknown = true; return; }
       const ss = (info.price || 0) * qty * rentDays;
       if(info.cons) cons += ss; else rent += ss;
+      dep += (info.dep || 0) * qty;
     });
     document.getElementById('sumRent').textContent = unknown ? 'по прайсу' : fmtRub(rent);
     document.getElementById('sumConsLine').style.display = cons > 0 ? 'flex' : 'none';
     document.getElementById('sumCons').textContent = fmtRub(cons);
+    const depLine = document.getElementById('sumDepLine');
+    depLine.style.display = (!unknown && dep > 0) ? 'flex' : 'none';
+    document.getElementById('sumDep').textContent = fmtRub(dep);
     const distLine = document.getElementById('sumDistLine');
     if(getMethodValue === 'delivery'){
       distLine.style.display = 'flex';
@@ -1382,7 +1397,7 @@ const TOOLS = [
     if(unknown){
       totalEl.textContent = 'по прайсу' + (getMethodValue === 'delivery' && distCost > 0 ? ' + ' + fmtRub(distCost) + ' доставка' : '');
     } else {
-      totalEl.textContent = fmtRub(rent + cons + (getMethodValue === 'delivery' ? distCost : 0));
+      totalEl.textContent = fmtRub(rent + cons + dep + (getMethodValue === 'delivery' ? distCost : 0));
     }
   }
   document.getElementById('daysMinus').addEventListener('click', function(){ if(rentDays > 1){ rentDays--; updateSum(); } });
@@ -1391,7 +1406,7 @@ const TOOLS = [
   // ====== ПОЛНЫЙ ЧЕК ЗАЯВКИ (уходит в ВК вместе с заявкой) ======
   function buildOrderReceipt(){
     const items = [];
-    let rent = 0, cons = 0, unknown = false;
+    let rent = 0, cons = 0, dep = 0, unknown = false;
     toolsList.querySelectorAll('.tool-row').forEach(function(r){
       const name = (r.querySelector('.tool-value')||{}).value || '';
       if(!name) return;
@@ -1399,6 +1414,7 @@ const TOOLS = [
       const info = TOOL_PRICE[name];
       if(!info){ unknown = true; items.push({ name:name, qty:qty, str:'• '+name+' ×'+qty+' — по прайсу' }); return; }
       const sm = (info.price||0) * qty * rentDays;
+      dep += (info.dep || 0) * qty;
       if(info.cons){ cons += sm; items.push({ name:name, qty:qty, str:'• '+name+' ×'+qty+' — '+info.price+' ₽/шт × '+daysLabel(rentDays)+' = '+fmtRub(sm) }); }
       else { rent += sm; items.push({ name:name, qty:qty, str:'• '+name+' ×'+qty+' — '+info.price+' ₽/сут × '+daysLabel(rentDays)+' = '+fmtRub(sm) }); }
     });
@@ -1408,9 +1424,10 @@ const TOOLS = [
     chk.push('Аренда: ' + (rent > 0 ? fmtRub(rent) : (unknown ? 'по прайсу' : '0 ₽')));
     if(cons > 0) chk.push('Расходники: ' + fmtRub(cons));
     if(getMethodValue === 'delivery') chk.push('Доставка: ' + (distCost > 0 ? fmtKm(distKm) + ' км — ' + fmtRub(distCost) : 'уточню по адресу'));
+    if(!unknown && dep > 0) chk.push('Залог (возвращается при возврате и проверке инструмента): ' + fmtRub(dep));
     let total;
     if(unknown) total = 'по прайсу' + (getMethodValue === 'delivery' && distCost > 0 ? ' + доставка ' + fmtRub(distCost) : '');
-    else total = fmtRub(rent + cons + (getMethodValue === 'delivery' ? distCost : 0));
+    else total = fmtRub(rent + cons + dep + (getMethodValue === 'delivery' ? distCost : 0));
     chk.push('ИТОГО: ' + total);
     return { short: items.map(function(it){ return it.name + ' ×' + it.qty; }).join(', '), text: chk.join('\n') };
   }
@@ -1479,6 +1496,8 @@ const TOOLS = [
     imgEl.innerHTML = t.img ? '<img src="'+t.img+'" alt="'+t.name+'" loading="lazy">' : '';
     document.getElementById('tmName').textContent = t.name;
     document.getElementById('tmPrice').innerHTML = 'от <b>'+t.price+' ₽</b> / сутки';
+    const tmDep = Number(t.deposit) > 0 ? Number(t.deposit) : (t.price || 0) * 5;
+    document.getElementById('tmDeposit').innerHTML = 'Залог: <b>'+tmDep.toLocaleString('ru-RU')+' ₽</b> <span style="color:var(--gray);font-size:12px">— возвращается при возврате и проверке инструмента</span>';
     document.getElementById('tmDesc').textContent = t.desc || 'Описание уточняйте по телефону — подскажем и поможем выбрать.';
     toolModal.classList.add('open');
   }
@@ -1867,13 +1886,13 @@ const TOOLS = [
     try{
       let [cR, tR, sR] = await Promise.all([
         sb.from('cats').select('key,title,icon,sort,active').order('sort'),
-        sb.from('tools').select('name,cat,cats,subs,sub,cat_label,img,descr,price,active,sort').order('sort'),
+        sb.from('tools').select('name,cat,cats,subs,sub,cat_label,img,descr,price,deposit,active,sort').order('sort'),
         sb.from('subcats').select('cat,key,title,icon,sort,active').order('sort')
       ]);
       // В базе ещё не выполнен новый SQL (нет колонок cats/subs)? Грузим каталог без них,
       // чтобы сайт не падал во встроенный каталог — мультикатегории просто не работают до Run.
       if(tR.error && /column/i.test((tR.error||{}).message||'') && /(cats|subs)/.test((tR.error||{}).message||'')){
-        const t2 = await sb.from('tools').select('name,cat,sub,cat_label,img,descr,price,active,sort').order('sort');
+        const t2 = await sb.from('tools').select('name,cat,sub,cat_label,img,descr,price,deposit,active,sort').order('sort');
         if(!t2.error) tR = { data:(t2.data||[]).map(t=>Object.assign({}, t, {cats:null, subs:null})), error:null };
       }
       if((cR.error || tR.error) && /jwt/i.test((cR.error||tR.error||{}).message||'') && !dbJwtRetried){
@@ -1892,18 +1911,15 @@ const TOOLS = [
         TOOLS.push({
           name:t.name||'', cat:t.cat||'', cats:extra,
           subs:Array.isArray(t.subs)?t.subs:[],
-          sub:t.sub||'', catLabel:t.cat_label||'', img:t.img||'', desc:t.descr||'', price:t.price||0,
+          sub:t.sub||'', catLabel:t.cat_label||'', img:t.img||'', desc:t.descr||'', price:t.price||0, deposit:Number(t.deposit)||0,
           catsLabel: extra.map(k=>catTitles[k]||k).join(' ')
         });
       });
       // Инструменты в форме заявки — реальные из базы (а не зашитый список)
       if(TOOLS.length){
         TOOL_OPTIONS.length = 0; TOOLS.forEach(t=>TOOL_OPTIONS.push(t.name));
-        // Карта цен для итога заявки (расходники — по категории с «расходник» в названии)
-        Object.keys(TOOL_PRICE).forEach(k=>delete TOOL_PRICE[k]);
-        TOOLS.forEach(function(t){
-          TOOL_PRICE[t.name] = { price: t.price || 0, cons: /расходник/i.test(t.catLabel || '') || /расходник/i.test(t.catsLabel || '') };
-        });
+        // Карта цен и залогов для итога заявки
+        buildToolPrice();
         // Если заявка уже открыта — обновляем её списки, сохраняя выбор
         document.querySelectorAll('#toolsList .combo').forEach(c=>{
           const val = c.querySelector('.tool-value');
