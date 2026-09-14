@@ -102,6 +102,17 @@
   .emoji-grid button svg{width:18px;height:18px;display:block;margin:0 auto}
   #cEmojiVal svg,#sEmojiVal svg{width:20px;height:20px;vertical-align:middle}
   .info svg{width:14px;height:14px;vertical-align:-2px}
+  /* Баннер «Скачать приложение» — только владелец, только мобильный, 5 секунд */
+  .apk-banner{position:fixed;top:0;left:0;right:0;z-index:900;transform:translateY(-110%);transition:transform .35s ease;background:#171a21;border-bottom:2px solid var(--orange);box-shadow:0 10px 30px rgba(0,0,0,.5)}
+  .apk-banner.show{transform:translateY(0)}
+  .apk-banner a{display:flex;align-items:center;gap:12px;padding:12px 14px;text-decoration:none;color:var(--dark)}
+  .apk-banner .ic-wrap{width:40px;height:40px;border-radius:10px;background:var(--orange);display:grid;place-items:center;flex:none}
+  .apk-banner .ic-wrap svg{width:22px;height:22px;stroke:#fff;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+  .apk-banner b{display:block;font-size:14.5px}
+  .apk-banner small{display:block;color:var(--gray);font-size:12px;margin-top:2px}
+  .apk-banner .apx{margin-left:auto;background:none;border:none;color:var(--gray);font-size:22px;padding:6px 8px;cursor:pointer;flex:none}
+  .apk-banner .apx:hover{color:var(--dark)}
+  @media(min-width:769px){ .apk-banner{display:none !important} }
   @media(max-width:640px){
     .emoji-grid{grid-template-columns:repeat(8,1fr)}
     .form-grid{grid-template-columns:1fr}
@@ -131,6 +142,14 @@
 </style>
 </head>
 <body>
+
+<div class="apk-banner" id="apkBanner">
+  <a href="https://eclipsru.github.io/Arenda-Nvk/ProkatInstrumenta.apk" download>
+    <span class="ic-wrap"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg></span>
+    <span><b>Скачать приложение для Android</b><small>ProkatInstrumenta.apk — тот же кабинет, каталог и заявки</small></span>
+  </a>
+  <button type="button" class="apx" id="apkClose" aria-label="Закрыть">&times;</button>
+</div>
 <header>
   <div class="container top">
     <a class="logo" href="index.html">
@@ -357,8 +376,26 @@
     $('whoEmail').textContent = email;
     $('admLogout').style.display = 'inline-block';
     show('vMain');
+    maybeApkBanner();
     refresh();
   }
+
+  // ====== Баннер «Скачать приложение» (владелец, мобильный, 5 секунд) ======
+  let apkShown = false;
+  function maybeApkBanner(){
+    if(apkShown) return;
+    apkShown = true;
+    if(!(window.matchMedia && window.matchMedia('(max-width:768px)').matches)) return;
+    const b = $('apkBanner');
+    if(!b) return;
+    setTimeout(function(){
+      b.classList.add('show');
+      setTimeout(function(){ b.classList.remove('show'); }, 5000);
+    }, 600);
+  }
+  document.addEventListener('click', function(e){
+    if(e.target && e.target.id === 'apkClose'){ const b = $('apkBanner'); if(b) b.classList.remove('show'); }
+  });
 
   async function signOut(){ if(sb) await sb.auth.signOut(); user=null; show('vLogin'); }
   $('admLogout').addEventListener('click', signOut);
