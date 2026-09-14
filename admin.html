@@ -320,6 +320,7 @@
   });
 
   // ====== ЗАГРУЗКА ДАННЫХ ======
+  let jwtRetryDone = false;
   async function refresh(){
     const box = $('loadErr');
     box.style.display = 'none';
@@ -342,11 +343,29 @@
         problems.push('Подкатегории: ' + s.error.message);
       }
     } else { SUBCATS = s.data || []; }
+
+    // «JWT issued at future» = часы устройства спешат. Пробуем обновить токен и повторить загрузку один раз.
+    const jwtErr = problems.some(p=>/jwt/i.test(p));
+    if(jwtErr && !jwtRetryDone){
+      jwtRetryDone = true;
+      try{ await sb.auth.refreshSession(); }catch(e){}
+      return refresh();
+    }
+
     renderAll(subsMissing);
     if(problems.length){
-      box.innerHTML = '<b>Не удалось загрузить данные из базы.</b><br>' +
-        problems.map(p=>'<code>'+esc(p)+'</code>').join('<br>') +
-        '<br><br>Чаще всего помогает: выполнить обновлённый <b>КАБИНЕТ-SQL.sql</b> (Supabase → SQL Editor → вставить весь файл → Run) и обновить эту страницу. Если не помогло — пришлите текст из серых полей выше.';
+      if(jwtErr){
+        box.innerHTML = '<b>Часы на этом устройстве спешат — сервер отклоняет токен входа.</b><br>' +
+          'Включите автоматическое время и синхронизируйте его:<br>' +
+          '• Windows: <b>Параметры → Время и язык → Дата и время</b> → включить «Установить время автоматически» → нажать <b>«Синхронизировать сейчас»</b>;<br>' +
+          '• Телефон: <b>Настройки → Общие/Система → Дата и время</b> → включить <b>«Автоматически»</b>.<br>' +
+          'Затем выйдите из аккаунта и войдите заново.<br><br>' +
+          'Технический текст: ' + problems.map(p=>'<code>'+esc(p)+'</code>').join(' · ');
+      } else {
+        box.innerHTML = '<b>Не удалось загрузить данные из базы.</b><br>' +
+          problems.map(p=>'<code>'+esc(p)+'</code>').join('<br>') +
+          '<br><br>Чаще всего помогает: выполнить обновлённый <b>КАБИНЕТ-SQL.sql</b> (Supabase → SQL Editor → вставить весь файл → Run) и обновить эту страницу. Если не помогло — пришлите текст из серых полей выше.';
+      }
       box.style.display = 'block';
     }
   }
