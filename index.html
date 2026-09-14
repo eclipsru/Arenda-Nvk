@@ -256,6 +256,22 @@
 
   /* ORDER MODAL (заявка на аренду) */
   .modal-order{max-width:520px;max-height:88vh;overflow-y:auto}
+  /* Мобильная заявка: все поля на всю ширину окна, крупнее и удобнее */
+  @media(max-width:768px){
+    #orderModal{padding:8px}
+    #orderModal .modal-order{max-width:none;padding:18px 14px;border-radius:16px;max-height:94vh}
+    #orderModal h3{font-size:20px}
+    #orderModal .msub{margin-bottom:14px}
+    #orderModal .get-method{flex-direction:column}
+    #orderModal .get-method .gm{width:100%}
+    #orderModal .tool-row{flex-wrap:wrap}
+    #orderModal .tool-row .combo{flex:1 1 100%}
+    #orderModal .tool-row .tool-qty{flex:1;width:auto}
+    #orderModal .tool-row .tool-remove{flex:none;width:52px}
+    #orderModal .add-tool{width:100%;text-align:center}
+    #orderForm button[type="submit"]{width:100%}
+    #orderModal .sum-box{padding:11px 12px}
+  }
   .tools-label{display:block;font-weight:600;font-size:14px;margin-bottom:8px}
   .tool-row{display:flex;gap:8px;align-items:center;margin-bottom:10px}
   .tool-row .combo{position:relative;flex:1;min-width:0}
