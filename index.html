@@ -1359,6 +1359,33 @@ const TOOLS = [
   document.getElementById('daysMinus').addEventListener('click', function(){ if(rentDays > 1){ rentDays--; updateSum(); } });
   document.getElementById('daysPlus').addEventListener('click', function(){ if(rentDays < 60){ rentDays++; updateSum(); } });
 
+  // ====== ПОЛНЫЙ ЧЕК ЗАЯВКИ (уходит в ВК вместе с заявкой) ======
+  function buildOrderReceipt(){
+    const items = [];
+    let rent = 0, cons = 0, unknown = false;
+    toolsList.querySelectorAll('.tool-row').forEach(function(r){
+      const name = (r.querySelector('.tool-value')||{}).value || '';
+      if(!name) return;
+      const qty = parseInt((r.querySelector('.tool-qty')||{}).value, 10) || 1;
+      const info = TOOL_PRICE[name];
+      if(!info){ unknown = true; items.push({ name:name, qty:qty, str:'• '+name+' ×'+qty+' — по прайсу' }); return; }
+      const sm = (info.price||0) * qty * rentDays;
+      if(info.cons){ cons += sm; items.push({ name:name, qty:qty, str:'• '+name+' ×'+qty+' — '+info.price+' ₽/шт × '+daysLabel(rentDays)+' = '+fmtRub(sm) }); }
+      else { rent += sm; items.push({ name:name, qty:qty, str:'• '+name+' ×'+qty+' — '+info.price+' ₽/сут × '+daysLabel(rentDays)+' = '+fmtRub(sm) }); }
+    });
+    const chk = ['— — — ЧЕК (предварительно) — — —'];
+    items.forEach(function(it){ chk.push(it.str); });
+    chk.push('Срок аренды: ' + daysLabel(rentDays));
+    chk.push('Аренда: ' + (rent > 0 ? fmtRub(rent) : (unknown ? 'по прайсу' : '0 ₽')));
+    if(cons > 0) chk.push('Расходники: ' + fmtRub(cons));
+    if(getMethodValue === 'delivery') chk.push('Доставка: ' + (distCost > 0 ? fmtKm(distKm) + ' км — ' + fmtRub(distCost) : 'уточню по адресу'));
+    let total;
+    if(unknown) total = 'по прайсу' + (getMethodValue === 'delivery' && distCost > 0 ? ' + доставка ' + fmtRub(distCost) : '');
+    else total = fmtRub(rent + cons + (getMethodValue === 'delivery' ? distCost : 0));
+    chk.push('ИТОГО: ' + total);
+    return { short: items.map(function(it){ return it.name + ' ×' + it.qty; }).join(', '), text: chk.join('\n') };
+  }
+
   orderForm.addEventListener('submit', function(e){
     e.preventDefault();
     // Проверяем, что выбран хотя бы один инструмент
@@ -1379,13 +1406,15 @@ const TOOLS = [
     // Сохраняем заявку в облачную базу (Supabase), если подключено.
     // Уведомление в MAX придёт автоматически через вебхук (см. БЕСПЛАТНЫЙ-СТАРТ.md).
     if(sb){
+      const rc = buildOrderReceipt();
+      const userCmt = document.getElementById('comment').value.trim();
       sb.rpc('submit_order', {
         p_name: document.getElementById('name').value.trim(),
         p_phone: document.getElementById('phone').value.trim(),
-        p_tools: chosen.map(s=>s.value).join(', '),
+        p_tools: rc.short,
         p_get_method: getMethodValue === 'delivery' ? ('Доставка: ' + addressInput.value.trim() + (distKm ? ' — ' + fmtKm(distKm) + ' км, ' + distCost + ' ₽' : '')) : 'Самовывоз, ул. Маресьева, 36',
         p_address: getMethodValue === 'delivery' ? addressInput.value.trim() : '',
-        p_comment: document.getElementById('comment').value.trim(),
+        p_comment: userCmt ? (userCmt + '\n\n' + rc.text) : rc.text,
         p_user_email: sbUser ? (sbUser.email || '') : ''
       }).then(({ error })=>{ if(error) console.warn('Заявка не сохранена в базу:', error.message); });
     }
