@@ -76,6 +76,9 @@
   .catalog-layout{display:grid;grid-template-columns:260px 1fr;gap:28px;align-items:start}
 
   /* Поиск по каталогу */
+  .order-tool-search{width:100%;padding:11px 14px;background:#171a21;color:var(--dark);border:2px solid var(--line);border-radius:10px;font-size:15px;font-family:inherit;margin-bottom:10px;transition:.15s}
+  .order-tool-search:focus{outline:none;border-color:var(--orange)}
+  .order-tool-search::placeholder{color:#6b7080}
   .search-box{position:relative;margin-bottom:18px}
   .search-box input{width:100%;background:var(--card);border:1px solid var(--line);border-radius:12px;color:var(--dark);font-size:15px;padding:13px 46px 13px 46px;outline:none;transition:.15s}
   .search-box input:focus{border-color:var(--orange);box-shadow:0 0 0 3px rgba(255,143,31,.15)}
@@ -637,6 +640,7 @@
       </div>
 
       <label class="tools-label">Что нужно взять</label>
+      <input type="text" id="orderToolSearch" class="order-tool-search" placeholder="Поиск инструмента…" autocomplete="off">
       <div id="toolsList">
         <!-- строки инструментов подставляются скриптом -->
       </div>
@@ -970,8 +974,22 @@ const TOOLS = [
     toolsList.appendChild(makeToolRow(preselect));
   }
 
+  // Поиск инструмента в заявке: прячет неподходящие пункты списков
+  const orderToolSearch = document.getElementById('orderToolSearch');
+  function filterToolOptions(){
+    if(!orderToolSearch) return;
+    const q = orderToolSearch.value.trim().toLowerCase();
+    document.querySelectorAll('#toolsList .tool-select').forEach(sel=>{
+      [...sel.options].forEach(o=>{
+        o.style.display = (!q || o.value === '' || o.textContent.toLowerCase().indexOf(q) !== -1) ? '' : 'none';
+      });
+    });
+  }
+  if(orderToolSearch) orderToolSearch.addEventListener('input', filterToolOptions);
+
   function openOrder(){
     orderErr.style.display='none';
+    if(orderToolSearch){ orderToolSearch.value=''; filterToolOptions(); }
     const ph = document.getElementById('phone');
     if(ph && !ph.value && currentUserPhone) ph.value = currentUserPhone;
     const nm = document.getElementById('name');
@@ -988,6 +1006,7 @@ const TOOLS = [
   orderModal.addEventListener('click', (e)=>{ if(e.target===orderModal) closeOrder(); });
   document.getElementById('addToolBtn').addEventListener('click', ()=>{
     toolsList.appendChild(makeToolRow());
+    filterToolOptions();
     toolsList.lastElementChild.querySelector('.tool-select').focus();
   });
 
@@ -1479,7 +1498,15 @@ const TOOLS = [
         });
       });
       // Инструменты в форме заявки — реальные из базы (а не зашитый список)
-      if(TOOLS.length){ TOOL_OPTIONS.length = 0; TOOLS.forEach(t=>TOOL_OPTIONS.push(t.name)); }
+      if(TOOLS.length){
+        TOOL_OPTIONS.length = 0; TOOLS.forEach(t=>TOOL_OPTIONS.push(t.name));
+        // Если заявка уже открыта — обновляем её списки, сохраняя выбор
+        document.querySelectorAll('#toolsList .tool-select').forEach(sel=>{
+          const cur = sel.value;
+          sel.innerHTML = ['<option value="">— выберите инструмент —</option>']
+            .concat(TOOL_OPTIONS.map(o=>`<option${cur===o?' selected':''}>${o}</option>`)).join('');
+        });
+      }
       const cats = (cR.data || []).filter(c=>c.active !== false);
       const subs = (sR.data || []).filter(s=>s.active !== false);
       DB_SUBS = subs;                       // категории строятся сразу со своими подменю
