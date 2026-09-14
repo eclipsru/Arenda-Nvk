@@ -562,6 +562,7 @@
       const sb = supabase.createClient('https://wdxdeatphizclskfmfxi.supabase.co', 'sb_publishable_dtRaEHNNPBFbHFvg8hw9iA_FqJSz9BE');
       const { data } = await sb.auth.getSession();
       const u = data && data.session && data.session.user;
+      window.__servAuthed = !!u;
       if(u){
         const nm = (u.user_metadata && u.user_metadata.name) || u.email || 'клиент';
         document.getElementById('userName').textContent = 'Привет, ' + nm + '!';
@@ -577,6 +578,11 @@
         });
       }
     }catch(e){}
+    var ab = document.getElementById('authBtn');
+    if(ab && !ab.dataset.bound){
+      ab.dataset.bound = '1';
+      ab.addEventListener('click', function(){ location.href = 'index.html?login=1'; });
+    }
   })();
 </script>
 
@@ -609,6 +615,17 @@
     document.getElementById('siOrder').addEventListener('click', function(){ closeServInfo(); openServ(infoTitle); });
 
     function openServ(title){
+      // Заказывать услуги могут только зарегистрированные
+      if(!window.__servAuthed){
+        soTitle = title || '';
+        document.getElementById('soTitle').textContent = soTitle;
+        okBox.style.display = 'none';
+        form.style.display = 'none';
+        errBox.innerHTML = 'Заказать услугу могут только зарегистрированные пользователи.<br><a href="index.html?login=1" style="color:var(--orange);font-weight:700">Войти или зарегистрироваться</a>';
+        errBox.style.display = 'block';
+        modal.classList.add('open');
+        return;
+      }
       soTitle = title || '';
       document.getElementById('soTitle').textContent = soTitle;
       errBox.style.display = 'none';
@@ -630,7 +647,7 @@
       // Автофокус не ставим: на телефоне сама выезжает клавиатура
       modal.classList.add('open');
     }
-    function closeServ(){ modal.classList.remove('open'); }
+    function closeServ(){ modal.classList.remove('open'); form.style.display = 'block'; errBox.style.display = 'none'; }
 
     document.getElementById('servicesGrid').addEventListener('click', function(e){
       var b = e.target.closest('.serv-order');
