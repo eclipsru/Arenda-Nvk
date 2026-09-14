@@ -727,11 +727,11 @@ const TOOLS = [
     const q = query.toLowerCase();
     const list = TOOLS.filter(t => {
       if(cat !== 'all' && t.cat !== cat && !(t.cats||[]).includes(cat)) return false;
-      if(sub !== 'all' && t.sub !== sub) return false;
+      if(sub !== 'all' && t.sub !== sub && !(t.subs||[]).includes(cat + '/' + sub)) return false;
       // Поиск: по названию, описанию и категории инструмента (с транслитерацией «макита»→«makita» и нормализацией ё→е)
       if(q){
         const norm = s => s.toLowerCase().replace(/ё/g, 'е');
-        const hay = norm(t.name + ' ' + (t.desc || '') + ' ' + (t.catLabel || '') + ' ' + (t.catsLabel || ''));
+        const hay = norm(t.name + ' ' + (t.desc || '') + ' ' + (t.catLabel || '') + ' ' + (t.catsLabel || '') + ' ' + subTitlesOf(t));
         const qN = norm(q);
         const qLat = qN.replace(/[а-я]/g, ch => TR[ch] !== undefined ? TR[ch] : ch);
         if(!hay.includes(qN) && !hay.includes(qLat)) return false;
@@ -1338,6 +1338,14 @@ const TOOLS = [
     _default:'<svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>'
   };
   let DB_SUBS = []; // подкатегории из базы: {cat, key, title, icon}
+  // Названия доп. подкатегорий инструмента (пары «cat/key») — участвуют в поиске
+  function subTitlesOf(t){
+    return (t.subs||[]).map(pp=>{
+      const i = pp.indexOf('/');
+      const sub = DB_SUBS.find(x=>x.cat===pp.slice(0,i) && x.key===pp.slice(i+1));
+      return sub ? sub.title : pp.slice(i+1);
+    }).join(' ');
+  }
   // Значок может быть SVG-картинкой (новые) или эмодзи (старые записи) — рисуем оба варианта
   function icoHTML(ic){
     if(!ic) return '';
@@ -1412,11 +1420,17 @@ const TOOLS = [
   async function loadCatalogFromDB(){
     if(!sb) return; // Supabase не подключён — работаем со встроенным каталогом
     try{
-      const [cR, tR, sR] = await Promise.all([
+      let [cR, tR, sR] = await Promise.all([
         sb.from('cats').select('key,title,icon,sort,active').order('sort'),
-        sb.from('tools').select('name,cat,cats,sub,cat_label,img,descr,price,active,sort').order('sort'),
+        sb.from('tools').select('name,cat,cats,subs,sub,cat_label,img,descr,price,active,sort').order('sort'),
         sb.from('subcats').select('cat,key,title,icon,sort,active').order('sort')
       ]);
+      // В базе ещё не выполнен новый SQL (нет колонок cats/subs)? Грузим каталог без них,
+      // чтобы сайт не падал во встроенный каталог — мультикатегории просто не работают до Run.
+      if(tR.error && /column/i.test((tR.error||{}).message||'') && /(cats|subs)/.test((tR.error||{}).message||'')){
+        const t2 = await sb.from('tools').select('name,cat,sub,cat_label,img,descr,price,active,sort').order('sort');
+        if(!t2.error) tR = { data:(t2.data||[]).map(t=>Object.assign({}, t, {cats:null, subs:null})), error:null };
+      }
       if((cR.error || tR.error) && /jwt/i.test((cR.error||tR.error||{}).message||'') && !dbJwtRetried){
         // Часы устройства спешат → обновляем токен и пробуем ещё раз
         dbJwtRetried = true;
@@ -1432,6 +1446,7 @@ const TOOLS = [
         const extra = Array.isArray(t.cats) ? t.cats : [];
         TOOLS.push({
           name:t.name||'', cat:t.cat||'', cats:extra,
+          subs:Array.isArray(t.subs)?t.subs:[],
           sub:t.sub||'', catLabel:t.cat_label||'', img:t.img||'', desc:t.descr||'', price:t.price||0,
           catsLabel: extra.map(k=>catTitles[k]||k).join(' ')
         });
