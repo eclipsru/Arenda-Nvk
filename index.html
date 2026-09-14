@@ -1255,10 +1255,10 @@ const TOOLS = [
       userName.textContent = 'Привет, ' + name + '!';
       authBtn.style.display='none';
       userBox.style.display='flex';
-      servLink.style.display='inline-block';
+      servLink.style.display='inline-flex';
       const isAdminNow = isAdminUser() || demoAdmin;
       cabLink.href = isAdminNow ? 'admin.html' : 'kabinet.html';
-      cabLink.style.display = 'inline-block';
+      cabLink.style.display = 'inline-flex';
     }else{
       currentUserName = '';
       currentUserPhone = '';
