@@ -158,6 +158,7 @@
       <div class="stat"><b id="stCats">0</b><span>категорий</span></div>
       <div class="stat"><b id="stSubs">0</b><span>подкатегорий</span></div>
       <div class="stat"><b id="stHidden">0</b><span>скрыто с сайта</span></div>
+      <div class="stat"><b id="stServ">0</b><span>услуг</span></div>
     </div>
 
     <div id="importBox" class="panel" style="display:none">
@@ -170,6 +171,7 @@
     <div class="tabs">
       <button class="tab active" data-tab="tools" type="button">Инструменты</button>
       <button class="tab" data-tab="cats" type="button">Категории</button>
+      <button class="tab" data-tab="serv" type="button">Услуги</button>
     </div>
 
     <section id="tab-tools">
@@ -178,7 +180,7 @@
         <form id="toolForm" class="form-grid">
           <label>Название<input id="tName" required placeholder="Например: Перфоратор Bosch GBH 2-26"></label>
           <label>Категория<select id="tCat" required></select></label>
-          <label class="full" id="tCatsWrap" style="display:none">Дополнительно показывать в категориях<div id="tCatsBox" class="cats-multi"></div><span class="muted" style="font-size:11.5px;display:block;margin-top:5px">Отметьте другие категории — инструмент будет виден в них тоже (для удобного поиска)</span></label>
+          <label class="full" id="tCatsWrap" style="display:none">Дополнительно показывать в категориях и подкатегориях<div id="tCatsBox" class="cats-multi"></div><div id="tSubsExtraWrap" style="display:none;margin-top:12px"><b style="font-size:12.5px;display:block;margin-bottom:1px">Подкатегории:</b><div id="tSubsBox" class="cats-multi"></div></div><span class="muted" style="font-size:11.5px;display:block;margin-top:5px">Отметьте другие категории и подкатегории — инструмент будет виден в них тоже (для удобного поиска)</span></label>
           <label id="tSubWrap" style="display:none">Подкатегория<select id="tSub"><option value="">Все электроинструменты</option><option value="battery">На аккумуляторе</option><option value="corded">От сети 220В</option></select></label>
           <label>Цена, ₽/сутки<input id="tPrice" type="number" min="0" required placeholder="400"></label>
           <label class="full">Краткое описание<input id="tDesc" placeholder="Мощность, комплект, особенности"></label>
@@ -226,6 +228,25 @@
         <div id="subsBox"></div>
       </div>
     </section>
+
+    <section id="tab-serv" style="display:none">
+      <div class="panel">
+        <h3 id="svHead">Добавить услугу</h3>
+        <p class="muted">Услуги показываются на отдельной странице <b>uslugi.html</b> («Услуги от нас» в меню сайта).</p>
+        <form id="servForm" class="form-grid">
+          <label>Название<input id="svName" required placeholder="Например: Доставка инструмента"></label>
+          <label>Цена (можно текстом)<input id="svPrice" placeholder="Например: от 300 ₽"></label>
+          <label class="full">Описание<textarea id="svDesc" rows="2" placeholder="Что входит в услугу"></textarea></label>
+          <label class="full">Значок услуги (необязательно)<div style="display:flex;align-items:center;gap:8px;margin-top:5px"><button type="button" class="btn outline sm" id="svEmojiBtn">Выбрать значок</button><span id="svEmojiVal" style="font-size:19px;min-width:24px"></span><button type="button" class="btn outline sm" id="svEmojiClear" style="display:none">Убрать</button></div></label>
+          <div class="emoji-grid full" id="svEmojiGrid" style="display:none"></div>
+          <div style="display:flex;align-items:center;gap:10px;grid-column:1/-1"><button class="btn" type="submit" id="svBtn">Добавить</button><button class="btn outline" type="button" id="svCancel" style="display:none">Отмена</button><span id="svMsg" class="msg"></span></div>
+        </form>
+      </div>
+      <div class="panel">
+        <h3>Услуги <span class="muted" id="servCount"></span></h3>
+        <div id="servBox"></div>
+      </div>
+    </section>
   </section>
 </main>
 
@@ -246,7 +267,7 @@
   const $ = id => document.getElementById(id);
   const SUB_LABELS = {battery:'На аккумуляторе', corded:'От сети 220В'};
   const WRENCH = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>';
-  let sb = null, user = null, CATS = [], TOOLS = [], SUBCATS = [];
+  let sb = null, user = null, CATS = [], TOOLS = [], SUBCATS = [], SVS = []; // SVS — услуги страницы «Услуги от нас»
   let editMode = null; // {type:'tool',id} | {type:'cat',key} | {type:'sub',id} | null
 
   // ====== 600 ЗНАЧКОВ В СТИЛЕ САЙТА (инструменты, запчасти, товары; +100 разноцветных) ======
@@ -280,6 +301,7 @@
   }
   makeEmojiPicker('cEmojiBtn','cEmojiGrid','cEmojiVal','cEmojiClear');
   makeEmojiPicker('sEmojiBtn','sEmojiGrid','sEmojiVal','sEmojiClear');
+  makeEmojiPicker('svEmojiBtn','svEmojiGrid','svEmojiVal','svEmojiClear');
 
   function toast(t){ const el=$('toast'); el.textContent=t; el.classList.add('show'); setTimeout(()=>el.classList.remove('show'), 2600); }
   function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
@@ -333,10 +355,11 @@
     const results = await Promise.allSettled([
       sb.from('cats').select('*').order('sort'),
       sb.from('tools').select('*').order('sort'),
-      sb.from('subcats').select('*').order('sort')
+      sb.from('subcats').select('*').order('sort'),
+      sb.from('services').select('*').order('sort')
     ]);
     const get = (r) => r.status === 'fulfilled' ? r.value : { error: { message: 'нет соединения' }, data: [] };
-    const c = get(results[0]), t = get(results[1]), s = get(results[2]);
+    const c = get(results[0]), t = get(results[1]), s = get(results[2]), sv = get(results[3]);
     if(c.error){ problems.push('Категории: ' + c.error.message); CATS = []; } else { CATS = c.data || []; }
     if(t.error){ problems.push('Инструменты: ' + t.error.message); TOOLS = []; } else { TOOLS = t.data || []; }
     let subsMissing = false;
@@ -348,6 +371,15 @@
         problems.push('Подкатегории: ' + s.error.message);
       }
     } else { SUBCATS = s.data || []; }
+    let servMissing = false;
+    if(sv.error){
+      SVS = [];
+      if(/does not exist|не существует|schema cache/i.test(sv.error.message)){
+        servMissing = true;
+      } else {
+        problems.push('Услуги: ' + sv.error.message);
+      }
+    } else { SVS = sv.data || []; }
 
     // «JWT issued at future» = часы устройства спешат. Пробуем обновить токен и повторить загрузку один раз.
     const jwtErr = problems.some(p=>/jwt/i.test(p));
@@ -357,7 +389,7 @@
       return refresh();
     }
 
-    renderAll(subsMissing);
+    renderAll(subsMissing, servMissing);
     if(problems.length){
       if(jwtErr){
         box.innerHTML = '<b>Часы на этом устройстве спешат — сервер отклоняет токен входа.</b><br>' +
@@ -383,15 +415,41 @@
     return s ? (' · '+(s.icon && s.icon.indexOf('<svg')!==0 ? s.icon+' ' : '')+s.title) : '';
   }
   function toolsInSub(cat,key){ return TOOLS.filter(t=>t.cat===cat && t.sub===key).length; }
-  // ===== Дополнительные категории инструмента (мультикатегории) =====
-  function buildExtraCats(selected, primary){
+  // ===== Дополнительные категории И подкатегории инструмента (мультикатегории) =====
+  // Заголовок доп. подкатегории по паре «cat/key» в виде «Категория › Подкатегория»
+  function subPairTitle(pair){
+    const i = pair.indexOf('/'), c = pair.slice(0,i), k = pair.slice(i+1);
+    const sub = SUBCATS.find(x=>x.cat===c && x.key===k);
+    return sub ? (catTitle(c)+' › '+sub.title) : pair;
+  }
+  // Пара «категория/подкатегория», выбранная в форме как основная
+  function currentSubPair(){
+    const c = $('tCat').value, s = $('tSub').value;
+    return s ? (c+'/'+s) : '';
+  }
+  function buildExtraCats(selected, primary, selSubs, primarySubPair){
     const box = $('tCatsBox'), wrap = $('tCatsWrap');
     if(!box || !wrap) return;
     const others = CATS.filter(c=>c.key!==primary);
-    wrap.style.display = others.length ? 'block' : 'none';
+    const subsAll = SUBCATS.filter(s2=>(s2.cat+'/'+s2.key)!==(primarySubPair||''));
+    const subsWrap = $('tSubsExtraWrap'), subsBox = $('tSubsBox');
+    if(subsBox){
+      subsBox.innerHTML = subsAll.map(s2=>
+        '<label><input type="checkbox" value="'+esc(s2.cat+'/'+s2.key)+'"'+((selSubs||[]).indexOf(s2.cat+'/'+s2.key)!==-1?' checked':'')+'>'+esc(catTitle(s2.cat)+' › '+s2.title)+'</label>'
+      ).join('');
+      if(subsWrap) subsWrap.style.display = subsAll.length ? 'block' : 'none';
+    }
+    wrap.style.display = (others.length || subsAll.length) ? 'block' : 'none';
     box.innerHTML = others.map(c=>'<label><input type="checkbox" value="'+esc(c.key)+'"'+((selected||[]).indexOf(c.key)!==-1?' checked':'')+'>'+esc(c.title)+'</label>').join('');
   }
   function extraCatsSelected(){ return [...$('tCatsBox').querySelectorAll('input:checked')].map(i=>i.value); }
+  // Отмеченные доп. подкатегории («cat/key»); текущая основная пара исключается
+  function extraSubsSelected(){
+    const sbox = document.getElementById('tSubsBox');
+    if(!sbox) return [];
+    const pair = currentSubPair();
+    return [...sbox.querySelectorAll('input:checked')].map(i=>i.value).filter(v=>v!==pair);
+  }
 
   // Заполняем выбор подкатегории в форме инструмента по выбранной категории
   function fillSubSelect(){
@@ -404,12 +462,13 @@
       subs.map(s=>'<option value="'+esc(s.key)+'">'+(s.icon && s.icon.indexOf('<svg')!==0 ? s.icon+' ' : '')+esc(s.title)+'</option>').join('');
   }
 
-  function renderAll(subsMissing){
+  function renderAll(subsMissing, servMissing){
     $('stTools').textContent = TOOLS.length;
     $('stCats').textContent = CATS.length;
     $('stSubs').textContent = SUBCATS.length;
     $('stHidden').textContent = TOOLS.filter(t=>t.active===false).length;
     $('importBox').style.display = TOOLS.length ? 'none' : 'block';
+    $('stServ').textContent = SVS.length;
 
     // селекты категорий (форма инструмента и форма подкатегории);
     // сохраняем выбранные значения — обновление списка не должно сбрасывать выбор
@@ -427,7 +486,7 @@
       '<div class="row">' +
         (t.img ? '<img class="thumb" src="'+esc(t.img)+'" alt="" onerror="this.style.display=\'none\'">' : '<div class="ph">'+WRENCH+'</div>') +
         '<div class="info"><b>'+esc(t.name)+(t.active===false?'<span class="hidden-flag">скрыт</span>':'')+'</b>' +
-        '<span>'+esc([t.cat].concat(t.cats||[]).map(catTitle).join(' · '))+(t.sub?subTitle(t.cat,t.sub):'')+' · '+esc(t.price)+' ₽/сутки</span></div>' +
+        '<span>'+esc([t.cat].concat(t.cats||[]).map(catTitle).join(' · '))+(t.sub?subTitle(t.cat,t.sub):'')+((t.subs&&t.subs.length)?' · '+esc(t.subs.map(subPairTitle).join(' · ')):'')+' · '+esc(t.price)+' ₽/сутки</span></div>' +
         '<label class="switch"><input type="checkbox" data-toggle="'+esc(t.id)+'"'+(t.active!==false?' checked':'')+'>показывать</label>' +
         '<button class="btn outline sm" type="button" data-edit="'+esc(t.id)+'">Изменить</button>' +
         '<button class="btn danger sm" type="button" data-del="'+esc(t.id)+'">Удалить</button>' +
@@ -441,6 +500,21 @@
         '<button class="btn outline sm" type="button" data-editcat="'+esc(c.key)+'">Изменить</button>' +
         '<button class="btn danger sm" type="button" data-delcat="'+esc(c.key)+'">Удалить</button>' +
       '</div>').join('') : '<p class="muted">Пока пусто.</p>';
+
+    // список услуг
+    $('servCount').textContent = '— ' + SVS.length + ' шт.';
+    if(servMissing){
+      $('servBox').innerHTML = '<p class="muted">Таблица услуг ещё не создана в базе. Выполните обновлённый <b>КАБИНЕТ-SQL.sql</b> (Supabase → SQL Editor → Run) и обновите страницу.</p>';
+    } else {
+      $('servBox').innerHTML = SVS.length ? SVS.map(sv2=>
+        '<div class="row">' +
+          (sv2.icon ? (sv2.icon.indexOf('<svg')===0 ? '<div class="ph">'+sv2.icon+'</div>' : '<div class="ph" style="font-size:20px">'+esc(sv2.icon)+'</div>') : '<div class="ph">'+WRENCH+'</div>') +
+          '<div class="info"><b>'+esc(sv2.title)+(sv2.active===false?'<span class="hidden-flag">скрыта</span>':'')+'</b><span>'+esc(sv2.descr||'')+(sv2.descr&&sv2.price?' · ':'')+esc(sv2.price||'')+'</span></div>' +
+          '<label class="switch"><input type="checkbox" data-svtoggle="'+esc(String(sv2.id))+'"'+(sv2.active!==false?' checked':'')+'>показывать</label>' +
+          '<button class="btn outline sm" type="button" data-svedit="'+esc(String(sv2.id))+'">Изменить</button>' +
+          '<button class="btn danger sm" type="button" data-svdel="'+esc(String(sv2.id))+'">Удалить</button>' +
+        '</div>').join('') : '<p class="muted">Пока пусто. Добавьте первую услугу выше — она сразу появится на сайте.</p>';
+    }
 
     // список подкатегорий
     $('subsCount').textContent = '— ' + SUBCATS.length + ' шт.';
@@ -463,6 +537,7 @@
     if(editMode.type==='tool' && !TOOLS.some(t=>String(t.id)===editMode.id)) resetToolForm();
     if(editMode.type==='cat' && !CATS.some(c=>c.key===editMode.key)) resetCatForm();
     if(editMode.type==='sub' && !SUBCATS.some(s=>String(s.id)===editMode.id)) resetSubForm();
+    if(editMode.type==='serv' && !SVS.some(s=>String(s.id)===editMode.id)) resetServForm();
   }
 
   // ====== ВКЛАДКИ ======
@@ -472,12 +547,15 @@
       tab.classList.add('active');
       $('tab-tools').style.display = tab.dataset.tab==='tools' ? 'block' : 'none';
       $('tab-cats').style.display = tab.dataset.tab==='cats' ? 'block' : 'none';
+      $('tab-serv').style.display = tab.dataset.tab==='serv' ? 'block' : 'none';
     });
   });
 
   // ====== ДОБАВЛЕНИЕ ИНСТРУМЕНТА ======
-  function onCatChange(){ fillSubSelect(); buildExtraCats(extraCatsSelected(), $('tCat').value); }
+  function onCatChange(){ fillSubSelect(); buildExtraCats(extraCatsSelected(), $('tCat').value, extraSubsSelected(), currentSubPair()); }
   $('tCat').addEventListener('change', onCatChange);
+  // Сменилась основная подкатегория — перестраиваем блок доп. подкатегорий (выбор сохраняем)
+  $('tSub').addEventListener('change', ()=>buildExtraCats(extraCatsSelected(), $('tCat').value, extraSubsSelected(), currentSubPair()));
   $('tPhoto').addEventListener('change', ()=>{
     const f = $('tPhoto').files[0];
     if(f){ $('tPreview').src = URL.createObjectURL(f); $('tPreview').style.display='inline-block'; }
@@ -487,7 +565,7 @@
   function resetToolForm(){
     editMode = null;
     $('toolForm').reset(); $('tPreview').style.display='none';
-    fillSubSelect(); buildExtraCats([], $('tCat').value);
+    fillSubSelect(); buildExtraCats([], $('tCat').value, [], '');
     $('tBtn').textContent='Добавить'; $('tCancel').style.display='none';
     $('tHead').textContent='Добавить инструмент';
     $('tMsg').textContent=''; $('tMsg').className='msg';
@@ -497,7 +575,7 @@
     if(!t) return;
     editMode = {type:'tool', id:String(id)};
     $('tName').value = t.name||'';
-    $('tCat').value = t.cat||''; fillSubSelect(); buildExtraCats(t.cats||[], t.cat);
+    $('tCat').value = t.cat||''; fillSubSelect(); buildExtraCats(t.cats||[], t.cat, t.subs||[], t.sub?(t.cat+'/'+t.sub):'');
     $('tSub').value = t.sub||'';
     $('tPrice').value = t.price||0;
     $('tDesc').value = t.descr||'';
@@ -530,6 +608,7 @@
       const row = {
         name:$('tName').value.trim(), cat:cat,
         cats:extraCatsSelected(),
+        subs:extraSubsSelected(),
         sub:$('tSub').value||'',
         cat_label:catTitle(cat),
         img:img, descr:$('tDesc').value.trim(),
@@ -669,6 +748,12 @@
       if(cat !== s.cat){
         const { error:e2 } = await sb.from('tools').update({cat:cat}).eq('sub', s.key).eq('cat', s.cat);
         if(!e2) moved = true;
+        // доп. подкатегории: пара «старая_категория/key» → «новая_категория/key»
+        for(const t of TOOLS){
+          if((t.subs||[]).indexOf(s.cat+'/'+s.key)!==-1){
+            await sb.from('tools').update({subs:(t.subs||[]).map(pp=>pp===s.cat+'/'+s.key ? cat+'/'+s.key : pp)}).eq('id', t.id);
+          }
+        }
       }
       resetSubForm();
       toast(moved ? 'Подкатегория обновлена, инструменты переехали вместе с ней' : 'Подкатегория обновлена');
@@ -695,11 +780,90 @@
     const s = SUBCATS.find(x=>String(x.id)===btn.dataset.delsub);
     if(!s) return;
     const n = toolsInSub(s.cat, s.key);
-    if(n){ alert('Сначала удалите или перенесите инструменты этой подкатегории ('+n+' шт.).'); return; }
+    const nx = TOOLS.filter(t=>(t.subs||[]).indexOf(s.cat+'/'+s.key)!==-1).length;
+    if(n || nx){ alert('Эта подкатегория используется у инструментов ('+(n+nx)+' шт.). Сначала уберите её у них через «Изменить».'); return; }
     if(!confirm('Удалить подкатегорию «'+s.title+'»?')) return;
     const { error } = await sb.from('subcats').delete().eq('id', s.id);
     if(error){ toast('Ошибка: '+error.message); return; }
     toast('Подкатегория удалена');
+    await refresh();
+  });
+
+  // ====== УСЛУГИ (страница «Услуги от нас») ======
+  function resetServForm(){
+    editMode = null;
+    $('servForm').reset();
+    delete $('svEmojiGrid').dataset.icon; $('svEmojiVal').innerHTML=''; $('svEmojiClear').style.display='none';
+    $('svBtn').textContent='Добавить'; $('svCancel').style.display='none';
+    $('svHead').textContent='Добавить услугу';
+    $('svMsg').textContent=''; $('svMsg').className='msg';
+  }
+  $('svCancel').addEventListener('click', resetServForm);
+  function startEditServ(id){
+    const sv3 = SVS.find(x=>String(x.id)===String(id));
+    if(!sv3) return;
+    editMode = {type:'serv', id:String(id)};
+    $('svName').value = sv3.title||'';
+    $('svPrice').value = sv3.price||'';
+    $('svDesc').value = sv3.descr||'';
+    if(sv3.icon){ $('svEmojiGrid').dataset.icon = sv3.icon; $('svEmojiVal').innerHTML = (sv3.icon.indexOf('<svg')===0 ? sv3.icon : esc(sv3.icon)); $('svEmojiClear').style.display='inline-block'; }
+    else { delete $('svEmojiGrid').dataset.icon; $('svEmojiVal').innerHTML=''; $('svEmojiClear').style.display='none'; }
+    $('svBtn').textContent='Сохранить изменения'; $('svCancel').style.display='inline-block';
+    $('svHead').textContent='Редактирование услуги';
+    $('svMsg').textContent=''; $('svMsg').className='msg';
+    const f = $('svName'); if(f && f.scrollIntoView) f.scrollIntoView({block:'center'});
+  }
+  $('servForm').addEventListener('submit', async e=>{
+    e.preventDefault();
+    $('svMsg').textContent = ''; $('svMsg').className='msg';
+    const title = $('svName').value.trim();
+    if(!title){ $('svMsg').textContent='Напишите название услуги.'; $('svMsg').className='msg err'; return; }
+    const editing = editMode && editMode.type==='serv' ? SVS.find(x=>String(x.id)===editMode.id) : null;
+    $('svBtn').disabled = true;
+    try{
+      $('svMsg').textContent = 'Сохраняю…';
+      const row = {
+        title:title,
+        descr:$('svDesc').value.trim(),
+        price:$('svPrice').value.trim(),
+        icon:$('svEmojiGrid').dataset.icon||''
+      };
+      if(editing){
+        const { error } = await sb.from('services').update(row).eq('id', editing.id);
+        if(error) throw error;
+        toast('Изменения сохранены — уже на сайте');
+      }else{
+        row.active = true; row.sort = SVS.length+1;
+        const { error } = await sb.from('services').insert(row);
+        if(error) throw error;
+        toast('Услуга добавлена — она уже на сайте');
+      }
+      resetServForm();
+      await refresh();
+    }catch(err){
+      $('svMsg').className='msg err';
+      $('svMsg').textContent = 'Не получилось: ' + err.message;
+    }
+    $('svBtn').disabled = false;
+  });
+  $('servBox').addEventListener('click', async e=>{
+    const edv = e.target.closest('[data-svedit]');
+    if(edv){ startEditServ(edv.dataset.svedit); return; }
+    const tgv = e.target.closest('[data-svtoggle]');
+    if(tgv){
+      const { error } = await sb.from('services').update({active:tgv.checked}).eq('id', tgv.dataset.svtoggle);
+      if(error){ toast('Ошибка: '+error.message); await refresh(); return; }
+      toast(tgv.checked ? 'Услуга видна на сайте' : 'Услуга скрыта с сайта');
+      await refresh(); return;
+    }
+    const delv = e.target.closest('[data-svdel]');
+    if(!delv) return;
+    const sv4 = SVS.find(x=>String(x.id)===String(delv.dataset.svdel));
+    if(!sv4) return;
+    if(!confirm('Удалить услугу «'+sv4.title+'» с сайта?')) return;
+    const { error } = await sb.from('services').delete().eq('id', sv4.id);
+    if(error){ toast('Ошибка: '+error.message); return; }
+    toast('Услуга удалена');
     await refresh();
   });
 
@@ -711,8 +875,9 @@
     const key = btn.dataset.delcat;
     const n = toolsIn(key);
     const nExtra = TOOLS.filter(t=>(t.cats||[]).indexOf(key)!==-1).length;
-    if(n || nExtra){
-      alert('Эта категория используется у инструментов ('+(n+nExtra)+' шт.). Сначала удалите их или через «Изменить» уберите эту категорию из списка доп. категорий.');
+    const nXS = TOOLS.filter(t=>(t.subs||[]).some(pp=>pp.indexOf(key+'/')===0)).length;
+    if(n || nExtra || nXS){
+      alert('Эта категория используется у инструментов ('+(n+nExtra+nXS)+' шт.). Сначала удалите их или через «Изменить» уберите эту категорию/её подкатегории из списка доп.');
       return;
     }
     if(!confirm('Удалить категорию «'+catTitle(key)+'»?')) return;
