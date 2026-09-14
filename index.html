@@ -287,10 +287,11 @@
     .nav{height:52px;gap:8px;min-width:0}
     .nav-links{display:none}
     .nav-phone .tel{display:none}
-    .nav-phone #userBox{gap:8px}
+    .nav-phone #userBox{gap:8px;flex-wrap:nowrap}
     .nav-phone #userBox span{display:none}
+    .nav-phone #userBox #servLink,
     .nav-phone #userBox #cabLink,
-    .nav-phone #userBox #logoutBtn{display:inline-flex;padding:7px 10px;font-size:12.5px;flex:none}
+    .nav-phone #userBox #logoutBtn{display:inline-flex;align-items:center;justify-content:center;padding:7px 10px;font-size:12.5px;line-height:1.2;white-space:nowrap;flex:0 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis}
     .nav-phone{gap:6px;flex:none;flex-shrink:0}
     .nav-phone #authBtn{display:inline-flex;padding:7px 10px;font-size:12.5px;flex:none;white-space:nowrap}
     /* Лого занимает оставшееся место и ОБРЕЗАЕТСЯ, но никогда не выталкивает кнопки за экран */
@@ -300,13 +301,22 @@
     .logo > span:last-child{display:block;line-height:1.15;min-width:0;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
     .logo > span:last-child small{display:block;font-weight:700;font-size:9.5px;color:var(--orange);letter-spacing:.03em;overflow:hidden;text-overflow:ellipsis}
 
-    /* Очень узкие экраны: поджимаем кнопки, чтобы «Кабинет» и «Выйти» всегда были видны */
+    /* Тесные экраны: «Услуги», «Кабинет» и «Выйти» в один ряд — уменьшаем, чтобы поместились */
+    @media(max-width:430px){
+      .nav-phone #userBox{gap:5px}
+      .nav-phone #userBox #servLink,
+      .nav-phone #userBox #cabLink,
+      .nav-phone #userBox #logoutBtn{padding:6px 7px;font-size:11.5px}
+    }
+
+    /* Очень узкие экраны: поджимаем кнопки, чтобы «Услуги», «Кабинет» и «Выйти» всегда были видны */
     @media(max-width:374px){
       .nav{gap:6px}
       .nav-phone{gap:4px}
       .nav-phone #authBtn,
+      .nav-phone #userBox #servLink,
       .nav-phone #userBox #cabLink,
-      .nav-phone #userBox #logoutBtn{padding:6px 7px;font-size:11.5px}
+      .nav-phone #userBox #logoutBtn{padding:5px 6px;font-size:11px}
       .logo{font-size:13px;gap:6px}
       .logo .mark{width:26px;height:26px}
     }
@@ -383,6 +393,7 @@
       <button class="btn outline" id="authBtn" type="button">Войти</button>
       <span id="userBox" style="display:none;align-items:center;gap:10px">
         <span id="userName" style="font-weight:700"></span>
+        <a href="uslugi.html" id="servLink" class="btn outline" style="display:none;text-decoration:none">Услуги</a>
         <a href="admin.html" id="cabLink" class="btn outline" style="display:none;text-decoration:none">Кабинет</a>
         <button class="btn outline" id="logoutBtn" type="button">Выйти</button>
       </span>
@@ -1089,6 +1100,7 @@ const TOOLS = [
   let currentUserName = '';
   let currentUserPhone = '';
   const cabLink = document.getElementById('cabLink');
+  const servLink = document.getElementById('servLink');
 
   // Владелец сайта — тот, чей e-mail совпадает с CONFIG.ADMIN_EMAIL
   function isAdminUser(){
@@ -1167,12 +1179,14 @@ const TOOLS = [
       userName.textContent = 'Привет, ' + name + '!';
       authBtn.style.display='none';
       userBox.style.display='flex';
+      servLink.style.display='inline-block';
       cabLink.style.display = (isAdminUser() || demoAdmin) ? 'inline-block' : 'none';
     }else{
       currentUserName = '';
       currentUserPhone = '';
       authBtn.style.display='inline-block';
       userBox.style.display='none';
+      servLink.style.display='none';
       cabLink.style.display='none';
     }
     const phoneInput = document.getElementById('phone');
