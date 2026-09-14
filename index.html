@@ -239,6 +239,10 @@
   .btn.outline:hover{background:var(--orange);color:#fff}
   .cta-card{background:var(--card);color:var(--dark);border:1px solid var(--line);border-radius:var(--radius);padding:32px;text-align:center}
   /* «Заявка на аренду» на веб-версии живёт в левой колонке каталога (под категориями, той же ширины) */
+  /* Столбец «Категории + Заявка»: липнет к верху как единое целое,
+     заявка всегда стоит сразу под блоком категорий */
+  .side-col{position:sticky;top:88px;align-self:start;max-height:calc(100vh - 96px);overflow:auto}
+  .side-col .cat-sidebar{position:static}
   .side-cta{margin-top:16px}
   .side-cta .cta-card{padding:16px 12px;display:block}
   .side-cta .cta-card h3{font-size:16px;margin-bottom:4px}
@@ -250,9 +254,8 @@
   .contact-wrap .cta-card{display:none}
   /* Жёстко закрепляем блоки за колонками: категории и «Заявка» — слева (260px), карточки — справа */
   @media(min-width:981px){
-    .catalog-layout > aside.cat-sidebar{grid-column:1;grid-row:1}
-    .catalog-layout > .side-cta{grid-column:1;grid-row:2}
-    .catalog-layout > .catalog-content{grid-column:2;grid-row:1 / span 2}
+    .catalog-layout > .side-col{grid-column:1;grid-row:1}
+    .catalog-layout > .catalog-content{grid-column:2;grid-row:1}
   }
   .cta-card .cta-ico{font-size:44px;margin-bottom:10px}
   .cta-card h3{font-size:24px;margin-bottom:8px}
@@ -269,6 +272,7 @@
     /* Боковое меню становится горизонтальным сверху */
     .catalog-layout{grid-template-columns:1fr;gap:20px}
     .cat-sidebar{position:static}
+    .side-col{position:static;max-height:none;overflow:visible}
     .side-cta .form-note{font-size:9.5px}
     .filters{flex-direction:row;flex-wrap:wrap}
     .chip{width:auto;border:2px solid var(--line);border-radius:30px;padding:9px 16px}
@@ -435,6 +439,7 @@
     </div>
 
     <div class="catalog-layout">
+      <div class="side-col">
       <aside class="cat-sidebar">
         <div class="cat-sidebar-title">Категории</div>
         <nav class="filters" id="filters">
@@ -462,6 +467,7 @@
       <button type="button" class="btn" id="openOrderBtn2">Оставить заявку</button>
       <p class="form-note">Или позвоните: <a href="tel:+79081731410" style="color:var(--orange);font-weight:700">+7 (908) 173-14-10</a></p>
     </div></div>
+      </div>
 
       <div class="catalog-content">
         <div class="search-box">
@@ -1450,5 +1456,5 @@ const TOOLS = [
   refreshUI();
 </script>
 <script>(function(){function c(){var b=a.contentDocument||(a.contentWindow&&a.contentWindow.document);if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a37b4c3cfa66f115',t:'MTc4ODg0MjY2NA=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script><script type="module" src="https://static.cloudflareinsights.com/beacon.min.js/v31edd6df95cf4e85bb4c19e7a9bdbcba1788362987495" integrity="sha512-iIg7k2xntmwu6/uSb5tpc/hySgZc4eoL31yB29W6tJFo2akwjPWcEqnCEdJvGexCL0KEQwVYv5BlowfhVz26hg==" data-cf-beacon='{"version":"2024.11.0","token":"1954b47c125f43f8b4338b3c4f804e4f","spa":2}' crossorigin="anonymous"></script>
-<script>(function(){function c(){var b=a.contentDocument||(a.contentWindow&&a.contentWindow.document);if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a3abe7e8abfbf111',t:'MTc4OTM1MjM1Nw=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
+<script>(function(){function c(){var b=a.contentDocument||(a.contentWindow&&a.contentWindow.document);if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a3abef83280bf111',t:'MTc4OTM1MjY2OA=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
 </html>
