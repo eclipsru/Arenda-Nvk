@@ -726,12 +726,12 @@ const TOOLS = [
     grid.innerHTML = '';
     const q = query.toLowerCase();
     const list = TOOLS.filter(t => {
-      if(cat !== 'all' && t.cat !== cat) return false;
+      if(cat !== 'all' && t.cat !== cat && !(t.cats||[]).includes(cat)) return false;
       if(sub !== 'all' && t.sub !== sub) return false;
       // Поиск: по названию, описанию и категории инструмента (с транслитерацией «макита»→«makita» и нормализацией ё→е)
       if(q){
         const norm = s => s.toLowerCase().replace(/ё/g, 'е');
-        const hay = norm(t.name + ' ' + (t.desc || '') + ' ' + (t.catLabel || ''));
+        const hay = norm(t.name + ' ' + (t.desc || '') + ' ' + (t.catLabel || '') + ' ' + (t.catsLabel || ''));
         const qN = norm(q);
         const qLat = qN.replace(/[а-я]/g, ch => TR[ch] !== undefined ? TR[ch] : ch);
         if(!hay.includes(qN) && !hay.includes(qLat)) return false;
@@ -1414,7 +1414,7 @@ const TOOLS = [
     try{
       const [cR, tR, sR] = await Promise.all([
         sb.from('cats').select('key,title,icon,sort,active').order('sort'),
-        sb.from('tools').select('name,cat,sub,cat_label,img,descr,price,active,sort').order('sort'),
+        sb.from('tools').select('name,cat,cats,sub,cat_label,img,descr,price,active,sort').order('sort'),
         sb.from('subcats').select('cat,key,title,icon,sort,active').order('sort')
       ]);
       if((cR.error || tR.error) && /jwt/i.test((cR.error||tR.error||{}).message||'') && !dbJwtRetried){
@@ -1425,10 +1425,17 @@ const TOOLS = [
       }
       if(cR.error || tR.error){ console.warn('Каталог из базы недоступен:', (cR.error||tR.error).message); return; }
       if(!tR.data || !tR.data.length) return; // база пуста — показываем встроенный каталог
+      const catTitles = {};
+      (cR.data||[]).forEach(c=>{ catTitles[c.key] = c.title; });
       TOOLS.length = 0;
-      tR.data.filter(t=>t.active !== false).forEach(t=>TOOLS.push({
-        name:t.name||'', cat:t.cat||'', sub:t.sub||'', catLabel:t.cat_label||'', img:t.img||'', desc:t.descr||'', price:t.price||0
-      }));
+      tR.data.filter(t=>t.active !== false).forEach(t=>{
+        const extra = Array.isArray(t.cats) ? t.cats : [];
+        TOOLS.push({
+          name:t.name||'', cat:t.cat||'', cats:extra,
+          sub:t.sub||'', catLabel:t.cat_label||'', img:t.img||'', desc:t.descr||'', price:t.price||0,
+          catsLabel: extra.map(k=>catTitles[k]||k).join(' ')
+        });
+      });
       const cats = (cR.data || []).filter(c=>c.active !== false);
       const subs = (sR.data || []).filter(s=>s.active !== false);
       DB_SUBS = subs;                       // категории строятся сразу со своими подменю
@@ -1446,6 +1453,5 @@ const TOOLS = [
   refreshUI();
 </script>
 <script>(function(){function c(){var b=a.contentDocument||(a.contentWindow&&a.contentWindow.document);if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a37b4c3cfa66f115',t:'MTc4ODg0MjY2NA=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script><script type="module" src="https://static.cloudflareinsights.com/beacon.min.js/v31edd6df95cf4e85bb4c19e7a9bdbcba1788362987495" integrity="sha512-iIg7k2xntmwu6/uSb5tpc/hySgZc4eoL31yB29W6tJFo2akwjPWcEqnCEdJvGexCL0KEQwVYv5BlowfhVz26hg==" data-cf-beacon='{"version":"2024.11.0","token":"1954b47c125f43f8b4338b3c4f804e4f","spa":2}' crossorigin="anonymous"></script>
-<script type="module" src="https://static.cloudflareinsights.com/beacon.min.js/v31edd6df95cf4e85bb4c19e7a9bdbcba1788362987495" integrity="sha512-iIg7k2xntmwu6/uSb5tpc/hySgZc4eoL31yB29W6tJFo2akwjPWcEqnCEdJvGexCL0KEQwVYv5BlowfhVz26hg==" data-cf-beacon='{"version":"2024.11.0","token":"1954b47c125f43f8b4338b3c4f804e4f","spa":2}' crossorigin="anonymous"></script>
-<script>(function(){function c(){var b=a.contentDocument||(a.contentWindow&&a.contentWindow.document);if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a3abfd6f384ff10b',t:'MTc4OTM1MzIzOA=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
+</body>
 </html>
