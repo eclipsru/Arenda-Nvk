@@ -204,6 +204,10 @@
   @media(max-width:768px){
     #pickupMap .pickup-map{display:none}
   }
+  /* Расчёт стоимости доставки */
+  .dist-box{margin-top:9px;background:var(--bg-2);border:1px solid var(--line);border-radius:10px;padding:10px 12px;font-size:13.5px;line-height:1.5}
+  .dist-box svg.ic{width:16px;height:16px;vertical-align:-3px;margin-right:6px;color:var(--orange)}
+  .dist-box b{color:var(--orange)}
   .pm-caption{font-size:12.5px;color:var(--gray);margin:8px 0 16px !important}
   .pm-caption a{color:var(--orange);text-decoration:none;font-weight:600}
   .pm-caption a:hover{text-decoration:underline}
@@ -652,6 +656,7 @@
       <div class="field" id="addressField" style="display:none">
         <label for="address">Адрес доставки</label>
         <input type="text" id="address" name="address" placeholder="Улица, дом, квартира — Новочеркасск" />
+        <div id="distBox" class="dist-box" style="display:none"></div>
       </div>
       <div class="field">
         <label for="name">Ваше имя</label>
@@ -1088,6 +1093,71 @@ const TOOLS = [
     });
   });
 
+  // ====== РАСЧЁТ СТОИМОСТИ ДОСТАВКИ: 40 ₽ за 1 км от склада ======
+  const DELIVERY_RATE = 40; // рублей за 1 километр — если изменится тариф, менять здесь
+  const WAREHOUSE = { lat: 47.4526182, lon: 40.1008652 }; // склад: г. Новочеркасск, ул. Маресьева, 36
+  let distKm = 0, distCost = 0;
+  const distBox = document.getElementById('distBox');
+  let distTimer = null, distSeq = 0;
+  function fmtKm(km){ const v = km >= 10 ? Math.round(km) : Math.round(km * 10) / 10; return String(v).replace('.', ','); }
+  function havKm(a, b){
+    const R = 6371, to = Math.PI / 180;
+    const dLat = (b.lat - a.lat) * to, dLon = (b.lon - a.lon) * to;
+    const x = Math.pow(Math.sin(dLat/2), 2) + Math.cos(a.lat*to) * Math.cos(b.lat*to) * Math.pow(Math.sin(dLon/2), 2);
+    return 2 * R * Math.asin(Math.sqrt(x));
+  }
+  function fetchTO(url, ms){
+    const ctrl = new AbortController();
+    const t = setTimeout(function(){ ctrl.abort(); }, ms);
+    return fetch(url, { signal: ctrl.signal }).finally(function(){ clearTimeout(t); });
+  }
+  async function calcDist(){
+    const seq = ++distSeq;
+    const q = addressInput.value.trim();
+    distKm = 0; distCost = 0;
+    distBox.style.display = 'none';
+    if(getMethodValue !== 'delivery' || q.length < 4) return;
+    try{
+      const gq = /новочеркасск/i.test(q) ? q : q + ', Новочеркасск';
+      const gr = await fetchTO('https://nominatim.openstreetmap.org/search?format=json&limit=1&q=' + encodeURIComponent(gq), 7000);
+      const ga = await gr.json();
+      if(seq !== distSeq) return;
+      if(!ga || !ga.length) return;
+      const pt = { lat: parseFloat(ga[0].lat), lon: parseFloat(ga[0].lon) };
+      let km = 0;
+      try{
+        const rr = await fetchTO('https://router.project-osrm.org/route/v1/driving/' + WAREHOUSE.lon + ',' + WAREHOUSE.lat + ';' + pt.lon + ',' + pt.lat + '?overview=false', 7000);
+        const rj = await rr.json();
+        if(seq !== distSeq) return;
+        if(rj && rj.routes && rj.routes[0] && rj.routes[0].distance) km = rj.routes[0].distance / 1000;
+      }catch(e){}
+      if(!km) km = havKm(WAREHOUSE, pt) * 1.3; // если маршрут недоступен — по прямой с поправкой на дороги
+      if(seq !== distSeq) return;
+      if(km > 100){
+        distBox.textContent = 'Адрес далеко за городом (~' + fmtKm(km) + ' км) — стоимость доставки рассчитает менеджер.';
+        distBox.style.display = 'block';
+        return;
+      }
+      distKm = Math.max(1, Math.round(km * 10) / 10);
+      distCost = Math.round(distKm * DELIVERY_RATE);
+      distBox.innerHTML = '<svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M14 18V6a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v11a1 1 0 0 0 1 1h2"/><path d="M15 18H9"/><path d="M19 18h2a1 1 0 0 0 1-1v-3.65a1 1 0 0 0-.22-.62l-3.48-4.35A1 1 0 0 0 17.52 8H14"/><circle cx="17" cy="18" r="2"/><circle cx="7" cy="18" r="2"/></svg> ~' + fmtKm(distKm) + ' км · Доставка: <b>' + distCost + ' ₽</b> <span style="color:var(--gray);font-size:12px">(предварительно, ' + DELIVERY_RATE + ' ₽/км — уточним при подтверждении)</span>';
+      distBox.style.display = 'block';
+    }catch(e){}
+  }
+  addressInput.addEventListener('input', function(){
+    clearTimeout(distTimer);
+    distKm = 0; distCost = 0;
+    distBox.style.display = 'none';
+    distTimer = setTimeout(calcDist, 900);
+  });
+  getMethodBox.addEventListener('click', function(){
+    if(getMethodValue !== 'delivery'){
+      clearTimeout(distTimer); distSeq++;
+      distKm = 0; distCost = 0;
+      distBox.style.display = 'none';
+    }
+  });
+
   orderForm.addEventListener('submit', function(e){
     e.preventDefault();
     // Проверяем, что выбран хотя бы один инструмент
@@ -1112,7 +1182,7 @@ const TOOLS = [
         p_name: document.getElementById('name').value.trim(),
         p_phone: document.getElementById('phone').value.trim(),
         p_tools: chosen.map(s=>s.value).join(', '),
-        p_get_method: getMethodValue === 'delivery' ? 'Доставка: ' + addressInput.value.trim() : 'Самовывоз, ул. Маресьева, 36',
+        p_get_method: getMethodValue === 'delivery' ? ('Доставка: ' + addressInput.value.trim() + (distKm ? ' — ' + fmtKm(distKm) + ' км, ' + distCost + ' ₽' : '')) : 'Самовывоз, ул. Маресьева, 36',
         p_address: getMethodValue === 'delivery' ? addressInput.value.trim() : '',
         p_comment: document.getElementById('comment').value.trim(),
         p_user_email: sbUser ? (sbUser.email || '') : ''
