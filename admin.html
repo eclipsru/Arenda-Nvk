@@ -76,6 +76,10 @@
   .emoji-grid button svg{width:18px;height:18px;display:block;margin:0 auto}
   #cEmojiVal svg,#sEmojiVal svg{width:20px;height:20px;vertical-align:middle}
   .info svg{width:14px;height:14px;vertical-align:-2px}
+  .cats-multi{display:flex;flex-wrap:wrap;gap:6px;margin-top:7px}
+  .cats-multi label{display:flex;align-items:center;gap:6px;background:var(--bg-2);border:1px solid var(--line);border-radius:9px;padding:7px 11px;font-size:13px;font-weight:600;color:var(--dark);cursor:pointer;margin:0}
+  .cats-multi label:hover{border-color:var(--orange)}
+  .cats-multi input{width:15px;height:15px;margin:0;accent-color:var(--orange)}
   @media(max-width:640px){
     .emoji-grid{grid-template-columns:repeat(8,1fr)}
     .form-grid{grid-template-columns:1fr}
@@ -174,6 +178,7 @@
         <form id="toolForm" class="form-grid">
           <label>Название<input id="tName" required placeholder="Например: Перфоратор Bosch GBH 2-26"></label>
           <label>Категория<select id="tCat" required></select></label>
+          <label class="full" id="tCatsWrap" style="display:none">Дополнительно показывать в категориях<div id="tCatsBox" class="cats-multi"></div><span class="muted" style="font-size:11.5px;display:block;margin-top:5px">Отметьте другие категории — инструмент будет виден в них тоже (для удобного поиска)</span></label>
           <label id="tSubWrap" style="display:none">Подкатегория<select id="tSub"><option value="">Все электроинструменты</option><option value="battery">На аккумуляторе</option><option value="corded">От сети 220В</option></select></label>
           <label>Цена, ₽/сутки<input id="tPrice" type="number" min="0" required placeholder="400"></label>
           <label class="full">Краткое описание<input id="tDesc" placeholder="Мощность, комплект, особенности"></label>
@@ -378,6 +383,16 @@
     return s ? (' · '+(s.icon && s.icon.indexOf('<svg')!==0 ? s.icon+' ' : '')+s.title) : '';
   }
   function toolsInSub(cat,key){ return TOOLS.filter(t=>t.cat===cat && t.sub===key).length; }
+  // ===== Дополнительные категории инструмента (мультикатегории) =====
+  function buildExtraCats(selected, primary){
+    const box = $('tCatsBox'), wrap = $('tCatsWrap');
+    if(!box || !wrap) return;
+    const others = CATS.filter(c=>c.key!==primary);
+    wrap.style.display = others.length ? 'block' : 'none';
+    box.innerHTML = others.map(c=>'<label><input type="checkbox" value="'+esc(c.key)+'"'+((selected||[]).indexOf(c.key)!==-1?' checked':'')+'>'+esc(c.title)+'</label>').join('');
+  }
+  function extraCatsSelected(){ return [...$('tCatsBox').querySelectorAll('input:checked')].map(i=>i.value); }
+
   // Заполняем выбор подкатегории в форме инструмента по выбранной категории
   function fillSubSelect(){
     const cat = $('tCat').value;
@@ -412,7 +427,7 @@
       '<div class="row">' +
         (t.img ? '<img class="thumb" src="'+esc(t.img)+'" alt="" onerror="this.style.display=\'none\'">' : '<div class="ph">'+WRENCH+'</div>') +
         '<div class="info"><b>'+esc(t.name)+(t.active===false?'<span class="hidden-flag">скрыт</span>':'')+'</b>' +
-        '<span>'+esc(catTitle(t.cat))+(t.sub?subTitle(t.cat,t.sub):'')+' · '+esc(t.price)+' ₽/сутки</span></div>' +
+        '<span>'+esc([t.cat].concat(t.cats||[]).map(catTitle).join(' · '))+(t.sub?subTitle(t.cat,t.sub):'')+' · '+esc(t.price)+' ₽/сутки</span></div>' +
         '<label class="switch"><input type="checkbox" data-toggle="'+esc(t.id)+'"'+(t.active!==false?' checked':'')+'>показывать</label>' +
         '<button class="btn outline sm" type="button" data-edit="'+esc(t.id)+'">Изменить</button>' +
         '<button class="btn danger sm" type="button" data-del="'+esc(t.id)+'">Удалить</button>' +
@@ -461,7 +476,7 @@
   });
 
   // ====== ДОБАВЛЕНИЕ ИНСТРУМЕНТА ======
-  function onCatChange(){ fillSubSelect(); }
+  function onCatChange(){ fillSubSelect(); buildExtraCats(extraCatsSelected(), $('tCat').value); }
   $('tCat').addEventListener('change', onCatChange);
   $('tPhoto').addEventListener('change', ()=>{
     const f = $('tPhoto').files[0];
@@ -472,7 +487,7 @@
   function resetToolForm(){
     editMode = null;
     $('toolForm').reset(); $('tPreview').style.display='none';
-    fillSubSelect();
+    fillSubSelect(); buildExtraCats([], $('tCat').value);
     $('tBtn').textContent='Добавить'; $('tCancel').style.display='none';
     $('tHead').textContent='Добавить инструмент';
     $('tMsg').textContent=''; $('tMsg').className='msg';
@@ -482,7 +497,7 @@
     if(!t) return;
     editMode = {type:'tool', id:String(id)};
     $('tName').value = t.name||'';
-    $('tCat').value = t.cat||''; fillSubSelect();
+    $('tCat').value = t.cat||''; fillSubSelect(); buildExtraCats(t.cats||[], t.cat);
     $('tSub').value = t.sub||'';
     $('tPrice').value = t.price||0;
     $('tDesc').value = t.descr||'';
@@ -514,6 +529,7 @@
       }
       const row = {
         name:$('tName').value.trim(), cat:cat,
+        cats:extraCatsSelected(),
         sub:$('tSub').value||'',
         cat_label:catTitle(cat),
         img:img, descr:$('tDesc').value.trim(),
@@ -694,7 +710,11 @@
     if(!btn) return;
     const key = btn.dataset.delcat;
     const n = toolsIn(key);
-    if(n){ alert('Сначала удалите или перенесите инструменты этой категории ('+n+' шт.).'); return; }
+    const nExtra = TOOLS.filter(t=>(t.cats||[]).indexOf(key)!==-1).length;
+    if(n || nExtra){
+      alert('Эта категория используется у инструментов ('+(n+nExtra)+' шт.). Сначала удалите их или через «Изменить» уберите эту категорию из списка доп. категорий.');
+      return;
+    }
     if(!confirm('Удалить категорию «'+catTitle(key)+'»?')) return;
     const { error } = await sb.from('cats').delete().eq('key', key);
     if(error){ toast('Ошибка: '+error.message); return; }
