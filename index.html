@@ -707,8 +707,16 @@
         <div id="distBox" class="dist-box" style="display:none"></div>
       </div>
       <div class="field">
+        <label for="lastName">Фамилия</label>
+        <input type="text" id="lastName" name="lastName" placeholder="Петров" autocomplete="family-name" />
+      </div>
+      <div class="field">
         <label for="name">Ваше имя</label>
         <input type="text" id="name" name="name" placeholder="Иван" required />
+      </div>
+      <div class="field">
+        <label for="patrName">Отчество</label>
+        <input type="text" id="patrName" name="patrName" placeholder="Сергеевич" autocomplete="additional-name" />
       </div>
       <div class="field">
         <label for="phone">Телефон</label>
@@ -1139,6 +1147,12 @@ const TOOLS = [
     if(ph && !ph.value && currentUserPhone) ph.value = currentUserPhone;
     const nm = document.getElementById('name');
     if(nm && !nm.value && currentUserName) nm.value = currentUserName;
+    // Фамилия и отчество — из профиля вошедшего клиента
+    const mdUser = (sbUser && sbUser.user_metadata) || {};
+    const lnEl = document.getElementById('lastName');
+    const ptEl = document.getElementById('patrName');
+    if(lnEl && !lnEl.value && mdUser.lastname) lnEl.value = mdUser.lastname;
+    if(ptEl && !ptEl.value && mdUser.patronymic) ptEl.value = mdUser.patronymic;
     orderModal.classList.add('open');
     // На телефоне не вызываем фокус — иначе сама выезжает клавиатура
     if(!(window.matchMedia && window.matchMedia('(max-width:768px)').matches)) document.getElementById('name').focus();
@@ -1409,7 +1423,7 @@ const TOOLS = [
       const rc = buildOrderReceipt();
       const userCmt = document.getElementById('comment').value.trim();
       sb.rpc('submit_order', {
-        p_name: document.getElementById('name').value.trim(),
+        p_name: [document.getElementById('lastName').value.trim(), document.getElementById('name').value.trim(), document.getElementById('patrName').value.trim()].filter(Boolean).join(' '),
         p_phone: document.getElementById('phone').value.trim(),
         p_tools: rc.short,
         p_get_method: getMethodValue === 'delivery' ? ('Доставка: ' + addressInput.value.trim() + (distKm ? ' — ' + fmtKm(distKm) + ' км, ' + distCost + ' ₽' : '')) : 'Самовывоз, ул. Маресьева, 36',
