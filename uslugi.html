@@ -7,6 +7,7 @@
 <meta name="description" content="Прокат инструмента в Новочеркасске: перфораторы, болгарки, бетономешалки, генераторы, виброплиты, триммеры, мотоблоки, насосы, нивелиры, тепловые пушки, сварочные аппараты. Посуточная аренда, доступные цены, быстрая выдача." />
 <style>
   :root{
+    color-scheme:dark;
     --orange:#ff8f1f;
     --orange-dark:#e65100;
     --dark:#f2f3f5;            /* основной текст теперь светлый */
@@ -469,12 +470,38 @@
           '<h3>'+esc(s.title)+'</h3>' +
           '<div class="desc">'+esc(s.descr||'')+'</div>' +
           '<div class="price">'+(s.price ? '<b>'+esc(s.price)+'</b>' : '&nbsp;')+'</div>' +
-          '<div class="card-btns"><a href="index.html#contact" class="btn" style="text-decoration:none">Заказать</a></div>' +
+          '<div class="card-btns"><button type="button" class="btn serv-order" data-serv="'+esc(s.title)+'">Заказать</button></div>' +
         '</div>';
       grid.appendChild(card);
     });
   })();
 </script>
+
+<!-- Модалка заказа услуги -->
+<div class="modal-overlay" id="servModal">
+  <div class="modal">
+    <button type="button" class="close" id="servClose" aria-label="Закрыть">&times;</button>
+    <h3>Заказ услуги</h3>
+    <p class="msub" id="soTitle">—</p>
+    <form id="servForm" novalidate>
+      <div class="auth-err" id="soErr"></div>
+      <div class="auth-ok" id="soOk">Заявка отправлена! Мы перезвоним вам в ближайшее время.</div>
+      <div class="field">
+        <label for="soName">Ваше имя</label>
+        <input id="soName" type="text" placeholder="Как к вам обращаться" autocomplete="name">
+      </div>
+      <div class="field">
+        <label for="soPhone">Телефон</label>
+        <input id="soPhone" type="tel" placeholder="+7 (___) ___-__-__" autocomplete="tel">
+      </div>
+      <div class="field">
+        <label for="soComment">Комментарий <span style="color:var(--gray);font-weight:400">(необязательно)</span></label>
+        <textarea id="soComment" rows="3" placeholder="Уточните детали — что нужно сделать"></textarea>
+      </div>
+      <button type="submit" class="btn" id="soBtn" style="width:100%">Отправить заявку</button>
+    </form>
+  </div>
+</div>
 
 <script>
   // Авторизация в шапке: «Кабинет» и «Выйти» — только для вошедших; «Кабинет» — владельцу
@@ -494,6 +521,85 @@
         });
       }
     }catch(e){}
+  })();
+</script>
+
+<script>
+  // ====== ЗАКАЗ УСЛУГИ: модалка + заявка в базу (уходит в ВК) ======
+  (function(){
+    var modal = document.getElementById('servModal');
+    var form = document.getElementById('servForm');
+    var errBox = document.getElementById('soErr');
+    var okBox = document.getElementById('soOk');
+    var btn = document.getElementById('soBtn');
+    var soSb = null, soUser = null, soTitle = '';
+
+    function openServ(title){
+      soTitle = title || '';
+      document.getElementById('soTitle').textContent = soTitle;
+      errBox.style.display = 'none';
+      okBox.style.display = 'none';
+      form.style.display = 'block';
+      // Если пользователь вошёл — подставляем имя и телефон
+      try{
+        if(window.supabase && !soSb) soSb = supabase.createClient('https://wdxdeatphizclskfmfxi.supabase.co','sb_publishable_dtRaEHNNPBFbHFvg8hw9iA_FqJSz9BE');
+        if(soSb && soSb.auth) soSb.auth.getSession().then(function(res){
+          var u = res && res.data && res.data.session && res.data.session.user;
+          if(u){
+            soUser = u;
+            var nm = document.getElementById('soName'), ph = document.getElementById('soPhone');
+            if(!nm.value && u.user_metadata && u.user_metadata.name) nm.value = u.user_metadata.name;
+            if(!ph.value && u.user_metadata && u.user_metadata.phone) ph.value = u.user_metadata.phone;
+          }
+        });
+      }catch(e){}
+      // Автофокус не ставим: на телефоне сама выезжает клавиатура
+      modal.classList.add('open');
+    }
+    function closeServ(){ modal.classList.remove('open'); }
+
+    document.getElementById('servicesGrid').addEventListener('click', function(e){
+      var b = e.target.closest('.serv-order');
+      if(b){ e.preventDefault(); openServ(b.getAttribute('data-serv')); }
+    });
+    document.getElementById('servClose').addEventListener('click', closeServ);
+    modal.addEventListener('click', function(e){ if(e.target === modal) closeServ(); });
+
+    form.addEventListener('submit', function(ev){
+      ev.preventDefault();
+      errBox.style.display = 'none';
+      var name = document.getElementById('soName').value.trim();
+      var phone = document.getElementById('soPhone').value.trim();
+      var comment = document.getElementById('soComment').value.trim();
+      if(name.length < 2){ errBox.textContent = 'Укажите имя'; errBox.style.display = 'block'; return; }
+      if(phone.replace(/\D/g,'').length < 10){ errBox.textContent = 'Укажите телефон — не менее 10 цифр'; errBox.style.display = 'block'; return; }
+      btn.disabled = true; btn.textContent = 'Отправляем…';
+      var finish = function(errMsg){
+        btn.disabled = false; btn.textContent = 'Отправить заявку';
+        if(errMsg){
+          errBox.textContent = 'Не удалось отправить: ' + errMsg + '. Позвоните нам: +7 (908) 173-14-10';
+          errBox.style.display = 'block';
+          return;
+        }
+        form.style.display = 'none';
+        okBox.style.display = 'block';
+        form.reset();
+        setTimeout(function(){ closeServ(); form.style.display = 'block'; okBox.style.display = 'none'; }, 2600);
+      };
+      try{
+        if(!soSb && window.supabase) soSb = supabase.createClient('https://wdxdeatphizclskfmfxi.supabase.co','sb_publishable_dtRaEHNNPBFbHFvg8hw9iA_FqJSz9BE');
+        if(!soSb){ finish('нет подключения'); return; }
+        soSb.rpc('submit_order', {
+          p_name: name,
+          p_phone: phone,
+          p_tools: 'Услуга: ' + soTitle,
+          p_get_method: 'Заказ услуги',
+          p_address: '',
+          p_comment: comment,
+          p_user_email: soUser ? (soUser.email || '') : ''
+        }).then(function(res){ finish(res && res.error ? res.error.message : null); });
+      }catch(e){ finish(e.message); }
+    });
   })();
 </script>
 </body>
