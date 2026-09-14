@@ -7,6 +7,7 @@
 <meta name="description" content="Прокат инструмента в Новочеркасске: перфораторы, болгарки, бетономешалки, генераторы, виброплиты, триммеры, мотоблоки, насосы, нивелиры, тепловые пушки, сварочные аппараты. Посуточная аренда, доступные цены, быстрая выдача." />
 <style>
   :root{
+    color-scheme:dark;
     --orange:#ff8f1f;
     --orange-dark:#e65100;
     --dark:#f2f3f5;            /* основной текст теперь светлый */
@@ -196,6 +197,10 @@
   .pickup-map .pm-fallback{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;text-align:center;padding:14px;font-size:14px;z-index:0}
   .pickup-map .pm-fallback .pm-pin{font-size:34px}
   .pickup-map .pm-fallback p{color:var(--gray);font-size:12.5px;margin:0}
+  /* На телефоне при «Заберу сам» карту не показываем — только адрес склада */
+  @media(max-width:768px){
+    #pickupMap .pickup-map{display:none}
+  }
   .pm-caption{font-size:12.5px;color:var(--gray);margin:8px 0 16px !important}
   .pm-caption a{color:var(--orange);text-decoration:none;font-weight:600}
   .pm-caption a:hover{text-decoration:underline}
@@ -235,6 +240,11 @@
   .tool-row .combo::after{content:'';position:absolute;right:14px;top:50%;width:9px;height:9px;border-right:2px solid #6b7080;border-bottom:2px solid #6b7080;transform:translateY(-70%) rotate(45deg);pointer-events:none}
   .combo-menu{display:none;position:absolute;top:calc(100% + 6px);left:0;right:0;background:#171a21;border:2px solid var(--line);border-radius:12px;z-index:80;box-shadow:0 14px 36px rgba(0,0,0,.5);overflow:hidden}
   .combo-menu.open{display:block}
+  /* На телефоне список инструмента раскрывается почти на всю ширину экрана */
+  @media(max-width:560px){
+    .combo-menu.open{position:fixed;left:10px;right:10px;top:50%;transform:translateY(-50%);max-height:70vh;z-index:120}
+    .combo-menu.open .combo-list{max-height:calc(70vh - 54px)}
+  }
   .combo-search{display:block;width:100%;padding:12px 14px;background:#10131a;color:var(--dark);border:none;border-bottom:2px solid var(--line);font-size:16px;font-family:inherit}
   .combo-search:focus{outline:none}
   .combo-list{max-height:235px;overflow:auto;-webkit-overflow-scrolling:touch}
@@ -1026,7 +1036,8 @@ const TOOLS = [
     const nm = document.getElementById('name');
     if(nm && !nm.value && currentUserName) nm.value = currentUserName;
     orderModal.classList.add('open');
-    document.getElementById('name').focus();
+    // На телефоне не вызываем фокус — иначе сама выезжает клавиатура
+    if(!(window.matchMedia && window.matchMedia('(max-width:768px)').matches)) document.getElementById('name').focus();
   }
   function closeOrder(){ orderModal.classList.remove('open'); }
 
