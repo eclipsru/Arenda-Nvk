@@ -974,6 +974,8 @@ const TOOLS = [
     orderErr.style.display='none';
     const ph = document.getElementById('phone');
     if(ph && !ph.value && currentUserPhone) ph.value = currentUserPhone;
+    const nm = document.getElementById('name');
+    if(nm && !nm.value && currentUserName) nm.value = currentUserName;
     orderModal.classList.add('open');
     document.getElementById('name').focus();
   }
@@ -991,10 +993,13 @@ const TOOLS = [
 
   // ====== КЛИК "АРЕНДОВАТЬ" в каталоге -> открыть окно с выбранным инструментом ======
   function pick(name){
-    // Подбираем подходящий пункт списка по первому слову названия
+    // Сначала точное название из каталога, затем поиск по первому слову
     let match = '';
-    const key = name.split(' ')[0].toLowerCase();
-    for(const o of TOOL_OPTIONS){ if(o.toLowerCase().includes(key)){ match = o; break; } }
+    if(TOOL_OPTIONS.indexOf(name) !== -1) match = name;
+    else {
+      const key = name.split(' ')[0].toLowerCase();
+      for(const o of TOOL_OPTIONS){ if(o.toLowerCase().includes(key)){ match = o; break; } }
+    }
     resetOrderTools(match);
     openOrder();
   }
@@ -1039,13 +1044,14 @@ const TOOLS = [
     // Сохраняем заявку в облачную базу (Supabase), если подключено.
     // Уведомление в MAX придёт автоматически через вебхук (см. БЕСПЛАТНЫЙ-СТАРТ.md).
     if(sb){
-      sb.from('orders').insert({
-        name: document.getElementById('name').value.trim(),
-        phone: document.getElementById('phone').value.trim(),
-        tools: chosen.map(s=>s.value).join(', '),
-        get_method: getMethodValue === 'delivery' ? 'Доставка: ' + addressInput.value.trim() : 'Самовывоз, ул. Маресьева, 36',
-        comment: document.getElementById('comment').value.trim(),
-        user_email: sbUser ? (sbUser.email || '') : ''
+      sb.rpc('submit_order', {
+        p_name: document.getElementById('name').value.trim(),
+        p_phone: document.getElementById('phone').value.trim(),
+        p_tools: chosen.map(s=>s.value).join(', '),
+        p_get_method: getMethodValue === 'delivery' ? 'Доставка: ' + addressInput.value.trim() : 'Самовывоз, ул. Маресьева, 36',
+        p_address: getMethodValue === 'delivery' ? addressInput.value.trim() : '',
+        p_comment: document.getElementById('comment').value.trim(),
+        p_user_email: sbUser ? (sbUser.email || '') : ''
       }).then(({ error })=>{ if(error) console.warn('Заявка не сохранена в базу:', error.message); });
     }
     // Пока сайт без сервера — заявка показывает подтверждение.
@@ -1186,7 +1192,9 @@ const TOOLS = [
       authBtn.style.display='none';
       userBox.style.display='flex';
       servLink.style.display='inline-block';
-      cabLink.style.display = (isAdminUser() || demoAdmin) ? 'inline-block' : 'none';
+      const isAdminNow = isAdminUser() || demoAdmin;
+      cabLink.href = isAdminNow ? 'admin.html' : 'kabinet.html';
+      cabLink.style.display = 'inline-block';
     }else{
       currentUserName = '';
       currentUserPhone = '';
@@ -1470,6 +1478,8 @@ const TOOLS = [
           catsLabel: extra.map(k=>catTitles[k]||k).join(' ')
         });
       });
+      // Инструменты в форме заявки — реальные из базы (а не зашитый список)
+      if(TOOLS.length){ TOOL_OPTIONS.length = 0; TOOLS.forEach(t=>TOOL_OPTIONS.push(t.name)); }
       const cats = (cR.data || []).filter(c=>c.active !== false);
       const subs = (sR.data || []).filter(s=>s.active !== false);
       DB_SUBS = subs;                       // категории строятся сразу со своими подменю
