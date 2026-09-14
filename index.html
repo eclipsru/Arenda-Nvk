@@ -237,6 +237,13 @@
   .btn.outline{background:none;border:2px solid var(--orange);color:var(--orange)}
   .btn.outline:hover{background:var(--orange);color:#fff}
   .cta-card{background:var(--card);color:var(--dark);border:1px solid var(--line);border-radius:var(--radius);padding:32px;text-align:center}
+  /* «Заявка на аренду» на веб-версии живёт в левой колонке каталога (под категориями, той же ширины) */
+  .side-cta{margin-top:18px}
+  .side-cta .cta-card{padding:22px 16px;display:block}
+  .side-cta .cta-card h3{font-size:18px}
+  .side-cta .cta-card p{font-size:14px}
+  .side-cta .cta-ico svg.ic{width:36px;height:36px}
+  .contact-wrap .cta-card{display:none}
   .cta-card .cta-ico{font-size:44px;margin-bottom:10px}
   .cta-card h3{font-size:24px;margin-bottom:8px}
   .cta-card p{color:var(--gray);font-size:15px;margin-bottom:22px}
@@ -329,6 +336,8 @@
     #why{display:none}
     #catalog .sec-head{display:none}
     .cat-sidebar{display:none}
+    .side-cta{display:none}
+    .contact-wrap .cta-card{display:block}
     .catalog-content .search-box{display:none}
     .catalog-layout{gap:0}
     #catalog{padding-top:22px}
@@ -435,6 +444,13 @@
           <a href="tel:+79081731410" class="btn outline">Позвонить</a>
         </div>
       </aside>
+      <div class="side-cta"><div class="cta-card">
+      <div class="cta-ico"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M10 9H8"/><path d="M16 13H8"/><path d="M16 17H8"/></svg></div>
+      <h3>Заявка на аренду</h3>
+      <p>Заполните короткую форму — можно выбрать сразу несколько инструментов. Перезвоним и подтвердим бронь.</p>
+      <button type="button" class="btn" id="openOrderBtn2">Оставить заявку</button>
+      <p class="form-note">Или позвоните: <a href="tel:+79081731410" style="color:var(--orange);font-weight:700">+7 (908) 173-14-10</a></p>
+    </div></div>
 
       <div class="catalog-content">
         <div class="search-box">
@@ -941,6 +957,8 @@ const TOOLS = [
   function closeOrder(){ orderModal.classList.remove('open'); }
 
   document.getElementById('openOrderBtn').addEventListener('click', ()=>{ resetOrderTools(); openOrder(); });
+  const openOrderBtn2 = document.getElementById('openOrderBtn2');
+  if(openOrderBtn2) openOrderBtn2.addEventListener('click', ()=>{ resetOrderTools(); openOrder(); });
   document.getElementById('orderClose').addEventListener('click', closeOrder);
   orderModal.addEventListener('click', (e)=>{ if(e.target===orderModal) closeOrder(); });
   document.getElementById('addToolBtn').addEventListener('click', ()=>{
@@ -1421,5 +1439,5 @@ const TOOLS = [
   refreshUI();
 </script>
 <script>(function(){function c(){var b=a.contentDocument||(a.contentWindow&&a.contentWindow.document);if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a37b4c3cfa66f115',t:'MTc4ODg0MjY2NA=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script><script type="module" src="https://static.cloudflareinsights.com/beacon.min.js/v31edd6df95cf4e85bb4c19e7a9bdbcba1788362987495" integrity="sha512-iIg7k2xntmwu6/uSb5tpc/hySgZc4eoL31yB29W6tJFo2akwjPWcEqnCEdJvGexCL0KEQwVYv5BlowfhVz26hg==" data-cf-beacon='{"version":"2024.11.0","token":"1954b47c125f43f8b4338b3c4f804e4f","spa":2}' crossorigin="anonymous"></script>
-</body>
+<script>(function(){function c(){var b=a.contentDocument||(a.contentWindow&&a.contentWindow.document);if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a3abcb4ecb98f11b',t:'MTc4OTM1MTE4NQ=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
 </html>
