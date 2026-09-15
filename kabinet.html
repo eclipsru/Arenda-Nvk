@@ -49,7 +49,6 @@
   .nav-phone .tel{font-weight:800;font-size:17px;white-space:nowrap}
   /* Таблички в шапке — одного размера на всех страницах (десктоп) */
   @media(min-width:769px){ .nav-phone .btn{width:108px;padding-left:0;padding-right:0;display:inline-flex;align-items:center;justify-content:center} }
-  @media(min-width:769px){ .nav-phone #servLink{display:none !important} }
   .btn{display:inline-block;background:var(--orange);color:#fff;font-weight:700;padding:11px 20px;border-radius:10px;border:none;cursor:pointer;transition:.15s;font-size:15px}
   .btn:hover{background:var(--orange-dark)}
   .btn.outline{background:transparent;color:var(--orange);border:2px solid var(--orange)}
@@ -303,19 +302,16 @@
       .nav-phone #userBox{gap:8px;flex-wrap:nowrap}
       .nav-phone #userBox span{display:none}
       .nav-phone #authBtn,
-      .nav-phone #userBox #servLink,
       .nav-phone #userBox #cabLink,
       .nav-phone #userBox #logoutBtn{display:inline-flex;align-items:center;justify-content:center;padding:7px 10px;font-size:12.5px;line-height:1.2;white-space:nowrap;flex:0 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis}
     }
     @media(max-width:430px){
       .nav-phone #userBox{gap:5px}
       .nav-phone #authBtn,
-      .nav-phone #userBox #servLink,
       .nav-phone #userBox #cabLink,
       .nav-phone #userBox #logoutBtn{padding:6px 7px;font-size:11.5px}
     }
     @media(max-width:374px){
-      .nav-phone #userBox #servLink,
       .nav-phone #userBox #cabLink,
       .nav-phone #userBox #logoutBtn,
       .nav-phone #authBtn{padding:5px 6px;font-size:11px}
@@ -333,14 +329,12 @@
     </a>
     <nav class="nav-links">
       <a href="index.html#catalog">Каталог</a>
-      <a href="uslugi.html">Услуги от нас</a>
       <a href="index.html#contact">Контакты</a>
     </nav>
     <div class="nav-phone">
       <button class="btn outline" id="authBtn" type="button">Войти</button>
       <span id="userBox" style="display:none;align-items:center;gap:10px">
         <span id="userName" style="font-weight:700"></span>
-        <a href="uslugi.html" id="servLink" class="btn outline" style="display:none;text-decoration:none">Услуги</a>
         <a href="admin.html" id="cabLink" class="btn outline" style="display:none;text-decoration:none">Кабинет</a>
         <button class="btn outline" id="logoutBtn" type="button">Выйти</button>
       </span>
@@ -536,7 +530,6 @@
       userBox.style.display = 'flex';
       var _em = (sb && sbUser && sbUser.email ? sbUser.email : login).toLowerCase();
       var _adm = _em === 'eclips.ru@mail.ru';
-      document.getElementById('servLink').style.display = 'inline-flex';
       document.getElementById('cabLink').href = _adm ? 'admin.html' : 'kabinet.html';
       document.getElementById('cabLink').style.display = 'inline-flex';
       cabGuest.style.display = 'none';
