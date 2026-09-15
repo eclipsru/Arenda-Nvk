@@ -205,7 +205,6 @@
       <div class="stat"><b id="stCats">0</b><span>категорий</span></div>
       <div class="stat"><b id="stSubs">0</b><span>подкатегорий</span></div>
       <div class="stat"><b id="stHidden">0</b><span>скрыто с сайта</span></div>
-      <div class="stat"><b id="stServ">0</b><span>услуг</span></div>
     </div>
 
     <div id="importBox" class="panel" style="display:none">
@@ -278,6 +277,7 @@
     </section>
 
 
+  </section>
 </main>
 
 <div id="toast" class="toast"></div>
@@ -663,11 +663,6 @@
   // ====== ДОБАВЛЕНИЕ ИНСТРУМЕНТА ======
   function onCatChange(){ fillSubSelect(); rebuildExtraMultis(); }
   $('tCat').addEventListener('change', onCatChange);
-  $('svPhoto').addEventListener('change', ()=>{
-    const f = $('svPhoto').files[0];
-    if(f){ $('svPreview').src = URL.createObjectURL(f); $('svPreview').style.display='inline-block'; }
-    else { $('svPreview').style.display='none'; }
-  });
   $('tPhoto').addEventListener('change', ()=>{
     const f = $('tPhoto').files[0];
     if(f){ $('tPreview').src = URL.createObjectURL(f); $('tPreview').style.display='inline-block'; }
