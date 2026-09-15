@@ -1,6 +1,6 @@
 # APK-ИНСТРУКЦИЯ — приложение «Прокат Инструмента» v2.0 (нативное)
 
-Файл приложения: **ProkatInstrumenta.apk** (лежит в этой папке, а также на сайте — скачивается по кнопке в админ-кабинете). Версия **4.1 (versionCode 10)**.
+Файл приложения: **ProkatInstrumenta.apk** (лежит в этой папке, а также на сайте — скачивается по кнопке в админ-кабинете). Версия **4.2 (versionCode 11)**.
 
 ## Что это за версия
 
@@ -60,7 +60,7 @@
 Внизу экрана входа написана версия приложения (например, «версия 2.3»). Если цифра старее — установите свежий APK с сайта.
 
 ## Технические данные
-- Пакет: ru.prokatnvsk.app, версия 4.1 (versionCode 10), minSdk 21 (Android 5.0), targetSdk 34
+- Пакет: ru.prokatnvsk.app, версия 4.2 (versionCode 11), minSdk 21 (Android 5.0), targetSdk 34
 - Подпись: SHA-256 6d077a926738f40b025ac98a0594de2b06e371e16599faacd89fc6ba4c44d606 (схемы v1 + v2 + v3)
 - Сервер: Supabase (тот же проект, что и сайт); заявка — RPC submit_order; вход — Supabase Auth
 - Исходники: папка android-app/ (res/layout — экраны, src — MainActivity.java; сборка: aapt2 → javac → d8 → zipalign → apksigner)
