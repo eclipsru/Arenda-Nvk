@@ -49,7 +49,6 @@
   .nav-phone .tel{font-weight:800;font-size:17px;white-space:nowrap}
   /* Таблички в шапке — одного размера на всех страницах (десктоп) */
   @media(min-width:769px){ .nav-phone .btn{width:108px;padding-left:0;padding-right:0;display:inline-flex;align-items:center;justify-content:center} }
-  @media(min-width:769px){ .nav-phone #servLink{display:none !important} }
   .btn{display:inline-block;background:var(--orange);color:#fff;font-weight:700;padding:11px 20px;border-radius:10px;border:none;cursor:pointer;transition:.15s;font-size:15px}
   .btn:hover{background:var(--orange-dark)}
   .btn.outline{background:transparent;color:var(--orange);border:2px solid var(--orange)}
@@ -419,7 +418,6 @@
     .nav-phone .tel{display:none}
     .nav-phone #userBox{gap:8px;flex-wrap:nowrap}
     .nav-phone #userBox span{display:none}
-    .nav-phone #userBox #servLink,
     .nav-phone #userBox #cabLink,
     .nav-phone #userBox #logoutBtn{display:inline-flex;align-items:center;justify-content:center;padding:7px 10px;font-size:12.5px;line-height:1.2;white-space:nowrap;flex:0 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis}
     .nav-phone{gap:6px;flex:none;flex-shrink:0}
@@ -431,21 +429,19 @@
     .logo > span:last-child{display:block;line-height:1.15;min-width:0;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
     .logo > span:last-child small{display:block;font-weight:700;font-size:9.5px;color:var(--orange);letter-spacing:.03em;overflow:hidden;text-overflow:ellipsis}
 
-    /* Тесные экраны: «Услуги», «Кабинет» и «Выйти» в один ряд — уменьшаем, чтобы поместились */
+    /* Тесные экраны: «Кабинет» и «Выйти» в один ряд — уменьшаем, чтобы поместились */
     @media(max-width:430px){
       .nav-phone #userBox{gap:5px}
       .nav-phone #authBtn,
-      .nav-phone #userBox #servLink,
       .nav-phone #userBox #cabLink,
       .nav-phone #userBox #logoutBtn{padding:6px 7px;font-size:11.5px;line-height:1.2}
     }
 
-    /* Очень узкие экраны: поджимаем кнопки, чтобы «Услуги», «Кабинет» и «Выйти» всегда были видны */
+    /* Очень узкие экраны: поджимаем кнопки, чтобы «Кабинет» и «Выйти» всегда были видны */
     @media(max-width:374px){
       .nav{gap:6px}
       .nav-phone{gap:4px}
       .nav-phone #authBtn,
-      .nav-phone #userBox #servLink,
       .nav-phone #userBox #cabLink,
       .nav-phone #userBox #logoutBtn{padding:5px 6px;font-size:11px;line-height:1.2}
       .logo{font-size:13px;gap:6px}
@@ -516,14 +512,12 @@
     </a>
     <nav class="nav-links">
       <a href="#catalog">Каталог</a>
-      <a href="uslugi.html">Услуги от нас</a>
       <a href="#contact">Контакты</a>
     </nav>
     <div class="nav-phone">
       <button class="btn outline" id="authBtn" type="button">Войти</button>
       <span id="userBox" style="display:none;align-items:center;gap:10px">
         <span id="userName" style="font-weight:700"></span>
-        <a href="uslugi.html" id="servLink" class="btn outline" style="display:none;text-decoration:none">Услуги</a>
         <a href="admin.html" id="cabLink" class="btn outline" style="display:none;text-decoration:none">Кабинет</a>
         <button class="btn outline" id="logoutBtn" type="button">Выйти</button>
       </span>
@@ -1600,7 +1594,6 @@ const TOOLS = [
   let currentUserName = '';
   let currentUserPhone = '';
   const cabLink = document.getElementById('cabLink');
-  const servLink = document.getElementById('servLink');
 
   // Владелец сайта — тот, чей e-mail совпадает с CONFIG.ADMIN_EMAIL
   function isAdminUser(){
@@ -1681,7 +1674,6 @@ const TOOLS = [
       userName.textContent = 'Привет, ' + name + '!';
       authBtn.style.display='none';
       userBox.style.display='flex';
-      servLink.style.display='inline-flex';
       const isAdminNow = isAdminUser() || demoAdmin;
       cabLink.href = isAdminNow ? 'admin.html' : 'kabinet.html';
       cabLink.style.display = 'inline-flex';
@@ -1690,7 +1682,6 @@ const TOOLS = [
       currentUserPhone = '';
       authBtn.style.display='inline-block';
       userBox.style.display='none';
-      servLink.style.display='none';
       cabLink.style.display='none';
     }
     const phoneInput = document.getElementById('phone');
@@ -1844,7 +1835,7 @@ const TOOLS = [
       sbUser = session ? session.user : null; refreshUI();
     });
   }
-  // Ссылки вида index.html?login=1 (например, со страницы Услуг) — сразу открываем вход
+  // Ссылки вида index.html?login=1 — сразу открываем вход
   // Гостю сразу показываем красивый экран входа (один раз за визит)
   try{
     const qs = new URLSearchParams(location.search);
