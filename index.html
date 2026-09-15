@@ -1813,9 +1813,14 @@ const TOOLS = [
     });
   }
   // Ссылки вида index.html?login=1 (например, со страницы Услуг) — сразу открываем вход
+  // Гостю сразу показываем красивый экран входа (один раз за визит)
   try{
     const qs = new URLSearchParams(location.search);
     if(qs.has('login') && !isAuthed()){ setMode('login'); openModal(); }
+    else if(!isAuthed() && !sessionStorage.getItem('authAutoShown')){
+      sessionStorage.setItem('authAutoShown','1');
+      setTimeout(function(){ if(!isAuthed() && !modal.classList.contains('open')){ setMode('login'); openModal(); } }, 1200);
+    }
   }catch(e){}
 
   // ====== КАТАЛОГ ИЗ БАЗЫ (управляется в личном кабинете admin.html) ======
