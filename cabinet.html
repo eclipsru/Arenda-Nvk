@@ -108,7 +108,7 @@ textarea.inp{resize:vertical;min-height:70px}
 .thr .nm{font-weight:600;font-size:14.5px}
 .thr .ms{color:var(--g2);font-size:13px;margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:200px}
 .thr .un{min-width:20px;height:20px;border-radius:10px;background:var(--or);color:#fff;font-size:11.5px;font-weight:700;display:flex;align-items:center;justify-content:center;padding:0 6px;margin-left:auto}
-.msgs{padding-bottom:10px}
+.msgs{padding:6px 14px 100px}.chdr{display:flex;align-items:center;gap:11px;padding:10px 14px;border-bottom:1px solid var(--line)}.chdr .tt{flex:1;font-weight:700;font-size:15px}
 .msg{max-width:78%;margin-top:8px;padding:9px 12px;border-radius:14px;font-size:14.5px;line-height:1.4;white-space:pre-wrap;word-break:break-word}
 .msg.me{background:var(--ord);color:#fff;margin-left:auto;border-bottom-right-radius:4px}
 .msg.ot{background:var(--card);border:1px solid var(--line);border-bottom-left-radius:4px}
@@ -139,14 +139,63 @@ textarea.inp{resize:vertical;min-height:70px}
 .hub::-webkit-scrollbar{display:none}
 .hub button{flex:0 0 auto;background:var(--card);border:1px solid var(--line);color:var(--gr);font-size:13px;font-weight:700;padding:9px 14px;border-radius:20px}
 .hub button.on{background:var(--ord);border-color:var(--ord);color:#fff}
+
+/* ================== ДЕСКТОП ================== */
+#side{display:none}
+@media(min-width:800px){
+  .app{max-width:none;box-shadow:none}
+  #side{display:flex;flex-direction:column;position:fixed;z-index:30;left:0;top:0;bottom:0;width:234px;background:#12151B;border-right:1px solid var(--line);padding:18px 14px 14px;gap:4px}
+  #side .slogo{display:flex;gap:11px;align-items:center;margin-bottom:16px;padding:0 6px}
+  #side .slogo img{width:44px;height:44px;border-radius:11px;border:1px solid var(--line)}
+  #side .slogo b{font-size:17px;display:block;line-height:1.2}
+  #side .slogo span{color:var(--g2);font-size:11px}
+  #side>button{display:flex;align-items:center;gap:10px;background:none;color:var(--gr);font-size:14.5px;font-weight:600;padding:11px 12px;border-radius:10px;text-align:left}
+  #side>button:hover{background:var(--card);color:var(--tx)}
+  #side>button.on{background:#2A2013;color:var(--or)}
+  #side .addbtn{background:var(--ord);color:#fff!important;text-align:center;justify-content:center;margin-top:12px}
+  #side .sfoot{margin-top:auto;display:flex;justify-content:space-between;align-items:center;color:var(--g2);font-size:12.5px;padding:6px}
+  #side .sfoot a{color:var(--or);cursor:pointer;font-weight:700}
+  #main{margin-left:234px}
+  .hdr,.nav{display:none!important}
+  .scr{padding:22px 30px 60px;max-width:1180px}
+  .grid{grid-template-columns:repeat(auto-fill,minmax(215px,1fr));gap:14px}
+  .mask{align-items:center;justify-content:center}
+  .sheet{border-radius:16px;max-width:620px}
+  .cbar{left:auto;right:44px;transform:none;bottom:30px;max-width:430px}
+  .stats{grid-template-columns:repeat(4,1fr)}
+  #auth{padding-top:6vh}
+  .abox{width:470px;margin:0 auto;background:var(--card);border:1px solid var(--line);border-radius:18px;overflow:hidden;padding-bottom:8px}
+  .chatwrap{display:flex;height:100vh}
+  .clist{width:330px;flex:0 0 330px;border-right:1px solid var(--line);overflow-y:auto;padding:14px}
+  .clist .thr{margin-top:0;margin-bottom:10px}
+  .clist .thr.on{border-color:var(--or)}
+  .cpane{flex:1;display:flex;flex-direction:column;min-width:0}
+  .cpane .chdr{display:flex;align-items:center;gap:11px;padding:12px 22px;border-bottom:1px solid var(--line)}
+  .cpane .chdr .tt{flex:1;font-weight:700;font-size:15.5px}
+  .cpane .msgs{flex:1;overflow-y:auto;padding:16px 26px}
+  .cpane .ibar{position:static;transform:none;max-width:none;border:0;border-top:1px solid var(--line);background:var(--bg)}
+  #lst{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+  #lst .card{margin-top:0}
+  .hub{flex-wrap:wrap}
+}
 </style>
 </head>
 <body>
 <div class="app" id="app">
   <div id="splash"><img src="iva_logo.png" alt=""><div>Ива</div></div>
 
-  <div id="auth" class="hide">
-    <div class="hero"><img src="iva_logo.png" style="width:64px;height:64px;border-radius:14px;border:1px solid #262B35"><div><b style="font-size:19px;line-height:1.3;display:block">Ива-Инструмент<br>в аренду</b></div></div>
+  <aside id="side" class="hide">
+      <div class="slogo"><img src="iva_logo.png" alt=""><div><b>Ива</b><span>Инструмент в аренду</span></div></div>
+      <button data-n="home" class="on">Главная</button>
+      <button data-n="chat">Чат</button>
+      <button data-n="orders">Заявки</button>
+      <button data-n="cab">Кабинет</button>
+      <button data-n="plus" class="addbtn">＋ Добавить инструмент</button>
+      <div class="sfoot"><span id="whoami"></span><a id="btnOut2">Выйти</a></div>
+    </aside>
+
+    <div id="auth" class="hide">
+    <div class="abox"><div class="hero"><img src="iva_logo.png" style="width:64px;height:64px;border-radius:14px;border:1px solid #262B35"><div><b style="font-size:19px;line-height:1.3;display:block">Ива-Инструмент<br>в аренду</b></div></div>
     <div style="padding:16px 20px 40px">
       <div class="tabs" id="authTabs"><span class="on" data-t="in">Вход</span><span data-t="up">Регистрация</span></div>
       <div class="err" id="authErr"></div>
@@ -160,7 +209,7 @@ textarea.inp{resize:vertical;min-height:70px}
       <span class="fgt hide" id="fgt">Забыли пароль?</span>
       <button class="big" id="authBtn">Войти</button>
       <div class="link" id="authSwitch">Создать аккаунт</div>
-    </div>
+    </div></div>
   </div>
 
   <div id="main" class="hide">
@@ -274,13 +323,14 @@ $('authBtn').onclick=async function(){
   b.textContent=regMode?'Создать аккаунт':'Войти';b.disabled=false;
 };
 $('aPass').addEventListener('keydown',function(e){if(e.key==='Enter')$('authBtn').click()});
-$('btnOut').onclick=function(){
+function doLogout(){
   if(!confirm('Выйти из аккаунта?'))return;
   S.tok=null;S.ref=null;S.admin=null;S.cart={};S.likes={};
   try{localStorage.removeItem('iva_auth')}catch(e){}
   if(S.pollT){clearInterval(S.pollT);S.pollT=null}
-  $('main').classList.add('hide');$('auth').classList.remove('hide');setReg(false);
-};
+  $('main').classList.add('hide');$('side').classList.add('hide');$('auth').classList.remove('hide');setReg(false);
+}
+$('btnOut').onclick=doLogout;$('btnOut2').onclick=doLogout;
 
 /* ================== СТАРТ ================== */
 (async function boot(){
@@ -294,7 +344,8 @@ $('btnOut').onclick=function(){
   if(S.tok){enter()}else{setTimeout(function(){$('splash').classList.add('hide');$('auth').classList.remove('hide')},400)}
 })();
 async function enter(){
-  $('splash').classList.add('hide');$('auth').classList.add('hide');$('main').classList.remove('hide');
+  $('splash').classList.add('hide');$('auth').classList.add('hide');$('main').classList.remove('hide');$('side').classList.remove('hide');
+  $('whoami').textContent=S.uname||S.me;
   var ac=cget('admins',300000);
   if(ac){S.admin=findMe(ac)}else{loadAdmins()}
   try{
@@ -338,17 +389,14 @@ function isAdmin(){return !!S.admin}
 function isChief(){return S.admin&&S.admin.role==='chief'}
 
 /* ================== НАВИГАЦИЯ ================== */
-$('nav').onclick=function(e){
-  var b=e.target.closest('button');if(!b)return;
-  var n=b.getAttribute('data-n');
-  if(n==='plus'){plusBtn();return}
-  go(n);
-};
+function navClick(e){var b=e.target.closest('button');if(!b)return;var n=b.getAttribute('data-n');if(n==='plus'){plusBtn();return}go(n)}
+$('nav').onclick=navClick;
+$('side').onclick=navClick;
 function plusBtn(){
   if(isAdmin()){S.cabTab='tools';go('cab');setTimeout(function(){toolForm(null)},250)}
   else go('home');
 }
-function navOn(n){var b=document.querySelectorAll('#nav button');for(var i=0;i<b.length;i++){var d=b[i].getAttribute('data-n');b[i].classList.toggle('on',d===n||(n==='cab'&&d==='cab'))}}
+function navOn(n){var b=document.querySelectorAll('#nav button,#side>button');for(var i=0;i<b.length;i++){var d=b[i].getAttribute('data-n');b[i].classList.toggle('on',d===n)}}
 function go(n){
   S.screen=n;if(S.pollT){clearInterval(S.pollT);S.pollT=null}
   if(n==='home')vHome();
@@ -615,9 +663,14 @@ function whoName(em){
   if(em===S.me)return 'Я';
   return em.split('@')[0];
 }
+function isWide(){return window.matchMedia('(min-width:800px)').matches}
 async function vChat(){
   navOn('chat');
-  $('view').innerHTML='<div class="scr"><div class="tabs"><span class="on">Сообщения</span></div><div id="thr"><div class="empt">Загрузка…</div></div></div>';
+  if(isWide()){
+    $('view').innerHTML='<div class="chatwrap"><div class="clist" id="thr"><div class="empt">Загрузка…</div></div><div class="cpane" id="cpane"><div class="empt" style="margin:auto">Выберите чат слева</div></div></div>';
+  }else{
+    $('view').innerHTML='<div class="scr"><div class="tabs"><span class="on">Сообщения</span></div><div id="thr"><div class="empt">Загрузка…</div></div></div>';
+  }
   try{
     var msgs=await api('/rest/v1/app_messages?select=id,from_email,to_email,text,is_read,created_at&order=created_at.desc&limit=200&or=(from_email.eq.'+encodeURIComponent(S.me)+',to_email.eq.'+encodeURIComponent(S.me)+')');
     var th={};
@@ -653,17 +706,28 @@ async function loadUnread(){
 async function openChatWith(who,prefill){
   who=(who||OWNER_EMAIL).toLowerCase();
   S.chatWith=who;if(S.pollT){clearInterval(S.pollT);S.pollT=null}
-  navOn('chat');$('nav').style.display='none';
-  $('view').innerHTML='<div class="hdr" style="position:static"><span class="out" id="bk" style="padding:6px 10px 6px 0">←</span><div class="ava" style="width:34px;height:34px;flex:0 0 34px;font-size:14px">'+esc((whoName(who)[0]||'?').toUpperCase())+'</div><div class="tt">'+esc(whoName(who))+'</div></div><div class="scr msgs" id="msgs" style="padding-top:4px"><div class="empt">Загрузка…</div></div>'
+  var wide=isWide();
+  var hh='<div class="chdr">'+(wide?'':'<span class="out" id="bk" style="padding:6px 10px 6px 0">←</span>')
+  +'<div class="ava" style="width:36px;height:36px;flex:0 0 36px;font-size:15px">'+esc((whoName(who)[0]||'?').toUpperCase())+'</div>'
+  +'<div class="tt">'+esc(whoName(who))+'</div></div>'
+  +'<div class="msgs" id="msgs"><div class="empt">Загрузка…</div></div>'
   +'<div class="ibar"><input id="mIn" placeholder="Сообщение…" autocomplete="off"><button class="send" id="mSend"><svg viewBox="0 0 24 24"><path d="M2 21 23 12 2 3l4 8 10 1-10 1z"/></svg></button></div>';
-  $('bk').onclick=function(){closeChat()};
+  if(wide){
+    $('cpane').innerHTML=hh;
+    var ths=document.querySelectorAll('#thr .thr');
+    for(var i=0;i<ths.length;i++)ths[i].classList.toggle('on',ths[i].getAttribute('data-e')===who);
+  }else{
+    navOn('chat');$('nav').style.display='none';
+    $('view').innerHTML=hh;
+  }
+  var bk=$('bk');if(bk)bk.onclick=function(){closeChat()};
   $('mSend').onclick=sendMsg;
   $('mIn').addEventListener('keydown',function(e){if(e.key==='Enter')sendMsg()});
-  if(prefill){$('mIn').value=prefill}
+  if(prefill)$('mIn').value=prefill;
   await drawMsgs();
   api('/rest/v1/app_messages?to_email=eq.'+encodeURIComponent(S.me)+'&from_email=eq.'+encodeURIComponent(who)+'&is_read=eq.false','PATCH',{is_read:true}).catch(function(){});
   S.pollT=setInterval(drawMsgs,5000);
-  if(prefill)setTimeout(function(){$('mIn').focus()},200);
+  if(prefill)setTimeout(function(){var i=$('mIn');if(i)i.focus()},200);
 }
 function closeChat(){
   if(S.pollT){clearInterval(S.pollT);S.pollT=null}
@@ -684,7 +748,7 @@ async function drawMsgs(){
       h+='<div class="msg '+(mine?'me':'ot')+'">'+esc(x.text||'')+(x.img?'<br><img src="'+esc(x.img)+'" style="max-width:100%;border-radius:8px;margin-top:6px">':'')+'<span class="tm">'+tm+(mine?(x.is_read?' ✓✓':' ✓'):'')+'</span></div>';
     }
     el.innerHTML=h||'<div class="empt">Напишите первое сообщение</div>';
-    var sc=document.querySelector('.app');sc.scrollTop=sc.scrollHeight;
+    var mm=$('msgs');if(mm)mm.scrollTop=mm.scrollHeight;
   }catch(e){}
 }
 async function sendMsg(){
