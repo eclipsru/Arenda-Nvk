@@ -142,25 +142,42 @@ textarea.inp{resize:vertical;min-height:70px}
 .hub button{flex:0 0 auto;background:var(--card);border:1px solid var(--line);color:var(--gr);font-size:13px;font-weight:700;padding:9px 14px;border-radius:20px}
 .hub button.on{background:var(--ord);border-color:var(--ord);color:#fff}
 
-/* ================== ДЕСКТОП ================== */
-#side{display:none}
+/* ================== ДЕСКТОП (шапка как у Авито) ================== */
+#tophead{display:none}
 @media(min-width:800px){
   .app{max-width:none;box-shadow:none}
-  #side{display:flex;flex-direction:column;position:fixed;z-index:30;left:0;top:0;bottom:0;width:234px;background:#12151B;border-right:1px solid var(--line);padding:18px 14px 14px;gap:4px}
-  #side .slogo{display:flex;gap:11px;align-items:center;margin-bottom:16px;padding:0 6px}
-  #side .slogo img{width:44px;height:44px;border-radius:11px;border:1px solid var(--line)}
-  #side .slogo b{font-size:17px;display:block;line-height:1.2}
-  #side .slogo span{color:var(--g2);font-size:11px}
-  #side>button{display:flex;align-items:center;gap:10px;background:none;color:var(--gr);font-size:14.5px;font-weight:600;padding:11px 12px;border-radius:10px;text-align:left}
-  #side>button:hover{background:var(--card);color:var(--tx)}
-  #side>button.on{background:#2A2013;color:var(--or)}
-  #side .addbtn{background:var(--ord);color:#fff!important;text-align:center;justify-content:center;margin-top:12px}
-  #side .sfoot{margin-top:auto;display:flex;justify-content:space-between;align-items:center;color:var(--g2);font-size:12.5px;padding:6px}
-  #side .sfoot a{color:var(--or);cursor:pointer;font-weight:700}
-  #main{margin-left:234px}
+  #tophead{display:block;position:sticky;top:0;z-index:30;background:#12151B;border-bottom:1px solid var(--line)}
+  .th-in{display:flex;align-items:center;gap:14px;padding:10px 22px;max-width:1280px;margin:0 auto}
+  .th-in .slogo{display:flex;align-items:center;gap:10px;cursor:pointer;flex:0 0 auto}
+  .th-in .slogo img{width:40px;height:40px;border-radius:10px;border:1px solid var(--line)}
+  .th-in .slogo b{font-size:16px;display:block;line-height:1.1}
+  .th-in .slogo span{color:var(--g2);font-size:10.5px}
+  .tsrch{flex:1;display:flex;align-items:center;background:var(--field);border:1px solid var(--fl);border-radius:10px;padding:0 12px;max-width:560px}
+  .tsrch svg{width:16px;height:16px;fill:var(--g2);flex:0 0 16px}
+  .tsrch input{flex:1;background:none;border:0;color:var(--tx);font-size:14.5px;padding:10px 8px}
+  .tsrch input::placeholder{color:var(--g2)}
+  .tnav{display:flex;gap:4px;flex:0 0 auto}
+  .tnav button{position:relative;background:none;color:var(--gr);font-size:14px;font-weight:600;padding:9px 13px;border-radius:9px}
+  .tnav button:hover{background:var(--card);color:var(--tx)}
+  .tnav button.on{color:var(--or);background:#2A2013}
+  .tnav button i{position:absolute;top:5px;right:7px;width:8px;height:8px;border-radius:50%;background:var(--or);display:none}
+  .tnav button i.show{display:block}
+  .place{flex:0 0 auto;background:var(--ord);color:#fff;font-weight:700;font-size:13.5px;padding:10px 16px;border-radius:9px}
+  .place:hover{background:var(--or)}
+  .prof{display:flex;flex-direction:column;align-items:flex-end;margin-left:2px;line-height:1.3;flex:0 0 auto}
+  .prof span{font-size:12.5px;color:var(--tx);max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .prof a{color:var(--g2);font-size:11.5px;cursor:pointer}
+  .prof a:hover{color:var(--or)}
+  .catrow{display:flex;gap:6px;overflow-x:auto;padding:8px 22px;max-width:1280px;margin:0 auto;scrollbar-width:none;border-top:1px solid var(--line)}
+  .catrow::-webkit-scrollbar{display:none}
+  .catrow button{flex:0 0 auto;background:none;border:1px solid transparent;color:var(--gr);font-size:13px;font-weight:600;padding:7px 12px;border-radius:18px}
+  .catrow button:hover{color:var(--tx);background:var(--card)}
+  .catrow button.on{background:var(--ord);color:#fff}
+  #main{margin-left:0}
   .hdr,.nav{display:none!important}
-  .scr{padding:22px 30px 60px;max-width:1180px}
-  .grid{grid-template-columns:repeat(auto-fill,minmax(215px,1fr));gap:14px}
+  .scr .srch{display:none}
+  .scr{padding:22px 30px 60px;max-width:1280px;margin:0 auto}
+  .grid{grid-template-columns:repeat(auto-fill,minmax(205px,1fr));gap:14px}
   .mask{align-items:center;justify-content:center}
   .sheet{border-radius:16px;max-width:620px}
   .cbar{left:auto;right:44px;transform:none;bottom:30px;max-width:430px}
@@ -186,15 +203,20 @@ textarea.inp{resize:vertical;min-height:70px}
 <div class="app" id="app">
   <div id="splash"><img src="iva_logo.png" alt=""><div>Ива</div></div>
 
-  <aside id="side" class="hide">
-      <div class="slogo"><img src="iva_logo.png" alt=""><div><b>Ива</b><span>Инструмент в аренду</span></div></div>
-      <button data-n="home" class="on">Главная</button>
-      <button data-n="chat">Чат</button>
-      <button data-n="orders">Заявки</button>
-      <button data-n="cab">Кабинет</button>
-      <button data-n="plus" class="addbtn">＋ Добавить инструмент</button>
-      <div class="sfoot"><span id="whoami"></span><a id="btnOut2">Выйти</a></div>
-    </aside>
+  <header id="tophead" class="hide">
+      <div class="th-in">
+        <div class="slogo" data-n="home"><img src="iva_logo.png" alt=""><div><b>Ива</b><span>Инструмент в аренду</span></div></div>
+        <div class="tsrch"><svg viewBox="0 0 24 24"><path d="M10 2a8 8 0 1 0 4.9 14.3l5.4 5.4 1.4-1.4-5.4-5.4A8 8 0 0 0 10 2zm0 2a6 6 0 1 1 0 12 6 6 0 0 1 0-12z"/></svg><input id="tq" placeholder="Поиск инструментов" autocomplete="off"></div>
+        <nav class="tnav">
+          <button data-n="chat">Чат<i id="chatDot2"></i></button>
+          <button data-n="orders">Заявки</button>
+          <button data-n="cab">Кабинет</button>
+        </nav>
+        <button class="place" data-n="plus">＋ Разместить</button>
+        <div class="prof"><span id="whoami"></span><a id="btnOut2">Выйти</a></div>
+      </div>
+      <div class="catrow" id="catRow"></div>
+    </header>
 
     <div id="auth" class="hide">
     <div class="abox"><div class="hero"><img src="iva_logo.png" style="width:64px;height:64px;border-radius:14px;border:1px solid #262B35"><div><b style="font-size:19px;line-height:1.3;display:block">Ива-Инструмент<br>в аренду</b></div></div>
@@ -330,7 +352,7 @@ function doLogout(){
   S.tok=null;S.ref=null;S.admin=null;S.cart={};S.likes={};
   try{localStorage.removeItem('iva_auth')}catch(e){}
   if(S.pollT){clearInterval(S.pollT);S.pollT=null}
-  $('main').classList.add('hide');$('side').classList.add('hide');$('auth').classList.remove('hide');setReg(false);
+  $('main').classList.add('hide');$('tophead').classList.add('hide');$('auth').classList.remove('hide');setReg(false);
 }
 $('btnOut').onclick=doLogout;$('btnOut2').onclick=doLogout;
 
@@ -346,9 +368,9 @@ $('btnOut').onclick=doLogout;$('btnOut2').onclick=doLogout;
   if(S.tok){enter()}else{setTimeout(function(){$('splash').classList.add('hide');$('auth').classList.remove('hide')},400)}
 })();
 async function enter(){
-  $('splash').classList.add('hide');$('auth').classList.add('hide');$('main').classList.remove('hide');$('side').classList.remove('hide');
+  $('splash').classList.add('hide');$('auth').classList.add('hide');$('main').classList.remove('hide');$('tophead').classList.remove('hide');
   $('whoami').textContent=S.uname||S.me;
-  var ab=document.querySelector('#side .addbtn');if(ab)ab.style.display=isAdmin()?'':'none';
+  var ab=document.querySelector('#tophead .place');if(ab)ab.style.display=isAdmin()?'':'none';
   var ac=cget('admins',300000);
   if(ac){S.admin=findMe(ac)}else{loadAdmins()}
   try{
@@ -392,14 +414,14 @@ function isAdmin(){return !!S.admin}
 function isChief(){return S.admin&&S.admin.role==='chief'}
 
 /* ================== НАВИГАЦИЯ ================== */
-function navClick(e){var b=e.target.closest('button');if(!b)return;var n=b.getAttribute('data-n');if(n==='plus'){plusBtn();return}go(n)}
+function navClick(e){var b=e.target.closest('[data-n]');if(!b)return;var n=b.getAttribute('data-n');if(n==='plus'){plusBtn();return}go(n)}
 $('nav').onclick=navClick;
-$('side').onclick=navClick;
+$('tophead').onclick=navClick;
 function plusBtn(){
   if(isAdmin()){S.cabTab='tools';go('cab');setTimeout(function(){toolForm(null)},250)}
   else go('home');
 }
-function navOn(n){var b=document.querySelectorAll('#nav button,#side>button');for(var i=0;i<b.length;i++){var d=b[i].getAttribute('data-n');b[i].classList.toggle('on',d===n)}}
+function navOn(n){var b=document.querySelectorAll('#nav button,#tophead .tnav button');for(var i=0;i<b.length;i++){var d=b[i].getAttribute('data-n');b[i].classList.toggle('on',d===n)}}
 function go(n){
   S.screen=n;if(S.pollT){clearInterval(S.pollT);S.pollT=null}
   if(n==='home')vHome();
@@ -413,6 +435,8 @@ function go(n){
 function catTitle(key){for(var i=0;i<S.cats.length;i++)if(S.cats[i].key===key)return S.cats[i].title;return key}
 function subTitle(cat,key){for(var i=0;i<S.subs.length;i++){var s=S.subs[i];if(s.cat===cat&&s.key===key)return s.title}for(var j=0;j<S.subs.length;j++)if(S.subs[j].key===key)return S.subs[j].title;return key}
 function myTools(){var lm=S.limited||[];return S.tools.filter(function(t){return lm.indexOf((t.owner_email||'').toLowerCase())<0})}
+function renderCatRow(){var cr=$('catRow');if(!cr)return;var h='<button class="'+(S.cat===''?'on':'')+'" data-c="">Все</button>';for(var i=0;i<S.cats.length;i++){var c=S.cats[i];h+='<button class="'+(S.cat===c.key?'on':'')+'" data-c="'+esc(c.key)+'">'+esc(c.title)+'</button>'}cr.innerHTML=h;cr.onclick=function(e){var b=e.target.closest('[data-c]');if(!b)return;S.cat=b.getAttribute('data-c');S.sub='';go('home')}}
+function hdrSearch(){var tq=$('tq');if(!tq)return;tq.value=S.q;tq.oninput=function(){S.q=this.value;var g=$('grid');if(S.screen==='home'&&g)g.innerHTML=tilesHtml();else if(S.screen!=='home'&&this.value.trim())go('home')}}
 function vHome(){
   navOn('home');
   var h='<div class="scr"><div class="srch"><input id="q" placeholder="Поиск: дрель, сварка…" value="'+esc(S.q)+'" autocomplete="off"></div><div class="chips" id="chips">';
@@ -425,6 +449,7 @@ function vHome(){
   h+='<div class="grid" id="grid">'+tilesHtml()+'</div><div id="cbar"></div></div>';
   $('view').innerHTML=h;
   $('q').oninput=function(){S.q=this.value;var g=$('grid');if(g)g.innerHTML=tilesHtml()};
+  renderCatRow();hdrSearch();
   $('chips').onclick=function(e){var b=e.target.closest('.chip');if(!b)return;S.cat=b.getAttribute('data-c');S.sub='';go('home')};
   var sc2=$('subchips');if(sc2)sc2.onclick=function(e){var b=e.target.closest('.chip');if(!b)return;S.sub=b.getAttribute('data-s');go('home')};
   cartBar();
@@ -704,6 +729,7 @@ async function loadUnread(){
   try{
     var u=await api('/rest/v1/app_messages?select=id&to_email=eq.'+encodeURIComponent(S.me)+'&is_read=eq.false&limit=50');
     $('chatDot').classList.toggle('hide',!(u&&u.length));
+    var d2=$('chatDot2');if(d2)d2.classList.toggle('show',!!(u&&u.length));
   }catch(e){}
 }
 async function openChatWith(who,prefill){
