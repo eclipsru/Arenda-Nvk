@@ -1,60 +1,117 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="ru">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Прокат Инструмента — приложение для аренды инструмента в Новочеркасске</title>
-<meta name="description" content="Мобильное приложение Прокат Инструмента: аренда электро- и бензоинструмента в Новочеркасске. Каталог с ценами и залогами, доставка, онлайн-заявки, оплата комиссии для арендодателей.">
+<meta name="theme-color" content="#101217">
+<title>Ива — Инструмент в аренду, Новочеркасск</title>
+<meta name="description" content="Прокат инструмента «Ива» в Новочеркасске: дрели, перфораторы, сварочное оборудование и другой инструмент в аренду. Цены за сутки, доставка, залог возвратный.">
 <style>
-  body{margin:0;background:#101217;color:#F2F4F8;font-family:Arial,Helvetica,sans-serif;line-height:1.5}
-  .wrap{max-width:720px;margin:0 auto;padding:32px 20px 48px}
-  h1{font-size:26px;margin:8px 0 4px;color:#FFFFFF}
-  .sub{color:#FF8F1F;font-weight:bold;font-size:14px;letter-spacing:1px}
-  p{color:#C9CEDA;font-size:15px}
-  .card{background:#1A1D24;border:1px solid #262B35;border-radius:12px;padding:18px 20px;margin:16px 0}
-  .btn{display:inline-block;background:#FF8F1F;color:#fff;text-decoration:none;font-weight:bold;
-       padding:14px 28px;border-radius:10px;font-size:16px;margin:6px 0}
-  .note{color:#9AA1B0;font-size:13px}
-  ul{color:#C9CEDA;font-size:15px}
-  b{color:#F2F4F8}
-  .price{color:#FF8F1F;font-weight:bold}
+:root{--bg:#101217;--card:#1A1D24;--line:#262B35;--or:#FF8F1F;--tx:#F2F4F8;--gr:#9AA1B0;--g2:#6B7080}
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:var(--bg);color:var(--tx);font-family:-apple-system,'Segoe UI',Roboto,Arial,sans-serif}
+a{color:var(--or);text-decoration:none}
+.hd{display:flex;align-items:center;gap:12px;padding:14px 22px;max-width:1180px;margin:0 auto}
+.hd img{width:44px;height:44px;border-radius:11px;border:1px solid var(--line)}
+.hd b{font-size:18px;display:block;line-height:1.15}
+.hd span{color:var(--g2);font-size:11.5px}
+.hd nav{margin-left:auto;display:flex;gap:8px;flex-wrap:wrap}
+.hd nav a{background:var(--card);border:1px solid var(--line);color:var(--tx);font-size:13.5px;font-weight:600;padding:9px 14px;border-radius:10px}
+.hd nav a.hot{background:var(--or);border-color:var(--or);color:#fff}
+.hero{max-width:1180px;margin:0 auto;padding:34px 22px 10px}
+.hero h1{font-size:30px;line-height:1.2}
+.hero h1 em{color:var(--or);font-style:normal}
+.hero p{color:var(--gr);margin-top:10px;font-size:15.5px;max-width:720px;line-height:1.5}
+.hero .btns{display:flex;gap:10px;margin-top:18px;flex-wrap:wrap}
+.hero .btns a{padding:13px 20px;border-radius:12px;font-weight:700;font-size:15px}
+.hero .btns a.main{background:var(--or);color:#fff}
+.hero .btns a.sec{background:var(--card);border:1px solid var(--line);color:var(--tx)}
+.sect{max-width:1180px;margin:0 auto;padding:30px 22px 6px;font-size:21px}
+.grid{max-width:1180px;margin:12px auto 0;padding:0 22px;display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:12px}
+.tile{background:var(--card);border:1px solid var(--line);border-radius:14px;overflow:hidden}
+.tile .ph{width:100%;aspect-ratio:1;object-fit:cover;display:block;background:#12151B}
+.tile .ph.empty{display:flex;align-items:center;justify-content:center}
+.tile .ph.empty svg{width:44px;height:44px;fill:#3A4050}
+.tile .nm{font-size:13.5px;font-weight:600;padding:9px 11px 3px;line-height:1.3}
+.tile .pr{padding:3px 11px 11px;color:var(--or);font-weight:700;font-size:14.5px}
+.tile .pr small{display:block;color:var(--g2);font-weight:500;font-size:11px}
+.feat{max-width:1180px;margin:8px auto 0;padding:0 22px;display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:12px}
+.f{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px}
+.f b{display:block;font-size:14.5px;margin-bottom:5px}
+.f span{color:var(--gr);font-size:13.5px;line-height:1.45}
+.steps{max-width:1180px;margin:8px auto;padding:0 22px;display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:12px}
+.st{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px}
+.st i{display:inline-block;width:30px;height:30px;border-radius:50%;background:var(--or);color:#fff;font-style:normal;font-weight:700;text-align:center;line-height:30px;margin-bottom:9px}
+.st b{display:block;font-size:14.5px;margin-bottom:5px}
+.st span{color:var(--gr);font-size:13.5px;line-height:1.45}
+.ft{border-top:1px solid var(--line);margin-top:36px;padding:22px;color:var(--g2);font-size:13px;line-height:1.7;text-align:center}
+.ft b{color:var(--tx)}
+@media(max-width:640px){.hero h1{font-size:23px}.hd nav a{padding:8px 10px;font-size:12.5px}}
 </style>
 </head>
 <body>
-<div class="wrap">
-  <div class="sub">НОВОЧЕРКАССК</div>
-  <h1>Прокат Инструмента — приложение</h1>
-  <p>Мобильное приложение сервиса проката электро- и бензоинструмента. Каталог инструментов с ценами и возвратным залогом, бронирование и онлайн-заявки, доставка до адреса, чат с арендодателем.</p>
+<header class="hd">
+  <img src="iva_logo.png" alt="Ива">
+  <div><b>Ива</b><span>Инструмент в аренду · Новочеркасск</span></div>
+  <nav>
+    <a href="#katalog">Каталог и цены</a>
+    <a href="offer.html">Оферта</a>
+    <a href="cabinet.html">Кабинет</a>
+    <a class="hot" href="https://eclipsru.github.io/Arenda-Nvk/ProkatInstrumenta.apk">Скачать приложение</a>
+  </nav>
+</header>
 
-  <div class="card">
-    <b>Что внутри:</b>
-    <ul>
-      <li>Каталог инструментов с ценами — аренда от <span class="price">200 ₽/сутки</span> (гайковёрт, перфоратор, болгарка, дрель, циркулярная пила и др.)</li>
-      <li>Услуги площадки и комиссия сервиса для арендодателей — от <span class="price">3–5% от суммы аренды</span></li>
-      <li>Возвратный залог, доставка по городу</li>
-      <li>Онлайн-заявки и чат, история аренд</li>
-    </ul>
+<section class="hero">
+  <h1>Аренда инструмента <em>в Новочеркасске</em></h1>
+  <p>Дрели, перфораторы, болгарки, сварочное оборудование, бетономешалки и десятки других позиций — от 150 ₽ в сутки. Выдача: ул. Маресьева, 36 (8:00–20:00). Доставка по городу. Залог возвратный.</p>
+  <div class="btns">
+    <a class="main" href="#katalog">Смотреть каталог и цены</a>
+    <a class="sec" href="cabinet.html">Заказать онлайн</a>
   </div>
+</section>
 
-  <a class="btn" href="https://eclipsru.github.io/Arenda-Nvk/ProkatInstrumenta.apk">Скачать приложение (Android)</a>
-  <p class="note">Файл .apk, версия 9.7. Для установки разрешите установку из браузера при первом запросе.</p>
+<h2 class="sect" id="katalog">Каталог и цены <span style="font-size:13px;color:#6B7080;font-weight:500">цена указана за сутки аренды</span></h2>
+<div class="grid" id="vit"><div style="color:#6B7080;padding:8px">Загружаем каталог…</div></div>
 
-  <div class="card">
-    <b>Для арендодателей:</b> приём комиссии сервиса и оплата задолженности выполняется в приложении через защищённую систему быстрых платежей (СБП) — данные карты не вводятся в приложении.
-  </div>
-
-  <div class="card">
-    <b>Реквизиты исполнителя</b><br>
-    <span style="color:#C9CEDA">Самозанятый (плательщик налога на профессиональный доход)<br>
-    Галиновский Илья Игоревич<br>
-    ИНН 615015092863<br>
-    г. Новочеркасск<br>
-    Телефон: 8 (908) 173-24-75<br>
-    E-mail: eclips.ru@mail.ru</span><br>
-    <a href="/Arenda-Nvk/offer.html" style="color:#FF8F1F">Публичная оферта об оказании услуг площадки</a>
-  </div>
-
-  <p class="note">Прокат Инструмента · Новочеркасск · ул. Маресьева, 36 · 8 (908) 173-24-75</p>
+<h2 class="sect">Условия аренды</h2>
+<div class="feat">
+  <div class="f"><b>Залог — возвратный</b><span>Залог равен 5×цены аренды в сутки. Возвращаем полностью при возврате и проверке инструмента.</span></div>
+  <div class="f"><b>Доставка</b><span>40 ₽ за километр за каждый инструмент. Самовывоз: ул. Маресьева, 36.</span></div>
+  <div class="f"><b>Оплата</b><span>Наличными или картой при получении. Онлайн-оплата — СБП и картой.</span></div>
+  <div class="f"><b>Выдача</b><span>Ежедневно 8:00–20:00, ул. Маресьева, 36, Новочеркасск. Тел: 8 (908) 173-24-75.</span></div>
 </div>
+
+<h2 class="sect">Как арендовать</h2>
+<div class="steps">
+  <div class="st"><i>1</i><b>Выберите инструмент</b><span>В каталоге на сайте или в приложении — цены указаны за сутки.</span></div>
+  <div class="st"><i>2</i><b>Оставьте заявку</b><span>Онлайн в кабинете или по телефону 8 (908) 173-24-75 — подтвердим наличие и время.</span></div>
+  <div class="st"><i>3</i><b>Получите инструмент</b><span>Самовывоз или доставка. Оформляем выдачу, залог и аренду.</span></div>
+</div>
+
+<footer class="ft">
+  <b>Ива — Инструмент в аренду</b><br>
+  Индивидуальный предприниматель без образования юр. лица (самозанятый): Галиновский Илья Игоревич · ИНН 615015092863<br>
+  Новочеркасск, ул. Маресьева, 36 · 8 (908) 173-24-75 · ежедневно 8:00–20:00<br>
+  <a href="offer.html">Публичная оферта</a> · <a href="cabinet.html">Личный кабинет</a> · <a href="https://eclipsru.github.io/Arenda-Nvk/ProkatInstrumenta.apk">Приложение для Android</a>
+</footer>
+
+<script>
+var SB='https://wdxdeatphizclskfmfxi.supabase.co',KEY='sb_publishable_dtRaEHNNPBFbHFvg8hw9iA_FqJSz9BE';
+function rub(x){x=Math.round(x||0);return String(x).replace(/\B(?=(\d{3})+(?!\d))/g,'\u00A0')+' \u20BD'}
+function esc(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;')}
+fetch(SB+'/rest/v1/tools?select=name,price,deposit,img,descr&active=eq.true&order=sort.asc.nullslast,created_at.desc&limit=60',{headers:{apikey:KEY}})
+.then(function(r){return r.json()})
+.then(function(t){
+  var el=document.getElementById('vit');
+  if(!t||!t.length){el.innerHTML='';return}
+  var h='';
+  for(var i=0;i<t.length;i++){var x=t[i];
+    h+='<div class="tile">'+(x.img?'<img class="ph" loading="lazy" src="'+esc(x.img)+'" alt="">':'<div class="ph empty"><svg viewBox="0 0 24 24"><path d="M21.7 18.3 14 10.6V8a6 6 0 0 0-8-5.7l3.6 3.6-2.8 2.8L3.2 5.1A6 6 0 0 0 8.9 13h2.5l7.7 7.7z"/></svg></div>')
+    +'<div class="nm">'+esc(x.name)+'</div><div class="pr">'+rub(x.price)+'<small>в сутки'+(x.deposit?' · залог '+rub(x.deposit):'')+'</small></div></div>';
+  }
+  el.innerHTML=h;
+})
+.catch(function(){var el=document.getElementById('vit');if(el)el.innerHTML=''})
+</script>
 </body>
 </html>
