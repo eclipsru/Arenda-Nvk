@@ -62,6 +62,11 @@ input,textarea,select{font-family:inherit;outline:none}
 .tile .like{position:absolute;top:8px;right:8px;width:34px;height:34px;border-radius:50%;background:#101217cc;display:flex;align-items:center;justify-content:center}
 .tile .like svg{width:19px;height:19px;fill:none;stroke:#fff;stroke-width:2}
 .tile .like.on svg{fill:var(--or);stroke:var(--or)}
+.catdash{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px;padding-top:10px}
+.dcat{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px;display:flex;flex-direction:column;gap:9px;cursor:pointer}
+.dcat:hover{border-color:var(--fl);background:#1E222B}
+.dic svg{width:27px;height:27px;fill:var(--or)}
+.dcat b{font-size:13.5px;font-weight:600;line-height:1.25}
 /* ---- buttons/inputs generic ---- */
 .btn{background:var(--ord);color:#fff;font-weight:700;font-size:15px;padding:13px 18px;border-radius:12px}
 .btn.sec{background:var(--card);border:1px solid var(--line);color:var(--tx)}
@@ -157,10 +162,13 @@ textarea.inp{resize:vertical;min-height:70px}
   .tsrch input{flex:1;background:none;border:0;color:var(--tx);font-size:14.5px;padding:10px 8px}
   .tsrch input::placeholder{color:var(--g2)}
   .tnav{display:flex;gap:4px;flex:0 0 auto}
-  .tnav button{position:relative;background:none;color:var(--gr);font-size:14px;font-weight:600;padding:9px 13px;border-radius:9px}
+  .tsrch button{flex:0 0 auto;background:var(--ord);color:#fff;font-weight:700;font-size:13px;padding:7px 14px;border-radius:8px;margin-left:6px}
+  .tsrch button:hover{background:var(--or)}
+  .tnav button{position:relative;display:flex;flex-direction:column;align-items:center;gap:3px;background:none;color:var(--gr);font-size:10.5px;font-weight:600;padding:5px 12px;border-radius:9px}
+  .tnav button svg{width:19px;height:19px;fill:currentColor}
   .tnav button:hover{background:var(--card);color:var(--tx)}
   .tnav button.on{color:var(--or);background:#2A2013}
-  .tnav button i{position:absolute;top:5px;right:7px;width:8px;height:8px;border-radius:50%;background:var(--or);display:none}
+  .tnav button i{position:absolute;top:3px;right:8px;width:8px;height:8px;border-radius:50%;background:var(--or);display:none}
   .tnav button i.show{display:block}
   .place{flex:0 0 auto;background:var(--ord);color:#fff;font-weight:700;font-size:13.5px;padding:10px 16px;border-radius:9px}
   .place:hover{background:var(--or)}
@@ -206,11 +214,12 @@ textarea.inp{resize:vertical;min-height:70px}
   <header id="tophead" class="hide">
       <div class="th-in">
         <div class="slogo" data-n="home"><img src="iva_logo.png" alt=""><div><b>Ива</b><span>Инструмент в аренду</span></div></div>
-        <div class="tsrch"><svg viewBox="0 0 24 24"><path d="M10 2a8 8 0 1 0 4.9 14.3l5.4 5.4 1.4-1.4-5.4-5.4A8 8 0 0 0 10 2zm0 2a6 6 0 1 1 0 12 6 6 0 0 1 0-12z"/></svg><input id="tq" placeholder="Поиск инструментов" autocomplete="off"></div>
+        <div class="tsrch"><svg viewBox="0 0 24 24"><path d="M10 2a8 8 0 1 0 4.9 14.3l5.4 5.4 1.4-1.4-5.4-5.4A8 8 0 0 0 10 2zm0 2a6 6 0 1 1 0 12 6 6 0 0 1 0-12z"/></svg><input id="tq" placeholder="Поиск инструментов" autocomplete="off"><button id="tfind">Найти</button></div>
         <nav class="tnav">
-          <button data-n="chat">Чат<i id="chatDot2"></i></button>
-          <button data-n="orders">Заявки</button>
-          <button data-n="cab">Кабинет</button>
+          <button data-n="fav"><svg viewBox="0 0 24 24"><path d="M12 21s-7.5-4.9-10-9.2C.4 8.7 2 5 5.6 5c2 0 3.4 1.1 4.2 2.4h4.4C15 6.1 16.4 5 18.4 5 22 5 23.6 8.7 22 11.8 19.5 16.1 12 21 12 21z"/></svg>Избранное</button>
+          <button data-n="chat"><svg viewBox="0 0 24 24"><path d="M4 4h16a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H8l-5 4V6a2 2 0 0 1 1-1.7z"/></svg>Чат<i id="chatDot2"></i></button>
+          <button data-n="orders"><svg viewBox="0 0 24 24"><path d="M7 4H5L4 6H2v13a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V6h-2l-1-2h-2l1 2H6zM5 8h14v11H5zm4 2h6v2H9z"/></svg>Заявки</button>
+          <button data-n="cab"><svg viewBox="0 0 24 24"><path d="M12 12a4 4 0 1 0-4-4 4 4 0 0 0 4 4zm0 2c-4 0-8 2-8 5v3h16v-3c0-3-4-5-8-5z"/></svg>Кабинет</button>
         </nav>
         <button class="place" data-n="plus">＋ Разместить</button>
         <div class="prof"><span id="whoami"></span><a id="btnOut2">Выйти</a></div>
@@ -414,14 +423,14 @@ function isAdmin(){return !!S.admin}
 function isChief(){return S.admin&&S.admin.role==='chief'}
 
 /* ================== НАВИГАЦИЯ ================== */
-function navClick(e){var b=e.target.closest('[data-n]');if(!b)return;var n=b.getAttribute('data-n');if(n==='plus'){plusBtn();return}go(n)}
+function navClick(e){var b=e.target.closest('[data-n]');if(!b)return;var n=b.getAttribute('data-n');if(n==='plus'){plusBtn();return}if(n==='fav'){S.favOnly=true;S.cat='';S.sub='';S.q='';go('home');return}if(n==='home')S.favOnly=false;go(n)}
 $('nav').onclick=navClick;
 $('tophead').onclick=navClick;
 function plusBtn(){
   if(isAdmin()){S.cabTab='tools';go('cab');setTimeout(function(){toolForm(null)},250)}
   else go('home');
 }
-function navOn(n){var b=document.querySelectorAll('#nav button,#tophead .tnav button');for(var i=0;i<b.length;i++){var d=b[i].getAttribute('data-n');b[i].classList.toggle('on',d===n)}}
+function navOn(n){var b=document.querySelectorAll('#nav button,#tophead .tnav button');for(var i=0;i<b.length;i++){var d=b[i].getAttribute('data-n');b[i].classList.toggle('on',d===n||(n==='home'&&S.favOnly&&d==='fav'))}}
 function go(n){
   S.screen=n;if(S.pollT){clearInterval(S.pollT);S.pollT=null}
   if(n==='home')vHome();
@@ -435,8 +444,9 @@ function go(n){
 function catTitle(key){for(var i=0;i<S.cats.length;i++)if(S.cats[i].key===key)return S.cats[i].title;return key}
 function subTitle(cat,key){for(var i=0;i<S.subs.length;i++){var s=S.subs[i];if(s.cat===cat&&s.key===key)return s.title}for(var j=0;j<S.subs.length;j++)if(S.subs[j].key===key)return S.subs[j].title;return key}
 function myTools(){var lm=S.limited||[];return S.tools.filter(function(t){return lm.indexOf((t.owner_email||'').toLowerCase())<0})}
-function renderCatRow(){var cr=$('catRow');if(!cr)return;var h='<button class="'+(S.cat===''?'on':'')+'" data-c="">Все</button>';for(var i=0;i<S.cats.length;i++){var c=S.cats[i];h+='<button class="'+(S.cat===c.key?'on':'')+'" data-c="'+esc(c.key)+'">'+esc(c.title)+'</button>'}cr.innerHTML=h;cr.onclick=function(e){var b=e.target.closest('[data-c]');if(!b)return;S.cat=b.getAttribute('data-c');S.sub='';go('home')}}
-function hdrSearch(){var tq=$('tq');if(!tq)return;tq.value=S.q;tq.oninput=function(){S.q=this.value;var g=$('grid');if(S.screen==='home'&&g)g.innerHTML=tilesHtml();else if(S.screen!=='home'&&this.value.trim())go('home')}}
+function renderCatRow(){var cr=$('catRow');if(!cr)return;var h='<button class="'+(S.cat===''?'on':'')+'" data-c="">Все</button>';for(var i=0;i<S.cats.length;i++){var c=S.cats[i];h+='<button class="'+(S.cat===c.key?'on':'')+'" data-c="'+esc(c.key)+'">'+esc(c.title)+'</button>'}cr.innerHTML=h;cr.onclick=function(e){var b=e.target.closest('[data-c]');if(!b)return;S.cat=b.getAttribute('data-c');S.sub='';S.favOnly=false;go('home')}}
+function hdrSearch(){var tq=$('tq');if(!tq)return;tq.value=S.q;tq.oninput=function(){S.q=this.value;if(this.value.trim())S.favOnly=false;var g=$('grid');if(S.screen==='home'&&g){g.innerHTML=tilesHtml();var d=$('dash');if(d)d.innerHTML=dashInner()}else if(S.screen!=='home'&&this.value.trim())go('home')};
+  var tf=$('tfind');if(tf)tf.onclick=function(){if(S.screen!=='home')go('home')}}
 function vHome(){
   navOn('home');
   var h='<div class="scr"><div class="srch"><input id="q" placeholder="Поиск: дрель, сварка…" value="'+esc(S.q)+'" autocomplete="off"></div><div class="chips" id="chips">';
@@ -446,14 +456,26 @@ function vHome(){
   if(S.cat){h+='<div class="chips" id="subchips"><button class="chip'+(S.sub===''?' on':'')+'" data-s="">Все виды</button>';
     for(var j=0;j<S.subs.length;j++){var s2=S.subs[j];if(s2.cat!==S.cat)continue;h+='<button class="chip'+(S.sub===s2.key?' on':'')+'" data-s="'+esc(s2.key)+'">'+esc(s2.title)+'</button>'}
     h+='</div>'}
-  h+='<div class="grid" id="grid">'+tilesHtml()+'</div><div id="cbar"></div></div>';
+  h+=(S.favOnly?'<div class="sect">Избранное</div>':'<div id="dash">'+dashInner()+'</div>')+'<div class="grid" id="grid">'+tilesHtml()+'</div><div id="cbar"></div></div>';
   $('view').innerHTML=h;
   $('q').oninput=function(){S.q=this.value;var g=$('grid');if(g)g.innerHTML=tilesHtml()};
   renderCatRow();hdrSearch();
-  $('chips').onclick=function(e){var b=e.target.closest('.chip');if(!b)return;S.cat=b.getAttribute('data-c');S.sub='';go('home')};
+  var dd=$('dash');if(dd)dd.onclick=function(e){var c=e.target.closest('[data-c]');if(!c)return;S.favOnly=false;S.cat=c.getAttribute('data-c');S.sub='';go('home')};
+  $('chips').onclick=function(e){var b=e.target.closest('.chip');if(!b)return;S.cat=b.getAttribute('data-c');S.sub='';S.favOnly=false;go('home')};
   var sc2=$('subchips');if(sc2)sc2.onclick=function(e){var b=e.target.closest('.chip');if(!b)return;S.sub=b.getAttribute('data-s');go('home')};
   cartBar();
 }
+function iconForCat(k){k=(k||'').toLowerCase();
+  if(k.indexOf('свар')>=0)return '<svg viewBox="0 0 24 24"><path d="M13 2 3 14h7l-1 8 10-12h-7z"/></svg>';
+  if(k.indexOf('электр')>=0||k.indexOf('power')>=0||k.indexOf('дрел')>=0||k.indexOf('перфор')>=0)return '<svg viewBox="0 0 24 24"><path d="M16 7V3h-2v4h-4V3H8v4H6v6a6 6 0 0 0 5 5.9V22h2v-3.1A6 6 0 0 0 18 13V7z"/></svg>';
+  if(k.indexOf('бенз')>=0)return '<svg viewBox="0 0 24 24"><path d="M5 3h8a2 2 0 0 1 2 2v16h-2V11H7v10H5V3zm2 2v4h6V5H7zM17 7l4 4v6a2 2 0 0 1-4 0v-4h-2v-2h2V7z"/></svg>';
+  if(k.indexOf('руч')>=0||k.indexOf('инструм')>=0)return '<svg viewBox="0 0 24 24"><path d="M15.5 2.5 21.5 8.5 19 11l-2-2-2 2-3-3 2-2-1.5-1.5zM10.6 9.4 14.6 13.4 5 23l-3-3z"/></svg>';
+  if(k.indexOf('строй')>=0)return '<svg viewBox="0 0 24 24"><path d="M12 2 22 7v10l-10 5L2 17V7zm0 10L4.2 8 12 4.2 19.8 8z"/></svg>';
+  if(k.indexOf('сад')>=0)return '<svg viewBox="0 0 24 24"><path d="M5 21c8 0 14-6 14-16-10 0-16 6-16 14 0 1 .1 1.6.2 2C3 21 3 21 5 21z"/></svg>';
+  return '<svg viewBox="0 0 24 24"><path d="M21.7 18.3 14 10.6V8a6 6 0 0 0-8-5.7l3.6 3.6-2.8 2.8L3.2 5.1A6 6 0 0 0 8.9 13h2.5l7.7 7.7z"/></svg>'}
+function dashInner(){if((S.q||'').trim()||S.cat||S.favOnly)return '';var h='<div class="sect">Категории</div><div class="catdash">';
+  for(var i=0;i<S.cats.length;i++){var c=S.cats[i];h+='<div class="dcat" data-c="'+esc(c.key)+'"><span class="dic">'+iconForCat(c.key)+'</span><b>'+esc(c.title)+'</b></div>'}
+  return h+'</div>'}
 function tilesHtml(){
   var q=S.q.trim().toLowerCase(),out='';
   var list=myTools();
@@ -461,6 +483,7 @@ function tilesHtml(){
     if(S.cat&&t.cat!==S.cat)continue;
     if(S.cat&&S.sub&&t.sub!==S.sub)continue;
     if(q&&(t.name+' '+(t.descr||'')).toLowerCase().indexOf(q)<0)continue;
+    if(S.favOnly&&!S.likes[t.id])continue;
     var im=t.img?esc(t.img):'';
     out+='<div class="tile" data-id="'+t.id+'">'
       +(im?'<img class="ph" loading="lazy" src="'+im+'" alt="">':'<div class="ph"></div>')
