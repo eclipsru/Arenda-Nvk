@@ -148,10 +148,41 @@ textarea.inp{resize:vertical;min-height:70px}
 .hub button.on{background:var(--ord);border-color:var(--ord);color:#fff}
 
 /* ================== ДЕСКТОП (шапка как у Авито) ================== */
-#tophead{display:none}
+#tophead{display:block;background:#12151B;border-bottom:1px solid var(--line);position:sticky;top:0;z-index:30}
+.toprow{background:#0E1116;border-bottom:1px solid var(--line)}
+.tr-in{display:flex;align-items:center;justify-content:flex-end;gap:4px;padding:6px 14px;max-width:1280px;margin:0 auto}
+.tlinks{display:flex;gap:2px;flex-wrap:wrap;justify-content:flex-end}
+.tlinks button{background:none;color:var(--gr);font-size:12.5px;padding:6px 9px;border-radius:8px;position:relative}
+.tlinks button:hover{color:var(--tx);background:var(--card)}
+.tlinks button i{position:absolute;top:3px;right:4px;width:7px;height:7px;background:var(--or);border-radius:50%;display:none}
+.tlinks button i.show{display:block}
+.place{background:var(--ord)!important;color:#fff!important;font-weight:700;font-size:12.5px;padding:7px 13px!important;border-radius:8px;margin-right:6px}
+.place:hover{background:var(--or)!important}
+.uwrap{position:relative;margin-left:4px}
+.uava{width:32px;height:32px;border-radius:50%;background:var(--ord);color:#fff;font-weight:700;border:0;padding:0;overflow:hidden;display:flex;align-items:center;justify-content:center}
+.umenu{position:absolute;right:0;top:calc(100% + 8px);background:var(--card);border:1px solid var(--line);border-radius:12px;min-width:200px;padding:6px;z-index:50;box-shadow:0 14px 40px #000b}
+.umenu b,.umenu a{display:block;padding:10px 12px;border-radius:8px;font-size:14px;cursor:pointer;font-weight:600;color:var(--tx)}
+.umenu b:hover{background:#2A2013;color:var(--or)}
+.umenu a{color:var(--red)}
+.umenu a:hover{background:#2d1113}
+.citybtn{display:flex;align-items:center;gap:6px;background:none;color:var(--tx);font-size:13px;font-weight:600;padding:9px 10px;border-radius:9px;flex:0 0 auto}
+.citybtn:hover{background:var(--card)}
+.citybtn svg{width:14px;height:14px;fill:var(--or);flex:0 0 14px}
+.tsrch-w{position:relative;flex:1;min-width:160px}
+.mega{position:fixed;left:10px;right:10px;top:118px;background:var(--card);border:1px solid var(--line);border-radius:14px;display:flex;min-height:300px;max-height:62vh;box-shadow:0 18px 50px #000c;z-index:45;overflow:hidden}
+.mega-l{width:280px;flex:0 0 280px;overflow-y:auto;border-right:1px solid var(--line);padding:8px}
+.mega-l div{padding:11px 12px;border-radius:9px;cursor:pointer;font-size:14px;font-weight:600;color:var(--tx)}
+.mega-l div.on,.mega-l div:hover{background:#2A2013;color:var(--or)}
+.mega-r{flex:1;overflow-y:auto;padding:14px}
+.mega-r div{padding:9px 12px;border-radius:8px;cursor:pointer;color:var(--gr);font-size:13.5px}
+.mega-r div:hover{background:var(--card);color:var(--tx)}
+.mega-r .ttl{font-size:11.5px;text-transform:uppercase;color:var(--g2);letter-spacing:.4px;padding-bottom:6px;cursor:default}
 @media(min-width:800px){
   .app{max-width:none;box-shadow:none}
-  #tophead{display:block;position:sticky;top:0;z-index:30;background:#12151B;border-bottom:1px solid var(--line)}
+  #tophead{position:sticky}
+  .mega{position:absolute;top:calc(100% + 6px);left:0;right:0}
+  .tr-in{padding:7px 22px}
+  .th-in{padding:10px 22px}
   .th-in{display:flex;align-items:center;gap:14px;padding:10px 22px;max-width:1280px;margin:0 auto}
   .th-in .slogo{display:flex;align-items:center;gap:10px;cursor:pointer;flex:0 0 auto}
   .th-in .slogo img{width:40px;height:40px;border-radius:10px;border:1px solid var(--line)}
@@ -212,17 +243,38 @@ textarea.inp{resize:vertical;min-height:70px}
   <div id="splash"><img src="iva_logo.png" alt=""><div>Ива</div></div>
 
   <header id="tophead" class="hide">
+      <div class="toprow"><div class="tr-in">
+        <nav class="tlinks">
+          <button class="place" data-n="plus">＋ Разместить</button>
+          <button data-n="myads">Мои объявления</button>
+          <button data-n="fav">Избранное</button>
+          <button data-n="notif">Уведомления<i id="notifDot"></i></button>
+          <button data-n="chat">Сообщения<i id="chatDot2"></i></button>
+          <button data-n="cart">Корзина<i id="cartDot"></i></button>
+          <button data-n="likes">Лайки</button>
+          <button data-n="company">Моя компания</button>
+        </nav>
+        <div class="uwrap" id="uwrap">
+          <button class="uava" id="uava"></button>
+          <div class="umenu hide" id="umenu">
+            <b data-n="cab">Кабинет</b>
+            <b data-n="company">Мои данные</b>
+            <b data-n="myads">Мои объявления</b>
+            <b data-n="fav">Избранное</b>
+            <b data-n="notif">Уведомления</b>
+            <b data-n="chat">Сообщения</b>
+            <b data-n="cart">Корзина</b>
+            <a id="btnOut2">Выйти</a>
+          </div>
+        </div>
+      </div></div>
       <div class="th-in">
         <div class="slogo" data-n="home"><img src="iva_logo.png" alt=""><div><b>Ива</b><span>Инструмент в аренду</span></div></div>
-        <div class="tsrch"><svg viewBox="0 0 24 24"><path d="M10 2a8 8 0 1 0 4.9 14.3l5.4 5.4 1.4-1.4-5.4-5.4A8 8 0 0 0 10 2zm0 2a6 6 0 1 1 0 12 6 6 0 0 1 0-12z"/></svg><input id="tq" placeholder="Поиск инструментов" autocomplete="off"><button id="tfind">Найти</button></div>
-        <nav class="tnav">
-          <button data-n="fav"><svg viewBox="0 0 24 24"><path d="M12 21s-7.5-4.9-10-9.2C.4 8.7 2 5 5.6 5c2 0 3.4 1.1 4.2 2.4h4.4C15 6.1 16.4 5 18.4 5 22 5 23.6 8.7 22 11.8 19.5 16.1 12 21 12 21z"/></svg>Избранное</button>
-          <button data-n="chat"><svg viewBox="0 0 24 24"><path d="M4 4h16a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H8l-5 4V6a2 2 0 0 1 1-1.7z"/></svg>Чат<i id="chatDot2"></i></button>
-          <button data-n="orders"><svg viewBox="0 0 24 24"><path d="M7 4H5L4 6H2v13a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V6h-2l-1-2h-2l1 2H6zM5 8h14v11H5zm4 2h6v2H9z"/></svg>Заявки</button>
-          <button data-n="cab"><svg viewBox="0 0 24 24"><path d="M12 12a4 4 0 1 0-4-4 4 4 0 0 0 4 4zm0 2c-4 0-8 2-8 5v3h16v-3c0-3-4-5-8-5z"/></svg>Кабинет</button>
-        </nav>
-        <button class="place" data-n="plus">＋ Разместить</button>
-        <div class="prof"><span id="whoami"></span><a id="btnOut2">Выйти</a></div>
+        <button class="citybtn" id="cityBtn"><svg viewBox="0 0 24 24"><path d="M12 2a7 7 0 0 0-7 7c0 5.2 7 13 7 13s7-7.8 7-13a7 7 0 0 0-7-7zm0 9.5A2.5 2.5 0 1 1 12 6a2.5 2.5 0 0 1 0 5.5z"/></svg><span id="cityName">Новочеркасск</span></button>
+        <div class="tsrch-w">
+          <div class="tsrch"><svg viewBox="0 0 24 24"><path d="M10 2a8 8 0 1 0 4.9 14.3l5.4 5.4 1.4-1.4-5.4-5.4A8 8 0 0 0 10 2zm0 2a6 6 0 1 1 0 12 6 6 0 0 1 0-12z"/></svg><input id="tq" placeholder="Поиск инструментов" autocomplete="off"><button id="tfind">Найти</button></div>
+          <div class="mega hide" id="mega"><div class="mega-l" id="megaL"></div><div class="mega-r" id="megaR"></div></div>
+        </div>
       </div>
       <div class="catrow" id="catRow"></div>
     </header>
@@ -271,7 +323,7 @@ var KEY='sb_publishable_dtRaEHNNPBFbHFvg8hw9iA_FqJSz9BE';
 var SKLAD={lat:47.4526182,lon:40.1008652};
 var OWNER_EMAIL='eclips.ru@mail.ru';
 var DELIV_PER_KM=40;
-var S={tok:null,ref:null,exp:0,me:'',uname:'',uphone:'',admin:null,tools:[],cats:[],subs:[],limited:[],likes:{},cart:{},screen:'home',cat:'',sub:'',q:'',chatWith:null,pollT:null,days:1,delivery:false,daddr:'',dkm:0,dsum:0,cabTab:'tools',ordTab:'act'};
+var S={city:'',tok:null,ref:null,exp:0,me:'',uname:'',uphone:'',admin:null,tools:[],cats:[],subs:[],limited:[],likes:{},cart:{},screen:'home',cat:'',sub:'',q:'',chatWith:null,pollT:null,days:1,delivery:false,daddr:'',dkm:0,dsum:0,cabTab:'tools',ordTab:'act'};
 function $(id){return document.getElementById(id)}
 function esc(s){return (s==null?'':''+s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;')}
 function m(x){x=Math.round(x||0);return String(x).replace(/\B(?=(\d{3})+(?!\d))/g,'\u00A0')+' \u20BD'}
@@ -379,11 +431,13 @@ $('btnOut').onclick=doLogout;$('btnOut2').onclick=doLogout;
 async function enter(){
   $('splash').classList.add('hide');$('auth').classList.add('hide');$('main').classList.remove('hide');$('tophead').classList.remove('hide');
   $('whoami').textContent=S.uname||S.me;
+  var cl2=$('cityName');if(cl2)cl2.textContent=S.city||'Новочеркасск';
+  setUava();
   var ab=document.querySelector('#tophead .place');if(ab)ab.style.display=isAdmin()?'':'none';
   var ac=cget('admins',300000);
   if(ac){S.admin=findMe(ac)}else{loadAdmins()}
   try{
-    var arr=await api('/rest/v1/admins?select=email,role,active,fee_pct,debt_limit,full_name,company,phone,address,org_address,work_hours&email=eq.'+encodeURIComponent(S.me));
+    var arr=await api('/rest/v1/admins?select=email,role,active,fee_pct,debt_limit,full_name,company,phone,address,org_address,work_hours,avatar&email=eq.'+encodeURIComponent(S.me));
     if(arr&&arr.length){S.admin=arr[0];var lst=cget('admins',300000)||[];lst=lst.filter(function(x){return (x.email||'').toLowerCase()!==S.me});lst.push(S.admin);cset('admins',lst)}
   }catch(e){}
   go('home');
@@ -392,11 +446,11 @@ async function enter(){
 }
 function findMe(lst){for(var i=0;i<lst.length;i++){if((lst[i].email||'').toLowerCase()===S.me)return lst[i]}return null}
 async function loadAdmins(){
-  try{var a=await api('/rest/v1/admins?select=email,role,active,fee_pct,debt_limit,full_name,company,phone,address,org_address,work_hours');cset('admins',a);if(!S.admin)S.admin=findMe(a)}catch(e){}
+  try{var a=await api('/rest/v1/admins?select=email,role,active,fee_pct,debt_limit,full_name,company,phone,address,org_address,work_hours,avatar');cset('admins',a);if(!S.admin)S.admin=findMe(a);setUava()}catch(e){}
 }
 async function loadBase(){
   var c=cget('base',180000);
-  if(c){S.tools=c.tools;S.cats=c.cats;S.subs=c.subs;S.limited=c.limited;if(S.screen==='home')go('home');loadLikes()}
+  if(c){S.tools=c.tools;S.cats=c.cats;S.subs=c.subs;S.limited=c.limited;renderMega();if(S.screen==='home')go('home');loadLikes()}
   try{
     var tl=await api('/rest/v1/tools?select=*&active=eq.true&order=sort.asc.nullslast,created_at.desc&limit=500');
     var cl=await api('/rest/v1/cats?select=*&active=eq.true&order=sort.asc.nullslast');
@@ -404,6 +458,7 @@ async function loadBase(){
     var lm=await api('/rest/v1/limited_admins?select=email');
     S.tools=tl;S.cats=cl;S.subs=sc;S.limited=(lm||[]).map(function(x){return (x.email||'').toLowerCase()});
     cset('base',{tools:tl,cats:cl,subs:sc,limited:S.limited});
+    renderMega();
     if(S.screen==='home')go('home');
   }catch(e){if(!c)toast('Не удалось загрузить каталог: '+e.message)}
   loadLikes();
@@ -423,27 +478,80 @@ function isAdmin(){return !!S.admin}
 function isChief(){return S.admin&&S.admin.role==='chief'}
 
 /* ================== НАВИГАЦИЯ ================== */
-function navClick(e){var b=e.target.closest('[data-n]');if(!b)return;var n=b.getAttribute('data-n');if(n==='plus'){plusBtn();return}if(n==='fav'){S.favOnly=true;S.cat='';S.sub='';S.q='';go('home');return}if(n==='home')S.favOnly=false;go(n)}
+var CITIES=['Новочеркасск','Ростов-на-Дону','Аксай','Батайск','Азов','Таганрог','Шахты','Новошахтинск','Красный Сулин','Волгодонск','Сальск','Миллерово'];
+function navClick(e){var b=e.target.closest('[data-n]');if(!b)return;var n=b.getAttribute('data-n');if(n==='plus'){plusBtn();return}if(n==='home')S.favOnly=false;go(n)}
+function setUava(){var u=$('uava');if(!u)return;var a=adminByMail(S.me);var av=a&&a.avatar;
+  if(av)u.innerHTML='<img src="'+esc(av)+'" style="width:100%;height:100%;object-fit:cover">';
+  else{var n=(S.uname||S.me||'?');u.innerHTML='<span style="font-size:14px">'+esc((n[0]||'?').toUpperCase())+'</span>'}}
+function citySheet(){
+  var h='<div class="sheet"><div class="grab"></div><h3>Выбор города</h3><div id="clst">';
+  for(var i=0;i<CITIES.length;i++){var c=CITIES[i];var on=(c===S.city||(c==='Новочеркасск'&&!S.city));
+    h+='<div class="kv" data-c="'+esc(c)+'" style="cursor:pointer"><span>'+esc(c)+'</span>'+(on?'<b style="color:var(--or)">✓</b>':'')+'</div>'}
+  h+='</div><div class="hint" style="margin-top:10px">В Новочеркасске — весь каталог. По другим городам показываем инструменты с выдачей в этом городе.</div></div>';
+  openLayer(h);
+  $('clst').onclick=function(e){var d=e.target.closest('[data-c]');if(!d)return;
+    S.city=d.getAttribute('data-c');if(S.city==='Новочеркасск')S.city='';
+    try{localStorage.setItem('iva_city',S.city)}catch(x){}
+    var cl=$('cityName');if(cl)cl.textContent=S.city||'Новочеркасск';
+    closeLayer();S.cat='';S.sub='';S.favOnly=false;go('home');
+    if(!S.city){toast('Показываем весь каталог');return}
+    var lst=S.tools.filter(function(t){var a=adminByMail(t.owner_email);return a&&a.address&&a.address.toLowerCase().indexOf(S.city.toLowerCase())>=0});
+    toast(lst.length?('Выдача в '+d.getAttribute('data-c')+': найдено '+lst.length):('В '+d.getAttribute('data-c')+' пока нет выдачи — показываем все'))}}
+function closeMega(){var m=$('mega');if(m)m.classList.add('hide')}
+function renderMega(){var L=$('megaL'),R=$('megaR');if(!L||!R)return;
+  var h='<div data-c="" class="'+(S.cat===''?'on':'')+'">Все категории</div>';
+  for(var i=0;i<S.cats.length;i++){var c=S.cats[i];h+='<div data-c="'+esc(c.key)+'" class="'+(S.cat===c.key?'on':'')+'">'+esc(c.title)+'</div>'}
+  L.innerHTML=h;
+  function fillR(k){var hh='';var ttl=k?catTitle(k):'Все категории';
+    if(k)hh+='<div data-s="" style="color:var(--or);font-weight:700">Все объявления категории</div>';
+    for(var j=0;j<S.subs.length;j++){var s2=S.subs[j];if(s2.cat!==k)continue;hh+='<div data-s="'+esc(s2.key)+'">'+esc(s2.title)+'</div>'}
+    R.innerHTML='<div class="ttl">'+esc(ttl)+'</div>'+hh}
+  fillR(S.cat||'');
+  L.onmouseover=function(e){var d=e.target.closest('[data-c]');if(d)fillR(d.getAttribute('data-c'))};
+  L.onclick=function(e){var d=e.target.closest('[data-c]');if(!d)return;S.cat=d.getAttribute('data-c');S.sub='';S.favOnly=false;closeMega();go('home')};
+  R.onclick=function(e){var d=e.target.closest('[data-s]');if(!d||!d.getAttribute('data-s'))return;S.sub=d.getAttribute('data-s');closeMega();go('home')}}
+(function bindHead(){
+  var cb=$('cityBtn');if(cb)cb.onclick=citySheet;
+  var ua=$('uava');if(ua)ua.onclick=function(){$('umenu').classList.toggle('hide')};
+  var tq=$('tq');
+  if(tq){tq.addEventListener('focus',function(){if(!tq.value){var m=$('mega');if(m)m.classList.remove('hide')}});
+    tq.addEventListener('input',function(){if(tq.value)closeMega()});
+    tq.addEventListener('keydown',function(e){if(e.key==='Enter')closeMega()})}
+  var tf=$('tfind');if(tf)tf.onclick=function(){closeMega();if(S.screen!=='home')go('home')};
+  document.addEventListener('click',function(e){
+    if(!e.target.closest('#uwrap')){var um=$('umenu');if(um)um.classList.add('hide')}
+    if(!e.target.closest('.tsrch-w'))closeMega();
+  });
+})();
 $('nav').onclick=navClick;
 $('tophead').onclick=navClick;
 function plusBtn(){
   if(isAdmin()){S.cabTab='tools';go('cab');setTimeout(function(){toolForm(null)},250)}
   else go('home');
 }
-function navOn(n){var b=document.querySelectorAll('#nav button,#tophead .tnav button');for(var i=0;i<b.length;i++){var d=b[i].getAttribute('data-n');b[i].classList.toggle('on',d===n||(n==='home'&&S.favOnly&&d==='fav'))}}
+function navOn(n){var b=document.querySelectorAll('#nav button,#tophead .tlinks button');for(var i=0;i<b.length;i++){var d=b[i].getAttribute('data-n');b[i].classList.toggle('on',d===n||(n==='home'&&S.favOnly&&d==='fav'))}}
 function go(n){
   S.screen=n;if(S.pollT){clearInterval(S.pollT);S.pollT=null}
   if(n==='home')vHome();
   else if(n==='chat')vChat();
   else if(n==='orders')vOrders();
   else if(n==='cab')vCab();
+  else if(n==='fav')vFav();
+  else if(n==='cart')vCart();
+  else if(n==='notif')vNotif();
+  else if(n==='myads')vMyads();
+  else if(n==='likes')vLikes();
+  else if(n==='company')vCompany();
   window.scrollTo(0,0);
 }
 
 /* ================== ГЛАВНАЯ ================== */
 function catTitle(key){for(var i=0;i<S.cats.length;i++)if(S.cats[i].key===key)return S.cats[i].title;return key}
 function subTitle(cat,key){for(var i=0;i<S.subs.length;i++){var s=S.subs[i];if(s.cat===cat&&s.key===key)return s.title}for(var j=0;j<S.subs.length;j++)if(S.subs[j].key===key)return S.subs[j].title;return key}
-function myTools(){var lm=S.limited||[];return S.tools.filter(function(t){return lm.indexOf((t.owner_email||'').toLowerCase())<0})}
+function myTools(){var lm=S.limited||[];var city=(S.city||'').trim().toLowerCase();
+  if(city&&city!=='новочеркасск'){var al=cget('admins',300000)||[];
+    if(al.length)return S.tools.filter(function(t){var a=adminByMail(t.owner_email);var ad=((a&&a.address)||'').toLowerCase();return lm.indexOf((t.owner_email||'').toLowerCase())<0&&ad.indexOf(city)>=0})}
+  return S.tools.filter(function(t){return lm.indexOf((t.owner_email||'').toLowerCase())<0})}
 function renderCatRow(){var cr=$('catRow');if(!cr)return;var h='<button class="'+(S.cat===''?'on':'')+'" data-c="">Все</button>';for(var i=0;i<S.cats.length;i++){var c=S.cats[i];h+='<button class="'+(S.cat===c.key?'on':'')+'" data-c="'+esc(c.key)+'">'+esc(c.title)+'</button>'}cr.innerHTML=h;cr.onclick=function(e){var b=e.target.closest('[data-c]');if(!b)return;S.cat=b.getAttribute('data-c');S.sub='';S.favOnly=false;go('home')}}
 function hdrSearch(){var tq=$('tq');if(!tq)return;tq.value=S.q;tq.oninput=function(){S.q=this.value;if(this.value.trim())S.favOnly=false;var g=$('grid');if(S.screen==='home'&&g){g.innerHTML=tilesHtml();var d=$('dash');if(d)d.innerHTML=dashInner()}else if(S.screen!=='home'&&this.value.trim())go('home')};
   var tf=$('tfind');if(tf)tf.onclick=function(){if(S.screen!=='home')go('home')}}
@@ -535,6 +643,7 @@ function adminByMail(em){var lst=cget('admins',300000)||[];em=(em||'').toLowerCa
 /* ---- корзина / оформление ---- */
 function cartCount(){var n=0;for(var k in S.cart)n+=S.cart[k];return n}
 function cartBar(){
+  var cd=$('cartDot');if(cd)cd.classList.toggle('show',cartCount()>0);
   var el=$('cbar');if(!el)return;
   var n=cartCount();
   if(!n){el.innerHTML='';return}
@@ -753,6 +862,7 @@ async function loadUnread(){
     var u=await api('/rest/v1/app_messages?select=id&to_email=eq.'+encodeURIComponent(S.me)+'&is_read=eq.false&limit=50');
     $('chatDot').classList.toggle('hide',!(u&&u.length));
     var d2=$('chatDot2');if(d2)d2.classList.toggle('show',!!(u&&u.length));
+    var nd=$('notifDot');if(nd)nd.classList.toggle('show',!!(u&&u.length));
   }catch(e){}
 }
 async function openChatWith(who,prefill){
@@ -852,8 +962,8 @@ function cabBody(){
   else if(S.cabTab==='adms')cabAdms();
   else if(S.cabTab==='all')cabAll();
 }
-async function cabTools(){
-  var b=$('cabBody');b.innerHTML='<div class="empt">Загрузка…</div>';
+async function cabTools(t){
+  var b=$(t||'cabBody');b.innerHTML='<div class="empt">Загрузка…</div>';
   try{
     var tl=await api('/rest/v1/tools?select=*&owner_email=eq.'+encodeURIComponent(S.me)+'&order=created_at.desc&limit=200');
     var h='<button class="btn" style="width:100%;margin-top:12px" id="addT">＋ Добавить инструмент</button>';
@@ -961,9 +1071,9 @@ async function cabInc(){
     $('payFee').onclick=function(){toast(debt>0?'Оплата комиссии появится сразу после подключения ЮKassa':'Задолженности нет')};
   }catch(e){b.innerHTML='<div class="empt">Ошибка: '+esc(e.message)+'</div>'}
 }
-function cabMe(){
+function cabMe(t){
   var a=S.admin||{};
-  var b=$('cabBody');
+  var b=$(t||'cabBody');
   b.innerHTML='<div class="sect">Профиль</div>'
   +'<span class="lbl">ФИО</span><input class="inp" id="mFn" value="'+esc(a.full_name||'')+'">'
   +'<span class="lbl">Компания</span><input class="inp" id="mCo" value="'+esc(a.company||'')+'">'
@@ -1041,6 +1151,83 @@ async function cabAll(){
       +'<div class="hint">Владелец: '+esc(whoName(p.owner_email))+(p.fee?' · комиссия '+m(p.fee):'')+'</div></div>';
     }).join('');
   }catch(e){b.innerHTML='<div class="empt">Ошибка: '+esc(e.message)+'</div>'}
+}
+/* ---- страницы шапки ---- */
+function vFav(){
+  navOn('fav');
+  $('view').innerHTML='<div class="scr"><div class="tabs"><span class="on">Избранное</span></div><div class="grid" id="favGrid"></div></div>';
+  var out='';
+  for(var i=0;i<S.tools.length;i++){var t=S.tools[i];if(!S.likes[t.id])continue;
+    var im=t.img?esc(t.img):'';
+    out+='<div class="tile" data-id="'+t.id+'">'+(im?'<img class="ph" loading="lazy" src="'+im+'" alt="">':'<div class="ph"></div>')
+    +'<span class="like on" data-l="'+t.id+'"><svg viewBox="0 0 24 24"><path d="M12 21s-7.5-4.9-10-9.2C.4 8.7 2 5 5.6 5c2 0 3.4 1.1 4.2 2.4h4.4C15 6.1 16.4 5 18.4 5 22 5 23.6 8.7 22 11.8 19.5 16.1 12 21 12 21z"/></svg></span>'
+    +'<div class="nm">'+esc(t.name)+'</div><div class="pr">'+m(t.price)+'<small>залог '+m(t.deposit)+'</small></div></div>'}
+  $('favGrid').innerHTML=out||'<div class="empt" style="grid-column:1/-1">Пока пусто — нажимайте ♥ на инструментах</div>';
+}
+function vCart(){
+  navOn('cart');
+  var n=cartCount();
+  var h='<div class="scr"><div class="tabs"><span class="on">Корзина</span></div>';
+  if(!n)h+='<div class="empt">Корзина пуста.<br>Добавьте инструменты из каталога</div>';
+  else{
+    var rent=0,dep=0,rows='';
+    for(var id in S.cart){var t=tById(id);if(!t)continue;
+      rent+=(t.price||0)*S.cart[id];dep+=(t.deposit||0)*S.cart[id];
+      rows+='<div class="card" style="display:flex;gap:10px;align-items:center">'
+      +(t.img?'<img src="'+esc(t.img)+'" style="width:56px;height:56px;border-radius:10px;object-fit:cover">':'<div style="width:56px;height:56px;border-radius:10px;background:var(--field)"></div>')
+      +'<div style="flex:1;min-width:0"><div style="font-weight:600;font-size:14.5px">'+esc(t.name)+'</div><div class="hint">'+m(t.price)+'/сут · залог '+m(t.deposit)+'</div>'
+      +'<div class="qty" style="margin-top:6px;padding:4px 10px"><button data-d="'+id+'">−</button><b>'+S.cart[id]+'</b><button data-i="'+id+'">+</button></div></div>'
+      +'<button class="btn sm sec" data-r="'+id+'">×</button></div>'}
+    h+=rows
+    +'<div class="card"><div class="kv"><span>Аренда за сутки</span><b>'+m(rent)+'</b></div><div class="kv" style="border:0"><span>Залог (возвратный)</span><b>'+m(dep)+'</b></div></div>'
+    +'<button class="big" id="cartGo">Оформить заявку</button>';
+  }
+  h+='</div>';
+  $('view').innerHTML=h;
+  var vw=$('view');
+  vw.onclick=function(e){
+    var d=e.target.closest('[data-d]'),i2=e.target.closest('[data-i]'),r=e.target.closest('[data-r]');
+    if(d){var id1=d.getAttribute('data-d');S.cart[id1]--;if(S.cart[id1]<=0)delete S.cart[id1];vCart();return}
+    if(i2){var id2=i2.getAttribute('data-i');S.cart[id2]=(S.cart[id2]||0)+1;if(S.cart[id2]>20)S.cart[id2]=20;vCart();return}
+    if(r){delete S.cart[r.getAttribute('data-r')];vCart();return}
+    if(e.target.id==='cartGo')orderSheet();
+  };
+}
+async function vNotif(){
+  navOn('notif');
+  $('view').innerHTML='<div class="scr"><div class="tabs"><span class="on">Уведомления</span></div><div id="nlist"><div class="empt">Загрузка…</div></div></div>';
+  try{
+    var u=await api('/rest/v1/app_messages?select=id,from_email,text,created_at&to_email=eq.'+encodeURIComponent(S.me)+'&is_read=eq.false&order=created_at.desc&limit=50');
+    $('nlist').innerHTML=(u&&u.length)?u.map(function(x){
+      return '<div class="card" data-e="'+esc(x.from_email)+'" style="cursor:pointer"><div class="top"><b>'+esc(whoName(x.from_email))+'</b><span class="dt">'+nice(x.created_at)+'</span></div><div class="body" style="white-space:normal">'+esc((x.text||'').slice(0,140))+'</div></div>';
+    }).join(''):'<div class="empt">Новых уведомлений нет</div>';
+    $('nlist').onclick=function(e){var c=e.target.closest('[data-e]');if(c)openChatWith(c.getAttribute('data-e'),'')};
+  }catch(e){$('nlist').innerHTML='<div class="empt">Ошибка: '+esc(e.message)+'</div>'}
+}
+function vMyads(){
+  navOn('myads');
+  if(!isAdmin()){$('view').innerHTML='<div class="scr"><div class="tabs"><span class="on">Мои объявления</span></div><div class="empt">Раздел для администраторов</div></div>';return}
+  $('view').innerHTML='<div class="scr" id="myadsbox"></div>';
+  cabTools('myadsbox');
+}
+async function vLikes(){
+  navOn('likes');
+  if(!isAdmin()){$('view').innerHTML='<div class="scr"><div class="tabs"><span class="on">Лайки</span></div><div class="empt">Отметки «нравится» видны администраторам.<br>Ваше избранное — в разделе «Избранное»</div></div>';return}
+  $('view').innerHTML='<div class="scr"><div class="tabs"><span class="on">Лайки на мои объявления</span></div><div id="lk"><div class="empt">Загрузка…</div></div></div>';
+  try{
+    var mine=await api('/rest/v1/tools?select=id,name&owner_email=eq.'+encodeURIComponent(S.me));
+    var ids={};(mine||[]).forEach(function(t){ids[t.id]=t.name});
+    var all=await api('/rest/v1/likes?select=tool_id&limit=2000');
+    var cnt={};(all||[]).forEach(function(l){var n=ids[l.tool_id];if(n)cnt[n]=(cnt[n]||0)+1});
+    var ks=Object.keys(cnt);
+    $('lk').innerHTML=ks.length?ks.map(function(n){return '<div class="card"><div class="top"><b>'+esc(n)+'</b><span class="badge b-new">♥ '+cnt[n]+'</span></div></div>'}).join(''):'<div class="empt">Лайков пока нет</div>';
+  }catch(e){$('lk').innerHTML='<div class="empt">Ошибка: '+esc(e.message)+'</div>'}
+}
+function vCompany(){
+  navOn('company');
+  if(!isAdmin()){$('view').innerHTML='<div class="scr"><div class="tabs"><span class="on">Моя компания</span></div><div class="empt">Раздел для администраторов</div></div>';return}
+  $('view').innerHTML='<div class="scr" style="max-width:640px" id="compbox"></div>';
+  cabMe('compbox');
 }
 /* ---- кабинет пользователя ---- */
 function vCabUser(){
