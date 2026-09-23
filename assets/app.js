@@ -262,7 +262,7 @@ function headerHTML(active, q){
       '</a>' +
       '<a class="hlink" href="cabinet.html#chat">' + IC.chat + '<span>Сообщения</span></a>' +
       '<a class="hlink" href="cabinet.html">' + IC.user + '<span>Кабинет</span></a>' +
-      '<a class="btn sm" href="classic.html#order" style="margin-left:6px">Оставить заявку</a>' +
+      '<a class="btn sm" href="cabinet.html#cart" style="margin-left:6px">Оставить заявку</a>' +
     '</nav>' +
   '</div></header>';
 }
@@ -277,7 +277,7 @@ function bnavHTML(active){
   return '<nav class="bnav"><div class="bnav-in">' +
     it('home','index.html',IC.home,'Главная') +
     it('fav','favorites.html',IC.heart,'Избранное') +
-    '<a class="mid" href="classic.html#order">' +
+    '<a class="mid" href="cabinet.html#cart">' +
       '<span class="plus">' + IC.plus + '</span><span>Заявка</span></a>' +
     it('chat','cabinet.html#chat',IC.chat,'Сообщения') +
     it('cab','cabinet.html',IC.user,'Кабинет') +
@@ -294,7 +294,7 @@ function footHTML(){
       '<div><b>Аренда</b>' +
         '<a href="offer.html">Публичная оферта</a>' +
         '<a href="catalog.html?delivery=1">С доставкой</a>' +
-        '<a href="classic.html">Прежняя версия сайта</a></div>' +
+        '<a href="cabinet.html">Личный кабинет</a></div>' +
       '<div><b>Контакты</b>' +
         '<a href="tel:+79081732475">+7 (908) 173-24-75</a>' +
         '<span>Новочеркасск, ул. Маресьева, 36</span>' +
