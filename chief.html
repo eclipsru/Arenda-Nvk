@@ -122,10 +122,17 @@
   function shell(inner){
     const nMod = D.tools.filter(function(t){ return t.status === 'moderation'; }).length;
     const nFee = D.fees.filter(function(f){ return f.status !== 'confirmed'; }).length;
+    const nUnread = D.unread || 0;
 
     return '<div class="sect" style="padding-bottom:0"><div class="sect-h">' +
         '<h2>Управление площадкой</h2>' +
         '<span class="cnt">' + esc(A.me) + ' · владелец</span>' +
+        '<span style="margin-left:auto;display:flex;gap:8px;flex-wrap:wrap">' +
+          '<a class="btn sm sec" href="chat.html">Сообщения' +
+            (nUnread ? ' · ' + nUnread : '') + '</a>' +
+          '<a class="btn sm sec" href="account.html">Мой кабинет</a>' +
+          '<a class="btn sm" href="new.html">Разместить</a>' +
+        '</span>' +
       '</div></div>' +
       '<div class="tabs">' +
         '<button data-tab="dash" class="' + (TAB==='dash'?'on':'') + '">Сводка</button>' +
@@ -632,6 +639,7 @@
       D.cats = r[5].cats; D.subs = r[5].subs;
       if (D.cats.length) CATS = D.cats;
       D.stats = moneyStats(D.parts, D.fees);
+      try { D.unread = await unreadCount(); } catch(e){ D.unread = 0; }
       render();
     } catch(e){
       $('root').innerHTML = '<div class="empty" style="padding:60px 20px">' +
