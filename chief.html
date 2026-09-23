@@ -71,6 +71,7 @@
   .tbl th:nth-child(n+4),.tbl td:nth-child(n+4){display:none}
 }
 </style>
+<link rel="stylesheet" href="assets/partners.css?v=20260923-onboarding">
 </head>
 <body>
 
@@ -88,12 +89,13 @@
 <script src="assets/data.js"></script>
 <script src="assets/sb.js"></script>
 <script src="assets/app.js?v=20260923-favorites-condition"></script>
+<script src="assets/partners.js?v=20260923-onboarding"></script>
 <script>
 (function(){
   mountChrome('chief', '');
 
   let TAB = (location.hash || '').replace('#','') || 'dash';
-  let D = { orders:[], parts:[], admins:[], fees:[], tools:[], cats:[], subs:[], stats:null };
+  let D = { landlordApps:[], landlordError:'', orders:[], parts:[], admins:[], fees:[], tools:[], cats:[], subs:[], stats:null };
   let ORD_FILTER = 'all';
 
   const m = function(v){ return rub(Number(v) || 0); };
@@ -134,6 +136,8 @@
           (nMod ? '<span class="n">' + nMod + '</span>' : '') + '</button>' +
         '<button data-tab="ads" class="'  + (TAB==='ads'?'on':'')  + '">Объявления</button>' +
         '<button data-tab="adm" class="'  + (TAB==='adm'?'on':'')  + '">Арендодатели</button>' +
+        '<button data-tab="landlords" class="' + (TAB==='landlords'?'on':'') + '">Заявки арендодателей' +
+          (D.landlordApps.filter(a=>a.status==='pending').length ? '<span class="n">' + D.landlordApps.filter(a=>a.status==='pending').length + '</span>' : '') + '</button>' +
         '<button data-tab="fee" class="'  + (TAB==='fee'?'on':'')  + '">Комиссия' +
           (nFee ? '<span class="n">' + nFee + '</span>' : '') + '</button>' +
         '<button data-tab="cat" class="'  + (TAB==='cat'?'on':'')  + '">Категории</button>' +
@@ -432,6 +436,7 @@
     else if (TAB === 'mod') inner = viewMod();
     else if (TAB === 'ads') inner = viewAds();
     else if (TAB === 'adm') inner = admTable(false);
+    else if (TAB === 'landlords') inner = viewLandlordApplications(D.landlordApps,D.landlordError);
     else if (TAB === 'fee') inner = viewFee();
     else if (TAB === 'cat') inner = viewCats();
     else                    inner = viewDash();
@@ -445,8 +450,19 @@
     });
   }
 
+  async function refreshLandlords(){
+    try { D.landlordApps = await loadLandlordApplications(); D.landlordError=''; D.admins=await loadAdmins(); }
+    catch(err){ D.landlordError=err.message; }
+    render();
+  }
+
   /* ---------- Обработчики ---------- */
   document.addEventListener('click', async function(e){
+    const lr=e.target.closest('[data-review-application]');
+    if(lr){ const a=D.landlordApps.find(x=>x.id===lr.dataset.reviewApplication);if(a)reviewLandlordDialog(a,refreshLandlords);return; }
+    const refresh=e.target.closest('[data-refresh-landlords]');
+    if(refresh){refresh.disabled=true;await refreshLandlords();return;}
+
     const tb = e.target.closest('[data-tab]');
     if (tb){ TAB = tb.getAttribute('data-tab'); history.replaceState(null,'','#'+TAB); render(); return; }
 
@@ -633,6 +649,7 @@
       if (D.cats.length) CATS = D.cats;
       D.stats = moneyStats(D.parts, D.fees);
       try { D.unread = await unreadCount(); } catch(e){ D.unread = 0; }
+      try { D.landlordApps=await loadLandlordApplications(); } catch(err){D.landlordError=err.message;}
       render();
     } catch(e){
       $('root').innerHTML = '<div class="empty" style="padding:60px 20px">' +

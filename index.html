@@ -8,6 +8,7 @@
 <meta name="theme-color" content="#101217">
 <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
 <link rel="stylesheet" href="assets/theme.css?v=20260923-global-search">
+<link rel="stylesheet" href="assets/partners.css?v=20260923-onboarding">
 </head>
 <body>
 
@@ -60,6 +61,22 @@
         </div>
       </section>
 
+      <aside class="useful-info" aria-labelledby="usefulInfoTitle">
+        <div class="cats-head"><h2 id="usefulInfoTitle">Полезная информация</h2></div>
+        <div class="useful-card">
+          <span class="partner-kicker">Для арендодателей</span>
+          <h3>Успей стать в своём городе <em>первым арендодателем</em></h3>
+          <p>Сдавайте инструмент через «Иву». Покажите свой ассортимент людям, которым он нужен для ремонта, стройки и работы.</p>
+          <ul><li>Свой каталог инструментов и условия аренды.</li><li>Заявки и сообщения от клиентов.</li><li>Учёт комиссии в кабинете арендодателя.</li></ul>
+          <p>Подключаем самозанятых, ИП и компании. Доступ — после проверки владельцем площадки.</p>
+          <div class="partner-actions">
+            <button class="btn sec wide" id="partnerDetailsBtn" type="button">Подробнее</button>
+            <a class="btn wide" href="landlord-register.html">Зарегистрироваться</a>
+          </div>
+          <p class="partner-note">Комиссия и лимит назначаются индивидуально. Первенство и эксклюзивность в городе не гарантируются.</p>
+        </div>
+      </aside>
+
     </div>
 
   </div>
@@ -71,9 +88,11 @@
 <script src="assets/data.js"></script>
 <script src="assets/sb.js"></script>
 <script src="assets/app.js?v=20260923-favorites-condition"></script>
+<script src="assets/partners.js?v=20260923-onboarding"></script>
 <script>
 (function(){
   mountChrome('home', '');
+  $('partnerDetailsBtn').addEventListener('click', partnerDetails);
 
   /* Состояние фильтров — общее для панели, плиток и списка */
   var F = {
