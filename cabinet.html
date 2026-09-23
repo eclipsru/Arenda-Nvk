@@ -568,6 +568,16 @@ function myTools(){var lm=S.limited||[];var city=(S.city||'').trim().toLowerCase
 function updPlace(){var ab=document.querySelector('#tophead .place');if(!ab)return;
   var lim=S.limited.indexOf(S.me)>=0;
   ab.style.display=(isAdmin()&&!lim)?'':'none'}
+function renderCatMenu(){var mm=$('catMenu');if(!mm)return;
+  var h='<button class="cm-item'+((!S.cat&&!S.favOnly)?' on':'')+'" data-c="">Весь каталог</button>';
+  for(var i=0;i<S.cats.length;i++){var c=S.cats[i];var on=S.cat===c.key;
+    h+='<button class="cm-item'+(on?' on':'')+'" data-c="'+esc(c.key)+'">'+esc(c.title)+'</button>';
+    if(on){for(var j=0;j<S.subs.length;j++){var s3=S.subs[j];if(s3.cat!==c.key)continue;
+      h+='<button class="cm-sub'+(S.sub===s3.key?' on':'')+'" data-s="'+esc(s3.key)+'">'+esc(s3.title)+'</button>'}}}
+  mm.innerHTML=h;
+  mm.onclick=function(e){
+    var c=e.target.closest('[data-c]');if(c){S.cat=c.getAttribute('data-c');S.sub='';S.favOnly=false;go('home');return}
+    var s4=e.target.closest('[data-s]');if(s4){S.sub=s4.getAttribute('data-s');go('home')}}}
 function renderCatRow(){var cr=$('catRow');if(!cr)return;var h='<button class="'+(S.cat===''?'on':'')+'" data-c="">Все</button>';for(var i=0;i<S.cats.length;i++){var c=S.cats[i];h+='<button class="'+(S.cat===c.key?'on':'')+'" data-c="'+esc(c.key)+'">'+esc(c.title)+'</button>'}cr.innerHTML=h;cr.onclick=function(e){var b=e.target.closest('[data-c]');if(!b)return;S.cat=b.getAttribute('data-c');S.sub='';S.favOnly=false;go('home')}}
 function hdrSearch(){var tq=$('tq');if(!tq)return;tq.value=S.q;tq.oninput=function(){S.q=this.value;if(this.value.trim())S.favOnly=false;var g=$('grid');if(S.screen==='home'&&g){g.innerHTML=tilesHtml();var d=$('dash');if(d)d.innerHTML=dashInner()}else if(S.screen!=='home'&&this.value.trim())go('home')};
   var tf=$('tfind');if(tf)tf.onclick=function(){if(S.screen!=='home')go('home')}}
@@ -580,10 +590,11 @@ function vHome(){
   if(S.cat){h+='<div class="chips" id="subchips"><button class="chip'+(S.sub===''?' on':'')+'" data-s="">Все виды</button>';
     for(var j=0;j<S.subs.length;j++){var s2=S.subs[j];if(s2.cat!==S.cat)continue;h+='<button class="chip'+(S.sub===s2.key?' on':'')+'" data-s="'+esc(s2.key)+'">'+esc(s2.title)+'</button>'}
     h+='</div>'}
-  h+=(S.favOnly?'<div class="sect">Избранное</div>':'<div id="dash">'+dashInner()+'</div>')+'<div class="grid" id="grid">'+tilesHtml()+'</div><div id="cbar"></div></div>';
+  h+='<div class="homeflex"><aside id="catMenu"></aside><div class="homecol">'+(S.favOnly?'<div class="sect">Избранное</div>':'<div id="dash">'+dashInner()+'</div>')+'<div class="grid" id="grid">'+tilesHtml()+'</div></div></div><div id="cbar"></div></div>';
   $('view').innerHTML=h;
   $('q').oninput=function(){S.q=this.value;var g=$('grid');if(g)g.innerHTML=tilesHtml()};
   renderCatRow();hdrSearch();
+  renderCatMenu();
   var dd=$('dash');if(dd)dd.onclick=function(e){var c=e.target.closest('[data-c]');if(!c)return;S.favOnly=false;S.cat=c.getAttribute('data-c');S.sub='';go('home')};
   $('chips').onclick=function(e){var b=e.target.closest('.chip');if(!b)return;S.cat=b.getAttribute('data-c');S.sub='';S.favOnly=false;go('home')};
   var sc2=$('subchips');if(sc2)sc2.onclick=function(e){var b=e.target.closest('.chip');if(!b)return;S.sub=b.getAttribute('data-s');go('home')};
