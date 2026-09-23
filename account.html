@@ -356,6 +356,8 @@
 
   /* ---------- Старт ---------- */
   async function boot(){
+    /* Владелец площадки работает в отдельном кабинете */
+    if (isChief()){ location.replace('chief.html'); return; }
     if (isAdmin()){
       try { MY = await loadMyTools(); }
       catch(e){ MY = []; toast('Не удалось загрузить объявления: ' + e.message); }

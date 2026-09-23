@@ -1,0 +1,645 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Управление площадкой — Ива</title>
+<meta name="robots" content="noindex, nofollow">
+<meta name="theme-color" content="#101217">
+<link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="assets/theme.css">
+<style>
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:12px;margin-bottom:22px}
+.kpi{background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:16px}
+.kpi .lb{font-size:12.5px;color:var(--g2);margin-bottom:7px}
+.kpi .vl{font-size:25px;font-weight:800;letter-spacing:-.5px}
+.kpi .sub{font-size:12px;color:var(--g2);margin-top:5px}
+.kpi.warn{border-color:rgba(255,183,77,.4)}
+.kpi.warn .vl{color:var(--yel)}
+.kpi.good .vl{color:var(--grn)}
+
+.tabs{display:flex;gap:4px;border-bottom:1px solid var(--line);margin-bottom:18px;
+  overflow-x:auto;padding-bottom:1px}
+.tabs button{padding:11px 15px;font-size:14.5px;color:var(--gr);white-space:nowrap;
+  border-bottom:2px solid transparent;margin-bottom:-1px;font-weight:500}
+.tabs button:hover{color:var(--tx)}
+.tabs button.on{color:var(--or);border-bottom-color:var(--or);font-weight:600}
+.tabs button .n{margin-left:6px;font-size:11.5px;background:var(--or);color:#fff;
+  border-radius:9px;padding:1px 6px;font-weight:700}
+
+.tbl{width:100%;border-collapse:collapse;font-size:14px}
+.tbl th{text-align:left;padding:10px 12px;color:var(--g2);font-size:12px;font-weight:600;
+  text-transform:uppercase;letter-spacing:.4px;border-bottom:1px solid var(--line);white-space:nowrap}
+.tbl td{padding:11px 12px;border-bottom:1px solid var(--line);vertical-align:middle}
+.tbl tr:last-child td{border-bottom:none}
+.tbl tbody tr:hover{background:var(--field)}
+.tbl .num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+.tbl .neg{color:var(--red);font-weight:600}
+.tbl .pos{color:var(--grn);font-weight:600}
+.tbl-wrap{background:var(--card);border:1px solid var(--line);border-radius:var(--r);overflow-x:auto}
+
+.mini-btn{font-size:12.5px;padding:6px 11px;border-radius:8px;border:1px solid var(--line);
+  background:var(--field);color:var(--gr);white-space:nowrap}
+.mini-btn:hover{border-color:var(--line-2);color:var(--tx)}
+.mini-btn.ok:hover{border-color:var(--grn);color:var(--grn)}
+.mini-btn.no:hover{border-color:var(--red);color:var(--red)}
+.acts{display:flex;gap:6px;flex-wrap:wrap}
+
+.mod-card{display:flex;gap:14px;background:var(--card);border:1px solid var(--line);
+  border-radius:var(--r);padding:14px;margin-bottom:12px}
+.mod-card.flag{border-color:rgba(255,183,77,.45)}
+.mod-card .mph{width:120px;height:92px;border-radius:var(--r-s);overflow:hidden;
+  flex-shrink:0;background:#12151B}
+.mod-card .mph img{width:100%;height:100%;object-fit:cover}
+.mod-card .mbody{flex:1;min-width:0}
+.mod-card .mnm{font-weight:600;font-size:15.5px;margin-bottom:4px}
+.mod-card .mmeta{font-size:12.5px;color:var(--g2);margin-bottom:8px}
+.mod-card .mdesc{font-size:13px;color:var(--gr);line-height:1.5;margin-bottom:10px;
+  display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.flags{display:flex;flex-direction:column;gap:3px;margin-bottom:10px}
+.flag-i{font-size:12.5px;display:flex;gap:7px;align-items:flex-start}
+.flag-i.bad{color:var(--yel)}
+.flag-i.ok{color:var(--g2)}
+
+.f-row2{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:16px}
+.f-row2 select,.f-row2 input{max-width:210px}
+
+@media (max-width:760px){
+  .kpi .vl{font-size:21px}
+  .mod-card{flex-wrap:wrap}
+  .mod-card .mph{width:84px;height:66px}
+  .tbl th:nth-child(n+4),.tbl td:nth-child(n+4){display:none}
+}
+</style>
+</head>
+<body>
+
+<div id="hdr"></div>
+
+<main class="page">
+  <div class="wrap" id="root">
+    <div class="empty" style="padding:70px 20px"><b>Загрузка…</b></div>
+  </div>
+</main>
+
+<div id="ftr"></div>
+<div id="bnav"></div>
+
+<script src="assets/data.js"></script>
+<script src="assets/sb.js"></script>
+<script src="assets/app.js"></script>
+<script>
+(function(){
+  mountChrome('chief', '');
+
+  let TAB = (location.hash || '').replace('#','') || 'dash';
+  let D = { orders:[], parts:[], admins:[], fees:[], tools:[], cats:[], subs:[], stats:null };
+  let ORD_FILTER = 'all';
+
+  const m = function(v){ return rub(Number(v) || 0); };
+  const dt = function(s){
+    if (!s) return '—';
+    const d = new Date(s);
+    return d.toLocaleDateString('ru-RU', {day:'2-digit', month:'2-digit', year:'2-digit'});
+  };
+
+  /* ---------- Нет доступа ---------- */
+  function screenDeny(msg, sub){
+    $('root').innerHTML =
+      '<div class="empty" style="padding:70px 20px">' +
+        '<svg viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="11" rx="2"/>' +
+          '<path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>' +
+        '<b>' + esc(msg) + '</b>' +
+        '<p>' + esc(sub || 'Раздел доступен только владельцу площадки.') + '</p>' +
+        '<div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap">' +
+          '<a class="btn" href="account.html">В личный кабинет</a>' +
+          '<a class="btn sec" href="index.html">На главную</a>' +
+        '</div>' +
+      '</div>';
+  }
+
+  /* ---------- Каркас ---------- */
+  function shell(inner){
+    const nMod = D.tools.filter(function(t){ return t.status === 'moderation'; }).length;
+    const nFee = D.fees.filter(function(f){ return f.status !== 'confirmed'; }).length;
+
+    return '<div class="sect" style="padding-bottom:0"><div class="sect-h">' +
+        '<h2>Управление площадкой</h2>' +
+        '<span class="cnt">' + esc(A.me) + ' · владелец</span>' +
+      '</div></div>' +
+      '<div class="tabs">' +
+        '<button data-tab="dash" class="' + (TAB==='dash'?'on':'') + '">Сводка</button>' +
+        '<button data-tab="ord" class="'  + (TAB==='ord'?'on':'')  + '">Заявки</button>' +
+        '<button data-tab="mod" class="'  + (TAB==='mod'?'on':'')  + '">Модерация' +
+          (nMod ? '<span class="n">' + nMod + '</span>' : '') + '</button>' +
+        '<button data-tab="ads" class="'  + (TAB==='ads'?'on':'')  + '">Объявления</button>' +
+        '<button data-tab="adm" class="'  + (TAB==='adm'?'on':'')  + '">Арендодатели</button>' +
+        '<button data-tab="fee" class="'  + (TAB==='fee'?'on':'')  + '">Комиссия' +
+          (nFee ? '<span class="n">' + nFee + '</span>' : '') + '</button>' +
+        '<button data-tab="cat" class="'  + (TAB==='cat'?'on':'')  + '">Категории</button>' +
+      '</div>' + inner;
+  }
+
+  /* ---------- Сводка ---------- */
+  function viewDash(){
+    const s = D.stats;
+    const now = new Date();
+    const mStart = new Date(now.getFullYear(), now.getMonth(), 1).getTime();
+    const monthParts = D.parts.filter(function(p){
+      return new Date(p.created_at).getTime() >= mStart;
+    });
+    const mRent = monthParts.reduce(function(a,p){ return a + (Number(p.rent_sum)||0); }, 0);
+    const mFee  = monthParts.reduce(function(a,p){ return a + (Number(p.fee)||0); }, 0);
+    const newOrders = D.orders.filter(function(o){
+      return !o.status || o.status === 'new';
+    }).length;
+
+    return '<div class="kpis">' +
+        '<div class="kpi"><div class="lb">Оборот за всё время</div>' +
+          '<div class="vl">' + m(s.rent) + '</div>' +
+          '<div class="sub">' + D.parts.length + ' ' +
+            plural(D.parts.length,'заявка','заявки','заявок') + '</div></div>' +
+        '<div class="kpi"><div class="lb">Оборот за месяц</div>' +
+          '<div class="vl">' + m(mRent) + '</div>' +
+          '<div class="sub">комиссия ' + m(mFee) + '</div></div>' +
+        '<div class="kpi good"><div class="lb">Комиссия получена</div>' +
+          '<div class="vl">' + m(s.paid) + '</div>' +
+          '<div class="sub">из ' + m(s.fee) + ' начислено</div></div>' +
+        '<div class="kpi' + (s.owed > 0 ? ' warn' : '') + '"><div class="lb">Ожидает выплаты</div>' +
+          '<div class="vl">' + m(s.owed) + '</div>' +
+          '<div class="sub">' + (s.owed > 0 ? 'долг арендодателей' : 'все рассчитались') + '</div></div>' +
+      '</div>' +
+
+      '<div class="kpis">' +
+        '<div class="kpi"><div class="lb">Новые заявки</div>' +
+          '<div class="vl">' + newOrders + '</div>' +
+          '<div class="sub">всего ' + D.orders.length + '</div></div>' +
+        '<div class="kpi"><div class="lb">Объявлений в каталоге</div>' +
+          '<div class="vl">' + D.tools.filter(function(t){ return t.status==='active'; }).length + '</div>' +
+          '<div class="sub">всего ' + D.tools.length + '</div></div>' +
+        '<div class="kpi' + (D.tools.filter(function(t){return t.status==='moderation';}).length ? ' warn' : '') +
+          '"><div class="lb">Ждут проверки</div>' +
+          '<div class="vl">' + D.tools.filter(function(t){ return t.status==='moderation'; }).length + '</div>' +
+          '<div class="sub">не видны в каталоге</div></div>' +
+        '<div class="kpi"><div class="lb">Арендодателей</div>' +
+          '<div class="vl">' + D.admins.filter(function(a){ return a.active !== false; }).length + '</div>' +
+          '<div class="sub">всего ' + D.admins.length + '</div></div>' +
+      '</div>' +
+
+      '<div class="sect-h" style="margin-top:10px"><h2 style="font-size:17px">По арендодателям</h2></div>' +
+      admTable(true);
+  }
+
+  /* ---------- Таблица арендодателей ---------- */
+  function admTable(short){
+    const rows = D.admins.map(function(a){
+      const em = (a.email || '').toLowerCase();
+      const st = D.stats.byAdmin[em] || { rent:0, fee:0, paid:0, debt:0, orders:0 };
+      const lim = Number(a.debt_limit) || 0;
+      const blocked = lim > 0 && st.debt > lim;
+      return '<tr data-email="' + esc(em) + '">' +
+        '<td><b>' + esc(a.full_name || a.company || em.split('@')[0]) + '</b>' +
+          (a.role === 'chief' ? ' <span class="badge act">владелец</span>' : '') +
+          (a.active === false ? ' <span class="badge off">выкл</span>' : '') +
+          '<div class="small muted">' + esc(em) + '</div></td>' +
+        '<td class="num">' + (a.fee_pct != null ? a.fee_pct + ' %' : '—') + '</td>' +
+        '<td class="num">' + st.orders + '</td>' +
+        '<td class="num">' + m(st.rent) + '</td>' +
+        '<td class="num">' + m(st.fee) + '</td>' +
+        '<td class="num">' + m(st.paid) + '</td>' +
+        '<td class="num ' + (st.debt > 0 ? 'neg' : 'pos') + '">' +
+          (st.debt > 0 ? '−' + m(st.debt) : m(0)) +
+          (blocked ? '<div class="small" style="color:var(--red)">лимит превышен</div>' : '') + '</td>' +
+        (short ? '' :
+          '<td><div class="acts">' +
+            '<button class="mini-btn" data-adm="edit">Настроить</button>' +
+            (a.role !== 'chief'
+              ? '<button class="mini-btn ' + (a.active === false ? 'ok' : 'no') + '" data-adm="toggle">' +
+                (a.active === false ? 'Включить' : 'Отключить') + '</button>'
+              : '') +
+          '</div></td>') +
+      '</tr>';
+    }).join('');
+
+    return '<div class="tbl-wrap"><table class="tbl"><thead><tr>' +
+      '<th>Арендодатель</th><th class="num">Комиссия</th><th class="num">Заявок</th>' +
+      '<th class="num">Оборот</th><th class="num">Начислено</th>' +
+      '<th class="num">Выплачено</th><th class="num">Долг</th>' +
+      (short ? '' : '<th></th>') +
+      '</tr></thead><tbody>' + rows + '</tbody></table></div>';
+  }
+
+  /* ---------- Заявки ---------- */
+  function viewOrders(){
+    let list = D.orders.slice();
+    if (ORD_FILTER === 'new') list = list.filter(function(o){ return !o.status || o.status === 'new'; });
+
+    const partsBy = {};
+    D.parts.forEach(function(p){
+      (partsBy[p.order_id] = partsBy[p.order_id] || []).push(p);
+    });
+
+    let h = '<div class="f-row2">' +
+      '<button class="chip" data-of="all"' + (ORD_FILTER==='all'?' style="border-color:var(--or);color:var(--or)"':'') + '>Все · ' + D.orders.length + '</button>' +
+      '<button class="chip" data-of="new"' + (ORD_FILTER==='new'?' style="border-color:var(--or);color:var(--or)"':'') + '>Новые · ' +
+        D.orders.filter(function(o){ return !o.status || o.status==='new'; }).length + '</button>' +
+      '</div>';
+
+    if (!list.length){
+      return h + '<div class="empty"><b>Заявок нет</b><p>Здесь появятся заказы от арендаторов.</p></div>';
+    }
+
+    h += '<div class="tbl-wrap"><table class="tbl"><thead><tr>' +
+      '<th>№</th><th>Клиент</th><th>Инструмент</th><th class="num">Срок</th>' +
+      '<th class="num">Аренда</th><th class="num">Комиссия</th><th>Дата</th>' +
+      '</tr></thead><tbody>' +
+      list.map(function(o){
+        const ps = partsBy[o.id] || [];
+        const rent = ps.reduce(function(a,p){ return a + (Number(p.rent_sum)||0); }, 0);
+        const fee  = ps.reduce(function(a,p){ return a + (Number(p.fee)||0); }, 0);
+        return '<tr>' +
+          '<td><b>' + o.id + '</b></td>' +
+          '<td>' + esc(o.name || '—') +
+            '<div class="small muted">' + esc(o.phone || '') + '</div></td>' +
+          '<td style="max-width:230px">' + esc(o.tools || '—') + '</td>' +
+          '<td class="num">' + (o.days || 1) + ' сут.</td>' +
+          '<td class="num">' + m(rent) + '</td>' +
+          '<td class="num">' + m(fee) + '</td>' +
+          '<td>' + dt(o.created_at) + '</td>' +
+        '</tr>';
+      }).join('') +
+      '</tbody></table></div>';
+    return h;
+  }
+
+  /* ---------- Модерация ---------- */
+  function viewMod(){
+    const list = D.tools.filter(function(t){ return t.status === 'moderation'; });
+    if (!list.length){
+      return '<div class="empty">' +
+        '<svg viewBox="0 0 24 24" style="stroke:var(--grn)"><circle cx="12" cy="12" r="10"/>' +
+          '<path d="m8 12 3 3 5-6"/></svg>' +
+        '<b>Очередь пуста</b>' +
+        '<p>Все объявления проверены. Сюда попадает то, что не прошло автопроверку.</p></div>';
+    }
+    return '<p class="small muted" style="margin-bottom:14px">' +
+        'Объявления не прошли автоматическую проверку и не видны в каталоге.</p>' +
+      list.map(function(t){
+        const img = (t.imgs && t.imgs[0]) || t.img || '';
+        return '<div class="mod-card flag" data-id="' + esc(t.id) + '">' +
+          '<div class="mph">' + (img
+            ? '<img src="' + esc(img) + '" alt="">'
+            : '<div style="width:100%;height:100%;display:flex;align-items:center;' +
+              'justify-content:center;color:var(--yel);font-size:11px">нет фото</div>') + '</div>' +
+          '<div class="mbody">' +
+            '<div class="mnm">' + esc(t.name) + '</div>' +
+            '<div class="mmeta">' + esc(t.owner_email) + ' · ' + m(t.price) + '/сут · ' +
+              esc(catTitle(t.cat) || t.cat) + ' · ' + dt(t.created_at) + '</div>' +
+            '<div class="mdesc">' + esc(t.descr || 'без описания') + '</div>' +
+            '<div class="flags" id="fl-' + esc(t.id) + '"><span class="small muted">проверяем…</span></div>' +
+            '<div class="acts">' +
+              '<button class="mini-btn ok" data-mod="ok">Опубликовать</button>' +
+              '<button class="mini-btn no" data-mod="rej">Отклонить</button>' +
+              '<a class="mini-btn" href="tool.html?id=' + encodeURIComponent(t.id) + '" target="_blank">Открыть</a>' +
+            '</div>' +
+          '</div>' +
+        '</div>';
+      }).join('');
+  }
+
+  /* Дорисовываем результат автопроверки в карточках модерации */
+  async function paintFlags(){
+    const list = D.tools.filter(function(t){ return t.status === 'moderation'; });
+    for (let i = 0; i < list.length; i++){
+      const t = list[i];
+      const box = $('fl-' + t.id);
+      if (!box) continue;
+      try {
+        const v = await autoModerate(t);
+        box.innerHTML = v.checks.map(function(c){
+          return '<div class="flag-i ' + (c.ok ? 'ok' : 'bad') + '">' +
+                 (c.ok ? '✓' : '⚠') + '<span>' + esc(c.label) +
+                 (c.note ? ' — ' + esc(c.note) : '') + '</span></div>';
+        }).join('');
+      } catch(e){
+        box.innerHTML = '<span class="small muted">не удалось проверить</span>';
+      }
+    }
+  }
+
+  /* ---------- Все объявления ---------- */
+  function viewAds(){
+    if (!D.tools.length){
+      return '<div class="empty"><b>Объявлений нет</b></div>';
+    }
+    return '<div class="tbl-wrap"><table class="tbl"><thead><tr>' +
+      '<th>Инструмент</th><th>Владелец</th><th class="num">Цена</th>' +
+      '<th>Статус</th><th>Добавлен</th><th></th>' +
+      '</tr></thead><tbody>' +
+      D.tools.map(function(t){
+        const st = t.status || 'active';
+        return '<tr data-id="' + esc(t.id) + '">' +
+          '<td><b>' + esc(t.name) + '</b>' +
+            '<div class="small muted">' + esc(catTitle(t.cat) || t.cat) + '</div></td>' +
+          '<td class="small">' + esc(t.owner_email || '—') + '</td>' +
+          '<td class="num">' + m(t.price) + '</td>' +
+          '<td><span class="badge ' + statusCls(st) + '">' + statusTitle(st) + '</span></td>' +
+          '<td>' + dt(t.created_at) + '</td>' +
+          '<td><div class="acts">' +
+            (st === 'active'
+              ? '<button class="mini-btn no" data-tool="hide">Снять</button>'
+              : '<button class="mini-btn ok" data-tool="show">Опубликовать</button>') +
+            '<button class="mini-btn no" data-tool="del">Удалить</button>' +
+          '</div></td>' +
+        '</tr>';
+      }).join('') +
+      '</tbody></table></div>';
+  }
+
+  /* ---------- Комиссия ---------- */
+  function viewFee(){
+    const pend = D.fees.filter(function(f){ return f.status !== 'confirmed'; });
+    let h = '<div class="kpis">' +
+      '<div class="kpi"><div class="lb">Начислено всего</div><div class="vl">' + m(D.stats.fee) + '</div></div>' +
+      '<div class="kpi good"><div class="lb">Подтверждено</div><div class="vl">' + m(D.stats.paid) + '</div></div>' +
+      '<div class="kpi' + (D.stats.owed>0?' warn':'') + '"><div class="lb">Не выплачено</div>' +
+        '<div class="vl">' + m(D.stats.owed) + '</div></div>' +
+      '</div>';
+
+    if (pend.length){
+      h += '<div class="sect-h"><h2 style="font-size:17px">Ждут подтверждения</h2></div>' +
+        '<div class="tbl-wrap"><table class="tbl"><thead><tr>' +
+        '<th>Арендодатель</th><th class="num">Сумма</th><th>Примечание</th><th>Дата</th><th></th>' +
+        '</tr></thead><tbody>' +
+        pend.map(function(f){
+          return '<tr data-fee="' + f.id + '">' +
+            '<td>' + esc(f.admin_email) + '</td>' +
+            '<td class="num"><b>' + m(f.amount) + '</b></td>' +
+            '<td class="small">' + esc(f.note || '—') + '</td>' +
+            '<td>' + dt(f.created_at) + '</td>' +
+            '<td><button class="mini-btn ok" data-fee-act="ok">Подтвердить</button></td>' +
+          '</tr>';
+        }).join('') + '</tbody></table></div>';
+    }
+
+    h += '<div class="sect-h" style="margin-top:22px"><h2 style="font-size:17px">Задолженность</h2>' +
+      '<button class="btn sm sec" id="addFeeBtn" style="margin-left:auto">Записать выплату</button></div>' +
+      admTable(true);
+
+    const done = D.fees.filter(function(f){ return f.status === 'confirmed'; });
+    if (done.length){
+      h += '<div class="sect-h" style="margin-top:22px"><h2 style="font-size:17px">История выплат</h2></div>' +
+        '<div class="tbl-wrap"><table class="tbl"><thead><tr>' +
+        '<th>Арендодатель</th><th class="num">Сумма</th><th>Примечание</th><th>Подтверждено</th>' +
+        '</tr></thead><tbody>' +
+        done.map(function(f){
+          return '<tr><td>' + esc(f.admin_email) + '</td>' +
+            '<td class="num pos">' + m(f.amount) + '</td>' +
+            '<td class="small">' + esc(f.note || '—') + '</td>' +
+            '<td>' + dt(f.confirmed_at || f.created_at) + '</td></tr>';
+        }).join('') + '</tbody></table></div>';
+    }
+    return h;
+  }
+
+  /* ---------- Категории ---------- */
+  function viewCats(){
+    return '<div class="sect-h"><h2 style="font-size:17px">Категории каталога</h2>' +
+        '<button class="btn sm sec" id="addCatBtn" style="margin-left:auto">Добавить</button></div>' +
+      '<div class="tbl-wrap"><table class="tbl"><thead><tr>' +
+        '<th>Название</th><th>Ключ</th><th class="num">Объявлений</th><th>Видна</th>' +
+      '</tr></thead><tbody>' +
+      D.cats.map(function(c){
+        const n = D.tools.filter(function(t){ return t.cat === c.key; }).length;
+        return '<tr><td><b>' + esc(c.title) + '</b>' +
+          '<div class="small muted">' + D.subs.filter(function(s){ return s.cat===c.key; }).length +
+          ' подкатегорий</div></td>' +
+          '<td class="small muted">' + esc(c.key) + '</td>' +
+          '<td class="num">' + n + '</td>' +
+          '<td><span class="badge ' + (c.active !== false ? 'act' : 'off') + '">' +
+            (c.active !== false ? 'да' : 'скрыта') + '</span></td></tr>';
+      }).join('') +
+      '</tbody></table></div>' +
+      '<p class="small muted" style="margin-top:12px">' +
+        'Подробное редактирование категорий и подкатегорий — в разделе ' +
+        '<a href="admin.html" style="color:var(--or)">управления каталогом</a>.</p>';
+  }
+
+  /* ---------- Рендер ---------- */
+  function render(){
+    let inner;
+    if (TAB === 'ord')      inner = viewOrders();
+    else if (TAB === 'mod') inner = viewMod();
+    else if (TAB === 'ads') inner = viewAds();
+    else if (TAB === 'adm') inner = admTable(false);
+    else if (TAB === 'fee') inner = viewFee();
+    else if (TAB === 'cat') inner = viewCats();
+    else                    inner = viewDash();
+
+    $('root').innerHTML = shell(inner);
+    if (TAB === 'mod') paintFlags();
+
+    const af = $('addFeeBtn'); if (af) af.addEventListener('click', feeForm);
+    const ac = $('addCatBtn'); if (ac) ac.addEventListener('click', function(){
+      location.href = 'admin.html';
+    });
+  }
+
+  /* ---------- Обработчики ---------- */
+  document.addEventListener('click', async function(e){
+    const tb = e.target.closest('[data-tab]');
+    if (tb){ TAB = tb.getAttribute('data-tab'); history.replaceState(null,'','#'+TAB); render(); return; }
+
+    const of = e.target.closest('[data-of]');
+    if (of){ ORD_FILTER = of.getAttribute('data-of'); render(); return; }
+
+    /* Модерация */
+    const md = e.target.closest('[data-mod]');
+    if (md){
+      const card = md.closest('[data-id]');
+      const id = card.getAttribute('data-id');
+      const act = md.getAttribute('data-mod');
+      md.disabled = true; md.textContent = '…';
+      try {
+        await updateTool(id, { status: act === 'ok' ? 'active' : 'archived' });
+        const t = D.tools.find(function(x){ return String(x.id) === String(id); });
+        if (t) t.status = act === 'ok' ? 'active' : 'archived';
+        render();
+        toast(act === 'ok' ? 'Опубликовано' : 'Отклонено');
+      } catch(err){ md.disabled = false; toast('Не удалось: ' + err.message); }
+      return;
+    }
+
+    /* Объявления */
+    const tl = e.target.closest('[data-tool]');
+    if (tl){
+      const row = tl.closest('[data-id]');
+      const id = row.getAttribute('data-id');
+      const act = tl.getAttribute('data-tool');
+
+      if (act === 'del'){
+        if (!confirm('Удалить объявление безвозвратно?')) return;
+        tl.disabled = true;
+        try {
+          await deleteTool(id);
+          D.tools = D.tools.filter(function(x){ return String(x.id) !== String(id); });
+          render(); toast('Удалено');
+        } catch(err){ tl.disabled = false; toast('Не удалось: ' + err.message); }
+        return;
+      }
+      tl.disabled = true; tl.textContent = '…';
+      try {
+        const next = act === 'hide' ? 'archived' : 'active';
+        await updateTool(id, { status: next });
+        const t = D.tools.find(function(x){ return String(x.id) === String(id); });
+        if (t) t.status = next;
+        render(); toast(next === 'active' ? 'Опубликовано' : 'Снято');
+      } catch(err){ tl.disabled = false; toast('Не удалось: ' + err.message); }
+      return;
+    }
+
+    /* Арендодатели */
+    const ad = e.target.closest('[data-adm]');
+    if (ad){
+      const row = ad.closest('[data-email]');
+      const em = row.getAttribute('data-email');
+      const a = D.admins.find(function(x){ return (x.email||'').toLowerCase() === em; });
+      if (!a) return;
+
+      if (ad.getAttribute('data-adm') === 'toggle'){
+        ad.disabled = true;
+        try {
+          const next = a.active === false;
+          await saveAdmin(a.email, { active: next });
+          a.active = next;
+          render(); toast(next ? 'Включён' : 'Отключён');
+        } catch(err){ ad.disabled = false; toast('Не удалось: ' + err.message); }
+      } else {
+        admForm(a);
+      }
+      return;
+    }
+
+    /* Подтверждение выплаты */
+    const fa = e.target.closest('[data-fee-act]');
+    if (fa){
+      const row = fa.closest('[data-fee]');
+      const id = row.getAttribute('data-fee');
+      fa.disabled = true; fa.textContent = '…';
+      try {
+        await confirmFee(id);
+        const f = D.fees.find(function(x){ return String(x.id) === String(id); });
+        if (f){ f.status = 'confirmed'; f.confirmed_at = new Date().toISOString(); }
+        D.stats = moneyStats(D.parts, D.fees);
+        render(); toast('Выплата подтверждена');
+      } catch(err){ fa.disabled = false; toast('Не удалось: ' + err.message); }
+      return;
+    }
+  });
+
+  /* ---------- Форма арендодателя ---------- */
+  function admForm(a){
+    openSheet('Настройки: ' + (a.full_name || a.email),
+      '<div class="fld" style="margin-bottom:14px"><label style="display:block;font-size:13px;' +
+        'font-weight:600;margin-bottom:6px">Комиссия площадки, %</label>' +
+        '<input class="inp" id="eFee" type="number" min="0" max="100" value="' +
+          (a.fee_pct != null ? a.fee_pct : 5) + '"></div>' +
+      '<div class="fld" style="margin-bottom:14px"><label style="display:block;font-size:13px;' +
+        'font-weight:600;margin-bottom:6px">Лимит долга, ₽ <span class="muted" style="font-weight:400">' +
+        '— 0 без ограничения</span></label>' +
+        '<input class="inp" id="eLim" type="number" min="0" value="' + (a.debt_limit || 0) + '"></div>' +
+      '<div class="fld"><label style="display:block;font-size:13px;font-weight:600;margin-bottom:6px">' +
+        'Телефон</label><input class="inp" id="ePh" value="' + esc(a.phone || '') + '"></div>',
+      '<button class="btn sec" id="eNo" style="flex:1">Отмена</button>' +
+      '<button class="btn" id="eYes" style="flex:1">Сохранить</button>');
+
+    $('eNo').addEventListener('click', closeSheet);
+    $('eYes').addEventListener('click', async function(){
+      this.disabled = true; this.textContent = 'Сохраняем…';
+      try {
+        const patch = {
+          fee_pct: Number($('eFee').value) || 0,
+          debt_limit: Number($('eLim').value) || 0,
+          phone: $('ePh').value.trim()
+        };
+        await saveAdmin(a.email, patch);
+        Object.assign(a, patch);
+        closeSheet(); render(); toast('Сохранено');
+      } catch(err){ closeSheet(); toast('Не удалось: ' + err.message); }
+    });
+  }
+
+  /* ---------- Форма выплаты ---------- */
+  function feeForm(){
+    const opts = D.admins.filter(function(a){ return a.role !== 'chief'; })
+      .map(function(a){
+        const st = D.stats.byAdmin[(a.email||'').toLowerCase()] || { debt:0 };
+        return '<option value="' + esc(a.email) + '">' + esc(a.email) +
+               (st.debt > 0 ? ' — долг ' + Math.round(st.debt) + ' ₽' : '') + '</option>';
+      }).join('');
+
+    openSheet('Записать выплату комиссии',
+      '<div class="fld" style="margin-bottom:14px"><label style="display:block;font-size:13px;' +
+        'font-weight:600;margin-bottom:6px">Арендодатель</label>' +
+        '<select class="inp" id="fAdm">' + opts + '</select></div>' +
+      '<div class="fld" style="margin-bottom:14px"><label style="display:block;font-size:13px;' +
+        'font-weight:600;margin-bottom:6px">Сумма, ₽</label>' +
+        '<input class="inp" id="fAmt" type="number" min="1" placeholder="1000"></div>' +
+      '<div class="fld"><label style="display:block;font-size:13px;font-weight:600;margin-bottom:6px">' +
+        'Примечание</label><input class="inp" id="fNote" placeholder="наличными / перевод"></div>',
+      '<button class="btn sec" id="fNo" style="flex:1">Отмена</button>' +
+      '<button class="btn" id="fYes" style="flex:1">Записать</button>');
+
+    $('fNo').addEventListener('click', closeSheet);
+    $('fYes').addEventListener('click', async function(){
+      const amt = Number($('fAmt').value) || 0;
+      if (amt <= 0){ toast('Укажите сумму'); return; }
+      this.disabled = true; this.textContent = 'Записываем…';
+      try {
+        const row = await addFee({
+          admin_email: $('fAdm').value,
+          amount: amt,
+          note: $('fNote').value.trim(),
+          status: 'confirmed',
+          confirmed_at: new Date().toISOString(),
+          confirmed_by: A.me
+        });
+        if (row) D.fees.unshift(row);
+        D.stats = moneyStats(D.parts, D.fees);
+        closeSheet(); render(); toast('Выплата записана');
+      } catch(err){ closeSheet(); toast('Не удалось: ' + err.message); }
+    });
+  }
+
+  window.addEventListener('hashchange', function(){
+    const h = (location.hash || '').replace('#','');
+    if (h && h !== TAB){ TAB = h; render(); }
+  });
+
+  /* ---------- Старт ---------- */
+  (async function init(){
+    await restoreSess();
+
+    if (!isAuthed()){ screenDeny('Нужно войти', 'Раздел доступен только владельцу площадки.'); return; }
+    if (!isChief()){ screenDeny('Доступ закрыт', 'Этот раздел видит только владелец площадки «Ива».'); return; }
+
+    try {
+      const r = await Promise.all([
+        loadOrders(), loadParts(), loadAdmins(), loadFees(), loadAllTools(), loadAllCats()
+      ]);
+      D.orders = r[0]; D.parts = r[1]; D.admins = r[2];
+      D.fees = r[3];   D.tools = r[4];
+      D.cats = r[5].cats; D.subs = r[5].subs;
+      if (D.cats.length) CATS = D.cats;
+      D.stats = moneyStats(D.parts, D.fees);
+      render();
+    } catch(e){
+      $('root').innerHTML = '<div class="empty" style="padding:60px 20px">' +
+        '<b>Не удалось загрузить данные</b><p>' + esc(e.message) + '</p>' +
+        '<button class="btn" onclick="location.reload()">Обновить</button></div>';
+    }
+  })();
+})();
+</script>
+</body>
+</html>

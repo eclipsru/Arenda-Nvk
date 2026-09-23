@@ -497,27 +497,50 @@ textarea.inp{resize:vertical;min-height:110px;font-family:inherit;line-height:1.
       'Состояние: ' + condTitle(F.cond)
     ].filter(Boolean).join('\n');
 
+    const payload = {
+      name: F.name.trim(),
+      cat: F.cat,
+      sub: F.sub,
+      descr: F.descr.trim(),
+      price: F.price,
+      deposit: Number(F.deposit) || Number(F.price) * 5,
+      imgs: F.imgs,
+      delivery: F.delivery,
+      delivery_price: F.delivery_price,
+      terms: terms
+    };
+
+    /* Автопроверка. Главный админ публикует без неё. */
+    let verdict = { status:'active', failed:[] };
+    if (!isChief()){
+      b.textContent = 'Проверяем…';
+      try { verdict = await autoModerate(payload); }
+      catch(e){ verdict = { status:'moderation', failed:[{label:'Проверка', note:'не завершилась'}] }; }
+    }
+    payload.status = verdict.status;
+
     try {
-      const t = await createTool({
-        name: F.name.trim(),
-        cat: F.cat,
-        sub: F.sub,
-        descr: F.descr.trim(),
-        price: F.price,
-        deposit: Number(F.deposit) || Number(F.price) * 5,
-        imgs: F.imgs,
-        delivery: F.delivery,
-        delivery_price: F.delivery_price,
-        terms: terms,
-        status: 'active'
-      });
+      const t = await createTool(payload);
       dropDraft();
+      const onMod = verdict.status === 'moderation';
+      const reasons = verdict.failed.map(function(f){
+        return '<li style="margin:4px 0">' + esc(f.label) + (f.note ? ' — ' + esc(f.note) : '') + '</li>';
+      }).join('');
+
       $('root').innerHTML =
         '<div class="empty" style="padding:70px 20px">' +
-          '<svg viewBox="0 0 24 24" style="stroke:var(--grn)"><circle cx="12" cy="12" r="10"/>' +
-            '<path d="m8 12 3 3 5-6"/></svg>' +
-          '<b>Объявление опубликовано</b>' +
-          '<p>«' + esc(F.name) + '» уже в каталоге и доступно арендаторам.</p>' +
+          (onMod
+            ? '<svg viewBox="0 0 24 24" style="stroke:var(--yel)"><circle cx="12" cy="12" r="10"/>' +
+              '<path d="M12 7v6l3 2"/></svg>'
+            : '<svg viewBox="0 0 24 24" style="stroke:var(--grn)"><circle cx="12" cy="12" r="10"/>' +
+              '<path d="m8 12 3 3 5-6"/></svg>') +
+          '<b>' + (onMod ? 'Отправлено на проверку' : 'Объявление опубликовано') + '</b>' +
+          (onMod
+            ? '<p>«' + esc(F.name) + '» проверит администратор — обычно это занимает несколько часов. ' +
+              'Автопроверка отметила:</p>' +
+              '<ul style="text-align:left;max-width:360px;margin:0 auto 16px;color:var(--yel);' +
+              'font-size:13.5px;padding-left:18px">' + reasons + '</ul>'
+            : '<p>«' + esc(F.name) + '» уже в каталоге и доступно арендаторам.</p>') +
           '<div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap">' +
             (t && t.id ? '<a class="btn" href="tool.html?id=' + encodeURIComponent(t.id) + '">Посмотреть</a>' : '') +
             '<a class="btn sec" href="account.html">Мои объявления</a>' +

@@ -355,3 +355,228 @@ async function hydrateShowcase(){
     return { ok:false, error:e.message };
   }
 }
+
+/* ===========================================================
+   ГЛАВНЫЙ АДМИН (chief): деньги, заявки, админы, модерация.
+   Доступ ограничен на уровне RLS — политики fn_is_chief().
+   =========================================================== */
+
+function isChief(){ return !!(A.admin && A.admin.role === 'chief'); }
+
+/* ---------- Заявки ---------- */
+async function loadOrders(limit){
+  return await api('/rest/v1/orders?select=*&order=id.desc&limit=' + (limit || 200)) || [];
+}
+async function loadParts(){
+  return await api('/rest/v1/order_parts?select=*&order=id.desc&limit=500') || [];
+}
+async function updateOrderPart(id, patch){
+  const r = await api('/rest/v1/order_parts?id=eq.' + id, 'PATCH', patch,
+                      { Prefer:'return=representation' });
+  return (r && r[0]) || null;
+}
+
+/* ---------- Админы ---------- */
+async function loadAdmins(){
+  return await api('/rest/v1/admins?select=*&order=role.asc') || [];
+}
+async function saveAdmin(email, patch){
+  const r = await api('/rest/v1/admins?email=eq.' + encodeURIComponent(email), 'PATCH', patch,
+                      { Prefer:'return=representation' });
+  return (r && r[0]) || null;
+}
+async function addAdmin(row){
+  const r = await api('/rest/v1/admins', 'POST', row, { Prefer:'return=representation' });
+  return (r && r[0]) || null;
+}
+async function removeAdmin(email){
+  await api('/rest/v1/admins?email=eq.' + encodeURIComponent(email), 'DELETE', null,
+            { Prefer:'return=minimal' });
+  return true;
+}
+
+/* ---------- Выплаты комиссии ---------- */
+async function loadFees(){
+  return await api('/rest/v1/fee_payments?select=*&order=id.desc&limit=300') || [];
+}
+async function addFee(row){
+  const r = await api('/rest/v1/fee_payments', 'POST', row, { Prefer:'return=representation' });
+  return (r && r[0]) || null;
+}
+async function confirmFee(id){
+  const r = await api('/rest/v1/fee_payments?id=eq.' + id, 'PATCH',
+    { status:'confirmed', confirmed_at:new Date().toISOString(), confirmed_by:A.me },
+    { Prefer:'return=representation' });
+  return (r && r[0]) || null;
+}
+
+/* ---------- Все объявления (для модерации) ---------- */
+async function loadAllTools(){
+  return await api('/rest/v1/tools?select=' + TOOL_FIELDS + '&order=created_at.desc&limit=500') || [];
+}
+
+/* ---------- Категории ---------- */
+async function loadAllCats(){
+  const cats = await api('/rest/v1/cats?select=*&order=sort.asc.nullslast') || [];
+  const subs = await api('/rest/v1/subcats?select=*&order=sort.asc.nullslast') || [];
+  return { cats: cats, subs: subs };
+}
+async function saveCat(key, patch){
+  const r = await api('/rest/v1/cats?key=eq.' + encodeURIComponent(key), 'PATCH', patch,
+                      { Prefer:'return=representation' });
+  return (r && r[0]) || null;
+}
+async function addCat(row){
+  const r = await api('/rest/v1/cats', 'POST', row, { Prefer:'return=representation' });
+  return (r && r[0]) || null;
+}
+async function addSubcat(row){
+  const r = await api('/rest/v1/subcats', 'POST', row, { Prefer:'return=representation' });
+  return (r && r[0]) || null;
+}
+async function removeSubcat(key){
+  await api('/rest/v1/subcats?key=eq.' + encodeURIComponent(key), 'DELETE', null,
+            { Prefer:'return=minimal' });
+  return true;
+}
+
+/* ---------- Подсчёт денег ---------- */
+function moneyStats(parts, fees){
+  const st = { rent:0, fee:0, paid:0, owed:0, byAdmin:{} };
+
+  (parts || []).forEach(function(p){
+    const rent = Number(p.rent_sum) || 0;
+    const fee  = Number(p.fee) || 0;
+    const em   = (p.owner_email || '').toLowerCase();
+    st.rent += rent;
+    st.fee  += fee;
+    if (!st.byAdmin[em]) st.byAdmin[em] = { rent:0, fee:0, paid:0, orders:0 };
+    st.byAdmin[em].rent += rent;
+    st.byAdmin[em].fee  += fee;
+    st.byAdmin[em].orders++;
+  });
+
+  (fees || []).forEach(function(f){
+    if (f.status !== 'confirmed') return;
+    const em = (f.admin_email || '').toLowerCase();
+    const a  = Number(f.amount) || 0;
+    st.paid += a;
+    if (!st.byAdmin[em]) st.byAdmin[em] = { rent:0, fee:0, paid:0, orders:0 };
+    st.byAdmin[em].paid += a;
+  });
+
+  st.owed = st.fee - st.paid;
+  for (const k in st.byAdmin) st.byAdmin[k].debt = st.byAdmin[k].fee - st.byAdmin[k].paid;
+  return st;
+}
+
+/* ===========================================================
+   АВТОМОДЕРАЦИЯ.
+   Настоящее распознавание предмета на фото требует платного
+   vision-сервиса. Здесь — проверки, которые реально выполнимы
+   в браузере: есть ли фото, не пустая ли картинка, вменяемы ли
+   цена и текст. Всё, что не прошло, уходит главному админу.
+   =========================================================== */
+
+/* Анализ картинки: размер, «живость» кадра (разброс цветов и детали) */
+async function analyzePhoto(url){
+  return new Promise(function(resolve){
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.onerror = function(){ resolve({ ok:false, reason:'фото не открывается' }); };
+    img.onload = function(){
+      try {
+        if (img.width < 300 || img.height < 300){
+          resolve({ ok:false, reason:'фото слишком мелкое (' + img.width + '×' + img.height + ')' });
+          return;
+        }
+        const N = 64;
+        const cv = document.createElement('canvas');
+        cv.width = cv.height = N;
+        const cx = cv.getContext('2d');
+        cx.drawImage(img, 0, 0, N, N);
+        const d = cx.getImageData(0, 0, N, N).data;
+
+        /* Разброс яркости: однотонная заливка = не фото товара */
+        let sum = 0, sum2 = 0, n = N * N;
+        const lum = new Float32Array(n);
+        for (let i = 0; i < n; i++){
+          const L = 0.299*d[i*4] + 0.587*d[i*4+1] + 0.114*d[i*4+2];
+          lum[i] = L; sum += L; sum2 += L*L;
+        }
+        const mean = sum / n;
+        const sd = Math.sqrt(Math.max(0, sum2/n - mean*mean));
+
+        /* Детализация: средний перепад между соседними пикселями */
+        let edge = 0, cnt = 0;
+        for (let y = 1; y < N-1; y++){
+          for (let x = 1; x < N-1; x++){
+            const i = y*N + x;
+            edge += Math.abs(lum[i] - lum[i+1]) + Math.abs(lum[i] - lum[i+N]);
+            cnt += 2;
+          }
+        }
+        edge = edge / cnt;
+
+        if (sd < 12)   { resolve({ ok:false, reason:'фото почти однотонное', sd:sd, edge:edge }); return; }
+        if (edge < 2.5){ resolve({ ok:false, reason:'на фото не видно предмета', sd:sd, edge:edge }); return; }
+        if (mean < 18) { resolve({ ok:false, reason:'фото слишком тёмное', sd:sd, edge:edge }); return; }
+        if (mean > 240){ resolve({ ok:false, reason:'фото засвечено', sd:sd, edge:edge }); return; }
+
+        resolve({ ok:true, sd:sd, edge:edge, w:img.width, h:img.height });
+      } catch(e){
+        /* CORS или иная помеха — не наказываем объявление, отправляем к человеку */
+        resolve({ ok:false, reason:'не удалось проверить фото' });
+      }
+    };
+    img.src = url;
+  });
+}
+
+const BAD_WORDS = ['продам','продажа','куплю','обмен','скам','казино','ставки','кредит'];
+
+/* Главная проверка: вернуть {status, checks[]} */
+async function autoModerate(ad){
+  const checks = [];
+  const add = function(ok, label, note){ checks.push({ ok:ok, label:label, note:note || '' }); };
+
+  /* 1. Фото */
+  const imgs = ad.imgs || [];
+  if (!imgs.length){
+    add(false, 'Фотография', 'нет ни одного фото');
+  } else {
+    const r = await analyzePhoto(imgs[0]);
+    add(r.ok, 'На фото виден инструмент', r.ok ? '' : r.reason);
+  }
+
+  /* 2. Название */
+  const nm = (ad.name || '').trim();
+  add(nm.length >= 5 && nm.length <= 90 && /[а-яёa-z]/i.test(nm),
+      'Название', nm.length < 5 ? 'слишком короткое' : '');
+
+  /* 3. Описание */
+  const ds = (ad.descr || '').trim();
+  add(ds.length >= 20, 'Описание', ds.length < 20 ? 'короче 20 символов' : '');
+
+  /* 4. Цена */
+  const pr = Number(ad.price) || 0;
+  add(pr > 0 && pr <= 100000, 'Цена', pr <= 0 ? 'не указана' : (pr > 100000 ? 'подозрительно высокая' : ''));
+
+  /* 5. Залог */
+  const dep = Number(ad.deposit) || 0;
+  add(dep >= 0 && dep <= pr * 50, 'Залог', dep > pr * 50 ? 'несоразмерен цене' : '');
+
+  /* 6. Текст без посторонних предложений и контактов */
+  const all = (nm + ' ' + ds).toLowerCase();
+  const bad = BAD_WORDS.filter(function(w){ return all.indexOf(w) !== -1; });
+  const hasPhone = /(\+7|8)[\s\-(]*\d{3}[\s\-)]*\d{3}[\s\-]*\d{2}[\s\-]*\d{2}/.test(all);
+  add(!bad.length && !hasPhone, 'Текст объявления',
+      bad.length ? 'слова не по теме: ' + bad.join(', ') : (hasPhone ? 'телефон в тексте' : ''));
+
+  const failed = checks.filter(function(c){ return !c.ok; });
+  return {
+    status: failed.length ? 'moderation' : 'active',
+    checks: checks,
+    failed: failed
+  };
+}
