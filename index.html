@@ -201,7 +201,7 @@
   .pickup-map .pm-fallback .pm-pin{font-size:34px}
   .pickup-map .pm-fallback p{color:var(--gray);font-size:12.5px;margin:0}
   /* На телефоне при «Заберу сам» карту не показываем — только адрес склада */
-  @media(max-width:768px){
+  @media(max-width:768px),(pointer:coarse) and (max-width:1024px){
     #pickupMap .pickup-map{display:none}
   }
   /* Расчёт стоимости доставки */
@@ -263,7 +263,7 @@
   #authModal .inp-wrap input,#authModal .pass-wrap .fic+input{padding-left:40px}
   .auth-logo{display:none}
   .auth-switch{display:none}
-  @media(max-width:768px){
+  @media(max-width:768px),(pointer:coarse) and (max-width:1024px){
     /* --- Экран входа на весь экран, как в приложении --- */
     #authModal{padding:0}
     #authModal .modal{width:100%;height:100%;max-width:none;max-height:none;border-radius:0;border:none;padding:0;margin:0;display:flex;flex-direction:column;overflow-y:auto;background:var(--bg)}
@@ -316,9 +316,9 @@
   .modal-tool .tm-price b{font-size:22px;color:var(--dark)}
   .modal-tool .tm-desc{font-size:14.5px;line-height:1.55;margin-bottom:12px}
   .modal-tool .tm-sub{font-size:15px;margin:8px 0 8px}
-  @media(max-width:768px){ .grid .card{cursor:pointer} #toolModal{padding:8px} #toolModal .modal-tool{max-width:none;max-height:94vh;border-radius:16px} }
+  @media(max-width:768px),(pointer:coarse) and (max-width:1024px){ .grid .card{cursor:pointer} #toolModal{padding:8px} #toolModal .modal-tool{max-width:none;max-height:94vh;border-radius:16px} }
   /* Мобильная заявка: все поля на всю ширину окна, крупнее и удобнее */
-  @media(max-width:768px){
+  @media(max-width:768px),(pointer:coarse) and (max-width:1024px){
     #orderModal{padding:8px}
     #orderModal .modal-order{max-width:none;padding:18px 14px;border-radius:16px;max-height:94vh}
     #orderModal h3{font-size:20px}
@@ -410,7 +410,7 @@
 
   /* ===== МОБИЛЬНЫЙ ФИЛЬТР-ПЛИТКИ В ШАПКЕ (виден только на телефоне) ===== */
   .m-catalog{display:none}
-  @media(max-width:768px){
+  @media(max-width:768px),(pointer:coarse) and (max-width:1024px){
     /* Шапка: название + «В Новочеркасске» + кнопка «Войти», всё компактнее */
     .container{padding:0 12px}
     .nav{height:52px;gap:8px;min-width:0}
@@ -501,7 +501,7 @@
   .subchip .ico-svg svg,.m-subchip .ico-svg svg{width:14px;height:14px;vertical-align:-2px}
 
   /* ==== МОБИЛЬНОЕ ОФОРМЛЕНИЕ «ИВА» (вариант Б) — только телефоны ==== */
-  @media(max-width:768px){
+  @media(max-width:768px),(pointer:coarse) and (max-width:1024px){
     :root{--bg:#101217;--bg-2:#171A21;--card:#1A1D24;--line:#262B35}
     body{background-color:#0B0D11}
     header{background:#101217f2;border-bottom:1px solid #262B35}
@@ -549,7 +549,7 @@
 
     /* ==== МОБИЛЬНОЕ ПРИЛОЖЕНИЕ «ИВА» — шапка и нижняя панель (только телефоны) ==== */
     .m-hdr,.m-bnav{display:none}
-    @media(max-width:768px){
+    @media(max-width:768px),(pointer:coarse) and (max-width:1024px){
       header{display:none}
       body{padding-bottom:calc(64px + env(safe-area-inset-bottom))}
       .m-hdr{display:flex;position:sticky;top:0;z-index:30;align-items:center;gap:8px;padding:9px 12px;background:#101217f2;backdrop-filter:blur(8px);border-bottom:1px solid #262B35}
