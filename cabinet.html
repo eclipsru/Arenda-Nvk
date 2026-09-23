@@ -35,15 +35,15 @@ input,textarea,select{font-family:inherit;outline:none}
 .mava{width:30px;height:30px;border-radius:50%;background:var(--ord);color:#fff;font-weight:800;font-size:13px;display:flex;align-items:center;justify-content:center;overflow:hidden}
 .mava img{width:100%;height:100%;object-fit:cover}
 /* ---- bottom nav ---- */
-.nav{position:fixed;bottom:0;left:50%;transform:translateX(-50%);width:100%;max-width:560px;display:flex;background:#12151B;border-top:1px solid var(--line);z-index:20;padding-bottom:env(safe-area-inset-bottom)}
-.nav button{flex:1;background:none;color:var(--g2);font-size:10.5px;padding:8px 0 9px;position:relative}
-.nav button svg{display:block;margin:0 auto 3px;width:22px;height:22px;fill:currentColor}
+.nav{position:static;transform:none;width:100%;max-width:none;display:flex;background:#12151B;border-top:0;border-bottom:1px solid var(--line);z-index:20;padding-bottom:0}
+.nav button{flex:1;background:none;color:var(--g2);font-size:9.5px;padding:7px 0 8px;position:relative}
+.nav button svg{display:block;margin:0 auto 2px;width:17px;height:17px;fill:currentColor}
 .nav button.on{color:var(--or)}
-.nav .plus{width:52px;height:52px;margin-top:-20px;border-radius:50%;background:var(--or);color:#fff!important;box-shadow:0 4px 14px #0008;display:flex;align-items:center;justify-content:center;margin-left:auto;margin-right:auto}
-.nav .plus svg{width:26px;height:26px;margin:0}
+.nav .plus{width:32px;height:32px;margin-top:0;border-radius:50%;background:var(--or);color:#fff!important;box-shadow:none;display:flex;align-items:center;justify-content:center;margin-left:auto;margin-right:auto}
+.nav .plus svg{width:18px;height:18px;margin:0}
 .nav .plb{display:block;font-size:8.5px;color:var(--g2);margin-top:1px;letter-spacing:-.2px;line-height:1}
 /* ---- screens ---- */
-.scr{padding:12px 14px 86px}
+.scr{padding:12px 14px 30px}
 .tabs{display:flex;gap:24px;border-bottom:1px solid var(--line);margin-bottom:14px}
 .tabs span{padding:0 2px 9px;color:var(--gr);font-weight:700;font-size:16px;cursor:pointer}
 .tabs span.on{color:#fff;border-bottom:3px solid var(--or)}
@@ -90,7 +90,7 @@ input,textarea,select{font-family:inherit;outline:none}
 textarea.inp{resize:vertical;min-height:70px}
 .lbl{color:var(--g2);font-size:12px;margin-top:14px;display:block}
 /* ---- cart bar ---- */
-.cbar{position:fixed;bottom:74px;left:50%;transform:translateX(-50%);width:calc(100% - 28px);max-width:532px;background:var(--ord);color:#fff;border-radius:14px;padding:13px 16px;font-weight:700;font-size:15px;display:flex;justify-content:space-between;box-shadow:0 6px 18px #000a;z-index:15}
+.cbar{position:fixed;bottom:16px;left:50%;transform:translateX(-50%);width:calc(100% - 28px);max-width:532px;background:var(--ord);color:#fff;border-radius:14px;padding:13px 16px;font-weight:700;font-size:15px;display:flex;justify-content:space-between;box-shadow:0 6px 18px #000a;z-index:15}
 /* ---- modal ---- */
 .mask{position:fixed;inset:0;background:#000a;z-index:40;display:flex;align-items:flex-end;justify-content:center}
 .sheet{background:var(--card);width:100%;max-width:560px;max-height:92vh;overflow-y:auto;border-radius:18px 18px 0 0;padding:16px 16px 30px}
@@ -144,7 +144,7 @@ textarea.inp{resize:vertical;min-height:70px}
 .stat .v{font-size:19px;font-weight:700;margin-top:4px}
 .neg{color:var(--red)}.pos{color:var(--grnB)}
 /* ---- toast ---- */
-#toast{position:fixed;bottom:100px;left:50%;transform:translateX(-50%);background:#2A2E38;color:#fff;font-size:13.5px;padding:11px 16px;border-radius:12px;z-index:60;max-width:86%;text-align:center;box-shadow:0 6px 18px #000b;opacity:0;transition:opacity .25s;pointer-events:none}
+#toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:#2A2E38;color:#fff;font-size:13.5px;padding:11px 16px;border-radius:12px;z-index:60;max-width:86%;text-align:center;box-shadow:0 6px 18px #000b;opacity:0;transition:opacity .25s;pointer-events:none}
 #toast.show{opacity:1}
 .sugg{background:#20242D;border:1px solid var(--line);border-radius:0 0 12px 12px;margin-top:-10px;overflow:hidden}
 .sugg div{padding:10px 12px;font-size:13.5px;color:var(--tx);border-top:1px solid var(--line);cursor:pointer}
@@ -177,6 +177,9 @@ textarea.inp{resize:vertical;min-height:70px}
 .umenu b:hover{background:#2A2013;color:var(--or)}
 .umenu a{color:var(--red)}
 .umenu a:hover{background:#2d1113}
+#umenuM{max-height:72vh;overflow-y:auto;min-width:224px}
+.umh{padding:9px 12px 5px;font-size:10.5px;letter-spacing:.5px;text-transform:uppercase;color:var(--g2);font-weight:800}
+#umCats b{font-size:13.5px;padding:9px 12px}
 .citybtn{display:flex;align-items:center;gap:6px;background:none;color:var(--tx);font-size:13px;font-weight:600;padding:9px 10px;border-radius:9px;flex:0 0 auto;margin-left:2px}
 .citybtn:hover{background:var(--card)}
 .citybtn svg{width:14px;height:14px;fill:var(--or);flex:0 0 14px}
@@ -371,7 +374,6 @@ textarea.inp{resize:vertical;min-height:70px}
         </div>
       </div>
     </div>
-    <div id="view"></div>
     <div class="nav" id="nav">
       <button data-n="home" class="on"><svg viewBox="0 0 24 24"><path d="M12 3 2 12h3v8h6v-6h2v6h6v-8h3z"/></svg>Главная</button>
       <button data-n="chat"><svg viewBox="0 0 24 24"><path d="M4 4h16a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H8l-5 4V6a2 2 0 0 1 1-1.7z"/></svg>Чат<span id="chatDot" class="hide" style="position:absolute;top:4px;right:22%;width:9px;height:9px;background:var(--or);border-radius:50%"></span></button>
@@ -379,6 +381,7 @@ textarea.inp{resize:vertical;min-height:70px}
       <button data-n="orders"><svg viewBox="0 0 24 24"><path d="M7 4h-2l-1 2H2v13a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V6h-2l-1-2h-2l1 2H6zM5 8h14v11H5zm4 2h6v2H9z"/></svg>Заявки</button>
       <button data-n="cab"><svg viewBox="0 0 24 24"><path d="M12 12a4 4 0 1 0-4-4 4 4 0 0 0 4 4zm0 2c-4 0-8 2-8 5v3h16v-3c0-3-4-5-8-5z"/></svg>Кабинет</button>
     </div>
+    <div id="view"></div>
   </div>
 
   <div id="layer"></div>
@@ -519,13 +522,13 @@ async function loadAdmins(){
 }
 async function loadBase(){
   var c=cget('base',180000);
-  if(c){S.tools=c.tools;S.cats=c.cats;S.subs=c.subs;S.limited=c.limited;renderMega();if(S.screen==='home')go('home');loadLikes()}
+  if(c){S.tools=c.tools;S.cats=c.cats;S.subs=c.subs;S.limited=c.limited;renderMega();renderUmenuCats();if(S.screen==='home')go('home');loadLikes()}
   try{
     var tl=await api('/rest/v1/tools?select=*&active=eq.true&order=sort.asc.nullslast,created_at.desc&limit=500');
     var cl=await api('/rest/v1/cats?select=*&active=eq.true&order=sort.asc.nullslast');
     var sc=await api('/rest/v1/subcats?select=*&active=eq.true&order=sort.asc.nullslast');
     var lm=await api('/rest/v1/limited_admins?select=email');
-    S.tools=tl;S.cats=cl;S.subs=sc;S.limited=(lm||[]).map(function(x){return (x.email||'').toLowerCase()});
+    S.tools=tl;S.cats=cl;S.subs=sc;S.limited=(lm||[]).map(function(x){return (x.email||'').toLowerCase()});renderUmenuCats();
     cset('base',{tools:tl,cats:cl,subs:sc,limited:S.limited});
     renderMega();updPlace();
     if(S.screen==='home')go('home');
@@ -588,7 +591,7 @@ function renderMega(){var L=$('megaL'),R=$('megaR');if(!L||!R)return;
   var mc=$('mCity');if(mc)mc.onclick=citySheet;
   var mb=$('mBell');if(mb)mb.onclick=function(){go('notif')};
   var ma=$('mAv');if(ma)ma.onclick=function(e){e.stopPropagation();var mm=$('umenuM');if(mm)mm.classList.toggle('hide')};
-  var umm=$('umenuM');if(umm)umm.onclick=function(e){navClick(e);umm.classList.add('hide')};
+  var umm=$('umenuM');if(umm)umm.onclick=function(e){var cc=e.target.closest('#umCats [data-c]');if(cc){S.cat=cc.getAttribute('data-c');S.sub='';S.favOnly=false;S.q='';var tq2=$('tq');if(tq2)tq2.value='';go('home')}else navClick(e);umm.classList.add('hide')};
   var ua=$('uava');if(ua)ua.onclick=function(){$('umenu').classList.toggle('hide')};
   var tq=$('tq');
   if(tq){tq.addEventListener('focus',function(){if(!tq.value){var m=$('mega');if(m)m.classList.remove('hide')}});
@@ -673,9 +676,17 @@ function iconForCat(k){k=(k||'').toLowerCase();
   if(k.indexOf('строй')>=0)return '<svg viewBox="0 0 24 24"><path d="M12 2 22 7v10l-10 5L2 17V7zm0 10L4.2 8 12 4.2 19.8 8z"/></svg>';
   if(k.indexOf('сад')>=0)return '<svg viewBox="0 0 24 24"><path d="M5 21c8 0 14-6 14-16-10 0-16 6-16 14 0 1 .1 1.6.2 2C3 21 3 21 5 21z"/></svg>';
   return '<svg viewBox="0 0 24 24"><path d="M21.7 18.3 14 10.6V8a6 6 0 0 0-8-5.7l3.6 3.6-2.8 2.8L3.2 5.1A6 6 0 0 0 8.9 13h2.5l7.7 7.7z"/></svg>'}
-function dashInner(){if((S.q||'').trim()||S.cat||S.favOnly)return '';var h='<div class="sect sth">Категории</div><div class="catdash">';
-  for(var i=0;i<S.cats.length;i++){var c=S.cats[i];h+='<div class="dcat" data-c="'+esc(c.key)+'"><span class="dic">'+iconForCat(c.key)+'</span><b>'+esc(c.title)+'</b></div>'}
-  return h+'</div>'}
+function renderUmenuCats(){
+  var mm=$('umenuM');if(!mm)return;
+  var old=document.getElementById('umCats');if(old)old.parentNode.removeChild(old);
+  var g=document.createElement('div');g.id='umCats';
+  var h='<div class="umh">Категории</div><b data-c="">Все категории</b>';
+  for(var i=0;i<S.cats.length;i++){var c=S.cats[i];h+='<b data-c="'+esc(c.key)+'">'+esc(c.title)+'</b>'}
+  g.innerHTML=h;
+  var out=mm.querySelector('a');
+  if(out)mm.insertBefore(g,out);else mm.appendChild(g);
+}
+function dashInner(){return ''}
 function tilesHtml(){
   var q=S.q.trim().toLowerCase(),out='';
   var list=myTools();
@@ -1141,14 +1152,14 @@ async function cabInc(){
     function ms(dt){return new Date(String(dt).replace(' ','T').replace('+00','+00:00')).getTime()}
     var per={d:[0,0,0],w:[0,0,0],mo:[0,0,0],a:[0,0,0]};
     (parts||[]).forEach(function(p){
-      var t=ms(p.created_at),r=p.rent_sum||0,f=p.fee||0;
+      var t=ms(p.created_at),r=+(p.rent_sum||0),f=+(p.fee||0);
       var arr=[r,f,r-f];
       if(t>=t0)for(var i=0;i<3;i++)per.d[i]+=arr[i];
       if(t>=w0)for(var i2=0;i2<3;i2++)per.w[i2]+=arr[i2];
       if(t>=m0)for(var i3=0;i3<3;i3++)per.mo[i3]+=arr[i3];
       for(var i4=0;i4<3;i4++)per.a[i4]+=arr[i4];
     });
-    var paid=0;(pays||[]).forEach(function(p){if(p.status==='confirmed')paid+=p.amount||0});
+    var paid=0;(pays||[]).forEach(function(p){if(p.status==='confirmed')paid+=+p.amount||0});
     var feeAll=per.a[1],debt=Math.max(0,feeAll-paid);
     function box(k,v,neg){return '<div class="stat"><div class="k">'+k+'</div><div class="v '+(neg?'':'')+'">'+v+'</div></div>'}
     b.innerHTML='<div class="sect">Доход за периоды</div>'

@@ -556,7 +556,7 @@
     .m-hdr,.m-bnav{display:none}
     @media(max-width:768px),(pointer:coarse) and (max-width:1024px){
       header{display:none}
-      body{padding-bottom:calc(64px + env(safe-area-inset-bottom))}
+      body{padding-bottom:0}
       .m-hdr{display:flex;position:sticky;top:0;z-index:30;align-items:center;gap:8px;padding:9px 12px;background:#101217f2;backdrop-filter:blur(8px);border-bottom:1px solid #262B35}
       .m-hdr img{width:36px;height:36px;border-radius:10px;border:1px solid #262B35;background:#101217;flex:0 0 36px}
       .m-hdr .m-tt{flex:1;min-width:0;line-height:1.1}
@@ -566,12 +566,12 @@
       .m-hdr .m-pill svg{width:11px;height:11px;color:#FF8F1F;flex:0 0 11px}
       .m-hdr .m-tel{width:34px;height:34px;flex:0 0 34px;display:flex;align-items:center;justify-content:center;color:#C9CFDA}
       .m-hdr .m-tel svg{width:18px;height:18px}
-      .m-bnav{display:flex;position:fixed;bottom:0;left:0;right:0;z-index:40;background:#12151B;border-top:1px solid #262B35;padding-bottom:env(safe-area-inset-bottom)}
-      .m-bnav a,.m-bnav .m-mid{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;min-width:0;padding:8px 0 9px;background:none;border:0;color:#6B7080;font-family:inherit;font-size:9.5px;font-weight:600;text-decoration:none;cursor:pointer}
-      .m-bnav a svg{width:21px;height:21px;display:block}
+      .m-bnav{display:flex;position:static;z-index:40;background:#12151B;border-top:0;border-bottom:1px solid #262B35;padding-bottom:0}
+      .m-bnav a,.m-bnav .m-mid{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;min-width:0;padding:7px 0 8px;background:none;border:0;color:#6B7080;font-family:inherit;font-size:9.5px;font-weight:600;text-decoration:none;cursor:pointer}
+      .m-bnav a svg{width:17px;height:17px;display:block}
       .m-bnav a.on{color:#FF8F1F}
-      .m-bnav .m-mid .m-plus{width:50px;height:50px;border-radius:50%;background:#F57C00;display:flex;align-items:center;justify-content:center;margin-top:-18px;box-shadow:0 6px 16px #0009;border:3px solid #12151B}
-      .m-bnav .m-mid .m-plus svg{width:24px;height:24px;color:#fff}
+      .m-bnav .m-mid .m-plus{width:32px;height:32px;border-radius:50%;background:#F57C00;display:flex;align-items:center;justify-content:center;margin-top:0;box-shadow:none;border:0}
+      .m-bnav .m-mid .m-plus svg{width:18px;height:18px;color:#fff}
       .m-bnav .m-mid span:last-child{color:#C9CFDA;margin-top:1px}
     }
 </style>
@@ -584,6 +584,13 @@
   <span class="m-pill"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2a7 7 0 0 0-7 7c0 5.2 7 13 7 13s7-7.8 7-13a7 7 0 0 0-7-7zm0 9.5A2.5 2.5 0 1 1 12 6a2.5 2.5 0 0 1 0 5.5z"/></svg>Новочеркасск</span>
   <a class="m-tel" href="tel:+79081732475" aria-label="Позвонить"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6.6 10.8a15 15 0 0 0 6.6 6.6l2.2-2.2a1 1 0 0 1 1-.25 11.4 11.4 0 0 0 3.6.57 1 1 0 0 1 1 1V20a1 1 0 0 1-1 1A17 17 0 0 1 3 4a1 1 0 0 1 1-1h3.5a1 1 0 0 1 1 1 11.4 11.4 0 0 0 .57 3.6 1 1 0 0 1-.25 1z"/></svg></a>
 </div>
+<nav class="m-bnav">
+  <a class="on" href="#"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 3 2 12h3v8h6v-6h2v6h6v-8h3z"/></svg>Главная</a>
+  <a href="cabinet.html"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M4 4h16a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H8l-5 4V6a2 2 0 0 1 1-1.7z"/></svg>Чат</a>
+  <button class="m-mid" type="button" onclick="document.getElementById('openOrderBtn').click()"><span class="m-plus"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M11 5h2v6h6v2h-6v6h-2v-6H5v-2h6z"/></svg></span><span>Заявка</span></button>
+  <a href="cabinet.html"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M7 4h-2l-1 2H2v13a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V6h-2l-1-2h-2l1 2H6zM5 8h14v11H5z"/></svg>Заявки</a>
+  <a href="cabinet.html"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 12a4 4 0 1 0-4-4 4 4 0 0 0 4 4zm0 2c-4 0-8 2-8 5v3h16v-3c0-3-4-5-8-5z"/></svg>Кабинет</a>
+</nav>
 
 
 <!-- ХЕДЕР -->
@@ -2086,12 +2093,6 @@ const TOOLS = [
 </script>
 
 <!-- МОБИЛЬНАЯ НИЖНЯЯ ПАНЕЛЬ «ИВА» (только телефоны) -->
-<nav class="m-bnav">
-  <a class="on" href="#"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 3 2 12h3v8h6v-6h2v6h6v-8h3z"/></svg>Главная</a>
-  <a href="cabinet.html"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M4 4h16a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H8l-5 4V6a2 2 0 0 1 1-1.7z"/></svg>Чат</a>
-  <button class="m-mid" type="button" onclick="document.getElementById('openOrderBtn').click()"><span class="m-plus"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M11 5h2v6h6v2h-6v6h-2v-6H5v-2h6z"/></svg></span><span>Заявка</span></button>
-  <a href="cabinet.html"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M7 4h-2l-1 2H2v13a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V6h-2l-1-2h-2l1 2H6zM5 8h14v11H5z"/></svg>Заявки</a>
-  <a href="cabinet.html"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 12a4 4 0 1 0-4-4 4 4 0 0 0 4 4zm0 2c-4 0-8 2-8 5v3h16v-3c0-3-4-5-8-5z"/></svg>Кабинет</a>
-</nav>
+
 </body>
 </html>
