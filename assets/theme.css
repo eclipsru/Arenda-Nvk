@@ -499,3 +499,38 @@ select.inp{cursor:pointer;appearance:none;
   .dlg-list{max-height:none}
   .bub{max-width:86%}
 }
+
+/* ===========================================================
+   ГЛАВНАЯ: постоянный фильтр слева + сетка по 4 карточки
+   =========================================================== */
+
+/* Сетка ровно по 4 в строке */
+.grid.g4{grid-template-columns:repeat(4,minmax(0,1fr))}
+@media (max-width:1180px){ .grid.g4{grid-template-columns:repeat(3,minmax(0,1fr))} }
+@media (max-width:900px){  .grid.g4{grid-template-columns:repeat(2,minmax(0,1fr))} }
+@media (max-width:380px){  .grid.g4{grid-template-columns:1fr} }
+
+/* Плитка «Назад» в списке подкатегорий */
+.cat.back{border-color:var(--line-2);background:var(--field)}
+.cat.back:hover{border-color:var(--or)}
+.cat.back .ico{color:var(--gr)}
+.cat.back b{color:var(--gr)}
+.cat.on{border-color:var(--or);background:var(--or-soft)}
+.cat.on b{color:var(--or)}
+
+/* Заголовок раздела категорий с «хлебной крошкой» */
+.cats-head{display:flex;align-items:baseline;gap:10px;margin-bottom:14px;flex-wrap:wrap}
+.cats-head h2{font-size:21px;font-weight:800;letter-spacing:-.2px}
+.cats-head .crumb{font-size:14px;color:var(--g2)}
+.cats-head .crumb b{color:var(--or);font-weight:600}
+.cats-head a{margin-left:auto;color:var(--or);font-size:14px;font-weight:600}
+
+/* На главной фильтр остаётся видимым и на планшете */
+@media (max-width:1024px){
+  .layout.home{grid-template-columns:230px 1fr;gap:14px}
+  .layout.home .filters{display:block;padding:13px}
+}
+@media (max-width:860px){
+  .layout.home{grid-template-columns:1fr}
+  .layout.home .filters{display:none}
+}

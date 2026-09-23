@@ -16,36 +16,47 @@
 <main class="page">
   <div class="wrap">
 
-    <!-- Категории -->
-    <section class="sect">
-      <div class="sect-h">
-        <h2>Категории</h2>
-        <a href="catalog.html">Весь каталог →</a>
-      </div>
-      <div class="cats" id="cats"></div>
-    </section>
+    <div class="layout home">
 
-    <!-- Рядом с вами -->
-    <section class="sect">
-      <div class="sect-h">
-        <h2>Рядом с вами</h2>
-        <span class="cnt" id="nearCity"></span>
-        <a href="catalog.html" id="nearAll">Смотреть все →</a>
-      </div>
-      <div class="grid" id="near"></div>
-    </section>
+      <!-- Постоянный фильтр слева -->
+      <aside class="filters" id="filters"></aside>
 
-    <!-- Новые объявления -->
-    <section class="sect">
-      <div class="sect-h">
-        <h2>Свежие объявления</h2>
-        <span class="cnt" id="freshCnt"></span>
-      </div>
-      <div class="grid" id="fresh"></div>
-      <div style="text-align:center;padding:24px 0 8px">
-        <a class="btn sec" href="catalog.html">Показать весь каталог</a>
-      </div>
-    </section>
+      <section>
+        <!-- Плитки категорий / подкатегорий -->
+        <div class="sect" style="padding-top:20px;padding-bottom:0">
+          <div class="cats-head">
+            <h2 id="catsTitle">Категории</h2>
+            <span class="crumb" id="catsCrumb"></span>
+            <a href="catalog.html">Весь каталог →</a>
+          </div>
+          <div class="cats" id="cats"></div>
+        </div>
+
+        <!-- Объявления -->
+        <div class="sect">
+          <div class="toolbar">
+            <button class="f-mob-btn" id="fMob">
+              <svg viewBox="0 0 24 24"><path d="M3 5h18M7 12h10M11 19h2"/></svg>
+              Фильтры <span class="n hide" id="fMobN">0</span>
+            </button>
+            <span class="found" id="found"></span>
+            <div class="sort">
+              <span>Сортировка</span>
+              <select class="inp" id="sort">
+                <option value="new">Сначала новые</option>
+                <option value="cheap">Сначала дешевле</option>
+                <option value="exp">Сначала дороже</option>
+                <option value="rating">По рейтингу</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="chips" id="chips"></div>
+          <div class="grid g4" id="grid"></div>
+        </div>
+      </section>
+
+    </div>
 
   </div>
 </main>
@@ -60,55 +71,306 @@
 (function(){
   mountChrome('home', '');
 
-  /* --- Плитка категорий с количеством --- */
+  /* Состояние фильтров — общее для панели, плиток и списка */
+  var F = {
+    q:'', cat:'', sub:'', city:'',
+    priceFrom:0, priceTo:0, conds:[], delivery:false
+  };
+  var SORT = 'new';
+
+  /* Уровень плиток: '' — категории, иначе показываем подкатегории этой категории */
+  var LEVEL = '';
+
+  /* ---------- Плитки ---------- */
   function renderCats(){
-    $('cats').innerHTML = CATS.map(function(c){
-      var n = ADS.filter(function(a){ return a.status === 'active' && a.cat === c.key; }).length;
-      return '<a class="cat" href="catalog.html?cat=' + c.key + '">' +
-               '<span class="ico">' + ICONS[c.key] + '</span>' +
-               '<b>' + esc(c.title) + '</b>' +
-               '<span>' + n + ' ' + plural(n,'объявление','объявления','объявлений') + '</span>' +
-             '</a>';
-    }).join('');
+    var box = $('cats');
+    var h = '';
+
+    if (!LEVEL){
+      /* Верхний уровень: все категории */
+      $('catsTitle').textContent = 'Категории';
+      $('catsCrumb').textContent = '';
+
+      h = CATS.map(function(c){
+        var n = ADS.filter(function(a){
+          return a.status === 'active' && a.cat === c.key;
+        }).length;
+        return '<button type="button" class="cat' + (F.cat === c.key ? ' on' : '') +
+                 '" data-cat="' + esc(c.key) + '">' +
+                 '<span class="ico">' + (ICONS[c.key] || ICONS.power) + '</span>' +
+                 '<b>' + esc(c.title) + '</b>' +
+                 '<span>' + n + ' ' + plural(n,'объявление','объявления','объявлений') + '</span>' +
+               '</button>';
+      }).join('');
+
+    } else {
+      /* Второй уровень: подкатегории выбранной категории */
+      var subs = SUBS.filter(function(s){ return s.cat === LEVEL; });
+      var cTitle = catTitle(LEVEL);
+
+      $('catsTitle').textContent = cTitle;
+      $('catsCrumb').innerHTML = 'Категории · <b>' + esc(cTitle) + '</b>';
+
+      /* Первая плитка — возврат к категориям */
+      h = '<button type="button" class="cat back" data-back="1">' +
+            '<span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" ' +
+              'stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">' +
+              '<path d="m15 18-6-6 6-6"/></svg></span>' +
+            '<b>Назад</b><span>ко всем категориям</span>' +
+          '</button>';
+
+      /* Плитка «вся категория» */
+      var nAll = ADS.filter(function(a){
+        return a.status === 'active' && a.cat === LEVEL;
+      }).length;
+      h += '<button type="button" class="cat' + (!F.sub ? ' on' : '') + '" data-sub="">' +
+             '<span class="ico">' + (ICONS[LEVEL] || ICONS.power) + '</span>' +
+             '<b>Все ' + esc(cTitle.toLowerCase()) + '</b>' +
+             '<span>' + nAll + ' ' + plural(nAll,'объявление','объявления','объявлений') + '</span>' +
+           '</button>';
+
+      h += subs.map(function(s){
+        var n = ADS.filter(function(a){
+          return a.status === 'active' && a.cat === LEVEL && a.sub === s.key;
+        }).length;
+        return '<button type="button" class="cat' + (F.sub === s.key ? ' on' : '') +
+                 '" data-sub="' + esc(s.key) + '">' +
+                 '<span class="ico">' + (ICONS[LEVEL] || ICONS.power) + '</span>' +
+                 '<b>' + esc(s.title) + '</b>' +
+                 '<span>' + n + ' ' + plural(n,'объявление','объявления','объявлений') + '</span>' +
+               '</button>';
+      }).join('');
+    }
+
+    box.innerHTML = h;
   }
 
-  /* --- Лента «Рядом с вами» (по выбранному городу) --- */
-  function renderNear(){
-    var city = getCity();
-    var list = ADS.filter(function(a){ return a.status === 'active' && a.city === city; });
-
-    $('nearCity').textContent = city;
-    $('nearAll').href = 'catalog.html?city=' + encodeURIComponent(city);
-
-    if (!list.length){
-      $('near').innerHTML =
-        '<div class="empty" style="grid-column:1/-1">' +
-          '<b>В городе ' + esc(city) + ' пока пусто</b>' +
-          '<p>Посмотрите объявления в соседних городах — многие арендодатели возят инструмент.</p>' +
-          '<a class="btn sec" href="catalog.html">Весь каталог</a>' +
-        '</div>';
+  /* Клики по плиткам */
+  $('cats').addEventListener('click', function(e){
+    var bk = e.target.closest('[data-back]');
+    if (bk){
+      LEVEL = ''; F.cat = ''; F.sub = '';
+      renderAll();
       return;
     }
-    $('near').innerHTML = sortAds(list, 'new').slice(0, 8).map(adCard).join('');
+    var c = e.target.closest('[data-cat]');
+    if (c){
+      var key = c.getAttribute('data-cat');
+      LEVEL = key; F.cat = key; F.sub = '';
+      renderAll();
+      return;
+    }
+    var s = e.target.closest('[data-sub]');
+    if (s){
+      F.sub = s.getAttribute('data-sub');
+      renderAll();
+    }
+  });
+
+  /* ---------- Панель фильтров ---------- */
+  function countFor(catKey){
+    var probe = Object.assign({}, F, { cat:catKey, sub:'' });
+    return applyFilters(ADS, probe).length;
   }
 
-  /* --- Свежие объявления --- */
-  function renderFresh(){
-    var list = sortAds(ADS.filter(function(a){ return a.status === 'active'; }), 'new').slice(0, 12);
-    $('freshCnt').textContent = ADS.filter(function(a){ return a.status === 'active'; }).length + ' всего';
-    $('fresh').innerHTML = list.map(adCard).join('');
+  function filtersHTML(){
+    var subs = F.cat ? SUBS.filter(function(s){ return s.cat === F.cat; }) : [];
+
+    var catList = '<div class="f-item' + (!F.cat ? ' on' : '') + '" data-fcat="">' +
+                    'Все категории<span class="n">' + countFor('') + '</span></div>' +
+      CATS.map(function(c){
+        return '<div class="f-item' + (F.cat === c.key ? ' on' : '') + '" data-fcat="' + esc(c.key) + '">' +
+                 esc(c.title) + '<span class="n">' + countFor(c.key) + '</span></div>';
+      }).join('');
+
+    var subBlock = subs.length ?
+      '<div class="f-grp"><h4>Подкатегория</h4><div class="f-list">' +
+        '<div class="f-item' + (!F.sub ? ' on' : '') + '" data-fsub="">Любая</div>' +
+        subs.map(function(s){
+          var n = ADS.filter(function(a){
+            return a.status === 'active' && a.cat === F.cat && a.sub === s.key;
+          }).length;
+          return '<div class="f-item' + (F.sub === s.key ? ' on' : '') + '" data-fsub="' + esc(s.key) + '">' +
+                 esc(s.title) + '<span class="n">' + n + '</span></div>';
+        }).join('') +
+      '</div></div>' : '';
+
+    return '' +
+    '<div class="f-grp"><h4>Цена за сутки, ₽</h4>' +
+      '<div class="f-row">' +
+        '<input class="inp" id="pFrom" type="number" min="0" placeholder="от" value="' + (F.priceFrom || '') + '">' +
+        '<input class="inp" id="pTo" type="number" min="0" placeholder="до" value="' + (F.priceTo || '') + '">' +
+      '</div></div>' +
+
+    '<div class="f-grp"><h4>Категория</h4><div class="f-list">' + catList + '</div></div>' +
+    subBlock +
+
+    '<div class="f-grp"><h4>Город</h4>' +
+      '<select class="inp" id="fCity">' +
+        '<option value="">Любой город</option>' +
+        CITIES.map(function(c){
+          return '<option value="' + esc(c) + '"' + (F.city === c ? ' selected' : '') + '>' + esc(c) + '</option>';
+        }).join('') +
+      '</select></div>' +
+
+    '<div class="f-grp"><h4>Состояние</h4>' +
+      CONDS.map(function(c){
+        return '<label class="chk"><input type="checkbox" data-cond="' + c.key + '"' +
+               (F.conds.indexOf(c.key) !== -1 ? ' checked' : '') + '>' + esc(c.title) + '</label>';
+      }).join('') +
+    '</div>' +
+
+    '<div class="f-grp">' +
+      '<label class="chk"><input type="checkbox" id="fDeliv"' + (F.delivery ? ' checked' : '') + '>' +
+        'Только с доставкой</label></div>' +
+
+    '<div class="f-grp">' +
+      '<button class="btn sec wide sm" id="fReset">Сбросить фильтры</button></div>';
   }
 
-  async function boot(){
-    await hydrateShowcase();   /* живые объявления вместо демо */
+  function bindFilters(root){
+    root.addEventListener('click', function(e){
+      var c = e.target.closest('[data-fcat]');
+      if (c){
+        F.cat = c.getAttribute('data-fcat'); F.sub = '';
+        LEVEL = F.cat;              /* плитки идут следом за фильтром */
+        renderAll(); return;
+      }
+      var s = e.target.closest('[data-fsub]');
+      if (s){ F.sub = s.getAttribute('data-fsub'); renderAll(); return; }
+
+      if (e.target.id === 'fReset'){ resetAll(); }
+    });
+
+    root.addEventListener('change', function(e){
+      var t = e.target;
+      if (t.id === 'fCity'){ F.city = t.value; renderAll(); }
+      else if (t.id === 'fDeliv'){ F.delivery = t.checked; renderAll(); }
+      else if (t.hasAttribute && t.hasAttribute('data-cond')){
+        var k = t.getAttribute('data-cond'), i = F.conds.indexOf(k);
+        if (t.checked && i === -1) F.conds.push(k);
+        if (!t.checked && i !== -1) F.conds.splice(i, 1);
+        renderAll();
+      }
+    });
+
+    root.addEventListener('keydown', function(e){
+      if (e.key === 'Enter' && (e.target.id === 'pFrom' || e.target.id === 'pTo')) e.target.blur();
+    });
+    root.addEventListener('blur', function(e){
+      if (e.target.id === 'pFrom' || e.target.id === 'pTo'){
+        var fEl = root.querySelector('#pFrom'), tEl = root.querySelector('#pTo');
+        var from = Number(fEl && fEl.value) || 0, to = Number(tEl && tEl.value) || 0;
+        if (from !== F.priceFrom || to !== F.priceTo){
+          F.priceFrom = from; F.priceTo = to; renderAll();
+        }
+      }
+    }, true);
+  }
+
+  function resetAll(){
+    F = { q:'', cat:'', sub:'', city:'', priceFrom:0, priceTo:0, conds:[], delivery:false };
+    LEVEL = '';
+    renderAll();
+  }
+
+  /* ---------- Чипы ---------- */
+  function chipsHTML(){
+    var out = [];
+    var add = function(label, key){
+      out.push('<span class="chip">' + esc(label) +
+               '<button data-x="' + key + '" aria-label="Убрать">×</button></span>');
+    };
+    if (F.cat)  add(catTitle(F.cat), 'cat');
+    if (F.sub)  add(subTitle(F.sub), 'sub');
+    if (F.city) add(F.city, 'city');
+    if (F.priceFrom) add('от ' + F.priceFrom + ' ₽', 'from');
+    if (F.priceTo)   add('до ' + F.priceTo + ' ₽', 'to');
+    F.conds.forEach(function(c){ add(condTitle(c), 'cond:' + c); });
+    if (F.delivery) add('С доставкой', 'delivery');
+    if (out.length > 1) out.push('<span class="chip clr" data-x="all">Сбросить всё</span>');
+    return out.join('');
+  }
+
+  $('chips').addEventListener('click', function(e){
+    var b = e.target.closest('[data-x]');
+    if (!b) return;
+    var k = b.getAttribute('data-x');
+    if (k === 'all'){ resetAll(); return; }
+    if (k === 'cat'){ F.cat = ''; F.sub = ''; LEVEL = ''; }
+    else if (k === 'sub'){ F.sub = ''; }
+    else if (k === 'city'){ F.city = ''; }
+    else if (k === 'from'){ F.priceFrom = 0; }
+    else if (k === 'to'){ F.priceTo = 0; }
+    else if (k === 'delivery'){ F.delivery = false; }
+    else if (k.indexOf('cond:') === 0){
+      var c = k.slice(5), i = F.conds.indexOf(c);
+      if (i !== -1) F.conds.splice(i, 1);
+    }
+    renderAll();
+  });
+
+  /* ---------- Список объявлений ---------- */
+  function renderList(){
+    var list = sortAds(applyFilters(ADS, F), SORT);
+
+    $('found').textContent = 'Найдено ' + list.length + ' ' +
+      plural(list.length, 'объявление', 'объявления', 'объявлений');
+    $('chips').innerHTML = chipsHTML();
+
+    var n = (F.cat?1:0) + (F.sub?1:0) + (F.city?1:0) + (F.priceFrom?1:0) +
+            (F.priceTo?1:0) + F.conds.length + (F.delivery?1:0);
+    $('fMobN').textContent = n;
+    $('fMobN').classList.toggle('hide', !n);
+
+    if (!list.length){
+      $('grid').innerHTML =
+        '<div class="empty" style="grid-column:1/-1">' +
+          '<svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>' +
+          '<b>Ничего не нашлось</b>' +
+          '<p>Попробуйте изменить фильтры или выбрать другую категорию. ' +
+             'Нужного инструмента нет в списке? Позвоните — скорее всего, он есть на складе.</p>' +
+          '<button class="btn sec" id="eReset">Сбросить фильтры</button>' +
+        '</div>';
+      var er = $('eReset');
+      if (er) er.addEventListener('click', resetAll);
+      return;
+    }
+    $('grid').innerHTML = list.map(adCard).join('');
+  }
+
+  /* ---------- Полная перерисовка ---------- */
+  function renderAll(){
     renderCats();
-    renderNear();
-    renderFresh();
+    $('filters').innerHTML = filtersHTML();
+    var sheetBody = $1('#sheet .sheet-b');
+    if (sheetBody) sheetBody.innerHTML = filtersHTML();
+    renderList();
   }
-  boot();
 
-  /* Перерисовать ленту при смене города */
-  window.onCityChanged = renderNear;
+  /* ---------- Сортировка ---------- */
+  $('sort').addEventListener('change', function(){ SORT = this.value; renderList(); });
+
+  /* ---------- Мобильная шторка фильтров ---------- */
+  $('fMob').addEventListener('click', function(){
+    openSheet('Фильтры', filtersHTML(),
+      '<button class="btn sec" id="shReset" style="flex:1">Сбросить</button>' +
+      '<button class="btn" id="shOk" style="flex:2">Показать</button>');
+    bindFilters($1('#sheet .sheet-b'));
+    $('shOk').addEventListener('click', closeSheet);
+    $('shReset').addEventListener('click', function(){ resetAll(); closeSheet(); });
+  });
+
+  /* ---------- Старт ---------- */
+  bindFilters($('filters'));
+  renderAll();
+
+  (async function boot(){
+    await hydrateShowcase();   /* живые объявления из базы */
+    renderAll();
+  })();
+
+  window.onCityChanged = function(){ renderAll(); };
 })();
 </script>
 </body>
