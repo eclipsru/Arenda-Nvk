@@ -52,13 +52,34 @@ function toast(msg){
 
 /* ---------- Избранное (localStorage) ---------- */
 const FAV_KEY = 'iva_market_fav';
-function favList(){
-  try { return JSON.parse(localStorage.getItem(FAV_KEY) || '[]'); }
-  catch(e){ return []; }
+/* Реальные объявления используют UUID, демо — числовые ID.
+   Храним оба вида строками; прежний Number(UUID) превращался в null в JSON. */
+function favId(id){
+  if (typeof id === 'string') return id.trim();
+  if (typeof id === 'number' && Number.isFinite(id)) return String(id);
+  return '';
 }
-function favHas(id){ return favList().indexOf(Number(id)) !== -1; }
+function favList(){
+  try {
+    const raw = localStorage.getItem(FAV_KEY) || '[]';
+    const saved = JSON.parse(raw);
+    const list = [];
+    if (Array.isArray(saved)) saved.forEach(function(id){
+      const key = favId(id);
+      if (key && list.indexOf(key) === -1) list.push(key);
+    });
+    /* Сохраняем доступные ID, убираем дубли и повреждённые null. */
+    const clean = JSON.stringify(list);
+    if (clean !== raw) {
+      try { localStorage.setItem(FAV_KEY, clean); } catch(e){}
+    }
+    return list;
+  } catch(e){ return []; }
+}
+function favHas(id){ return favList().indexOf(favId(id)) !== -1; }
 function favToggle(id){
-  id = Number(id);
+  id = favId(id);
+  if (!id) return false;
   const list = favList();
   const i = list.indexOf(id);
   if (i === -1) list.push(id); else list.splice(i, 1);
@@ -165,10 +186,14 @@ function applyFilters(list, f){
 
 function sortAds(list, mode){
   const a = list.slice();
-  if (mode === 'cheap')  a.sort((x,y) => x.price - y.price);
-  else if (mode === 'exp') a.sort((x,y) => y.price - x.price);
-  else if (mode === 'rating') a.sort((x,y) => ownerById(y.owner).rating - ownerById(x.owner).rating);
-  else a.sort((x,y) => x.days - y.days); // 'new' — по свежести
+  // Выбранное состояние идёт первым; внутри группы — свежие объявления.
+  const order = ['new', 'good', 'work'];
+  if (order.indexOf(mode) !== -1) {
+    order.splice(order.indexOf(mode), 1);
+    order.unshift(mode);
+  }
+  const rank = cond => order.indexOf(cond) === -1 ? order.length : order.indexOf(cond);
+  a.sort((x,y) => rank(x.cond) - rank(y.cond) || (x.days || 0) - (y.days || 0));
   return a;
 }
 

@@ -204,11 +204,12 @@ select.inp{cursor:pointer;appearance:none;
    экране остаются прежними (1240 - 32 - 262 - 20 = 926px). */
 @media (min-width:1240px){
   .catalog-wide .layout > section{width:100%;max-width:926px;margin-inline:auto}
-  /* Главная: левый край рядом с фильтром, правый — на прежнем месте.
-     Половина доступной колонки + половина прежних 926px. */
-  .catalog-wide .layout.home > section{width:calc(50% + 463px);max-width:none;margin-inline:0}
+  /* Фильтр шире на 44px. Выдача сужается на те же 44px,
+     поэтому её правый край остаётся на прежнем месте. */
+  .catalog-wide .layout.home > section{width:calc(50% + 441px);max-width:none;margin-inline:0}
 }
 .layout{display:grid;grid-template-columns:262px minmax(0,1fr);gap:20px;align-items:start;padding-bottom:40px}
+.layout.home{grid-template-columns:306px minmax(0,1fr)}
 .filters{background:var(--card);border:1px solid var(--line);border-radius:var(--r);
   padding:16px;position:sticky;top:calc(var(--head-h) + 14px)}
 .f-grp{padding:13px 0;border-bottom:1px solid var(--line)}

@@ -7,7 +7,7 @@
 <meta name="description" content="Каталог инструмента в аренду: фильтры по цене, категории, городу и состоянию. Цена за сутки, возвратный залог.">
 <meta name="theme-color" content="#101217">
 <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
-<link rel="stylesheet" href="assets/theme.css?v=20260923-align5">
+<link rel="stylesheet" href="assets/theme.css?v=20260923-favorites-condition">
 </head>
 <body>
 
@@ -35,11 +35,10 @@
           <span class="found" id="found"></span>
           <div class="sort">
             <span>Сортировка</span>
-            <select class="inp" id="sort">
-              <option value="new">Сначала новые</option>
-              <option value="cheap">Сначала дешевле</option>
-              <option value="exp">Сначала дороже</option>
-              <option value="rating">По рейтингу</option>
+            <select class="inp" id="sort" aria-label="Сначала по состоянию инструмента">
+              <option value="new">Новые</option>
+              <option value="good">Хорошие</option>
+              <option value="work">Рабочие</option>
             </select>
           </div>
         </div>
@@ -56,7 +55,7 @@
 
 <script src="assets/data.js"></script>
 <script src="assets/sb.js"></script>
-<script src="assets/app.js"></script>
+<script src="assets/app.js?v=20260923-favorites-condition"></script>
 <script>
 (function(){
 
@@ -73,6 +72,7 @@
     delivery:  p.get('delivery') === '1'
   };
   var SORT = p.get('sort') || 'new';
+  if (['new','good','work'].indexOf(SORT) === -1) SORT = 'new';
 
   mountChrome('', F.q);
 

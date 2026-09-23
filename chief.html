@@ -7,7 +7,7 @@
 <meta name="robots" content="noindex, nofollow">
 <meta name="theme-color" content="#101217">
 <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
-<link rel="stylesheet" href="assets/theme.css?v=20260923-align5">
+<link rel="stylesheet" href="assets/theme.css?v=20260923-favorites-condition">
 <style>
 .kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:12px;margin-bottom:22px}
 .kpi{background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:16px}
@@ -87,7 +87,7 @@
 
 <script src="assets/data.js"></script>
 <script src="assets/sb.js"></script>
-<script src="assets/app.js"></script>
+<script src="assets/app.js?v=20260923-favorites-condition"></script>
 <script>
 (function(){
   mountChrome('chief', '');
@@ -122,17 +122,10 @@
   function shell(inner){
     const nMod = D.tools.filter(function(t){ return t.status === 'moderation'; }).length;
     const nFee = D.fees.filter(function(f){ return f.status !== 'confirmed'; }).length;
-    const nUnread = D.unread || 0;
 
     return '<div class="sect" style="padding-bottom:0"><div class="sect-h">' +
         '<h2>Управление площадкой</h2>' +
         '<span class="cnt">' + esc(A.me) + ' · владелец</span>' +
-        '<span style="margin-left:auto;display:flex;gap:8px;flex-wrap:wrap">' +
-          '<a class="btn sm sec" href="chat.html">Сообщения' +
-            (nUnread ? ' · ' + nUnread : '') + '</a>' +
-          '<a class="btn sm sec" href="account.html">Мой кабинет</a>' +
-          '<a class="btn sm" href="new.html">Разместить</a>' +
-        '</span>' +
       '</div></div>' +
       '<div class="tabs">' +
         '<button data-tab="dash" class="' + (TAB==='dash'?'on':'') + '">Сводка</button>' +
