@@ -519,10 +519,15 @@
     .m-search .m-clear{color:#C9CFDA}
     .m-search input:focus{border-color:#FF8F1F;box-shadow:0 0 0 3px rgba(255,143,31,.2)}
     /* плитки категорий — тёмные карточки */
-    .m-tile{background:#1A1D24;border:1px solid #262B35;border-radius:14px;color:#F2F4F8;font-size:10.5px;gap:6px}
-    .m-tile svg{color:#FF8F1F;width:24px;height:24px}
-    .m-tile.active{background:#F57C00;border-color:#F57C00;color:#fff}
+    .m-tile{background:linear-gradient(160deg,#181C26,#101319);border:1px solid #262B35;border-radius:14px;color:#F2F4F8;font-size:10px;font-weight:600;line-height:1.15;gap:5px}
+    .m-tile svg{color:#FF8F1F;width:22px;height:22px}
+    .m-tile .ico-e{font-size:22px;line-height:22px}
+    .m-tile span{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+    .m-tile.active{background:linear-gradient(160deg,#FF9A2E,#F57C00);border-color:#F57C00;color:#fff}
     .m-tile.active svg{color:#fff}
+    .m-tile.m-ctl:not(.active) svg{color:#9AA1B0}
+    .m-tile.m-ctl:not(.active) span{color:#9AA1B0}
+    #mSubs{display:none!important}
     .m-back{background:#1A1D24;border:1px solid #262B35;border-radius:14px;color:#F2F4F8}
     .m-subchip{background:#1A1D24;border:1px solid #262B35;color:#9AA1B0;border-radius:18px;padding:8px 13px;font-size:12.5px}
     .m-subchip.active{background:#F57C00;border-color:#F57C00;color:#fff}
@@ -1099,83 +1104,83 @@ const TOOLS = [
   });
   searchClear.addEventListener('click', clearSearch);
 
-  // ====== МОБИЛЬНЫЙ ФИЛЬТР: плитки в шапке ======
+  // ====== МОБИЛЬНЫЙ ФИЛЬТР: плитки как в приложении ======
   const mTiles = document.getElementById('mTiles');
-  const mSubs = document.getElementById('mSubs');
-  const mSubChips = document.getElementById('mSubChips');
-  const mBack = document.getElementById('mBack');
   const mSearch = document.getElementById('mSearch');
   const mClear = document.getElementById('mClear');
   const M_LABELS = {all:'Все категории', power:'Электро\u00ADинструмент', construction:'Строй\u00ADоборудование', garden:'Садовый инструмент', auto:'Для авто'};
+  const M_ICONS = {
+    all:'<svg viewBox="0 0 24 24" fill="currentColor"><path d="M4 4h7v7H4zm9 0h7v7h-7zM4 13h7v7H4zm9 0h7v7h-7z"/></svg>',
+    hide:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M5 12h14"/></svg>',
+    back:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5"/><path d="m12 19-7-7 7-7"/></svg>',
+    sub:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>'
+  };
+  let mView = 'collapsed'; // collapsed | expanded | subs
+  let mCat = 'all', mSub = 'all';
 
-  // Плитки строим из существующих кнопок категорий — один источник иконок и подписей
-  function buildMobileTiles(){
-    if(!mTiles || mTiles.dataset.built) return;
-    document.querySelectorAll('#filters .chip').forEach(chip=>{
+  function mIconOf(el){
+    const ico = el.querySelector('.ico-svg') || el.querySelector('.ico-e') || el.querySelector('svg');
+    return ico ? ico.outerHTML : '';
+  }
+  function mLabelOf(el, fallback){
+    const c = el.cloneNode(true);
+    c.querySelectorAll('.ico-svg,.ico-e,svg').forEach(n=>n.remove());
+    const t = c.textContent.replace('↳','').trim();
+    return t || fallback || '';
+  }
+  function mCatList(){
+    const out = [];
+    document.querySelectorAll('#filters .chip[data-cat]').forEach(chip=>{
       const cat = chip.dataset.cat;
-      const b = document.createElement('button');
-      b.type = 'button';
-      b.className = 'm-tile' + (cat === 'all' ? ' active' : '');
-      b.dataset.cat = cat;
-      const icoSvg = chip.querySelector('.ico-svg');
-      const svg = chip.querySelector('svg');
-      const emo = chip.querySelector('.ico-e');
-      if(icoSvg) b.innerHTML = icoSvg.outerHTML;
-      else if(svg) b.innerHTML = svg.outerHTML;
-      else if(emo){ const s = document.createElement('span'); s.className='ico-e'; s.style.fontSize='24px'; s.textContent = emo.textContent; b.appendChild(s); }
-      const lbl = document.createElement('span');
-      lbl.textContent = M_LABELS[cat] || chip.textContent.trim();
-      b.appendChild(lbl);
-      b.addEventListener('click', ()=> mPick(cat));
-      mTiles.appendChild(b);
+      out.push({ key:cat,
+        label: cat==='all' ? M_LABELS.all : (M_LABELS[cat] || mLabelOf(chip, cat)),
+        icon: mIconOf(chip) });
     });
-    mTiles.dataset.built = '1';
+    return out;
   }
-  buildMobileTiles();
-
-  function mMarkTile(cat){
-    mTiles.querySelectorAll('.m-tile').forEach(t=>t.classList.toggle('active', t.dataset.cat === cat));
-  }
-  function mShowTiles(){
-    mSubs.style.display = 'none';
-    mTiles.style.display = 'grid';
-  }
-  function mPick(cat){
-    mMarkTile(cat);
-    // Свое меню подкатегорий у каждой категории (у старого статичного — категория power)
+  function mSubList(cat){
     const menu = document.querySelector('#filters .subfilters[data-for="'+cat+'"]')
               || (cat === 'power' ? document.getElementById('subPower') : null);
-    if(menu && menu.querySelector('.subchip')){
-      // Экран подкатегорий: чипы строим из десктопного меню этой категории
-      mSubChips.innerHTML = '';
-      menu.querySelectorAll('.subchip').forEach((sc, idx)=>{
-        const b = document.createElement('button');
-        b.type = 'button';
-        b.className = 'm-subchip' + (idx === 0 ? ' active' : '');
-        b.dataset.sub = sc.dataset.sub;
-        b.innerHTML = sc.innerHTML.replace('↳ ', '');
-        b.addEventListener('click', ()=>{
-          mSubChips.querySelectorAll('.m-subchip').forEach(x=>x.classList.remove('active'));
-          b.classList.add('active');
-          render(cat, b.dataset.sub);
-        });
-        mSubChips.appendChild(b);
-      });
-      mTiles.style.display = 'none';
-      mSubs.style.display = 'block';
-      render(cat, 'all');
+    const out = [];
+    if(menu) menu.querySelectorAll('.subchip').forEach(sc=>{
+      out.push({ key: sc.dataset.sub, label: mLabelOf(sc, sc.dataset.sub), icon: mIconOf(sc) });
+    });
+    return out;
+  }
+  function mTile(label, icon, isCtl, active, fn){
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'm-tile' + (isCtl ? ' m-ctl' : '') + (active ? ' active' : '');
+    b.innerHTML = (icon || M_ICONS.sub) + '<span>'+label+'</span>';
+    b.addEventListener('click', fn);
+    mTiles.appendChild(b);
+  }
+  function mFilter(cat, sub){ mCat = cat; mSub = sub; render(cat, sub); }
+  function mEnter(key){
+    mCat = key; mSub = 'all';
+    const subs = mSubList(key);
+    if(subs.length) mView = 'subs';
+    mFilter(key, 'all');
+    buildMobileTiles();
+  }
+  // Режимы: collapsed — «Все категории» + 3 плитки; expanded — «Скрыть» + все категории;
+  // subs — «Назад» + все подкатегории выбранной категории
+  function buildMobileTiles(){
+    if(!mTiles) return;
+    mTiles.innerHTML = '';
+    const cats = mCatList().filter(c=>c.key!=='all');
+    if(mView==='collapsed'){
+      mTile(M_LABELS.all, M_ICONS.all, true, (mCat==='all' && mSub==='all'), function(){ mView='expanded'; mFilter('all','all'); buildMobileTiles(); });
+      cats.slice(0,3).forEach(function(c){ mTile(c.label, c.icon, false, (mCat===c.key && mSub==='all'), function(){ mEnter(c.key); }); });
+    }else if(mView==='expanded'){
+      mTile('Скрыть', M_ICONS.hide, true, false, function(){ mView='collapsed'; buildMobileTiles(); });
+      cats.forEach(function(c){ mTile(c.label, c.icon, false, (mCat===c.key), function(){ mEnter(c.key); }); });
     }else{
-      // У категории нет подкатегорий — фильтруем сразу, плитки остаются
-      mShowTiles();
-      render(cat, 'all');
+      mTile('Назад', M_ICONS.back, true, false, function(){ mView='collapsed'; mFilter('all','all'); buildMobileTiles(); });
+      mSubList(mCat).forEach(function(x){ mTile(x.label, x.icon || M_ICONS.sub, false, (mSub===x.key), function(){ mSub=x.key; mFilter(mCat, x.key); buildMobileTiles(); }); });
     }
   }
-  // «Назад» — возвращаемся к плиткам и сбрасываем фильтр
-  mBack.addEventListener('click', ()=>{
-    mShowTiles();
-    mMarkTile('all');
-    render('all', 'all');
-  });
+  buildMobileTiles();
   // Мобильный поиск — тот же механизм, что и на десктопе
   mSearch.addEventListener('input', ()=>{
     query = mSearch.value.trim();
@@ -1230,8 +1235,8 @@ const TOOLS = [
           <div class="combo-list">${opts}</div>
         </div>
       </div>
-      <input type="number" class="tool-qty" min="1" value="1" title="Количество">
-      <button type="button" class="tool-remove" title="Убрать">&times;</button>`;
+      <input type="number" class="tool-qty" min="1" value="1">
+      <button type="button" class="tool-remove">&times;</button>`;
     const input = row.querySelector('.combo-input');
     const value = row.querySelector('.tool-value');
     const menu = row.querySelector('.combo-menu');
