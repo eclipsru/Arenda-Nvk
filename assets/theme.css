@@ -88,6 +88,9 @@ select.inp{cursor:pointer;appearance:none;
   position:sticky;top:0;z-index:40;background:rgba(16,18,23,.96);
   backdrop-filter:blur(10px);border-bottom:1px solid var(--line);
 }
+/* На всю ширину окна; свободное место получает только поиск. */
+.head > .wrap{max-width:none}
+.head-in > .city{flex-shrink:0}
 .head-in{display:flex;align-items:center;gap:14px;height:var(--head-h)}
 .logo{display:flex;align-items:center;gap:10px;flex-shrink:0}
 .logo img{width:38px;height:38px;border-radius:10px;border:1px solid var(--line)}
@@ -194,7 +197,15 @@ select.inp{cursor:pointer;appearance:none;
 .sect-h a.btn{margin-left:auto}
 
 /* ---------- Фильтры ---------- */
-.layout{display:grid;grid-template-columns:262px 1fr;gap:20px;align-items:start;padding-bottom:40px}
+/* Отдельный широкий контейнер только для страниц с фильтрами. */
+.wrap.catalog-wide{max-width:none}
+.layout > section{min-width:0}
+/* Переносим только фильтры: размеры и положение выдачи на широком
+   экране остаются прежними (1240 - 32 - 262 - 20 = 926px). */
+@media (min-width:1240px){
+  .catalog-wide .layout > section{width:100%;max-width:926px;margin-inline:auto}
+}
+.layout{display:grid;grid-template-columns:262px minmax(0,1fr);gap:20px;align-items:start;padding-bottom:40px}
 .filters{background:var(--card);border:1px solid var(--line);border-radius:var(--r);
   padding:16px;position:sticky;top:calc(var(--head-h) + 14px)}
 .f-grp{padding:13px 0;border-bottom:1px solid var(--line)}
@@ -369,7 +380,7 @@ select.inp{cursor:pointer;appearance:none;
   .hlinks{display:none}
   .search{order:3;flex-basis:100%}
   .search input{padding:11px 80px 11px 38px;font-size:14.5px}
-  .city{margin-left:auto;min-width:0;flex-shrink:1}
+  .head-in > .city{margin-left:auto;min-width:0;flex-shrink:1}
   .city .city-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .sect{padding:20px 0 4px}
   .sect-h h2{font-size:18.5px}
@@ -533,31 +544,4 @@ select.inp{cursor:pointer;appearance:none;
 @media (max-width:860px){
   .layout.home{grid-template-columns:1fr}
   .layout.home .filters{display:none}
-}
-
-/* ===========================================================
-   ПОЛНАЯ ШИРИНА: шапка и главная от края до края окна
-   =========================================================== */
-
-/* Контейнер без ограничения по ширине */
-.wrap.wide{max-width:none;padding:0 20px}
-
-/* Шапка: элементы сохраняют размер, тянется только поиск */
-.head-in.wide .logo,
-.head-in.wide .city,
-.head-in.wide .hlinks{flex:0 0 auto}
-.head-in.wide .search{flex:1 1 auto;min-width:0;max-width:none}
-
-/* Главная: фильтр прижат к левому краю окна */
-.layout.home{grid-template-columns:264px minmax(0,1fr);gap:20px}
-
-@media (max-width:1024px){
-  .wrap.wide{padding:0 14px}
-  .layout.home{grid-template-columns:230px minmax(0,1fr);gap:14px}
-}
-@media (max-width:860px){
-  .layout.home{grid-template-columns:minmax(0,1fr)}
-}
-@media (max-width:760px){
-  .wrap.wide{padding:0 12px}
 }
