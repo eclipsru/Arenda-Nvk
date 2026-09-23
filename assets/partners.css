@@ -6,7 +6,7 @@
 .useful-card h3 em{font-style:normal;color:var(--or)}
 .useful-card p,.useful-card li{font-size:14px;color:var(--gr);line-height:1.65}
 .useful-card ul{padding-left:18px;display:grid;gap:10px}
-.useful-card .partner-actions{display:grid;gap:10px;margin-top:auto}
+.useful-card .partner-actions{display:grid;gap:10px;margin-top:0}
 .useful-card .partner-kicker{font-size:11px;letter-spacing:1px;font-weight:700;color:var(--or);text-transform:uppercase}
 .useful-card .partner-note{font-size:12px;color:var(--g2)}
 @media(min-width:1500px){
