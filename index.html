@@ -87,7 +87,7 @@
 
 <script src="assets/data.js"></script>
 <script src="assets/sb.js"></script>
-<script src="assets/app.js?v=20260923-favorites-condition"></script>
+<script src="assets/app.js?v=20260923-city-filter"></script>
 <script src="assets/partners.js?v=20260923-info-spacing"></script>
 <script>
 (function(){
@@ -96,7 +96,7 @@
 
   /* Состояние фильтров — общее для панели, плиток и списка */
   var F = {
-    q:'', cat:'', sub:'', city:'',
+    q:'', cat:'', sub:'', city:getCity(),
     priceFrom:0, priceTo:0, conds:[], delivery:false
   };
   var SORT = 'new';
@@ -116,7 +116,7 @@
 
       h = CATS.map(function(c){
         var n = ADS.filter(function(a){
-          return a.status === 'active' && a.cat === c.key;
+          return a.status === 'active' && (!F.city || cityMatches(a.city,F.city)) && a.cat === c.key;
         }).length;
         return '<button type="button" class="cat' + (F.cat === c.key ? ' on' : '') +
                  '" data-cat="' + esc(c.key) + '">' +
@@ -144,7 +144,7 @@
 
       /* Плитка «вся категория» */
       var nAll = ADS.filter(function(a){
-        return a.status === 'active' && a.cat === LEVEL;
+        return a.status === 'active' && (!F.city || cityMatches(a.city,F.city)) && a.cat === LEVEL;
       }).length;
       h += '<button type="button" class="cat' + (!F.sub ? ' on' : '') + '" data-sub="">' +
              '<span class="ico">' + (ICONS[LEVEL] || ICONS.power) + '</span>' +
@@ -154,7 +154,7 @@
 
       h += subs.map(function(s){
         var n = ADS.filter(function(a){
-          return a.status === 'active' && a.cat === LEVEL && a.sub === s.key;
+          return a.status === 'active' && (!F.city || cityMatches(a.city,F.city)) && a.cat === LEVEL && a.sub === s.key;
         }).length;
         return '<button type="button" class="cat' + (F.sub === s.key ? ' on' : '') +
                  '" data-sub="' + esc(s.key) + '">' +
@@ -211,7 +211,7 @@
         '<div class="f-item' + (!F.sub ? ' on' : '') + '" data-fsub="">Любая</div>' +
         subs.map(function(s){
           var n = ADS.filter(function(a){
-            return a.status === 'active' && a.cat === F.cat && a.sub === s.key;
+            return a.status === 'active' && (!F.city || cityMatches(a.city,F.city)) && a.cat === F.cat && a.sub === s.key;
           }).length;
           return '<div class="f-item' + (F.sub === s.key ? ' on' : '') + '" data-fsub="' + esc(s.key) + '">' +
                  esc(s.title) + '<span class="n">' + n + '</span></div>';
@@ -230,8 +230,8 @@
 
     '<div class="f-grp"><h4>Город</h4>' +
       '<select class="inp" id="fCity">' +
-        '<option value="">Любой город</option>' +
-        CITIES.map(function(c){
+        '<option value="">Все города</option>' +
+        availableCities().map(function(c){
           return '<option value="' + esc(c) + '"' + (F.city === c ? ' selected' : '') + '>' + esc(c) + '</option>';
         }).join('') +
       '</select></div>' +
@@ -351,8 +351,8 @@
         '<div class="empty" style="grid-column:1/-1">' +
           '<svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>' +
           '<b>Ничего не нашлось</b>' +
-          '<p>Попробуйте изменить фильтры или выбрать другую категорию. ' +
-             'Нужного инструмента нет в списке? Позвоните — скорее всего, он есть на складе.</p>' +
+          '<p>' + (F.city ? 'В городе «' + esc(F.city) + '» нет объявлений по выбранным условиям. ' :
+             'По выбранным условиям объявлений нет. ') + 'Измените фильтры или выберите другой город.</p>' +
           '<button class="btn sec" id="eReset">Сбросить фильтры</button>' +
         '</div>';
       var er = $('eReset');
@@ -364,10 +364,11 @@
 
   /* ---------- Полная перерисовка ---------- */
   function renderAll(){
+    setCity(F.city); // Шапка, фильтр, чипы и сохранённый город — одно состояние.
     renderCats();
     $('filters').innerHTML = filtersHTML();
     var sheetBody = $1('#sheet .sheet-b');
-    if (sheetBody) sheetBody.innerHTML = filtersHTML();
+    if (sheetBody && sheetBody.querySelector('#fCity')) sheetBody.innerHTML = filtersHTML();
     renderList();
   }
 
@@ -393,7 +394,7 @@
     renderAll();
   })();
 
-  window.onCityChanged = function(){ renderAll(); };
+  window.onCityChanged = function(){ F.city = getCity(); renderAll(); };
 })();
 </script>
 </body>

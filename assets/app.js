@@ -97,14 +97,51 @@ function paintFavCount(){
 
 /* ---------- Город ---------- */
 const CITY_KEY = 'iva_market_city';
+let _selectedCity;
 function getCity(){
-  try { return localStorage.getItem(CITY_KEY) || 'Новочеркасск'; }
-  catch(e){ return 'Новочеркасск'; }
+  if (_selectedCity === undefined){
+    try {
+      const saved = localStorage.getItem(CITY_KEY);
+      // Пустая строка — явный выбор «Все города», а не отсутствие настройки.
+      _selectedCity = saved === null ? 'Новочеркасск' : saved;
+    } catch(e){ _selectedCity = 'Новочеркасск'; }
+  }
+  return _selectedCity;
 }
 function setCity(c){
-  try { localStorage.setItem(CITY_KEY, c); } catch(e){}
-  $$('.city-name').forEach(el => el.textContent = c);
+  _selectedCity = String(c || '').trim();
+  try {
+    if (localStorage.getItem(CITY_KEY) !== _selectedCity) localStorage.setItem(CITY_KEY, _selectedCity);
+  } catch(e){}
+  $$('.city-name').forEach(el => el.textContent = _selectedCity || 'Все города');
+  const sug = $('sug'); if (sug) sug.classList.add('hide');
 }
+function cityKey(city){
+  return String(city || '').trim().toLowerCase().replace(/ё/g,'е')
+    .replace(/^(?:город\s+|г\.\s*|г\s+)/,'').replace(/[–—]/g,'-')
+    .replace(/\s*-\s*/g,'-').replace(/\s+/g,' ');
+}
+function cityMatches(a,b){ return cityKey(a) === cityKey(b); }
+function availableCities(){
+  const result = [], seen = new Set();
+  CITIES.concat(ADS.filter(a=>a.status==='active').map(a=>a.city), [getCity()]).forEach(city=>{
+    const key=cityKey(city);
+    if (key && !seen.has(key)){ seen.add(key); result.push(String(city).trim()); }
+  });
+  // Сохранённый вариант написания должен оставаться выбираемым в select.
+  const selected=getCity();
+  if(selected && result.indexOf(selected)===-1){
+    const i=result.findIndex(city=>cityMatches(city,selected));
+    if(i!==-1)result[i]=selected;else result.push(selected);
+  }
+  return result;
+}
+window.addEventListener('storage',function(e){
+  if(e.key !== CITY_KEY && e.key !== null) return;
+  _selectedCity=undefined;
+  setCity(getCity());
+  if(window.onCityChanged)window.onCityChanged();
+});
 
 /* ---------- Иконки ---------- */
 const IC = {
@@ -170,7 +207,7 @@ function applyFilters(list, f){
     if (ad.status !== 'active') return false;
     if (f.cat && ad.cat !== f.cat) return false;
     if (f.sub && ad.sub !== f.sub) return false;
-    if (f.city && ad.city !== f.city) return false;
+    if (f.city && !cityMatches(ad.city, f.city)) return false;
     if (f.priceFrom && ad.price < f.priceFrom) return false;
     if (f.priceTo   && ad.price > f.priceTo)   return false;
     if (f.conds && f.conds.length && f.conds.indexOf(ad.cond) === -1) return false;
@@ -212,7 +249,7 @@ function buildSuggest(input, box, onPick){
       .map(c => ({type:'cat', title:c.title, key:c.key}));
 
     const ads = ADS
-      .filter(a => a.status === 'active' && a.name.toLowerCase().indexOf(q) !== -1)
+      .filter(a => a.status === 'active' && (!getCity() || cityMatches(a.city,getCity())) && a.name.toLowerCase().indexOf(q) !== -1)
       .slice(0, 6)
       .map(a => ({type:'ad', title:a.name, id:a.id, cat:catTitle(a.cat)}));
 
@@ -232,7 +269,7 @@ function buildSuggest(input, box, onPick){
     const it = items[i];
     if (!it) return;
     close();
-    if (it.type === 'cat') location.href = 'catalog.html?cat=' + encodeURIComponent(it.key);
+    if (it.type === 'cat') location.href = 'catalog.html?cat=' + encodeURIComponent(it.key) + '&city=' + encodeURIComponent(getCity());
     else location.href = 'tool.html?id=' + it.id;
   }
 
@@ -271,7 +308,7 @@ function headerHTML(active, q){
       '<span><b>Ива</b><span>Инструмент в аренду</span></span>' +
     '</a>' +
     '<button class="city" id="cityBtn">' + IC.pin +
-      '<span class="city-name">' + esc(getCity()) + '</span>' +
+      '<span class="city-name">' + esc(getCity() || 'Все города') + '</span>' +
     '</button>' +
     '<div class="search">' +
       '<svg class="s-ic" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>' +
@@ -343,9 +380,9 @@ function citySheet(){
   const cur = getCity();
   openSheet('Выберите город',
     '<div class="f-list" style="max-height:none">' +
-      CITIES.map(c =>
+      [''].concat(availableCities()).map(c =>
         '<div class="f-item' + (c === cur ? ' on' : '') + '" data-city="' + esc(c) + '">' +
-          esc(c) + (c === cur ? '<span class="n">✓</span>' : '') +
+          esc(c || 'Все города') + (c === cur ? '<span class="n">✓</span>' : '') +
         '</div>').join('') +
     '</div>', null);
 
@@ -354,7 +391,7 @@ function citySheet(){
     if (!d) return;
     setCity(d.getAttribute('data-city'));
     closeSheet();
-    toast('Город: ' + d.getAttribute('data-city'));
+    toast(d.getAttribute('data-city') ? 'Город: ' + d.getAttribute('data-city') : 'Показаны все города');
     if (window.onCityChanged) window.onCityChanged();
   });
 }
@@ -426,7 +463,7 @@ function mountChrome(active, q){
     buildSuggest(qi, sug);
     const doSearch = () => {
       const v = qi.value.trim();
-      location.href = 'catalog.html' + (v ? '?q=' + encodeURIComponent(v) : '');
+      location.href = 'catalog.html?city=' + encodeURIComponent(getCity()) + (v ? '&q=' + encodeURIComponent(v) : '');
     };
     go.addEventListener('click', doSearch);
     qi.addEventListener('keydown', e => {

@@ -55,7 +55,7 @@
 
 <script src="assets/data.js"></script>
 <script src="assets/sb.js"></script>
-<script src="assets/app.js?v=20260923-favorites-condition"></script>
+<script src="assets/app.js?v=20260923-city-filter"></script>
 <script>
 (function(){
 
@@ -65,7 +65,7 @@
     q:         p.get('q') || '',
     cat:       p.get('cat') || '',
     sub:       p.get('sub') || '',
-    city:      p.get('city') || '',
+    city:      p.has('city') ? p.get('city').trim() : getCity(),
     priceFrom: Number(p.get('from')) || 0,
     priceTo:   Number(p.get('to')) || 0,
     conds:     (p.get('cond') || '').split(',').filter(Boolean),
@@ -74,6 +74,7 @@
   var SORT = p.get('sort') || 'new';
   if (['new','good','work'].indexOf(SORT) === -1) SORT = 'new';
 
+  setCity(F.city); // Город в ссылке имеет приоритет над сохранённым.
   mountChrome('', F.q);
 
   /* ---------- Синхронизация URL без перезагрузки ---------- */
@@ -82,7 +83,7 @@
     if (F.q) u.set('q', F.q);
     if (F.cat) u.set('cat', F.cat);
     if (F.sub) u.set('sub', F.sub);
-    if (F.city) u.set('city', F.city);
+    u.set('city', F.city); // city= сохраняет явный выбор всех городов.
     if (F.priceFrom) u.set('from', F.priceFrom);
     if (F.priceTo) u.set('to', F.priceTo);
     if (F.conds.length) u.set('cond', F.conds.join(','));
@@ -114,7 +115,7 @@
         '<div class="f-item' + (!F.sub ? ' on' : '') + '" data-sub="">Любая</div>' +
         subs.map(function(s){
           var n = ADS.filter(function(a){
-            return a.status === 'active' && a.cat === F.cat && a.sub === s.key;
+            return a.status === 'active' && (!F.city || cityMatches(a.city,F.city)) && a.cat === F.cat && a.sub === s.key;
           }).length;
           return '<div class="f-item' + (F.sub === s.key ? ' on' : '') + '" data-sub="' + s.key + '">' +
                    esc(s.title) + '<span class="n">' + n + '</span></div>';
@@ -134,8 +135,8 @@
 
     '<div class="f-grp"><h4>Город</h4>' +
       '<select class="inp" id="fCity">' +
-        '<option value="">Любой город</option>' +
-        CITIES.map(function(c){
+        '<option value="">Все города</option>' +
+        availableCities().map(function(c){
           return '<option value="' + esc(c) + '"' + (F.city === c ? ' selected' : '') + '>' + esc(c) + '</option>';
         }).join('') +
       '</select>' +
@@ -225,12 +226,13 @@
 
   /* ---------- Главный рендер ---------- */
   function render(){
+    setCity(F.city);
     syncURL();
 
     /* Панель фильтров: десктопная всегда, мобильная — если открыта шторка */
     $('filters').innerHTML = filtersHTML();
     var sheetBody = $1('#sheet .sheet-b');
-    if (sheetBody) sheetBody.innerHTML = filtersHTML();
+    if (sheetBody && sheetBody.querySelector('#fCity')) sheetBody.innerHTML = filtersHTML();
 
     /* Заголовок */
     $('ttl').textContent = F.cat ? catTitle(F.cat) : (F.q ? 'Поиск: ' + F.q : 'Каталог');
@@ -253,8 +255,8 @@
         '<div class="empty" style="grid-column:1/-1">' +
           '<svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>' +
           '<b>Ничего не нашлось</b>' +
-          '<p>Попробуйте изменить фильтры или поискать в другой категории. ' +
-             'Нужного инструмента нет в списке? Позвоните — скорее всего, он есть на складе.</p>' +
+          '<p>' + (F.city ? 'В городе «' + esc(F.city) + '» нет объявлений по выбранным условиям. ' :
+             'По выбранным условиям объявлений нет. ') + 'Измените фильтры или выберите другой город.</p>' +
           '<button class="btn sec" id="eReset">Сбросить фильтры</button>' +
         '</div>';
       var er = $('eReset');
@@ -310,6 +312,8 @@
       closeSheet();
     });
   });
+
+  window.onCityChanged = function(){ F.city = getCity(); render(); };
 
   bindFilters($('filters'));
   render();
