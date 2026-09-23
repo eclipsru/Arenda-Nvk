@@ -204,6 +204,9 @@ select.inp{cursor:pointer;appearance:none;
    экране остаются прежними (1240 - 32 - 262 - 20 = 926px). */
 @media (min-width:1240px){
   .catalog-wide .layout > section{width:100%;max-width:926px;margin-inline:auto}
+  /* Главная: левый край рядом с фильтром, правый — на прежнем месте.
+     Половина доступной колонки + половина прежних 926px. */
+  .catalog-wide .layout.home > section{width:calc(50% + 463px);max-width:none;margin-inline:0}
 }
 .layout{display:grid;grid-template-columns:262px minmax(0,1fr);gap:20px;align-items:start;padding-bottom:40px}
 .filters{background:var(--card);border:1px solid var(--line);border-radius:var(--r);
@@ -512,14 +515,15 @@ select.inp{cursor:pointer;appearance:none;
 }
 
 /* ===========================================================
-   ГЛАВНАЯ: постоянный фильтр слева + сетка по 4 карточки
+   ГЛАВНАЯ: постоянный фильтр слева + сетка по 5 карточек
    =========================================================== */
 
-/* Сетка ровно по 4 в строке */
-.grid.g4{grid-template-columns:repeat(4,minmax(0,1fr))}
-@media (max-width:1180px){ .grid.g4{grid-template-columns:repeat(3,minmax(0,1fr))} }
-@media (max-width:900px){  .grid.g4{grid-template-columns:repeat(2,minmax(0,1fr))} }
-@media (max-width:380px){  .grid.g4{grid-template-columns:1fr} }
+/* Пять карточек на широком экране, ниже — адаптивные 4 / 3 / 2 / 1. */
+.grid.home-grid{grid-template-columns:repeat(5,minmax(0,1fr))}
+@media (max-width:1239px){ .grid.home-grid{grid-template-columns:repeat(4,minmax(0,1fr))} }
+@media (max-width:1180px){ .grid.home-grid{grid-template-columns:repeat(3,minmax(0,1fr))} }
+@media (max-width:900px){  .grid.home-grid{grid-template-columns:repeat(2,minmax(0,1fr))} }
+@media (max-width:380px){  .grid.home-grid{grid-template-columns:1fr} }
 
 /* Плитка «Назад» в списке подкатегорий */
 .cat.back{border-color:var(--line-2);background:var(--field)}
