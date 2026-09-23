@@ -534,3 +534,30 @@ select.inp{cursor:pointer;appearance:none;
   .layout.home{grid-template-columns:1fr}
   .layout.home .filters{display:none}
 }
+
+/* ===========================================================
+   ПОЛНАЯ ШИРИНА: шапка и главная от края до края окна
+   =========================================================== */
+
+/* Контейнер без ограничения по ширине */
+.wrap.wide{max-width:none;padding:0 20px}
+
+/* Шапка: элементы сохраняют размер, тянется только поиск */
+.head-in.wide .logo,
+.head-in.wide .city,
+.head-in.wide .hlinks{flex:0 0 auto}
+.head-in.wide .search{flex:1 1 auto;min-width:0;max-width:none}
+
+/* Главная: фильтр прижат к левому краю окна */
+.layout.home{grid-template-columns:264px minmax(0,1fr);gap:20px}
+
+@media (max-width:1024px){
+  .wrap.wide{padding:0 14px}
+  .layout.home{grid-template-columns:230px minmax(0,1fr);gap:14px}
+}
+@media (max-width:860px){
+  .layout.home{grid-template-columns:minmax(0,1fr)}
+}
+@media (max-width:760px){
+  .wrap.wide{padding:0 12px}
+}

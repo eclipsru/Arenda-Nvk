@@ -240,7 +240,7 @@ function buildSuggest(input, box, onPick){
 /* ---------- Шапка и нижнее меню ---------- */
 function headerHTML(active, q){
   return '' +
-  '<header class="head"><div class="wrap head-in">' +
+  '<header class="head"><div class="wrap wide head-in">' +
     '<a class="logo" href="index.html">' +
       '<img src="assets/logo.png" alt="Ива">' +
       '<span><b>Ива</b><span>Инструмент в аренду</span></span>' +
