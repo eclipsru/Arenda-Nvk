@@ -8,6 +8,7 @@
 <meta name="theme-color" content="#101217">
 <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
 <link rel="stylesheet" href="assets/theme.css?v=20260923-global-search">
+<link rel="stylesheet" href="assets/profile.css?v=20260923-rental-profile">
 <style>
 .tabs{display:flex;gap:4px;border-bottom:1px solid var(--line);margin-bottom:18px;
   overflow-x:auto;padding-bottom:1px}
@@ -76,8 +77,9 @@
 <div id="bnav"></div>
 
 <script src="assets/data.js"></script>
-<script src="assets/sb.js?v=20260923-edit-profile-city"></script>
+<script src="assets/sb.js?v=20260923-rental-profile"></script>
 <script src="assets/app.js?v=20260923-edit-profile-city"></script>
+<script src="assets/profile.js?v=20260923-rental-profile"></script>
 <script>
 (function(){
   mountChrome('cab', '');
@@ -237,7 +239,7 @@
   /* ---------- Профиль ---------- */
   function viewProf(){
     const a = A.admin || {};
-    return '<div class="box" style="max-width:640px">' +
+    return '<div class="box profile-account" style="max-width:1000px">' +
       '<div style="display:flex;align-items:center;gap:14px;margin-bottom:18px">' +
         '<div class="ava" style="width:56px;height:56px;font-size:20px">' +
           esc(initials(A.uname || A.me)) + '</div>' +
@@ -247,9 +249,6 @@
       '<dl>' +
         '<div class="prof-row"><dt>Статус</dt><dd>' +
           (isAdmin() ? 'Арендодатель' + (a.role === 'chief' ? ' (главный)' : '') : 'Арендатор') + '</dd></div>' +
-        (a.full_name ? '<div class="prof-row"><dt>ФИО</dt><dd>' + esc(a.full_name) + '</dd></div>' : '') +
-        (a.company ? '<div class="prof-row"><dt>Компания</dt><dd>' + esc(a.company) + '</dd></div>' : '') +
-        (a.phone ? '<div class="prof-row"><dt>Телефон</dt><dd>' + esc(a.phone) + '</dd></div>' : '') +
         (a.fee_pct != null ? '<div class="prof-row"><dt>Комиссия площадки</dt><dd>' +
           esc(a.fee_pct) + ' %</dd></div>' : '') +
         '<div class="prof-row"><dt>Объявлений</dt><dd>' + MY.length + '</dd></div>' +
@@ -263,10 +262,10 @@
         '<p id="profileCityError" role="alert" style="color:var(--red);margin-top:8px"></p>' +
       '</form>' +
       '<div style="display:flex;gap:10px;margin-top:20px;flex-wrap:wrap">' +
-        '<a class="btn sec sm" href="cabinet.html#cab">Редактировать данные</a>' +
+        (isAdmin() ? '<a class="btn sec sm" href="#rentalProfile" id="jumpRental">Данные проката ↓</a>' : '<button class="btn sec sm" id="editPersonal">Редактировать данные</button>') +
         '<button class="btn ghost sm" id="bOut">Выйти</button>' +
       '</div>' +
-    '</div>';
+    '</div>' + (isAdmin() ? '<div id="rentalProfile"></div>' : '<div id="personalEditor"></div>');
   }
 
   /* ---------- Рендер ---------- */
@@ -280,10 +279,16 @@
     $('root').innerHTML = shell(inner);
     paintFavCount();
 
+    if($('rentalProfile'))RentalProfile.mount($('rentalProfile'));
+    const jump=$('jumpRental');if(jump)jump.onclick=function(e){e.preventDefault();$('rentalProfile').scrollIntoView({behavior:'smooth'});};
+    const editPersonal=$('editPersonal');if(editPersonal)editPersonal.onclick=function(){
+      const host=$('personalEditor');host.innerHTML='<form class="box" id="personalForm" style="max-width:640px;margin-top:18px"><label class="rp-field">Имя<input class="inp" name="name" required maxlength="150" value="'+esc(A.userMeta.full_name||A.uname||'')+'"></label><label class="rp-field" style="margin-top:14px">Телефон<input class="inp" type="tel" name="phone" maxlength="100" value="'+esc(A.userMeta.phone||'')+'"></label><p class="rp-error" role="alert"></p><button class="btn sm" style="margin-top:14px">Сохранить</button></form>';
+      host.querySelector('form').onsubmit=async function(e){e.preventDefault();const form=e.currentTarget,btn=form.querySelector('button');btn.disabled=true;try{const name=form.elements.name.value.trim();if(!name)throw new Error('Укажите имя');const user=await api('/auth/v1/user','PUT',{data:Object.assign({},A.userMeta,{name:name,full_name:name,phone:form.elements.phone.value.trim()})});applyAuthUser(user);saveSess();toast('Данные сохранены');render();}catch(err){form.querySelector('[role=alert]').textContent=err.message;btn.disabled=false;}};
+    };
     const cityForm=$('profileCityForm');
     if(cityForm)cityForm.addEventListener('submit',async function(e){
       e.preventDefault();const btn=cityForm.querySelector('button');btn.disabled=true;$('profileCityError').textContent='';
-      try {await saveProfileCity($('profileCity').value);toast('Город профиля сохранён');render();}
+      try {await saveProfileCity($('profileCity').value);toast('Город профиля сохранён');btn.disabled=false;}
       catch(err){$('profileCityError').textContent=err.message;btn.disabled=false;}
     });
 
@@ -365,7 +370,7 @@
 
   window.addEventListener('hashchange', function(){
     const h = (location.hash || '').replace('#','');
-    if (h && h !== TAB){ TAB = h; render(); }
+    if (h && h !== TAB){ if(!RentalProfile.allowLeave()){history.replaceState(null,'',location.pathname+'#'+TAB);return;} TAB = h; render(); }
   });
 
   /* ---------- Старт ---------- */

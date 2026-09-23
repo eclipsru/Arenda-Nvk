@@ -107,12 +107,13 @@ function saveSess(){
     localStorage.setItem(TOK_KEY, JSON.stringify({
       tok: A.tok, rtok: A.rtok, me: A.me, uname: A.uname
     }));
+    localStorage.setItem('iva_auth',JSON.stringify({tok:A.tok,ref:A.rtok,exp:Date.now()+3600000}));
   } catch(e){}
 }
 function clearSess(){
   A.tok = A.rtok = null; A.me = A.uname = ''; A.admin = null;
   A.uid=null; A.userMeta={}; A.profileCity='';
-  try { localStorage.removeItem(TOK_KEY); } catch(e){}
+  try { localStorage.removeItem(TOK_KEY); localStorage.removeItem('iva_auth'); } catch(e){}
 }
 
 /* ---------- Обновление токена ---------- */
@@ -170,6 +171,11 @@ async function restoreSess(){
 async function restoreSessOnce(){
   let s = null;
   try { s = JSON.parse(localStorage.getItem(TOK_KEY) || 'null'); } catch(e){}
+  if (!s || !s.rtok){
+    try { const legacy=JSON.parse(localStorage.getItem('iva_auth')||'null');
+      if(legacy&&legacy.tok&&legacy.ref)s={tok:legacy.tok,rtok:legacy.ref};
+    }catch(e){}
+  }
   if (!s || !s.rtok) return false;
 
   A.tok = s.tok; A.rtok = s.rtok; A.me = s.me || ''; A.uname = s.uname || '';
@@ -198,7 +204,7 @@ function signOut(){ clearSess(); }
 async function loadAdmin(){
   if (!A.me) { A.admin = null; return null; }
   try {
-    const arr = await api('/rest/v1/admins?select=email,role,active,fee_pct,full_name,company,phone,address' +
+    const arr = await api('/rest/v1/admins?select=email,role,active,fee_pct,debt_limit,full_name,company,phone,address,work_hours' +
                           '&email=eq.' + encodeURIComponent(A.me));
     A.admin = (arr && arr.length) ? arr[0] : null;
   } catch(e){ A.admin = null; }

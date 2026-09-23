@@ -1,6 +1,10 @@
 <!doctype html>
 <html lang="ru">
 <head>
+<script>
+// Единый редактор профиля вместо старой формы «Имя / Телефон».
+if(location.hash==='#cab')location.replace('account.html#prof');
+</script>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#101217">
@@ -435,7 +439,7 @@ function saveAuth(j){
   var md=u.user_metadata||{};
   S.uname=md.full_name||md.name||'';
   S.uphone=md.phone||'';
-  try{localStorage.setItem('iva_auth',JSON.stringify({tok:S.tok,ref:S.ref,exp:S.exp}))}catch(e){}
+  try{localStorage.setItem('iva_auth',JSON.stringify({tok:S.tok,ref:S.ref,exp:S.exp}));localStorage.setItem('iva_sess',JSON.stringify({tok:S.tok,rtok:S.ref,me:S.me,uname:S.uname}))}catch(e){}
 }
 async function authCall(path,method,body,noAuth){
   var h={'apikey':KEY,'Content-Type':'application/json'};
@@ -487,7 +491,7 @@ $('aPass').addEventListener('keydown',function(e){if(e.key==='Enter')$('authBtn'
 function doLogout(){
   if(!confirm('Выйти из аккаунта?'))return;
   S.tok=null;S.ref=null;S.admin=null;S.cart={};S.likes={};
-  try{localStorage.removeItem('iva_auth')}catch(e){}
+  try{localStorage.removeItem('iva_auth');localStorage.removeItem('iva_sess')}catch(e){}
   if(S.pollT){clearInterval(S.pollT);S.pollT=null}
   $('main').classList.add('hide');$('tophead').classList.add('hide');$('auth').classList.remove('hide');setReg(false);
 }
@@ -495,6 +499,7 @@ $('btnOut').onclick=doLogout;$('btnOut2').onclick=doLogout;
 
 /* ================== СТАРТ ================== */
 (async function boot(){
+  if(location.hash==='#cab')return;
   try{
     var a=JSON.parse(localStorage.getItem('iva_auth')||'null');
     if(a&&a.tok){S.tok=a.tok;S.ref=a.ref;S.exp=a.exp;
@@ -1186,25 +1191,7 @@ async function cabInc(){
     $('payFee').onclick=function(){toast(debt>0?'Оплата комиссии появится сразу после подключения ЮKassa':'Задолженности нет')};
   }catch(e){b.innerHTML='<div class="empt">Ошибка: '+esc(e.message)+'</div>'}
 }
-function cabMe(t){
-  var a=S.admin||{};
-  var b=$(t||'cabBody');
-  b.innerHTML='<div class="sect">Профиль</div>'
-  +'<span class="lbl">ФИО</span><input class="inp" id="mFn" value="'+esc(a.full_name||'')+'">'
-  +'<span class="lbl">Компания</span><input class="inp" id="mCo" value="'+esc(a.company||'')+'">'
-  +'<span class="lbl">Телефон</span><input class="inp" id="mPh" value="'+esc(a.phone||'')+'">'
-  +'<span class="lbl">Адрес выдачи</span><input class="inp" id="mAd" value="'+esc(a.address||'')+'">'
-  +'<span class="lbl">Юр. адрес</span><input class="inp" id="mOr" value="'+esc(a.org_address||'')+'">'
-  +'<span class="lbl">Время работы</span><input class="inp" id="mWh" value="'+esc(a.work_hours||'')+'" placeholder="Пн–Сб 8:00–20:00">'
-  +'<button class="big" id="mSave">Сохранить</button>'
-  +'<div class="hint" style="margin-top:10px">Ставку комиссии и лимит устанавливает владелец.</div>';
-  $('mSave').onclick=async function(){
-    try{
-      await api('/rest/v1/admins?email=eq.'+encodeURIComponent(S.me),'PATCH',{full_name:$('mFn').value.trim(),company:$('mCo').value.trim(),phone:$('mPh').value.trim(),address:$('mAd').value.trim(),org_address:$('mOr').value.trim(),work_hours:$('mWh').value.trim()});
-      S.admin.full_name=$('mFn').value.trim();toast('Сохранено');cdel('admins');loadAdmins();
-    }catch(e){toast('Ошибка: '+e.message)}
-  };
-}
+function cabMe(){ location.href='account.html#prof'; }
 async function cabAdms(){
   var b=$('cabBody');b.innerHTML='<div class="empt">Загрузка…</div>';
   try{
@@ -1345,29 +1332,7 @@ function vCompany(){
   cabMe('compbox');
 }
 /* ---- кабинет пользователя ---- */
-function vCabUser(){
-  var md=S.uname||S.me.split('@')[0];
-  $('view').innerHTML='<div class="scr">'
-  +'<div class="card" style="display:flex;gap:12px;align-items:center"><div class="ava">'+esc((md[0]||'?').toUpperCase())+'</div>'
-  +'<div style="flex:1"><div style="font-weight:700;font-size:16px">'+esc(S.uname||'Пользователь')+'</div><div class="hint">'+esc(S.me)+'</div></div></div>'
-  +'<div class="sect">Мои данные</div>'
-  +'<span class="lbl">Имя</span><input class="inp" id="uNm" value="'+esc(S.uname)+'">'
-  +'<span class="lbl">Телефон</span><input class="inp" id="uPh" value="'+esc(S.uphone)+'">'
-  +'<button class="big" id="uSave">Сохранить</button>'
-  +'<div class="sect">Ещё</div>'
-  +'<div class="card" style="cursor:pointer" id="uLend"><b>Хочу сдавать инструмент</b><div class="hint">Напишите нам — расскажем условия</div></div>'
-  +'<div class="card" style="cursor:pointer" id="uMy"><b>Мои заявки</b><div class="hint">Статусы и история</div></div>'
-  +'</div>';
-  $('uSave').onclick=async function(){
-    try{
-      var nm=$('uNm').value.trim(),ph=$('uPh').value.trim();
-      await authCall('/auth/v1/user','PUT',{data:{full_name:nm,name:nm,phone:ph}});
-      S.uname=nm;S.uphone=ph;toast('Сохранено');
-    }catch(e){toast('Ошибка: '+e.message)}
-  };
-  $('uLend').onclick=function(){openChatWith(OWNER_EMAIL,'Здравствуйте! Хочу сдавать инструмент в аренду. Подскажите, что делать дальше?')};
-  $('uMy').onclick=function(){go('orders')};
-}
+function vCabUser(){ location.href='account.html#prof'; }
 </script>
 </body>
 </html>
