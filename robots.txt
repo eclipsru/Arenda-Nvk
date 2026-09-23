@@ -1,8 +1,7 @@
 User-agent: *
 Allow: /
-Disallow: /admin.php
+Disallow: /admin.html
+Disallow: /cabinet.html
+Disallow: /kabinet.html
 
-User-agent: Yandex
-Allow: /
-
-Sitemap: https://Arenda.Nvk.ru/sitemap.xml
+Sitemap: https://eclipsru.github.io/Arenda-Nvk/sitemap.xml

@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Избранное — Ива, аренда инструмента</title>
+<meta name="theme-color" content="#101217">
+<link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="assets/theme.css">
+</head>
+<body>
+
+<div id="hdr"></div>
+
+<main class="page">
+  <div class="wrap">
+    <div class="sect">
+      <div class="sect-h">
+        <h2>Избранное</h2>
+        <span class="cnt" id="cnt"></span>
+        <a href="#" id="clrAll" class="hide">Очистить всё</a>
+      </div>
+      <div class="grid" id="grid"></div>
+    </div>
+  </div>
+</main>
+
+<div id="ftr"></div>
+<div id="bnav"></div>
+
+<script src="assets/data.js"></script>
+<script src="assets/app.js"></script>
+<script>
+(function(){
+  mountChrome('fav', '');
+
+  function render(){
+    var ids = favList();
+    var list = ids.map(adById).filter(Boolean).filter(function(a){ return a.status === 'active'; });
+
+    $('cnt').textContent = list.length
+      ? list.length + ' ' + plural(list.length, 'объявление', 'объявления', 'объявлений')
+      : '';
+    $('clrAll').classList.toggle('hide', !list.length);
+
+    if (!list.length){
+      $('grid').innerHTML =
+        '<div class="empty" style="grid-column:1/-1">' +
+          '<svg viewBox="0 0 24 24"><path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1-1.1a5.5 5.5 0 0 0-7.8 7.8l1.1 1L12 21.2l7.7-7.7 1.1-1a5.5 5.5 0 0 0 0-7.9z"/></svg>' +
+          '<b>Пока пусто</b>' +
+          '<p>Нажимайте на сердечко в карточке объявления — инструмент сохранится здесь, ' +
+             'чтобы не искать его заново.</p>' +
+          '<a class="btn" href="catalog.html">Перейти в каталог</a>' +
+        '</div>';
+      return;
+    }
+    $('grid').innerHTML = list.map(adCard).join('');
+  }
+
+  /* Убрали из избранного — перерисовываем список */
+  window.onFavChanged = render;
+
+  $('clrAll').addEventListener('click', function(e){
+    e.preventDefault();
+    try { localStorage.setItem('iva_market_fav', '[]'); } catch(err){}
+    paintFavCount();
+    render();
+    toast('Избранное очищено');
+  });
+
+  render();
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Объявление — Ива, аренда инструмента</title>
+<meta name="theme-color" content="#101217">
+<link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="assets/theme.css">
+</head>
+<body>
+
+<div id="hdr"></div>
+
+<main class="page">
+  <div class="wrap" id="root"></div>
+</main>
+
+<div id="ftr"></div>
+<div id="bnav"></div>
+
+<script src="assets/data.js"></script>
+<script src="assets/app.js"></script>
+<script>
+(function(){
+  mountChrome('', '');
+
+  var id = new URLSearchParams(location.search).get('id');
+  var ad = adById(id);
+
+  /* ---------- Объявление не найдено ---------- */
+  if (!ad){
+    $('root').innerHTML =
+      '<div class="empty" style="padding:80px 20px">' +
+        '<svg viewBox="0 0 24 24"><path d="M21 8 12 3 3 8v8l9 5 9-5z"/><path d="M3 8l9 5 9-5M12 13v8"/></svg>' +
+        '<b>Объявление не найдено</b>' +
+        '<p>Возможно, его сняли с публикации или ссылка устарела.</p>' +
+        '<a class="btn" href="catalog.html">Перейти в каталог</a>' +
+      '</div>';
+    return;
+  }
+
+  document.title = ad.name + ' — аренда в ' + ad.city + ' | Ива';
+
+  var owner = ownerById(ad.owner);
+  var dep = depositOf(ad);
+  var photos = [];
+  for (var i = 0; i < ad.photos; i++) photos.push(photoURL(ad, i));
+
+  /* ---------- Характеристики ---------- */
+  var specRows = '';
+  specRows += '<div class="spec"><dt>Категория</dt><dd>' + esc(catTitle(ad.cat)) +
+              (ad.sub ? ' · ' + esc(subTitle(ad.sub)) : '') + '</dd></div>';
+  specRows += '<div class="spec"><dt>Состояние</dt><dd>' + esc(condTitle(ad.cond)) + '</dd></div>';
+  Object.keys(ad.specs).forEach(function(k){
+    specRows += '<div class="spec"><dt>' + esc(k) + '</dt><dd>' + esc(ad.specs[k]) + '</dd></div>';
+  });
+  specRows += '<div class="spec"><dt>Доставка</dt><dd>' +
+    (ad.delivery ? 'Есть, 40 ₽/км по городу' : 'Только самовывоз') + '</dd></div>';
+  specRows += '<div class="spec"><dt>Минимальный срок</dt><dd>1 сутки</dd></div>';
+
+  /* ---------- Похожие ---------- */
+  var similar = ADS.filter(function(a){
+    return a.status === 'active' && a.id !== ad.id && a.cat === ad.cat;
+  }).slice(0, 4);
+  if (similar.length < 4){
+    ADS.forEach(function(a){
+      if (similar.length < 4 && a.status === 'active' && a.id !== ad.id &&
+          similar.indexOf(a) === -1) similar.push(a);
+    });
+  }
+
+  /* ---------- Разметка ---------- */
+  $('root').innerHTML = '' +
+  '<nav class="small" style="padding:16px 0 4px;color:var(--g2)">' +
+    '<a href="index.html" style="color:var(--gr)">Главная</a> · ' +
+    '<a href="catalog.html?cat=' + ad.cat + '" style="color:var(--gr)">' + esc(catTitle(ad.cat)) + '</a>' +
+    (ad.sub ? ' · <a href="catalog.html?cat=' + ad.cat + '&sub=' + ad.sub +
+              '" style="color:var(--gr)">' + esc(subTitle(ad.sub)) + '</a>' : '') +
+  '</nav>' +
+
+  '<div class="tool-grid">' +
+    /* --- Левая колонка --- */
+    '<div>' +
+      '<h1 class="t-title">' + esc(ad.name) + '</h1>' +
+      '<div class="t-sub">' +
+        '<span>' + esc(ad.city) + '</span>' +
+        '<span>' + daysAgo(ad.days) + '</span>' +
+        '<span class="badge act">Активно</span>' +
+      '</div>' +
+
+      /* Галерея */
+      '<div class="gal-main">' +
+        '<img id="gImg" src="' + photos[0] + '" alt="' + esc(ad.name) + '">' +
+        (photos.length > 1 ?
+          '<button class="gal-nav prev" id="gPrev" aria-label="Предыдущее фото">' + IC.left + '</button>' +
+          '<button class="gal-nav next" id="gNext" aria-label="Следующее фото">' + IC.right + '</button>' +
+          '<div class="gal-cnt"><span id="gCur">1</span> / ' + photos.length + '</div>' : '') +
+      '</div>' +
+      (photos.length > 1 ?
+        '<div class="gal-thumbs" id="gThumbs">' +
+          photos.map(function(src, i){
+            return '<img src="' + src + '" data-i="' + i + '"' +
+                   (i === 0 ? ' class="on"' : '') + ' alt="Фото ' + (i+1) + '">';
+          }).join('') +
+        '</div>' : '') +
+
+      /* Описание */
+      '<div class="box" style="margin-top:18px">' +
+        '<h3>Описание</h3>' +
+        '<p style="color:var(--gr);line-height:1.65">' + esc(ad.descr) + '</p>' +
+      '</div>' +
+
+      /* Характеристики */
+      '<div class="box">' +
+        '<h3>Характеристики</h3>' +
+        '<dl class="specs">' + specRows + '</dl>' +
+      '</div>' +
+
+      /* Условия */
+      '<div class="box">' +
+        '<h3>Условия аренды</h3>' +
+        '<p style="color:var(--gr);line-height:1.7;font-size:14px">' +
+          'Документы: паспорт РФ, договор оформляется за пару минут.<br>' +
+          'Залог возвращается полностью при исправном возврате инструмента.<br>' +
+          'Оплата за сутки вперёд — наличными или переводом.<br>' +
+          'Расходники (диски, буры, леска) — за счёт арендатора.' +
+        '</p>' +
+      '</div>' +
+    '</div>' +
+
+    /* --- Правая колонка --- */
+    '<aside class="side">' +
+      '<div class="box">' +
+        '<div class="price-big">' + rub(ad.price) + ' <span>/ сутки</span></div>' +
+        '<div class="dep-line">' +
+          '<span>Залог <b>' + rub(dep) + '</b> — возвращается при возврате</span>' +
+        '</div>' +
+
+        '<div style="display:flex;flex-direction:column;gap:9px;margin-top:16px">' +
+          '<button class="btn wide" data-soon="Чат с арендодателем">Написать</button>' +
+          '<button class="btn sec wide phone-btn" id="phoneBtn">Показать телефон</button>' +
+          '<button class="btn ghost wide" id="favBtn" data-fav="' + ad.id + '">' +
+            (favHas(ad.id) ? 'В избранном ♥' : 'В избранное') +
+          '</button>' +
+        '</div>' +
+      '</div>' +
+
+      /* Арендодатель */
+      '<div class="box">' +
+        '<div class="owner">' +
+          '<div class="ava">' + initials(owner.name) + '</div>' +
+          '<div>' +
+            '<div class="nm">' + esc(owner.name) +
+              (owner.verified ? ' <span class="badge new" style="margin-left:4px">Проверен</span>' : '') +
+            '</div>' +
+            '<div class="rt"><span class="star">★</span>' + owner.rating.toFixed(1) +
+              ' · ' + owner.deals + ' ' + plural(owner.deals,'сделка','сделки','сделок') + '</div>' +
+          '</div>' +
+        '</div>' +
+        '<div class="small muted" style="margin-top:12px">' +
+          'На площадке с ' + esc(owner.since) + '<br>' +
+          'Выдача: ' + esc(ad.city) +
+        '</div>' +
+      '</div>' +
+
+      /* Безопасность */
+      '<div class="box">' +
+        '<h3 style="font-size:14px">Безопасная аренда</h3>' +
+        '<p class="small muted" style="line-height:1.6">' +
+          'Проверяйте инструмент при получении. Залог фиксируется в договоре ' +
+          'и возвращается полностью, если техника исправна.' +
+        '</p>' +
+      '</div>' +
+    '</aside>' +
+  '</div>' +
+
+  /* Похожие */
+  (similar.length ?
+    '<section class="sect">' +
+      '<div class="sect-h"><h2>Похожие объявления</h2>' +
+        '<a href="catalog.html?cat=' + ad.cat + '">Все в категории →</a></div>' +
+      '<div class="grid">' + similar.map(adCard).join('') + '</div>' +
+    '</section>' : '');
+
+  /* ---------- Галерея ---------- */
+  var cur = 0;
+  function show(i){
+    cur = (i + photos.length) % photos.length;
+    $('gImg').src = photos[cur];
+    var c = $('gCur'); if (c) c.textContent = cur + 1;
+    $$('#gThumbs img').forEach(function(t, k){ t.classList.toggle('on', k === cur); });
+  }
+  if (photos.length > 1){
+    $('gPrev').addEventListener('click', function(){ show(cur - 1); });
+    $('gNext').addEventListener('click', function(){ show(cur + 1); });
+    $('gThumbs').addEventListener('click', function(e){
+      var t = e.target.closest('[data-i]');
+      if (t) show(Number(t.getAttribute('data-i')));
+    });
+    document.addEventListener('keydown', function(e){
+      if (e.key === 'ArrowLeft') show(cur - 1);
+      if (e.key === 'ArrowRight') show(cur + 1);
+    });
+    /* Свайп на мобильном */
+    var x0 = null;
+    var gm = $1('.gal-main');
+    gm.addEventListener('touchstart', function(e){ x0 = e.touches[0].clientX; }, {passive:true});
+    gm.addEventListener('touchend', function(e){
+      if (x0 === null) return;
+      var dx = e.changedTouches[0].clientX - x0;
+      if (Math.abs(dx) > 45) show(cur + (dx < 0 ? 1 : -1));
+      x0 = null;
+    }, {passive:true});
+  }
+
+  /* ---------- Показать телефон ---------- */
+  var shown = false;
+  $('phoneBtn').addEventListener('click', function(){
+    if (shown){ location.href = 'tel:' + owner.phone.replace(/[^\d+]/g,''); return; }
+    shown = true;
+    this.textContent = owner.phone;
+    this.classList.remove('sec');
+    toast('Скажите, что нашли объявление на площадке «Ива»');
+  });
+
+  /* ---------- Кнопка избранного в боковой колонке ---------- */
+  window.onFavChanged = function(){
+    var b = $('favBtn');
+    if (b) b.textContent = favHas(ad.id) ? 'В избранном ♥' : 'В избранное';
+  };
+})();
+</script>
+</body>
+</html>

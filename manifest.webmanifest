@@ -1,0 +1,15 @@
+{
+  "name": "Ива — Инструмент в аренду",
+  "short_name": "Ива",
+  "description": "Прокат инструмента в Новочеркасске: аренда посуточно, доставка, возвратный залог.",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#101217",
+  "theme_color": "#14161c",
+  "lang": "ru",
+  "icons": [
+    { "src": "favicon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" },
+    { "src": "iva_logo.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ]
+}

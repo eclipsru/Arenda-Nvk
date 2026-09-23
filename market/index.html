@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Ива — аренда инструмента в Новочеркасске</title>
+<meta name="description" content="Ива — площадка аренды инструмента: электроинструмент, стройоборудование, садовая техника. Цена за сутки, возвратный залог, доставка по городу.">
+<meta name="theme-color" content="#101217">
+<link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="assets/theme.css">
+</head>
+<body>
+
+<div id="hdr"></div>
+
+<main class="page">
+  <div class="wrap">
+
+    <!-- Категории -->
+    <section class="sect">
+      <div class="sect-h">
+        <h2>Категории</h2>
+        <a href="catalog.html">Весь каталог →</a>
+      </div>
+      <div class="cats" id="cats"></div>
+    </section>
+
+    <!-- Рядом с вами -->
+    <section class="sect">
+      <div class="sect-h">
+        <h2>Рядом с вами</h2>
+        <span class="cnt" id="nearCity"></span>
+        <a href="catalog.html" id="nearAll">Смотреть все →</a>
+      </div>
+      <div class="grid" id="near"></div>
+    </section>
+
+    <!-- Новые объявления -->
+    <section class="sect">
+      <div class="sect-h">
+        <h2>Свежие объявления</h2>
+        <span class="cnt" id="freshCnt"></span>
+      </div>
+      <div class="grid" id="fresh"></div>
+      <div style="text-align:center;padding:24px 0 8px">
+        <a class="btn sec" href="catalog.html">Показать весь каталог</a>
+      </div>
+    </section>
+
+  </div>
+</main>
+
+<div id="ftr"></div>
+<div id="bnav"></div>
+
+<script src="assets/data.js"></script>
+<script src="assets/app.js"></script>
+<script>
+(function(){
+  mountChrome('home', '');
+
+  /* --- Плитка категорий с количеством --- */
+  function renderCats(){
+    $('cats').innerHTML = CATS.map(function(c){
+      var n = ADS.filter(function(a){ return a.status === 'active' && a.cat === c.key; }).length;
+      return '<a class="cat" href="catalog.html?cat=' + c.key + '">' +
+               '<span class="ico">' + ICONS[c.key] + '</span>' +
+               '<b>' + esc(c.title) + '</b>' +
+               '<span>' + n + ' ' + plural(n,'объявление','объявления','объявлений') + '</span>' +
+             '</a>';
+    }).join('');
+  }
+
+  /* --- Лента «Рядом с вами» (по выбранному городу) --- */
+  function renderNear(){
+    var city = getCity();
+    var list = ADS.filter(function(a){ return a.status === 'active' && a.city === city; });
+
+    $('nearCity').textContent = city;
+    $('nearAll').href = 'catalog.html?city=' + encodeURIComponent(city);
+
+    if (!list.length){
+      $('near').innerHTML =
+        '<div class="empty" style="grid-column:1/-1">' +
+          '<b>В городе ' + esc(city) + ' пока пусто</b>' +
+          '<p>Посмотрите объявления в соседних городах — многие арендодатели возят инструмент.</p>' +
+          '<a class="btn sec" href="catalog.html">Весь каталог</a>' +
+        '</div>';
+      return;
+    }
+    $('near').innerHTML = sortAds(list, 'new').slice(0, 8).map(adCard).join('');
+  }
+
+  /* --- Свежие объявления --- */
+  function renderFresh(){
+    var list = sortAds(ADS.filter(function(a){ return a.status === 'active'; }), 'new').slice(0, 12);
+    $('freshCnt').textContent = ADS.filter(function(a){ return a.status === 'active'; }).length + ' всего';
+    $('fresh').innerHTML = list.map(adCard).join('');
+  }
+
+  renderCats();
+  renderNear();
+  renderFresh();
+
+  /* Перерисовать ленту при смене города */
+  window.onCityChanged = renderNear;
+})();
+</script>
+</body>
+</html>
