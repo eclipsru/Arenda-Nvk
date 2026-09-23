@@ -499,6 +499,53 @@
   }
   .chip .ico-svg svg{width:15px;height:15px;vertical-align:-2.5px}
   .subchip .ico-svg svg,.m-subchip .ico-svg svg{width:14px;height:14px;vertical-align:-2px}
+
+  /* ==== МОБИЛЬНОЕ ОФОРМЛЕНИЕ «ИВА» (вариант Б) — только телефоны ==== */
+  @media(max-width:768px){
+    :root{--bg:#101217;--bg-2:#171A21;--card:#1A1D24;--line:#262B35}
+    body{background-color:#0B0D11}
+    header{background:#101217f2;border-bottom:1px solid #262B35}
+    .nav{height:54px}
+    .logo .mark{background:linear-gradient(135deg,#ffa726,#f57c00);border-radius:10px}
+    .logo span b{color:#FF8F1F}
+    .nav-phone #authBtn{background:#F57C00;color:#fff;border:none;border-radius:12px;font-weight:700;padding:8px 14px}
+    .nav-phone #userBox #cabLink{background:#F57C00;color:#fff;border:none;border-radius:12px;font-weight:700}
+    .nav-phone #userBox #logoutBtn{background:#1A1D24;border:1px solid #3A4050;color:#F2F4F8;border-radius:12px}
+    .hero-bg{filter:brightness(.42)}
+    /* поиск — тёмное поле Ивы */
+    .m-search input{background:#171A21;border:1px solid #3A4050;border-radius:14px;color:#F2F4F8;padding:13px 40px 13px 38px}
+    .m-search input::placeholder{color:#6B7080}
+    .m-search .m-ico{color:#6B7080}
+    .m-search .m-clear{color:#C9CFDA}
+    .m-search input:focus{border-color:#FF8F1F;box-shadow:0 0 0 3px rgba(255,143,31,.2)}
+    /* плитки категорий — тёмные карточки */
+    .m-tile{background:#1A1D24;border:1px solid #262B35;border-radius:14px;color:#F2F4F8;font-size:10.5px;gap:6px}
+    .m-tile svg{color:#FF8F1F;width:24px;height:24px}
+    .m-tile.active{background:#F57C00;border-color:#F57C00;color:#fff}
+    .m-tile.active svg{color:#fff}
+    .m-back{background:#1A1D24;border:1px solid #262B35;border-radius:14px;color:#F2F4F8}
+    .m-subchip{background:#1A1D24;border:1px solid #262B35;color:#9AA1B0;border-radius:18px;padding:8px 13px;font-size:12.5px}
+    .m-subchip.active{background:#F57C00;border-color:#F57C00;color:#fff}
+    /* карточки каталога */
+    .grid{gap:10px}
+    .grid .card{background:#1A1D24;border:1px solid #262B35;border-radius:16px;overflow:hidden}
+    .card .body{padding:10px 11px 12px}
+    .card h3{font-size:13px;line-height:1.3}
+    .card .price{font-size:14.5px;font-weight:800;color:#F2F4F8}
+    .card .btn{background:#F57C00;color:#fff;border:0;border-radius:10px;padding:9px;font-size:13px;font-weight:700}
+    /* кнопки */
+    .btn{border-radius:13px}
+    .btn.big{width:100%;text-align:center}
+    /* модалки заявки/карточки/условий — шторки снизу */
+    .modal-overlay{align-items:flex-end;padding:0}
+    #orderModal,#toolModal,#conditionsModal{padding:0}
+    #orderModal .modal-order,#toolModal .modal-tool,#conditionsModal .modal-conditions{position:relative;max-width:none;width:100%;border-radius:20px 20px 0 0;max-height:92vh;padding-top:28px}
+    #orderModal .modal-order::before,#toolModal .modal-tool::before,#conditionsModal .modal-conditions::before{content:'';position:absolute;top:10px;left:50%;transform:translateX(-50%);width:44px;height:4px;border-radius:2px;background:#3A4050}
+    /* контакты и подвал */
+    .contact-item{background:#1A1D24;border:1px solid #262B35;border-radius:16px;padding:14px}
+    .cta-card{background:#1A1D24;border:1px solid #262B35;border-radius:16px}
+    footer{border-top:1px solid #262B35;color:#6B7080;font-size:12px}
+  }
 </style>
 </head>
 <body>
