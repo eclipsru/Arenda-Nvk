@@ -26,7 +26,7 @@
      const response=await fetch(SB+'/auth/v1/signup?redirect_to='+encodeURIComponent(redirect),{method:'POST',headers:{apikey:KEY,'Content-Type':'application/json'},body:JSON.stringify({email:em,password:pw,data:{onboarding:'landlord'}})});
      const text=await response.text();if(!response.ok)throw new Error(sbErr(text));const j=JSON.parse(text);
      if(!j.access_token){signup=false;loginScreen('Если для этого адреса требуется подтверждение, проверьте письмо, подтвердите email и войдите. Анкета пока не отправлена.',em);return;}
-     A.tok=j.access_token;A.rtok=j.refresh_token;A.me=((j.user||{}).email||em).toLowerCase();A.uname='';saveSess();await loadAdmin();
+     A.tok=j.access_token;A.rtok=j.refresh_token;A.me=((j.user||{}).email||em).toLowerCase();A.uname='';applyAuthUser(j.user);saveSess();await loadAdmin();
     }else await signIn(em,pw);
     await loadState();
    }catch(err){error.textContent=errText(err);button.disabled=false;}
@@ -79,7 +79,7 @@
    const value=id=>document.getElementById(id).value.trim();const website=value('laWebsite');if(website&&!/^https?:\/\/\S+$/i.test(website)){error.textContent='Ссылка должна начинаться с https:// или http://';return;}
    const data={full_name:value('laName'),phone,business_type:value('laType'),company:value('laCompany'),region:value('laRegion'),city:value('laCity'),inventory_count:Number(value('laCount')),website,comment:value('laComment'),categories:selected,accept_terms:document.getElementById('laTerms').checked,accept_privacy:document.getElementById('laPrivacy').checked};
    const btn=f.querySelector('button[type=submit]');btn.disabled=true;
-   try{const result=await api('/rest/v1/rpc/submit_landlord_application','POST',{p_data:data});application=Array.isArray(result)?result[0]:result;if(!application||!application.id)throw new Error('Не удалось получить статус заявки. Обновите страницу, чтобы проверить отправку.');statusScreen();root.scrollIntoView({behavior:'smooth',block:'start'});}
+   try{const result=await api('/rest/v1/rpc/submit_landlord_application','POST',{p_data:data});application=Array.isArray(result)?result[0]:result;if(!application||!application.id)throw new Error('Не удалось получить статус заявки. Обновите страницу, чтобы проверить отправку.');await loadProfileCity();statusScreen();root.scrollIntoView({behavior:'smooth',block:'start'});}
    catch(err){error.textContent=errText(err);btn.disabled=false;}
   };
  }

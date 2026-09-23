@@ -33,7 +33,6 @@
           <div class="cats-head">
             <h2 id="catsTitle">Категории</h2>
             <span class="crumb" id="catsCrumb"></span>
-            <a href="catalog.html">Весь каталог →</a>
           </div>
           <div class="cats" id="cats"></div>
         </div>
@@ -86,8 +85,8 @@
 <div id="bnav"></div>
 
 <script src="assets/data.js"></script>
-<script src="assets/sb.js"></script>
-<script src="assets/app.js?v=20260923-city-filter"></script>
+<script src="assets/sb.js?v=20260923-edit-profile-city"></script>
+<script src="assets/app.js?v=20260923-edit-profile-city"></script>
 <script src="assets/partners.js?v=20260923-info-spacing"></script>
 <script>
 (function(){
@@ -267,7 +266,7 @@
 
     root.addEventListener('change', function(e){
       var t = e.target;
-      if (t.id === 'fCity'){ F.city = t.value; renderAll(); }
+      if (t.id === 'fCity'){ setCity(t.value,true); F.city = t.value; renderAll(); }
       else if (t.id === 'fDeliv'){ F.delivery = t.checked; renderAll(); }
       else if (t.hasAttribute && t.hasAttribute('data-cond')){
         var k = t.getAttribute('data-cond'), i = F.conds.indexOf(k);
@@ -292,6 +291,7 @@
   }
 
   function resetAll(){
+    setCity('',true);
     F = { q:'', cat:'', sub:'', city:'', priceFrom:0, priceTo:0, conds:[], delivery:false };
     LEVEL = '';
     renderAll();
@@ -322,7 +322,7 @@
     if (k === 'all'){ resetAll(); return; }
     if (k === 'cat'){ F.cat = ''; F.sub = ''; LEVEL = ''; }
     else if (k === 'sub'){ F.sub = ''; }
-    else if (k === 'city'){ F.city = ''; }
+    else if (k === 'city'){ setCity('',true); F.city = ''; }
     else if (k === 'from'){ F.priceFrom = 0; }
     else if (k === 'to'){ F.priceTo = 0; }
     else if (k === 'delivery'){ F.delivery = false; }

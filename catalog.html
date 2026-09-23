@@ -54,8 +54,8 @@
 <div id="bnav"></div>
 
 <script src="assets/data.js"></script>
-<script src="assets/sb.js"></script>
-<script src="assets/app.js?v=20260923-city-filter"></script>
+<script src="assets/sb.js?v=20260923-edit-profile-city"></script>
+<script src="assets/app.js?v=20260923-edit-profile-city"></script>
 <script>
 (function(){
 
@@ -74,7 +74,7 @@
   var SORT = p.get('sort') || 'new';
   if (['new','good','work'].indexOf(SORT) === -1) SORT = 'new';
 
-  setCity(F.city); // Город в ссылке имеет приоритет над сохранённым.
+  setCity(F.city,p.has('city')); // Город в ссылке имеет приоритет над сохранённым.
   mountChrome('', F.q);
 
   /* ---------- Синхронизация URL без перезагрузки ---------- */
@@ -169,6 +169,7 @@
       if (s){ F.sub = s.getAttribute('data-sub'); render(); return; }
 
       if (e.target.id === 'fReset'){
+        setCity('',true);
         F = {q:'', cat:'', sub:'', city:'', priceFrom:0, priceTo:0, conds:[], delivery:false};
         render();
       }
@@ -176,7 +177,7 @@
 
     root.addEventListener('change', function(e){
       var t = e.target;
-      if (t.id === 'fCity'){ F.city = t.value; render(); }
+      if (t.id === 'fCity'){ setCity(t.value,true); F.city = t.value; render(); }
       else if (t.id === 'fDeliv'){ F.delivery = t.checked; render(); }
       else if (t.hasAttribute && t.hasAttribute('data-cond')){
         var k = t.getAttribute('data-cond');
@@ -261,6 +262,7 @@
         '</div>';
       var er = $('eReset');
       if (er) er.addEventListener('click', function(){
+        setCity('',true);
         F = {q:'', cat:'', sub:'', city:'', priceFrom:0, priceTo:0, conds:[], delivery:false};
         render();
       });
@@ -276,13 +278,14 @@
     var k = b.getAttribute('data-x');
 
     if (k === 'all'){
+      setCity('',true);
       F = {q:'', cat:'', sub:'', city:'', priceFrom:0, priceTo:0, conds:[], delivery:false};
       var qi = $('q'); if (qi) qi.value = '';
     }
     else if (k === 'q'){ F.q = ''; var qi2 = $('q'); if (qi2) qi2.value = ''; }
     else if (k === 'cat'){ F.cat = ''; F.sub = ''; }
     else if (k === 'sub'){ F.sub = ''; }
-    else if (k === 'city'){ F.city = ''; }
+    else if (k === 'city'){ setCity('',true); F.city = ''; }
     else if (k === 'from'){ F.priceFrom = 0; }
     else if (k === 'to'){ F.priceTo = 0; }
     else if (k === 'delivery'){ F.delivery = false; }
@@ -307,6 +310,7 @@
 
     $('shOk').addEventListener('click', closeSheet);
     $('shReset').addEventListener('click', function(){
+      setCity('',true);
       F = {q:'', cat:'', sub:'', city:'', priceFrom:0, priceTo:0, conds:[], delivery:false};
       render();
       closeSheet();

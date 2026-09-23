@@ -94,13 +94,17 @@ textarea.inp{resize:vertical;min-height:110px;font-family:inherit;line-height:1.
 <div id="bnav"></div>
 
 <script src="assets/data.js"></script>
-<script src="assets/sb.js"></script>
-<script src="assets/app.js?v=20260923-city-filter"></script>
+<script src="assets/sb.js?v=20260923-edit-profile-city"></script>
+<script src="assets/app.js?v=20260923-edit-profile-city"></script>
 <script>
 (function(){
   mountChrome('new', '');
 
   const DRAFT = 'iva_draft_ad';
+  const EDIT_ID = new URLSearchParams(location.search).get('edit');
+  let EDIT_SOURCE = null, editDirty = false;
+  let uploadsInFlight = 0;
+  window.addEventListener('beforeunload',function(e){ if(editDirty){e.preventDefault();e.returnValue='';} });
   let CATS_DB = [], SUBS_DB = [];
   let step = 1;
   const TOTAL = 5;
@@ -113,6 +117,7 @@ textarea.inp{resize:vertical;min-height:110px;font-family:inherit;line-height:1.
 
   /* ---------- Черновик ---------- */
   function saveDraft(){
+    if (EDIT_ID){ editDirty = true; return; }
     try { localStorage.setItem(DRAFT, JSON.stringify({f:F, step:step})); } catch(e){}
   }
   function loadDraft(){
@@ -122,7 +127,7 @@ textarea.inp{resize:vertical;min-height:110px;font-family:inherit;line-height:1.
     } catch(e){}
     return false;
   }
-  function dropDraft(){ try { localStorage.removeItem(DRAFT); } catch(e){} }
+  function dropDraft(){ if (EDIT_ID){editDirty=false;return;} try { localStorage.removeItem(DRAFT); } catch(e){} }
 
   /* ---------- Экран «нужен вход» ---------- */
   function screenAuth(msg){
@@ -309,9 +314,10 @@ textarea.inp{resize:vertical;min-height:110px;font-family:inherit;line-height:1.
     const bodies = [body1, body2, body3, body4, body5];
     $('root').innerHTML =
       '<div class="sect" style="padding-bottom:0"><div class="sect-h">' +
-        '<h2>Разместить объявление</h2>' +
+        '<h2>' + (EDIT_ID ? 'Редактировать объявление' : 'Разместить объявление') + '</h2>' +
         '<a href="account.html">Мои объявления →</a>' +
       '</div></div>' +
+      (EDIT_ID ? '<p class="muted small" style="margin:14px 0">Изменения сохранятся в этом же объявлении. Статус публикации не изменится.</p>' : '') +
       stepsHTML() +
       '<div class="form-grid">' +
         '<div>' + bodies[step - 1]() +
@@ -319,8 +325,8 @@ textarea.inp{resize:vertical;min-height:110px;font-family:inherit;line-height:1.
             (step > 1 ? '<button class="btn sec" id="bBack">Назад</button>' : '') +
             (step < TOTAL
               ? '<button class="btn" id="bNext">Далее</button>'
-              : '<button class="btn" id="bSave">Опубликовать</button>') +
-            (step === 1 ? '<a class="btn ghost" href="index.html" style="margin-left:auto">Отмена</a>' : '') +
+              : '<button class="btn" id="bSave">' + (EDIT_ID ? 'Сохранить изменения' : 'Опубликовать') + '</button>') +
+            (EDIT_ID || step === 1 ? '<a class="btn ghost" href="' + (EDIT_ID ? 'account.html' : 'index.html') + '" style="margin-left:auto">Отмена</a>' : '') +
           '</div>' +
         '</div>' +
         previewHTML() +
@@ -335,7 +341,7 @@ textarea.inp{resize:vertical;min-height:110px;font-family:inherit;line-height:1.
   function bindStep(){
     const root = $('root');
 
-    root.addEventListener('click', function(e){
+    root.onclick = function(e){
       const c = e.target.closest('[data-cat]');
       if (c){ F.cat = c.getAttribute('data-cat'); F.sub = ''; saveDraft(); render(); return; }
 
@@ -352,7 +358,7 @@ textarea.inp{resize:vertical;min-height:110px;font-family:inherit;line-height:1.
         F.deposit = (Number(F.price) || 0) * 5;
         saveDraft(); render(); return;
       }
-    });
+    };
 
     const bk = $('bBack'); if (bk) bk.addEventListener('click', function(){ step--; render(); });
     const nx = $('bNext'); if (nx) nx.addEventListener('click', function(){ if (validate()) { step++; saveDraft(); render(); } });
@@ -440,6 +446,7 @@ textarea.inp{resize:vertical;min-height:110px;font-family:inherit;line-height:1.
     const take = files.slice(0, free);
     if (files.length > free) toast('Добавлены первые ' + free + ' — всего можно 5');
 
+    uploadsInFlight += take.length;
     for (let i = 0; i < take.length; i++){
       const box = $('photos');
       const stub = document.createElement('div');
@@ -453,6 +460,7 @@ textarea.inp{resize:vertical;min-height:110px;font-family:inherit;line-height:1.
       } catch(err){
         toast('Фото не загрузилось: ' + err.message);
       }
+      uploadsInFlight--;
       if (stub.parentNode) stub.remove();
       paintPhotos(); livePreview();
     }
@@ -465,6 +473,7 @@ textarea.inp{resize:vertical;min-height:110px;font-family:inherit;line-height:1.
   }
 
   function validate(){
+    if (uploadsInFlight){toast('Дождитесь загрузки фотографий');return false;}
     if (step === 1){
       if (!F.cat){ bad('fCat', true); toast('Выберите категорию'); return false; }
       bad('fCat', false);
@@ -489,7 +498,7 @@ textarea.inp{resize:vertical;min-height:110px;font-family:inherit;line-height:1.
     if (!validate()) return;
 
     const b = $('bSave');
-    b.disabled = true; b.textContent = 'Публикуем…';
+    b.disabled = true; b.textContent = EDIT_ID ? 'Сохраняем…' : 'Публикуем…';
 
     const terms = [
       F.terms,
@@ -502,13 +511,28 @@ textarea.inp{resize:vertical;min-height:110px;font-family:inherit;line-height:1.
       cat: F.cat,
       sub: F.sub,
       descr: F.descr.trim(),
-      price: F.price,
-      deposit: Number(F.deposit) || Number(F.price) * 5,
+      price: Number(F.price),
+      deposit: F.deposit === '' ? Number(F.price) * 5 : Number(F.deposit),
       imgs: F.imgs,
       delivery: F.delivery,
-      delivery_price: F.delivery_price,
+      delivery_price: Number(F.delivery_price) || 0,
       terms: terms
     };
+
+    if (EDIT_ID){
+      try {
+        const updated = await updateTool(EDIT_ID, payload);
+        if (!updated) throw new Error('Объявление не найдено или доступ к нему изменился');
+        dropDraft();
+        $('root').innerHTML = '<div class="empty" style="padding:70px 20px"><b>Изменения сохранены</b>' +
+          '<p>«' + esc(updated.name || F.name) + '». Статус: ' + esc(statusTitle(updated.status)) + '.</p>' +
+          '<div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap">' +
+          '<a class="btn" href="tool.html?id=' + encodeURIComponent(EDIT_ID) + '">Посмотреть</a>' +
+          '<a class="btn sec" href="account.html">Мои объявления</a></div></div>';
+        window.scrollTo(0,0);
+      } catch(err){ b.disabled=false;b.textContent='Сохранить изменения';toast('Не удалось сохранить: ' + err.message); }
+      return;
+    }
 
     /* Автопроверка. Главный админ публикует без неё. */
     let verdict = { status:'active', failed:[] };
@@ -571,6 +595,35 @@ textarea.inp{resize:vertical;min-height:110px;font-family:inherit;line-height:1.
       CATS_DB = CATS; SUBS_DB = SUBS;   /* запасной вариант — справочник из data.js */
     }
 
+    if (EDIT_ID){
+      try {
+        EDIT_SOURCE = await loadTool(EDIT_ID);
+        if (!EDIT_SOURCE) throw new Error('Объявление не найдено или недоступно');
+        if (!isChief() && String(EDIT_SOURCE.owner_email || '').toLowerCase() !== A.me.toLowerCase())
+          throw new Error('Редактировать можно только свои объявления');
+        const parsed = toolToAd(EDIT_SOURCE);
+        const lines = String(EDIT_SOURCE.terms || '').split(/\r?\n/);
+        const addressLine = lines.find(line=>/^Адрес выдачи:\s*/i.test(line.trim()));
+        F = {
+          cat:EDIT_SOURCE.cat || '',sub:EDIT_SOURCE.sub || '',
+          imgs:EDIT_SOURCE.imgs && EDIT_SOURCE.imgs.length ? EDIT_SOURCE.imgs.slice() : (EDIT_SOURCE.img ? [EDIT_SOURCE.img] : []),
+          name:EDIT_SOURCE.name || '',descr:EDIT_SOURCE.descr || '',cond:parsed.cond,
+          price:EDIT_SOURCE.price == null ? '' : EDIT_SOURCE.price,
+          deposit:EDIT_SOURCE.deposit == null ? '' : EDIT_SOURCE.deposit,
+          terms:lines.filter(line=>!/^\s*(?:Адрес выдачи|Состояние):/i.test(line)).join('\n').trim(),
+          address:addressLine ? addressLine.trim().replace(/^Адрес выдачи:\s*/i,'') : '',
+          delivery:!!EDIT_SOURCE.delivery,delivery_price:EDIT_SOURCE.delivery_price == null ? 40 : EDIT_SOURCE.delivery_price
+        };
+        // Старую категорию не теряем, даже если её убрали из активного справочника.
+        if (F.cat && !CATS_DB.some(c=>c.key===F.cat)) CATS_DB.push({key:F.cat,title:catTitle(F.cat)});
+        if (F.sub && !SUBS_DB.some(c=>c.key===F.sub&&c.cat===F.cat)) SUBS_DB.push({key:F.sub,cat:F.cat,title:subTitle(F.sub)});
+        document.title='Редактирование объявления — Ива';
+        step=3;render();return;
+      } catch(err){
+        $('root').innerHTML='<div class="empty"><b>Не удалось открыть редактирование</b><p>'+esc(err.message)+'</p><a class="btn sec" href="account.html">Мои объявления</a></div>';
+        return;
+      }
+    }
     const had = loadDraft();
     render();
     if (had && (F.name || F.cat || F.imgs.length)) toast('Восстановлен черновик');

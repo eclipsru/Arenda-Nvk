@@ -98,6 +98,8 @@ function paintFavCount(){
 /* ---------- Город ---------- */
 const CITY_KEY = 'iva_market_city';
 let _selectedCity;
+let _cityChosenManually = false;
+const PROFILE_CITY_KEY = 'iva_market_profile_city';
 function getCity(){
   if (_selectedCity === undefined){
     try {
@@ -108,13 +110,27 @@ function getCity(){
   }
   return _selectedCity;
 }
-function setCity(c){
+function setCity(c, manual){
+  if (manual) _cityChosenManually = true;
   _selectedCity = String(c || '').trim();
   try {
     if (localStorage.getItem(CITY_KEY) !== _selectedCity) localStorage.setItem(CITY_KEY, _selectedCity);
   } catch(e){}
   $$('.city-name').forEach(el => el.textContent = _selectedCity || 'Все города');
   const sug = $('sug'); if (sug) sug.classList.add('hide');
+}
+// Профиль задаёт начальный город. Ручной выбор не меняет профиль и
+// сохраняется между страницами, пока пользователь не изменит город профиля.
+function applyProfileCity(city, force){
+  if (!city || typeof A === 'undefined' || !A.me) return;
+  let previous=null;
+  try { previous=JSON.parse(localStorage.getItem(PROFILE_CITY_KEY) || 'null'); } catch(e){}
+  const same=previous && previous.email===A.me && cityMatches(previous.city,city);
+  try {localStorage.setItem(PROFILE_CITY_KEY,JSON.stringify({email:A.me,city:city}));}catch(e){}
+  if(!force && (same || _cityChosenManually)) return;
+  if(force) _cityChosenManually=false;
+  setCity(city);
+  if(window.onCityChanged)window.onCityChanged();
 }
 function cityKey(city){
   return String(city || '').trim().toLowerCase().replace(/ё/g,'е')
@@ -124,7 +140,7 @@ function cityKey(city){
 function cityMatches(a,b){ return cityKey(a) === cityKey(b); }
 function availableCities(){
   const result = [], seen = new Set();
-  CITIES.concat(ADS.filter(a=>a.status==='active').map(a=>a.city), [getCity()]).forEach(city=>{
+  CITIES.concat(ADS.filter(a=>a.status==='active').map(a=>a.city), [getCity(), typeof A !== 'undefined' ? A.profileCity : '']).forEach(city=>{
     const key=cityKey(city);
     if (key && !seen.has(key)){ seen.add(key); result.push(String(city).trim()); }
   });
@@ -389,7 +405,7 @@ function citySheet(){
   $1('.sheet-b').addEventListener('click', function(e){
     const d = e.target.closest('[data-city]');
     if (!d) return;
-    setCity(d.getAttribute('data-city'));
+    setCity(d.getAttribute('data-city'), true);
     closeSheet();
     toast(d.getAttribute('data-city') ? 'Город: ' + d.getAttribute('data-city') : 'Показаны все города');
     if (window.onCityChanged) window.onCityChanged();

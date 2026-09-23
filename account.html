@@ -76,8 +76,8 @@
 <div id="bnav"></div>
 
 <script src="assets/data.js"></script>
-<script src="assets/sb.js"></script>
-<script src="assets/app.js?v=20260923-city-filter"></script>
+<script src="assets/sb.js?v=20260923-edit-profile-city"></script>
+<script src="assets/app.js?v=20260923-edit-profile-city"></script>
 <script>
 (function(){
   mountChrome('cab', '');
@@ -200,8 +200,7 @@
             (st === 'active'
               ? '<button data-act="hide">Снять с публикации</button>'
               : '<button class="pub" data-act="show">Опубликовать</button>') +
-            (st !== 'moderation'
-              ? '<button data-act="mod">На модерацию</button>' : '') +
+            '<a href="new.html?edit=' + encodeURIComponent(t.id) + '">Редактировать</a>' +
             '<button class="del" data-act="del">Удалить</button>' +
           '</div>' +
         '</div>' +
@@ -255,6 +254,14 @@
           esc(a.fee_pct) + ' %</dd></div>' : '') +
         '<div class="prof-row"><dt>Объявлений</dt><dd>' + MY.length + '</dd></div>' +
       '</dl>' +
+      '<form id="profileCityForm" style="margin-top:20px">' +
+        '<label for="profileCity" style="display:block;font-weight:600;margin-bottom:8px">Город в профиле</label>' +
+        '<input class="inp" id="profileCity" name="city" autocomplete="address-level2" list="profileCityOptions" required minlength="2" maxlength="100" value="' + esc(A.profileCity || '') + '" placeholder="Укажите ваш город">' +
+        '<datalist id="profileCityOptions">' + availableCities().map(c=>'<option value="'+esc(c)+'"></option>').join('') + '</datalist>' +
+        '<p class="small muted" style="margin:8px 0 12px">Используется для поиска по умолчанию. Другой город можно выбрать в шапке — это не изменит профиль и адрес выдачи инструмента.</p>' +
+        '<button class="btn sec sm" type="submit">Сохранить город</button>' +
+        '<p id="profileCityError" role="alert" style="color:var(--red);margin-top:8px"></p>' +
+      '</form>' +
       '<div style="display:flex;gap:10px;margin-top:20px;flex-wrap:wrap">' +
         '<a class="btn sec sm" href="cabinet.html#cab">Редактировать данные</a>' +
         '<button class="btn ghost sm" id="bOut">Выйти</button>' +
@@ -272,6 +279,13 @@
 
     $('root').innerHTML = shell(inner);
     paintFavCount();
+
+    const cityForm=$('profileCityForm');
+    if(cityForm)cityForm.addEventListener('submit',async function(e){
+      e.preventDefault();const btn=cityForm.querySelector('button');btn.disabled=true;$('profileCityError').textContent='';
+      try {await saveProfileCity($('profileCity').value);toast('Город профиля сохранён');render();}
+      catch(err){$('profileCityError').textContent=err.message;btn.disabled=false;}
+    });
 
     const out = $('bOut');
     if (out) out.addEventListener('click', function(){
@@ -327,7 +341,7 @@
       return;
     }
 
-    const map = { hide:'archived', show:'active', mod:'moderation' };
+    const map = { hide:'archived', show:'active' };
     const next = map[act];
     if (!next) return;
 

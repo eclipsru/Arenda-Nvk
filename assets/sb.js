@@ -12,10 +12,57 @@ const A = {
   rtok:  null,   // refresh_token
   me:    '',     // email в нижнем регистре
   uname: '',     // имя
+  uid: null, userMeta: {}, profileCity: '',
   admin: null    // запись из admins, если есть
 };
 
 const TOK_KEY = 'iva_sess';
+
+function applyAuthUser(user){
+  if (!user) return;
+  A.uid = user.id || A.uid;
+  A.me = (user.email || A.me || '').toLowerCase();
+  A.userMeta = user.user_metadata || {};
+  A.uname = A.userMeta.name || A.userMeta.full_name || A.uname || A.me.split('@')[0];
+}
+function cityFromProfileAddress(address){
+  const text = String(address || '').trim();
+  if (!text) return '';
+  const known = typeof CITIES !== 'undefined' ? CITIES.find(c=>{
+    const escaped=c.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
+    return new RegExp('(^|[^А-ЯЁа-яёA-Za-z])'+escaped+'(?=$|[^А-ЯЁа-яёA-Za-z])','i').test(text);
+  }) : '';
+  if (known) return known;
+  const marked = text.match(/(?:^|[,;]\s*)(?:г\.\s*|город\s+)([^,;\n]+)/i);
+  if (marked) return marked[1].trim();
+  const first = text.split(/[,;\n]/)[0].trim();
+  if (/^[А-ЯЁA-Z][А-ЯЁа-яёA-Za-z -]{1,79}$/.test(first) &&
+      !/(?:улица|проспект|область|район|край|переулок|шоссе|набережная)/i.test(first)) return first;
+  return '';
+}
+async function loadProfileCity(){
+  let city = typeof A.userMeta.city === 'string' ? A.userMeta.city.trim() : '';
+  if (!city && A.admin) city = cityFromProfileAddress(A.admin.address);
+  if (!city && A.uid){
+    try {
+      const rows = await api('/rest/v1/landlord_applications?select=city&user_id=eq.' + encodeURIComponent(A.uid) + '&limit=1');
+      city = rows && rows[0] && rows[0].city || '';
+    } catch(e){} // Отсутствие анкеты не мешает входу и работе профиля.
+  }
+  A.profileCity = String(city || '').trim();
+  if (typeof applyProfileCity === 'function') applyProfileCity(A.profileCity);
+  return A.profileCity;
+}
+async function saveProfileCity(city){
+  city=String(city || '').trim();
+  if (city.length<2 || city.length>100) throw new Error('Укажите город от 2 до 100 символов');
+  const user=await api('/auth/v1/user','PUT',{data:Object.assign({},A.userMeta,{city:city})});
+  applyAuthUser(user);
+  A.userMeta.city=city; A.profileCity=city;
+  saveSess();
+  if (typeof applyProfileCity === 'function') applyProfileCity(city,true);
+}
+
 
 /* ---------- Разбор ошибок PostgREST ---------- */
 function sbErr(txt){
@@ -64,6 +111,7 @@ function saveSess(){
 }
 function clearSess(){
   A.tok = A.rtok = null; A.me = A.uname = ''; A.admin = null;
+  A.uid=null; A.userMeta={}; A.profileCity='';
   try { localStorage.removeItem(TOK_KEY); } catch(e){}
 }
 
@@ -80,6 +128,7 @@ async function refreshToken(){
     const j = await r.json();
     A.tok  = j.access_token;
     A.rtok = j.refresh_token || A.rtok;
+    applyAuthUser(j.user);
     saveSess();
     return true;
   } catch(e){ return false; }
@@ -102,16 +151,23 @@ async function signIn(email, pass){
   const j = JSON.parse(txt);
   A.tok  = j.access_token;
   A.rtok = j.refresh_token;
-  A.me   = ((j.user && j.user.email) || email).toLowerCase();
-  const md = (j.user && j.user.user_metadata) || {};
-  A.uname = md.name || md.full_name || A.me.split('@')[0];
+  applyAuthUser(j.user || {email:email});
   saveSess();
   await loadAdmin();
   return A;
 }
 
 /* ---------- Восстановление сессии при загрузке ---------- */
+// Шапка и страница запрашивают одну сессию: не запускаем параллельные
+// восстановления, которые могли бы перезаписать уже изменённый профиль.
+let _restoreSessionPending = null;
 async function restoreSess(){
+  if (_restoreSessionPending) return _restoreSessionPending;
+  _restoreSessionPending = restoreSessOnce();
+  try { return await _restoreSessionPending; }
+  finally { _restoreSessionPending = null; }
+}
+async function restoreSessOnce(){
   let s = null;
   try { s = JSON.parse(localStorage.getItem(TOK_KEY) || 'null'); } catch(e){}
   if (!s || !s.rtok) return false;
@@ -128,9 +184,7 @@ async function restoreSess(){
       if (!ok) return false;
     } else {
       const u = await r.json();
-      A.me = (u.email || A.me).toLowerCase();
-      const md = u.user_metadata || {};
-      A.uname = md.name || md.full_name || A.uname || A.me.split('@')[0];
+      applyAuthUser(u);
     }
   } catch(e){ return false; }
 
@@ -144,10 +198,11 @@ function signOut(){ clearSess(); }
 async function loadAdmin(){
   if (!A.me) { A.admin = null; return null; }
   try {
-    const arr = await api('/rest/v1/admins?select=email,role,active,fee_pct,full_name,company,phone' +
+    const arr = await api('/rest/v1/admins?select=email,role,active,fee_pct,full_name,company,phone,address' +
                           '&email=eq.' + encodeURIComponent(A.me));
     A.admin = (arr && arr.length) ? arr[0] : null;
   } catch(e){ A.admin = null; }
+  await loadProfileCity();
   return A.admin;
 }
 function isAdmin(){ return !!(A.admin && A.admin.active !== false); }
