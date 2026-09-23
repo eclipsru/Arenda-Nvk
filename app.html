@@ -46,7 +46,23 @@ a{color:var(--or);text-decoration:none}
 .st span{color:var(--gr);font-size:13.5px;line-height:1.45}
 .ft{border-top:1px solid var(--line);margin-top:36px;padding:22px;color:var(--g2);font-size:13px;line-height:1.7;text-align:center}
 .ft b{color:var(--tx)}
-@media(max-width:640px){.hero h1{font-size:23px}.hd nav a{padding:8px 10px;font-size:12.5px}}
+@media(max-width:640px){
+  .hd{flex-wrap:wrap;padding:12px 14px;gap:10px}
+  .hd nav{order:3;width:100%;margin-left:0;flex-wrap:nowrap;overflow-x:auto;gap:7px;padding-top:2px;scrollbar-width:none}
+  .hd nav::-webkit-scrollbar{display:none}
+  .hd nav a{flex:0 0 auto;border-radius:18px;padding:8px 13px;font-size:12.5px}
+  .hero{padding:22px 14px 6px}
+  .hero h1{font-size:22px}
+  .hero p{font-size:14.5px}
+  .hero .btns{gap:8px}
+  .hero .btns a{flex:1 1 100%;text-align:center;padding:14px 16px}
+  .sect{padding:22px 14px 4px;font-size:18px}
+  .grid{padding:10px 14px 0;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px}
+  .tile{border-radius:16px}
+  .feat,.steps{padding:0 14px;gap:10px}
+  .f,.st{border-radius:14px;padding:14px}
+  .ft{padding:18px 14px;font-size:12px}
+}
 </style>
 </head>
 <body>

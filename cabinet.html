@@ -18,18 +18,30 @@ input,textarea,select{font-family:inherit;outline:none}
 #splash{position:fixed;inset:0;background:var(--bg);z-index:99;display:flex;flex-direction:column;align-items:center;justify-content:center}
 #splash img{width:96px;height:96px;border-radius:20px;border:1px solid var(--line);background:#101217}
 #splash div{margin-top:18px;font-size:22px;font-weight:700}
-/* ---- header ---- */
-.hdr{position:sticky;top:0;z-index:20;display:flex;align-items:center;gap:10px;padding:12px 14px;background:var(--bg);border-bottom:1px solid var(--line)}
-.hdr img{width:36px;height:36px;border-radius:10px;border:1px solid var(--line);background:#101217}
-.hdr .tt{flex:1;font-weight:700;font-size:15px}
-.hdr .out{color:var(--or);font-weight:700;font-size:13px;padding:6px}
+/* ---- header (мобильное приложение) ---- */
+.hdr{position:sticky;top:0;z-index:20;display:flex;align-items:center;gap:8px;padding:9px 12px;background:var(--bg);border-bottom:1px solid var(--line)}
+.hdr .mlogo{width:36px;height:36px;border-radius:10px;border:1px solid var(--line);background:#101217;flex:0 0 36px}
+.hdr .tt{flex:1;min-width:0;line-height:1.1}
+.hdr .tt b{display:block;font-weight:700;font-size:15px}
+.hdr .tt span{display:block;color:var(--g2);font-size:10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mpill{display:flex;align-items:center;gap:4px;background:var(--card);border:1px solid var(--line);border-radius:16px;color:var(--tx);font-size:11px;font-weight:600;padding:6px 9px;max-width:132px;min-width:0;flex:0 1 auto;cursor:pointer}
+.mpill svg{width:11px;height:11px;fill:var(--or);flex:0 0 11px}
+.mpill .citynm{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.mib{position:relative;width:34px;height:34px;flex:0 0 34px;background:none;display:flex;align-items:center;justify-content:center}
+.mib svg{width:19px;height:19px;fill:none;stroke:#C9CFDA;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.mib i{position:absolute;top:5px;right:5px;width:7px;height:7px;background:var(--or);border-radius:50%;border:1.5px solid var(--bg);display:none}
+.mib i.show{display:block}
+.uwrapM{position:relative;flex:0 0 auto}
+.mava{width:30px;height:30px;border-radius:50%;background:var(--ord);color:#fff;font-weight:800;font-size:13px;display:flex;align-items:center;justify-content:center;overflow:hidden}
+.mava img{width:100%;height:100%;object-fit:cover}
 /* ---- bottom nav ---- */
 .nav{position:fixed;bottom:0;left:50%;transform:translateX(-50%);width:100%;max-width:560px;display:flex;background:#12151B;border-top:1px solid var(--line);z-index:20;padding-bottom:env(safe-area-inset-bottom)}
 .nav button{flex:1;background:none;color:var(--g2);font-size:10.5px;padding:8px 0 9px;position:relative}
 .nav button svg{display:block;margin:0 auto 3px;width:22px;height:22px;fill:currentColor}
 .nav button.on{color:var(--or)}
-.nav .plus{width:52px;height:52px;margin-top:-20px;border-radius:50%;background:var(--or);color:#fff!important;box-shadow:0 4px 14px #0008;display:flex;align-items:center;justify-content:center}
+.nav .plus{width:52px;height:52px;margin-top:-20px;border-radius:50%;background:var(--or);color:#fff!important;box-shadow:0 4px 14px #0008;display:flex;align-items:center;justify-content:center;margin-left:auto;margin-right:auto}
 .nav .plus svg{width:26px;height:26px;margin:0}
+.nav .plb{display:block;font-size:8.5px;color:var(--g2);margin-top:1px;letter-spacing:-.2px;line-height:1}
 /* ---- screens ---- */
 .scr{padding:12px 14px 86px}
 .tabs{display:flex;gap:24px;border-bottom:1px solid var(--line);margin-bottom:14px}
@@ -148,7 +160,7 @@ textarea.inp{resize:vertical;min-height:70px}
 .hub button.on{background:var(--ord);border-color:var(--ord);color:#fff}
 
 /* ================== ДЕСКТОП (шапка как у Авито) ================== */
-#tophead{display:block;background:#12151B;border-bottom:1px solid var(--line);position:sticky;top:0;z-index:30}
+#tophead{display:none;background:#12151B;border-bottom:1px solid var(--line);position:sticky;top:0;z-index:30}
 .toprow{background:#0E1116;border-bottom:1px solid var(--line)}
 .tr-in{display:flex;align-items:center;justify-content:flex-end;gap:4px;padding:6px 14px;max-width:1280px;margin:0 auto}
 .tlinks{display:flex;gap:2px;flex-wrap:wrap;justify-content:flex-end}
@@ -179,7 +191,7 @@ textarea.inp{resize:vertical;min-height:70px}
 .mega-r .ttl{font-size:11.5px;text-transform:uppercase;color:var(--g2);letter-spacing:.4px;padding-bottom:6px;cursor:default}
 @media(min-width:800px){
   .app{max-width:none;box-shadow:none}
-  #tophead{position:sticky}
+  #tophead{display:block;position:sticky}
   .mega{position:absolute;top:calc(100% + 6px);left:0;right:0}
   .tr-in{padding:7px 22px}
   .th-in{padding:10px 22px}
@@ -249,6 +261,35 @@ textarea.inp{resize:vertical;min-height:70px}
   #lst .card{margin-top:0}
   .hub{flex-wrap:wrap}
 }
+/* ================== МОБИЛЬНАЯ ПОЛИРОВКА (вариант «приложение Ива») ================== */
+@media(max-width:799px){
+  .tabs{gap:8px;border-bottom:0;flex-wrap:wrap;margin-bottom:12px}
+  .tabs span{padding:8px 14px;font-size:13.5px;border-radius:18px;background:var(--card);border:1px solid var(--line);color:var(--gr);line-height:1.2}
+  .tabs span.on{background:var(--ord);border-color:var(--ord);color:#fff;border-bottom:3px solid var(--ord)}
+  .tabs span:only-child{background:none;border:0;border-radius:0;padding:4px 2px 8px;font-size:19px;font-weight:800;color:#fff;cursor:default}
+  .sect.sth{color:var(--tx);font-size:15.5px;text-transform:none;letter-spacing:0;font-weight:800;padding-bottom:8px}
+  .tile{border-radius:16px}
+  .tile .ph{aspect-ratio:1.3}
+  .card{border-radius:16px}
+  .sheet{border-radius:20px 20px 0 0;padding:12px 16px 30px}
+  .srch{border-radius:14px}
+  .srch input{padding:13px 0}
+  .chip{border-radius:18px;padding:8px 13px}
+  .catdash{grid-template-columns:repeat(auto-fill,minmax(84px,1fr));gap:8px}
+  .dcat{padding:12px 6px;align-items:center;text-align:center;border-radius:14px;gap:7px}
+  .dcat b{font-size:11px;line-height:1.2}
+  .dic svg{width:24px;height:24px}
+  .big{border-radius:13px}
+  .btn{border-radius:13px}
+  .btn.sm{border-radius:10px}
+  .fld{border-radius:12px}
+  .qty{border-radius:12px}
+  .thr{border-radius:16px}
+  .ownbox{border-radius:12px}
+  .timg{border-radius:14px}
+  .stat{border-radius:14px}
+  .cbar{border-radius:14px}
+}
 </style>
 </head>
 <body>
@@ -313,15 +354,28 @@ textarea.inp{resize:vertical;min-height:70px}
 
   <div id="main" class="hide">
     <div class="hdr">
-      <img src="iva_logo.png" alt="">
-      <div class="tt" style="font-size:15px">Ива-Инструмент в аренду</div>
-      <span class="out" id="btnOut">Выйти</span>
+      <img class="mlogo" src="iva_logo.png" alt="Ива">
+      <div class="tt"><b>Ива</b><span>Инструмент в аренду</span></div>
+      <button class="mpill" id="mCity"><svg viewBox="0 0 24 24"><path d="M12 2a7 7 0 0 0-7 7c0 5.2 7 13 7 13s7-7.8 7-13a7 7 0 0 0-7-7zm0 9.5A2.5 2.5 0 1 1 12 6a2.5 2.5 0 0 1 0 5.5z"/></svg><span class="citynm">Новочеркасск</span></button>
+      <button class="mib" id="mBell" aria-label="Уведомления"><svg viewBox="0 0 24 24"><path d="M12 3a6 6 0 0 0-6 6v4l-2 3h16l-2-3V9a6 6 0 0 0-6-6z"/><path d="M9.5 19a2.5 2.5 0 0 0 5 0"/></svg><i id="mBellDot"></i></button>
+      <div class="uwrapM">
+        <button class="mava" id="mAv">?</button>
+        <div class="umenu hide" id="umenuM">
+          <b data-n="cab">Кабинет</b>
+          <b data-n="orders">Мои заявки</b>
+          <b data-n="fav">Избранное</b>
+          <b data-n="cart">Корзина</b>
+          <b data-n="notif">Уведомления</b>
+          <b data-n="chat">Сообщения</b>
+          <a id="btnOut">Выйти</a>
+        </div>
+      </div>
     </div>
     <div id="view"></div>
     <div class="nav" id="nav">
       <button data-n="home" class="on"><svg viewBox="0 0 24 24"><path d="M12 3 2 12h3v8h6v-6h2v6h6v-8h3z"/></svg>Главная</button>
       <button data-n="chat"><svg viewBox="0 0 24 24"><path d="M4 4h16a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H8l-5 4V6a2 2 0 0 1 1-1.7z"/></svg>Чат<span id="chatDot" class="hide" style="position:absolute;top:4px;right:22%;width:9px;height:9px;background:var(--or);border-radius:50%"></span></button>
-      <button data-n="plus"><span class="plus"><svg viewBox="0 0 24 24" fill="#fff"><path d="M11 5h2v6h6v2h-6v6h-2v-6H5v-2h6z"/></svg></span></button>
+      <button data-n="plus"><span class="plus"><svg viewBox="0 0 24 24" fill="#fff"><path d="M11 5h2v6h6v2h-6v6h-2v-6H5v-2h6z"/></svg></span><span class="plb">Разместить</span></button>
       <button data-n="orders"><svg viewBox="0 0 24 24"><path d="M7 4h-2l-1 2H2v13a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V6h-2l-1-2h-2l1 2H6zM5 8h14v11H5zm4 2h6v2H9z"/></svg>Заявки</button>
       <button data-n="cab"><svg viewBox="0 0 24 24"><path d="M12 12a4 4 0 1 0-4-4 4 4 0 0 0 4 4zm0 2c-4 0-8 2-8 5v3h16v-3c0-3-4-5-8-5z"/></svg>Кабинет</button>
     </div>
@@ -446,6 +500,7 @@ async function enter(){
   $('splash').classList.add('hide');$('auth').classList.add('hide');$('main').classList.remove('hide');$('tophead').classList.remove('hide');
   $('whoami').textContent=S.uname||S.me;
   var cl2=$('cityName');if(cl2)cl2.textContent=S.city||'Новочеркасск';
+  var cnM=document.querySelectorAll('.citynm');for(var ci=0;ci<cnM.length;ci++)cnM[ci].textContent=S.city||'Новочеркасск';
   setUava();
   updPlace();
   var ac=cget('admins',300000);
@@ -494,9 +549,12 @@ function isChief(){return S.admin&&S.admin.role==='chief'}
 /* ================== НАВИГАЦИЯ ================== */
 var CITIES=['Новочеркасск','Ростов-на-Дону','Аксай','Батайск','Азов','Таганрог','Шахты','Новошахтинск','Красный Сулин','Волгодонск','Сальск','Миллерово'];
 function navClick(e){var b=e.target.closest('[data-n]');if(!b)return;var n=b.getAttribute('data-n');if(n==='plus'){plusBtn();return}if(n==='home')S.favOnly=false;go(n)}
-function setUava(){var u=$('uava');if(!u)return;var a=adminByMail(S.me);var av=a&&a.avatar;
-  if(av)u.innerHTML='<img src="'+esc(av)+'" style="width:100%;height:100%;object-fit:cover">';
-  else{var n=(S.uname||S.me||'?');u.innerHTML='<span style="font-size:14px">'+esc((n[0]||'?').toUpperCase())+'</span>'}}
+function setUava(){var a=adminByMail(S.me);var av=a&&a.avatar;
+  var n=(S.uname||S.me||'?');
+  var h=av?'<img src="'+esc(av)+'" style="width:100%;height:100%;object-fit:cover">':'<span style="font-size:14px">'+esc((n[0]||'?').toUpperCase())+'</span>';
+  var hm=av?'<img src="'+esc(av)+'" alt="">':esc((n[0]||'?').toUpperCase());
+  var u=$('uava');if(u)u.innerHTML=h;
+  var u2=$('mAv');if(u2)u2.innerHTML=hm;}
 function citySheet(){
   var h='<div class="sheet"><div class="grab"></div><h3>Выбор города</h3><div id="clst">';
   for(var i=0;i<CITIES.length;i++){var c=CITIES[i];var on=(c===S.city||(c==='Новочеркасск'&&!S.city));
@@ -507,6 +565,7 @@ function citySheet(){
     S.city=d.getAttribute('data-c');if(S.city==='Новочеркасск')S.city='';
     try{localStorage.setItem('iva_city',S.city)}catch(x){}
     var cl=$('cityName');if(cl)cl.textContent=S.city||'Новочеркасск';
+    var cn2=document.querySelectorAll('.citynm');for(var ci2=0;ci2<cn2.length;ci2++)cn2[ci2].textContent=S.city||'Новочеркасск';
     closeLayer();S.cat='';S.sub='';S.favOnly=false;go('home');
     if(!S.city){toast('Показываем весь каталог');return}
     var lst=S.tools.filter(function(t){var a=adminByMail(t.owner_email);return a&&a.address&&a.address.toLowerCase().indexOf(S.city.toLowerCase())>=0});
@@ -526,6 +585,10 @@ function renderMega(){var L=$('megaL'),R=$('megaR');if(!L||!R)return;
   R.onclick=function(e){var d=e.target.closest('[data-s]');if(!d||!d.getAttribute('data-s'))return;S.sub=d.getAttribute('data-s');closeMega();go('home')}}
 (function bindHead(){
   var cb=$('cityBtn');if(cb)cb.onclick=citySheet;
+  var mc=$('mCity');if(mc)mc.onclick=citySheet;
+  var mb=$('mBell');if(mb)mb.onclick=function(){go('notif')};
+  var ma=$('mAv');if(ma)ma.onclick=function(e){e.stopPropagation();var mm=$('umenuM');if(mm)mm.classList.toggle('hide')};
+  var umm=$('umenuM');if(umm)umm.onclick=function(e){navClick(e);umm.classList.add('hide')};
   var ua=$('uava');if(ua)ua.onclick=function(){$('umenu').classList.toggle('hide')};
   var tq=$('tq');
   if(tq){tq.addEventListener('focus',function(){if(!tq.value){var m=$('mega');if(m)m.classList.remove('hide')}});
@@ -534,6 +597,7 @@ function renderMega(){var L=$('megaL'),R=$('megaR');if(!L||!R)return;
   var tf=$('tfind');if(tf)tf.onclick=function(){closeMega();if(S.screen!=='home')go('home')};
   document.addEventListener('click',function(e){
     if(!e.target.closest('#uwrap')){var um=$('umenu');if(um)um.classList.add('hide')}
+    if(!e.target.closest('.uwrapM')){var um2=$('umenuM');if(um2)um2.classList.add('hide')}
     if(!e.target.closest('.tsrch-w'))closeMega();
   });
 })();
@@ -609,7 +673,7 @@ function iconForCat(k){k=(k||'').toLowerCase();
   if(k.indexOf('строй')>=0)return '<svg viewBox="0 0 24 24"><path d="M12 2 22 7v10l-10 5L2 17V7zm0 10L4.2 8 12 4.2 19.8 8z"/></svg>';
   if(k.indexOf('сад')>=0)return '<svg viewBox="0 0 24 24"><path d="M5 21c8 0 14-6 14-16-10 0-16 6-16 14 0 1 .1 1.6.2 2C3 21 3 21 5 21z"/></svg>';
   return '<svg viewBox="0 0 24 24"><path d="M21.7 18.3 14 10.6V8a6 6 0 0 0-8-5.7l3.6 3.6-2.8 2.8L3.2 5.1A6 6 0 0 0 8.9 13h2.5l7.7 7.7z"/></svg>'}
-function dashInner(){if((S.q||'').trim()||S.cat||S.favOnly)return '';var h='<div class="sect">Категории</div><div class="catdash">';
+function dashInner(){if((S.q||'').trim()||S.cat||S.favOnly)return '';var h='<div class="sect sth">Категории</div><div class="catdash">';
   for(var i=0;i<S.cats.length;i++){var c=S.cats[i];h+='<div class="dcat" data-c="'+esc(c.key)+'"><span class="dic">'+iconForCat(c.key)+'</span><b>'+esc(c.title)+'</b></div>'}
   return h+'</div>'}
 function tilesHtml(){
@@ -891,6 +955,7 @@ async function loadUnread(){
     $('chatDot').classList.toggle('hide',!(u&&u.length));
     var d2=$('chatDot2');if(d2)d2.classList.toggle('show',!!(u&&u.length));
     var nd=$('notifDot');if(nd)nd.classList.toggle('show',!!(u&&u.length));
+    var bd=$('mBellDot');if(bd)bd.classList.toggle('show',!!(u&&u.length));
   }catch(e){}
 }
 async function openChatWith(who,prefill){
