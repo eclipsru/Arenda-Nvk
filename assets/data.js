@@ -18,7 +18,7 @@ const ICONS = {
 };
 
 /* ---------- Категории ---------- */
-const CATS = [
+let CATS = [
   {key:'power',        title:'Электроинструмент',        sort:1},
   {key:'construction', title:'Стройоборудование',        sort:2},
   {key:'garden',       title:'Садовый инструмент',       sort:3},
@@ -31,7 +31,7 @@ const CATS = [
 ];
 
 /* ---------- Подкатегории ---------- */
-const SUBS = [
+let SUBS = [
   {cat:'power', key:'cordless',    title:'На аккумуляторе'},
   {cat:'power', key:'corded',      title:'От сети 220В'},
   {cat:'power', key:'grinders',    title:'Болгарки и штроборезы'},
@@ -72,7 +72,7 @@ const CONDS = [
    status: active | moderation | archived  (пригодится на этапе 2)
    price  — ₽ в сутки;  deposit — залог (0 = считается как цена×5)
 */
-const ADS = [
+let ADS = [
   // --- Электроинструмент (10) ---
   {id:1,  name:'Перфоратор Bosch GBH 2-26 DFR SDS-plus', cat:'power', sub:'hammers', price:600, deposit:3000,
    owner:'o1', city:'Новочеркасск', cond:'good', delivery:true, photos:3, status:'active', days:2,
@@ -270,7 +270,13 @@ const PH_COLORS = [
 ];
 
 function photoURL(ad, idx){
-  const pal = PH_COLORS[(ad.id + idx) % PH_COLORS.length];
+  /* Реальное объявление из базы: отдаём загруженное фото */
+  if (ad.photoList && ad.photoList.length){
+    return ad.photoList[Math.min(idx, ad.photoList.length - 1)];
+  }
+  /* id может быть числом (демо) или uuid-строкой (база) — сводим к числу */
+  const seed = String(ad.id).split('').reduce((a, c) => a + c.charCodeAt(0), 0);
+  const pal = PH_COLORS[(seed + idx) % PH_COLORS.length];
   const icon = (ICONS[ad.cat] || ICONS.power)
     .replace('<svg viewBox="0 0 24 24">','')
     .replace('</svg>','');
@@ -284,7 +290,7 @@ function photoURL(ad, idx){
          fill="none" stroke="#FF8F1F" stroke-opacity="0.55"
          stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">${icon}</g>
       <text x="200" y="278" text-anchor="middle" fill="#6B7080"
-            font-family="Arial,sans-serif" font-size="13">фото ${idx + 1}</text>
+            font-family="Arial,sans-serif" font-size="13">${ad.photoList ? 'без фото' : 'фото ' + (idx + 1)}</text>
     </svg>`;
   return 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg.replace(/\s+/g, ' '));
 }
@@ -293,7 +299,12 @@ function photoURL(ad, idx){
 const catTitle  = k => (CATS.find(c => c.key === k) || {}).title || k;
 const subTitle  = k => (SUBS.find(s => s.key === k) || {}).title || '';
 const condTitle = k => (CONDS.find(c => c.key === k) || {}).title || '';
-const ownerById = id => OWNERS.find(o => o.id === id) || OWNERS[0];
-const adById    = id => ADS.find(a => a.id === Number(id));
+const ownerById = id => {
+  /* Объявление из базы несёт владельца с собой */
+  const fromDb = ADS.find(a => a.owner === id && a.ownerObj);
+  if (fromDb) return fromDb.ownerObj;
+  return OWNERS.find(o => o.id === id) || OWNERS[0];
+};
+const adById    = id => ADS.find(a => String(a.id) === String(id));
 const depositOf = ad => ad.deposit > 0 ? ad.deposit : ad.price * 5;
 const subsOf    = cat => SUBS.filter(s => s.cat === cat);

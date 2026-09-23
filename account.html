@@ -1,0 +1,375 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Личный кабинет — Ива</title>
+<meta name="robots" content="noindex, nofollow">
+<meta name="theme-color" content="#101217">
+<link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="assets/theme.css">
+<style>
+.tabs{display:flex;gap:4px;border-bottom:1px solid var(--line);margin-bottom:18px;
+  overflow-x:auto;padding-bottom:1px}
+.tabs button{padding:11px 16px;font-size:14.5px;color:var(--gr);white-space:nowrap;
+  border-bottom:2px solid transparent;margin-bottom:-1px;font-weight:500}
+.tabs button:hover{color:var(--tx)}
+.tabs button.on{color:var(--or);border-bottom-color:var(--or);font-weight:600}
+.tabs button .n{margin-left:6px;font-size:12px;color:var(--g2)}
+.tabs button.on .n{color:var(--or)}
+
+/* Строка объявления */
+.row-ad{display:flex;gap:14px;background:var(--card);border:1px solid var(--line);
+  border-radius:var(--r);padding:13px;margin-bottom:11px;align-items:flex-start}
+.row-ad .rph{width:104px;height:80px;border-radius:var(--r-s);overflow:hidden;
+  flex-shrink:0;background:#12151B}
+.row-ad .rph img{width:100%;height:100%;object-fit:cover}
+.row-ad .rmid{flex:1;min-width:0}
+.row-ad .rnm{font-weight:600;font-size:15px;margin-bottom:4px;line-height:1.3}
+.row-ad .rpr{font-size:15px;font-weight:700}
+.row-ad .rpr span{font-size:12.5px;color:var(--g2);font-weight:600}
+.row-ad .rmeta{font-size:12.5px;color:var(--g2);margin-top:5px}
+.row-ad .racts{display:flex;gap:7px;flex-wrap:wrap;margin-top:10px}
+.row-ad .racts button,.row-ad .racts a{font-size:13px;padding:7px 12px;border-radius:9px;
+  border:1px solid var(--line);background:var(--field);color:var(--gr);transition:.14s}
+.row-ad .racts button:hover,.row-ad .racts a:hover{border-color:var(--line-2);color:var(--tx)}
+.row-ad .racts .del:hover{border-color:var(--red);color:var(--red)}
+.row-ad .racts .pub:hover{border-color:var(--or);color:var(--or)}
+
+/* Профиль */
+.prof-row{display:flex;gap:12px;padding:12px 0;border-bottom:1px solid var(--line);font-size:14.5px}
+.prof-row:last-child{border-bottom:none}
+.prof-row dt{color:var(--g2);min-width:170px;flex-shrink:0}
+.prof-row dd{font-weight:500;word-break:break-word}
+
+/* Вход */
+.auth-box{max-width:390px;margin:50px auto;background:var(--card);
+  border:1px solid var(--line);border-radius:var(--r);padding:26px}
+.auth-box h2{font-size:21px;margin-bottom:6px}
+.auth-box p{color:var(--g2);font-size:14px;margin-bottom:20px}
+.auth-box .fld{margin-bottom:14px}
+.auth-box label{display:block;font-size:13px;font-weight:600;margin-bottom:6px}
+.auth-err{background:rgba(255,138,128,.12);border:1px solid rgba(255,138,128,.3);
+  color:var(--red);padding:10px 13px;border-radius:var(--r-s);font-size:13.5px;
+  margin-bottom:14px;display:none}
+.auth-err.show{display:block}
+
+@media (max-width:620px){
+  .row-ad{flex-wrap:wrap}
+  .row-ad .rph{width:76px;height:60px}
+  .prof-row{flex-direction:column;gap:3px}
+  .prof-row dt{min-width:0;font-size:12.5px}
+}
+</style>
+</head>
+<body>
+
+<div id="hdr"></div>
+
+<main class="page">
+  <div class="wrap" id="root">
+    <div class="empty" style="padding:70px 20px"><b>Загрузка…</b></div>
+  </div>
+</main>
+
+<div id="ftr"></div>
+<div id="bnav"></div>
+
+<script src="assets/data.js"></script>
+<script src="assets/sb.js"></script>
+<script src="assets/app.js"></script>
+<script>
+(function(){
+  mountChrome('cab', '');
+
+  let TAB = (location.hash || '').replace('#','') || 'ads';
+  let MY = [];
+  let SUB_TAB = 'all';   // фильтр по статусу
+
+  /* ---------- Экран входа ---------- */
+  function screenLogin(){
+    $('root').innerHTML =
+      '<div class="auth-box">' +
+        '<h2>Вход</h2>' +
+        '<p>Личный кабинет площадки «Ива»</p>' +
+        '<div class="auth-err" id="aErr"></div>' +
+        '<div class="fld"><label>Почта</label>' +
+          '<input class="inp" id="lEmail" type="email" autocomplete="username" placeholder="you@mail.ru"></div>' +
+        '<div class="fld"><label>Пароль</label>' +
+          '<input class="inp" id="lPass" type="password" autocomplete="current-password" placeholder="••••••••"></div>' +
+        '<button class="btn wide" id="lGo">Войти</button>' +
+        '<p style="margin:16px 0 0;font-size:13px;text-align:center">' +
+          'Нет аккаунта? <a href="cabinet.html" style="color:var(--or)">Зарегистрироваться</a></p>' +
+      '</div>';
+
+    const go = $('lGo'), em = $('lEmail'), pw = $('lPass'), er = $('aErr');
+
+    async function doLogin(){
+      er.classList.remove('show');
+      const e = em.value.trim(), p = pw.value;
+      if (!e || !p){ er.textContent = 'Введите почту и пароль'; er.classList.add('show'); return; }
+      go.disabled = true; go.textContent = 'Входим…';
+      try {
+        await signIn(e, p);
+        boot();
+      } catch(err){
+        er.textContent = err.message;
+        er.classList.add('show');
+        go.disabled = false; go.textContent = 'Войти';
+      }
+    }
+    go.addEventListener('click', doLogin);
+    [em, pw].forEach(function(i){
+      i.addEventListener('keydown', function(ev){ if (ev.key === 'Enter') doLogin(); });
+    });
+  }
+
+  /* ---------- Каркас кабинета ---------- */
+  function shell(inner){
+    const cnt = {
+      all:        MY.length,
+      active:     MY.filter(function(t){ return (t.status||'active') === 'active'; }).length,
+      moderation: MY.filter(function(t){ return t.status === 'moderation'; }).length,
+      archived:   MY.filter(function(t){ return t.status === 'archived'; }).length
+    };
+
+    return '<div class="sect" style="padding-bottom:0"><div class="sect-h">' +
+        '<h2>' + esc(A.uname || 'Кабинет') + '</h2>' +
+        '<span class="cnt">' + esc(A.me) + (isAdmin() ? ' · арендодатель' : '') + '</span>' +
+        (isAdmin() ? '<a class="btn sm" href="new.html" style="margin-left:auto">Разместить</a>' : '') +
+      '</div></div>' +
+      '<div class="tabs">' +
+        (isAdmin() ? '<button data-tab="ads" class="' + (TAB==='ads'?'on':'') + '">' +
+          'Мои объявления<span class="n">' + cnt.all + '</span></button>' : '') +
+        '<button data-tab="fav" class="' + (TAB==='fav'?'on':'') + '">' +
+          'Избранное<span class="n fav-n">' + favList().length + '</span></button>' +
+        '<button data-tab="msg" class="' + (TAB==='msg'?'on':'') + '">Сообщения</button>' +
+        '<button data-tab="prof" class="' + (TAB==='prof'?'on':'') + '">Профиль</button>' +
+      '</div>' + inner;
+  }
+
+  /* ---------- Мои объявления ---------- */
+  function viewAds(){
+    const f = SUB_TAB === 'all' ? MY : MY.filter(function(t){
+      return (t.status || 'active') === SUB_TAB;
+    });
+
+    const cnt = function(s){
+      return s === 'all' ? MY.length
+        : MY.filter(function(t){ return (t.status||'active') === s; }).length;
+    };
+
+    let h = '<div class="chips" style="margin-bottom:16px">' +
+      [['all','Все'],['active','Активные'],['moderation','На модерации'],['archived','Снятые']]
+        .map(function(p){
+          return '<button class="chip" data-st="' + p[0] + '"' +
+                 (SUB_TAB === p[0] ? ' style="border-color:var(--or);color:var(--or)"' : '') +
+                 '>' + p[1] + ' · ' + cnt(p[0]) + '</button>';
+        }).join('') +
+      '</div>';
+
+    if (!f.length){
+      h += '<div class="empty">' +
+        '<svg viewBox="0 0 24 24"><path d="M21 8 12 3 3 8v8l9 5 9-5z"/><path d="M3 8l9 5 9-5M12 13v8"/></svg>' +
+        '<b>' + (MY.length ? 'В этой вкладке пусто' : 'Объявлений пока нет') + '</b>' +
+        '<p>' + (MY.length
+          ? 'Переключитесь на другую вкладку.'
+          : 'Разместите первый инструмент — он появится в каталоге сразу после публикации.') + '</p>' +
+        '<a class="btn" href="new.html">Разместить объявление</a></div>';
+      return h;
+    }
+
+    h += f.map(function(t){
+      const st  = t.status || 'active';
+      const img = (t.imgs && t.imgs[0]) || t.img || '';
+      const dep = Number(t.deposit) || Number(t.price) * 5;
+      return '<div class="row-ad" data-id="' + esc(t.id) + '">' +
+        '<div class="rph">' +
+          (img ? '<img src="' + esc(img) + '" alt="">' :
+                 '<div style="width:100%;height:100%;display:flex;align-items:center;' +
+                 'justify-content:center;color:var(--g2);font-size:11px">нет фото</div>') +
+        '</div>' +
+        '<div class="rmid">' +
+          '<div class="rnm">' + esc(t.name) + '</div>' +
+          '<div class="rpr">' + rub(t.price) + ' <span>/ сутки</span></div>' +
+          '<div class="rmeta">Залог ' + rub(dep) + ' · ' + esc(catTitle(t.cat) || t.cat) +
+            (t.delivery ? ' · доставка' : '') + '</div>' +
+          '<div class="racts">' +
+            '<span class="badge ' + statusCls(st) + '" style="padding:7px 12px">' +
+              statusTitle(st) + '</span>' +
+            '<a href="tool.html?id=' + encodeURIComponent(t.id) + '">Смотреть</a>' +
+            (st === 'active'
+              ? '<button data-act="hide">Снять с публикации</button>'
+              : '<button class="pub" data-act="show">Опубликовать</button>') +
+            (st !== 'moderation'
+              ? '<button data-act="mod">На модерацию</button>' : '') +
+            '<button class="del" data-act="del">Удалить</button>' +
+          '</div>' +
+        '</div>' +
+      '</div>';
+    }).join('');
+
+    return h;
+  }
+
+  /* ---------- Избранное ---------- */
+  function viewFav(){
+    const ids = favList();
+    const list = ids.map(adById).filter(Boolean);
+    if (!list.length){
+      return '<div class="empty">' +
+        '<svg viewBox="0 0 24 24"><path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1-1.1a5.5 5.5 0 0 0-7.8 7.8l1.1 1L12 21.2l7.7-7.7 1.1-1a5.5 5.5 0 0 0 0-7.9z"/></svg>' +
+        '<b>Избранное пусто</b>' +
+        '<p>Нажимайте на сердечко в каталоге — инструмент сохранится здесь.</p>' +
+        '<a class="btn" href="catalog.html">В каталог</a></div>';
+    }
+    return '<div class="grid">' + list.map(adCard).join('') + '</div>';
+  }
+
+  /* ---------- Сообщения ---------- */
+  function viewMsg(){
+    return '<div class="empty">' +
+      '<svg viewBox="0 0 24 24"><path d="M21 11.5a8.4 8.4 0 0 1-9 8.4 8.4 8.4 0 0 1-3.8-.9L3 21l2-5.2a8.4 8.4 0 0 1-.9-3.8 8.4 8.4 0 0 1 8.4-8.4h.5a8.4 8.4 0 0 1 8 8z"/></svg>' +
+      '<b>Чат появится на следующем этапе</b>' +
+      '<p>Сейчас переписка с арендаторами живёт в рабочем кабинете.</p>' +
+      '<a class="btn sec" href="cabinet.html#chat">Открыть переписку</a></div>';
+  }
+
+  /* ---------- Профиль ---------- */
+  function viewProf(){
+    const a = A.admin || {};
+    return '<div class="box" style="max-width:640px">' +
+      '<div style="display:flex;align-items:center;gap:14px;margin-bottom:18px">' +
+        '<div class="ava" style="width:56px;height:56px;font-size:20px">' +
+          esc(initials(A.uname || A.me)) + '</div>' +
+        '<div><div style="font-weight:700;font-size:17px">' + esc(A.uname || '—') + '</div>' +
+          '<div class="small muted">' + esc(A.me) + '</div></div>' +
+      '</div>' +
+      '<dl>' +
+        '<div class="prof-row"><dt>Статус</dt><dd>' +
+          (isAdmin() ? 'Арендодатель' + (a.role === 'chief' ? ' (главный)' : '') : 'Арендатор') + '</dd></div>' +
+        (a.full_name ? '<div class="prof-row"><dt>ФИО</dt><dd>' + esc(a.full_name) + '</dd></div>' : '') +
+        (a.company ? '<div class="prof-row"><dt>Компания</dt><dd>' + esc(a.company) + '</dd></div>' : '') +
+        (a.phone ? '<div class="prof-row"><dt>Телефон</dt><dd>' + esc(a.phone) + '</dd></div>' : '') +
+        (a.fee_pct != null ? '<div class="prof-row"><dt>Комиссия площадки</dt><dd>' +
+          esc(a.fee_pct) + ' %</dd></div>' : '') +
+        '<div class="prof-row"><dt>Объявлений</dt><dd>' + MY.length + '</dd></div>' +
+      '</dl>' +
+      '<div style="display:flex;gap:10px;margin-top:20px;flex-wrap:wrap">' +
+        '<a class="btn sec sm" href="cabinet.html#cab">Редактировать данные</a>' +
+        '<button class="btn ghost sm" id="bOut">Выйти</button>' +
+      '</div>' +
+    '</div>';
+  }
+
+  /* ---------- Рендер ---------- */
+  function render(){
+    let inner;
+    if (TAB === 'fav')       inner = viewFav();
+    else if (TAB === 'msg')  inner = viewMsg();
+    else if (TAB === 'prof') inner = viewProf();
+    else                     inner = isAdmin() ? viewAds() : viewFav();
+
+    $('root').innerHTML = shell(inner);
+    paintFavCount();
+
+    const out = $('bOut');
+    if (out) out.addEventListener('click', function(){
+      signOut();
+      toast('Вы вышли');
+      screenLogin();
+    });
+  }
+
+  /* Делегированные клики */
+  document.addEventListener('click', function(e){
+    const tb = e.target.closest('[data-tab]');
+    if (tb){
+      TAB = tb.getAttribute('data-tab');
+      history.replaceState(null, '', '#' + TAB);
+      render();
+      return;
+    }
+
+    const st = e.target.closest('[data-st]');
+    if (st){ SUB_TAB = st.getAttribute('data-st'); render(); return; }
+
+    const act = e.target.closest('[data-act]');
+    if (act){
+      const row = act.closest('[data-id]');
+      if (row) doAction(row.getAttribute('data-id'), act.getAttribute('data-act'), act);
+    }
+  });
+
+  /* ---------- Действия над объявлением ---------- */
+  async function doAction(id, act, btn){
+    const t = MY.find(function(x){ return String(x.id) === String(id); });
+    if (!t) return;
+
+    if (act === 'del'){
+      openSheet('Удалить объявление?',
+        '<p style="color:var(--gr);line-height:1.6">«' + esc(t.name) + '» будет удалено безвозвратно. ' +
+        'Если инструмент временно недоступен — лучше снять с публикации.</p>',
+        '<button class="btn sec" id="dNo" style="flex:1">Отмена</button>' +
+        '<button class="btn" id="dYes" style="flex:1;background:#C62828;border-color:#C62828">Удалить</button>');
+
+      $('dNo').addEventListener('click', closeSheet);
+      $('dYes').addEventListener('click', async function(){
+        this.disabled = true; this.textContent = 'Удаляем…';
+        try {
+          await deleteTool(id);
+          MY = MY.filter(function(x){ return String(x.id) !== String(id); });
+          closeSheet(); render(); toast('Объявление удалено');
+        } catch(err){
+          closeSheet(); toast('Не удалось удалить: ' + err.message);
+        }
+      });
+      return;
+    }
+
+    const map = { hide:'archived', show:'active', mod:'moderation' };
+    const next = map[act];
+    if (!next) return;
+
+    const old = btn.textContent;
+    btn.disabled = true; btn.textContent = '…';
+    try {
+      const up = await updateTool(id, { status: next });
+      t.status = up ? up.status : next;
+      t.active = t.status === 'active';
+      render();
+      toast(next === 'active' ? 'Опубликовано'
+          : next === 'archived' ? 'Снято с публикации'
+          : 'Отправлено на модерацию');
+    } catch(err){
+      btn.disabled = false; btn.textContent = old;
+      toast('Не удалось: ' + err.message);
+    }
+  }
+
+  window.onFavChanged = function(){ if (TAB === 'fav') render(); };
+
+  window.addEventListener('hashchange', function(){
+    const h = (location.hash || '').replace('#','');
+    if (h && h !== TAB){ TAB = h; render(); }
+  });
+
+  /* ---------- Старт ---------- */
+  async function boot(){
+    if (isAdmin()){
+      try { MY = await loadMyTools(); }
+      catch(e){ MY = []; toast('Не удалось загрузить объявления: ' + e.message); }
+    }
+    if (!isAdmin() && TAB === 'ads') TAB = 'fav';
+    render();
+  }
+
+  (async function init(){
+    await restoreSess();
+    if (!isAuthed()){ screenLogin(); return; }
+    boot();
+  })();
+})();
+</script>
+</body>
+</html>

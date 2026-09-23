@@ -29,6 +29,7 @@
 <div id="bnav"></div>
 
 <script src="assets/data.js"></script>
+<script src="assets/sb.js"></script>
 <script src="assets/app.js"></script>
 <script>
 (function(){
@@ -69,6 +70,7 @@
   });
 
   render();
+  hydrateShowcase().then(render);
 })();
 </script>
 </body>

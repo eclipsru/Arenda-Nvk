@@ -189,7 +189,9 @@ select.inp{cursor:pointer;appearance:none;
 .sect-h{display:flex;align-items:baseline;gap:12px;margin-bottom:14px;flex-wrap:wrap}
 .sect-h h2{font-size:21px;font-weight:800;letter-spacing:-.2px}
 .sect-h .cnt{color:var(--g2);font-size:14px}
-.sect-h a{margin-left:auto;color:var(--or);font-size:14px;font-weight:600}
+/* :not(.btn) — иначе оранжевый текст ложится на оранжевую кнопку */
+.sect-h a:not(.btn){margin-left:auto;color:var(--or);font-size:14px;font-weight:600}
+.sect-h a.btn{margin-left:auto}
 
 /* ---------- Фильтры ---------- */
 .layout{display:grid;grid-template-columns:262px 1fr;gap:20px;align-items:start;padding-bottom:40px}

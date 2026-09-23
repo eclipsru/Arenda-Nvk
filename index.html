@@ -54,6 +54,7 @@
 <div id="bnav"></div>
 
 <script src="assets/data.js"></script>
+<script src="assets/sb.js"></script>
 <script src="assets/app.js"></script>
 <script>
 (function(){
@@ -98,9 +99,13 @@
     $('fresh').innerHTML = list.map(adCard).join('');
   }
 
-  renderCats();
-  renderNear();
-  renderFresh();
+  async function boot(){
+    await hydrateShowcase();   /* живые объявления вместо демо */
+    renderCats();
+    renderNear();
+    renderFresh();
+  }
+  boot();
 
   /* Перерисовать ленту при смене города */
   window.onCityChanged = renderNear;

@@ -55,6 +55,7 @@
 <div id="bnav"></div>
 
 <script src="assets/data.js"></script>
+<script src="assets/sb.js"></script>
 <script src="assets/app.js"></script>
 <script>
 (function(){
@@ -312,6 +313,7 @@
 
   bindFilters($('filters'));
   render();
+  hydrateShowcase().then(render);   /* перерисовать по живым данным */
 })();
 </script>
 </body>

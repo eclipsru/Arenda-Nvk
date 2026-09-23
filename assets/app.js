@@ -260,9 +260,10 @@ function headerHTML(active, q){
         IC.heart + '<span>Избранное</span>' +
         '<span class="dot fav-count" style="display:none">0</span>' +
       '</a>' +
-      '<a class="hlink" href="cabinet.html#chat">' + IC.chat + '<span>Сообщения</span></a>' +
-      '<a class="hlink" href="cabinet.html">' + IC.user + '<span>Кабинет</span></a>' +
-      '<a class="btn sm" href="cabinet.html#cart" style="margin-left:6px">Оставить заявку</a>' +
+      '<a class="hlink" href="account.html#msg">' + IC.chat + '<span>Сообщения</span></a>' +
+      '<a class="hlink' + (active === 'cab' ? ' on' : '') + '" href="account.html">' +
+        IC.user + '<span>Кабинет</span></a>' +
+      '<a class="btn sm" href="new.html" style="margin-left:6px">Разместить</a>' +
     '</nav>' +
   '</div></header>';
 }
@@ -277,10 +278,10 @@ function bnavHTML(active){
   return '<nav class="bnav"><div class="bnav-in">' +
     it('home','index.html',IC.home,'Главная') +
     it('fav','favorites.html',IC.heart,'Избранное') +
-    '<a class="mid" href="cabinet.html#cart">' +
-      '<span class="plus">' + IC.plus + '</span><span>Заявка</span></a>' +
-    it('chat','cabinet.html#chat',IC.chat,'Сообщения') +
-    it('cab','cabinet.html',IC.user,'Кабинет') +
+    '<a class="mid" href="new.html">' +
+      '<span class="plus">' + IC.plus + '</span><span>Разместить</span></a>' +
+    it('chat','account.html#msg',IC.chat,'Сообщения') +
+    it('cab','account.html',IC.user,'Кабинет') +
   '</div></nav>';
 }
 
@@ -294,7 +295,7 @@ function footHTML(){
       '<div><b>Аренда</b>' +
         '<a href="offer.html">Публичная оферта</a>' +
         '<a href="catalog.html?delivery=1">С доставкой</a>' +
-        '<a href="cabinet.html">Личный кабинет</a></div>' +
+        '<a href="account.html">Личный кабинет</a></div>' +
       '<div><b>Контакты</b>' +
         '<a href="tel:+79081732475">+7 (908) 173-24-75</a>' +
         '<span>Новочеркасск, ул. Маресьева, 36</span>' +

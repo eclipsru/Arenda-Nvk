@@ -1,0 +1,558 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Разместить объявление — Ива</title>
+<meta name="robots" content="noindex, nofollow">
+<meta name="theme-color" content="#101217">
+<link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="assets/theme.css">
+<style>
+/* ---------- Шаги ---------- */
+.steps{display:flex;gap:6px;margin:18px 0 22px;flex-wrap:wrap}
+.step-i{flex:1;min-width:64px;display:flex;flex-direction:column;gap:7px}
+.step-i .bar{height:4px;border-radius:2px;background:var(--line)}
+.step-i.done .bar,.step-i.on .bar{background:var(--or)}
+.step-i .lb{font-size:12px;color:var(--g2)}
+.step-i.on .lb{color:var(--or);font-weight:600}
+.step-i.done .lb{color:var(--gr)}
+
+.form-grid{display:grid;grid-template-columns:1fr 320px;gap:24px;align-items:start;padding-bottom:40px}
+.fld{margin-bottom:16px}
+.fld label{display:block;font-size:13.5px;font-weight:600;margin-bottom:7px}
+.fld .hint{font-size:12.5px;color:var(--g2);margin-top:6px;line-height:1.45}
+.fld .err{font-size:12.5px;color:var(--red);margin-top:6px;display:none}
+.fld.bad .inp{border-color:var(--red)}
+.fld.bad .err{display:block}
+textarea.inp{resize:vertical;min-height:110px;font-family:inherit;line-height:1.55}
+
+/* Плитки выбора */
+.pick{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:9px}
+.pick button{background:var(--field);border:1px solid var(--line);border-radius:var(--r-s);
+  padding:13px 12px;text-align:left;font-size:14px;transition:.14s;display:flex;
+  flex-direction:column;gap:7px;min-height:80px}
+.pick button:hover{border-color:var(--line-2)}
+.pick button.on{border-color:var(--or);background:var(--or-soft);color:var(--or);font-weight:600}
+.pick button .ic{width:26px;height:26px;color:var(--or)}
+.pick button .ic svg{width:100%;height:100%;fill:none;stroke:currentColor;stroke-width:1.8}
+
+.pick.row{grid-template-columns:repeat(auto-fill,minmax(120px,1fr))}
+.pick.row button{min-height:0;padding:10px 12px;flex-direction:row;align-items:center}
+
+/* Фото */
+.drop{border:2px dashed var(--line-2);border-radius:var(--r);padding:26px 18px;text-align:center;
+  transition:.15s;cursor:pointer;background:var(--field)}
+.drop:hover,.drop.over{border-color:var(--or);background:var(--or-soft)}
+.drop svg{width:38px;height:38px;stroke:var(--g2);fill:none;stroke-width:1.6;margin-bottom:10px}
+.drop b{display:block;font-size:14.5px;margin-bottom:5px}
+.drop span{font-size:12.5px;color:var(--g2)}
+.photos{display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:10px;margin-top:14px}
+.ph-i{position:relative;aspect-ratio:1;border-radius:var(--r-s);overflow:hidden;
+  border:1px solid var(--line);background:var(--card)}
+.ph-i img{width:100%;height:100%;object-fit:cover}
+.ph-i .x{position:absolute;top:5px;right:5px;width:26px;height:26px;border-radius:50%;
+  background:rgba(11,13,17,.82);color:#fff;display:flex;align-items:center;
+  justify-content:center;font-size:17px;line-height:1}
+.ph-i .x:hover{background:var(--red);color:#111}
+.ph-i .main{position:absolute;left:5px;bottom:5px;background:var(--or);color:#fff;
+  font-size:10.5px;font-weight:700;padding:2px 7px;border-radius:6px}
+.ph-i.up{display:flex;align-items:center;justify-content:center;color:var(--g2);font-size:12px}
+
+/* Предпросмотр */
+.prev{position:sticky;top:calc(var(--head-h) + 14px)}
+.prev h4{font-size:12.5px;text-transform:uppercase;letter-spacing:.4px;
+  color:var(--g2);margin-bottom:10px}
+
+.nav-btns{display:flex;gap:10px;margin-top:22px}
+.nav-btns .btn{min-width:130px}
+.sum-row{display:flex;justify-content:space-between;padding:8px 0;
+  border-bottom:1px solid var(--line);font-size:14px}
+.sum-row:last-child{border-bottom:none}
+.sum-row span{color:var(--g2)}
+.sum-row b{text-align:right;max-width:60%}
+
+@media (max-width:900px){
+  .form-grid{grid-template-columns:1fr}
+  .prev{position:static;order:-1}
+  .step-i .lb{display:none}
+  .steps{gap:5px}
+}
+</style>
+</head>
+<body>
+
+<div id="hdr"></div>
+
+<main class="page">
+  <div class="wrap" id="root">
+    <div class="empty" style="padding:70px 20px"><b>Загрузка…</b></div>
+  </div>
+</main>
+
+<div id="ftr"></div>
+<div id="bnav"></div>
+
+<script src="assets/data.js"></script>
+<script src="assets/sb.js"></script>
+<script src="assets/app.js"></script>
+<script>
+(function(){
+  mountChrome('new', '');
+
+  const DRAFT = 'iva_draft_ad';
+  let CATS_DB = [], SUBS_DB = [];
+  let step = 1;
+  const TOTAL = 5;
+
+  /* Состояние формы */
+  let F = {
+    cat:'', sub:'', imgs:[], name:'', descr:'', cond:'good',
+    price:'', deposit:'', terms:'', delivery:false, delivery_price:40, address:''
+  };
+
+  /* ---------- Черновик ---------- */
+  function saveDraft(){
+    try { localStorage.setItem(DRAFT, JSON.stringify({f:F, step:step})); } catch(e){}
+  }
+  function loadDraft(){
+    try {
+      const d = JSON.parse(localStorage.getItem(DRAFT) || 'null');
+      if (d && d.f){ F = Object.assign(F, d.f); step = d.step || 1; return true; }
+    } catch(e){}
+    return false;
+  }
+  function dropDraft(){ try { localStorage.removeItem(DRAFT); } catch(e){} }
+
+  /* ---------- Экран «нужен вход» ---------- */
+  function screenAuth(msg){
+    $('root').innerHTML =
+      '<div class="empty" style="padding:70px 20px">' +
+        '<svg viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>' +
+          '<circle cx="12" cy="7" r="4"/></svg>' +
+        '<b>' + esc(msg || 'Нужно войти') + '</b>' +
+        '<p>Размещать объявления могут только арендодатели площадки «Ива».</p>' +
+        '<div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap">' +
+          '<a class="btn" href="account.html">Войти</a>' +
+          '<a class="btn sec" href="index.html">На главную</a>' +
+        '</div>' +
+      '</div>';
+  }
+
+  /* ---------- Разметка шагов ---------- */
+  function stepsHTML(){
+    const labels = ['Категория','Фото','Описание','Цена','Получение'];
+    return '<div class="steps">' + labels.map(function(l, i){
+      const n = i + 1;
+      return '<div class="step-i ' + (n < step ? 'done' : (n === step ? 'on' : '')) + '">' +
+               '<div class="bar"></div><div class="lb">' + n + '. ' + l + '</div>' +
+             '</div>';
+    }).join('') + '</div>';
+  }
+
+  function body1(){
+    const subs = SUBS_DB.filter(function(s){ return s.cat === F.cat; });
+    return '<div class="box">' +
+      '<div class="fld" id="fCat">' +
+        '<label>Категория инструмента</label>' +
+        '<div class="pick">' +
+          CATS_DB.map(function(c){
+            return '<button type="button" data-cat="' + esc(c.key) + '"' +
+                   (F.cat === c.key ? ' class="on"' : '') + '>' +
+                   '<span class="ic">' + (ICONS[c.key] || ICONS.power) + '</span>' +
+                   '<span>' + esc(c.title) + '</span></button>';
+          }).join('') +
+        '</div>' +
+        '<div class="err">Выберите категорию</div>' +
+      '</div>' +
+      (subs.length ?
+        '<div class="fld" style="margin-bottom:0"><label>Подкатегория ' +
+          '<span class="muted" style="font-weight:400">— необязательно</span></label>' +
+          '<div class="pick row">' +
+            '<button type="button" data-sub=""' + (!F.sub ? ' class="on"' : '') + '>Без уточнения</button>' +
+            subs.map(function(s){
+              return '<button type="button" data-sub="' + esc(s.key) + '"' +
+                     (F.sub === s.key ? ' class="on"' : '') + '>' + esc(s.title) + '</button>';
+            }).join('') +
+          '</div></div>' : '') +
+    '</div>';
+  }
+
+  function body2(){
+    return '<div class="box">' +
+      '<div class="fld" id="fImgs" style="margin-bottom:0">' +
+        '<label>Фотографии <span class="muted" style="font-weight:400">— до 5 штук</span></label>' +
+        '<div class="drop" id="drop">' +
+          '<svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>' +
+            '<path d="M17 8l-5-5-5 5M12 3v13"/></svg>' +
+          '<b>Перетащите фото сюда или нажмите</b>' +
+          '<span>JPG или PNG, первое фото будет главным</span>' +
+        '</div>' +
+        '<input type="file" id="file" accept="image/*" multiple class="hide">' +
+        '<div class="photos" id="photos"></div>' +
+        '<div class="hint">Без фото объявление тоже можно разместить — ' +
+          'в каталоге покажется заглушка. Но с фото инструмент берут заметно охотнее.</div>' +
+      '</div>' +
+    '</div>';
+  }
+
+  function body3(){
+    return '<div class="box">' +
+      '<div class="fld" id="fName">' +
+        '<label>Название</label>' +
+        '<input class="inp" id="iName" maxlength="90" placeholder="Например: Перфоратор Bosch GBH 2-26 SDS-plus" value="' + esc(F.name) + '">' +
+        '<div class="hint">Модель и главная характеристика — так объявление легче найти.</div>' +
+        '<div class="err">Введите название (минимум 5 символов)</div>' +
+      '</div>' +
+      '<div class="fld" id="fDescr">' +
+        '<label>Описание</label>' +
+        '<textarea class="inp" id="iDescr" maxlength="1200" placeholder="Что входит в комплект, для каких работ подходит, важные ограничения">' + esc(F.descr) + '</textarea>' +
+        '<div class="hint"><span id="dCnt">0</span> из 1200 символов</div>' +
+        '<div class="err">Опишите инструмент (минимум 20 символов)</div>' +
+      '</div>' +
+      '<div class="fld" style="margin-bottom:0">' +
+        '<label>Состояние</label>' +
+        '<div class="pick row">' +
+          CONDS.map(function(c){
+            return '<button type="button" data-cond="' + c.key + '"' +
+                   (F.cond === c.key ? ' class="on"' : '') + '>' + esc(c.title) + '</button>';
+          }).join('') +
+        '</div>' +
+      '</div>' +
+    '</div>';
+  }
+
+  function body4(){
+    return '<div class="box">' +
+      '<div class="fld" id="fPrice">' +
+        '<label>Цена за сутки, ₽</label>' +
+        '<input class="inp" id="iPrice" type="number" min="1" max="1000000" placeholder="600" value="' + esc(F.price) + '">' +
+        '<div class="err">Укажите цену больше нуля</div>' +
+      '</div>' +
+      '<div class="fld" id="fDep">' +
+        '<label>Залог, ₽</label>' +
+        '<input class="inp" id="iDep" type="number" min="0" max="10000000" placeholder="3000" value="' + esc(F.deposit) + '">' +
+        '<div class="hint">Возвращается арендатору при исправном возврате. ' +
+          'Обычно это цена за сутки × 5 — <button type="button" id="depAuto" ' +
+          'style="color:var(--or);font-weight:600">поставить автоматически</button>.</div>' +
+        '<div class="err">Залог не может быть отрицательным</div>' +
+      '</div>' +
+      '<div class="fld" style="margin-bottom:0">' +
+        '<label>Условия аренды <span class="muted" style="font-weight:400">— необязательно</span></label>' +
+        '<textarea class="inp" id="iTerms" maxlength="500" style="min-height:80px" ' +
+          'placeholder="Например: паспорт РФ, расходники за счёт арендатора">' + esc(F.terms) + '</textarea>' +
+      '</div>' +
+    '</div>';
+  }
+
+  function body5(){
+    return '<div class="box">' +
+      '<div class="fld">' +
+        '<label>Как арендатор получит инструмент</label>' +
+        '<div class="pick row">' +
+          '<button type="button" data-dl="0"' + (!F.delivery ? ' class="on"' : '') + '>Только самовывоз</button>' +
+          '<button type="button" data-dl="1"' + (F.delivery ? ' class="on"' : '') + '>Есть доставка</button>' +
+        '</div>' +
+      '</div>' +
+      (F.delivery ?
+        '<div class="fld" id="fDp">' +
+          '<label>Стоимость доставки, ₽ за км</label>' +
+          '<input class="inp" id="iDp" type="number" min="0" max="10000" value="' + esc(F.delivery_price) + '">' +
+          '<div class="hint">На площадке принято 40 ₽/км по городу.</div>' +
+        '</div>' : '') +
+      '<div class="fld" style="margin-bottom:0">' +
+        '<label>Адрес выдачи</label>' +
+        '<input class="inp" id="iAddr" maxlength="140" placeholder="Новочеркасск, ул. Маресьева, 36" value="' + esc(F.address) + '">' +
+        '<div class="hint">Точный адрес видит только арендатор после согласования заявки.</div>' +
+      '</div>' +
+    '</div>';
+  }
+
+  /* ---------- Предпросмотр карточки ---------- */
+  function previewHTML(){
+    const dep = Number(F.deposit) || (Number(F.price) || 0) * 5;
+    const ph = F.imgs.length ? F.imgs[0] : '';
+    return '<div class="prev">' +
+      '<h4>Как увидит арендатор</h4>' +
+      '<article class="ad" style="max-width:none">' +
+        '<div class="ad-ph">' +
+          (ph ? '<img src="' + esc(ph) + '" alt="">' :
+                '<div style="width:100%;height:100%;display:flex;align-items:center;' +
+                'justify-content:center;color:var(--g2);font-size:13px">фото не добавлено</div>') +
+          (F.delivery ? '<div class="ad-badges"><span class="badge deliv">Доставка</span></div>' : '') +
+        '</div>' +
+        '<div class="ad-body">' +
+          '<div class="ad-price">' + (F.price ? rub(F.price) : '— ₽') + ' <span>/ сутки</span></div>' +
+          '<div class="ad-name">' + esc(F.name || 'Название появится здесь') + '</div>' +
+          '<div class="ad-dep">Залог ' + rub(dep) + '</div>' +
+          '<div class="ad-meta"><span>' + esc(catTitleDB(F.cat) || 'категория') + '</span></div>' +
+        '</div>' +
+      '</article>' +
+      '<div class="box" style="margin-top:14px">' +
+        '<div class="sum-row"><span>Категория</span><b>' + esc(catTitleDB(F.cat) || '—') + '</b></div>' +
+        '<div class="sum-row"><span>Фото</span><b>' + (F.imgs.length || '—') + '</b></div>' +
+        '<div class="sum-row"><span>Цена</span><b>' + (F.price ? rub(F.price) + '/сут' : '—') + '</b></div>' +
+        '<div class="sum-row"><span>Залог</span><b>' + (F.price || F.deposit ? rub(dep) : '—') + '</b></div>' +
+        '<div class="sum-row"><span>Получение</span><b>' +
+          (F.delivery ? 'Доставка ' + (F.delivery_price || 0) + ' ₽/км' : 'Самовывоз') + '</b></div>' +
+      '</div>' +
+    '</div>';
+  }
+
+  function catTitleDB(k){
+    const c = CATS_DB.find(function(x){ return x.key === k; });
+    return c ? c.title : '';
+  }
+
+  /* ---------- Полный рендер ---------- */
+  function render(){
+    const bodies = [body1, body2, body3, body4, body5];
+    $('root').innerHTML =
+      '<div class="sect" style="padding-bottom:0"><div class="sect-h">' +
+        '<h2>Разместить объявление</h2>' +
+        '<a href="account.html">Мои объявления →</a>' +
+      '</div></div>' +
+      stepsHTML() +
+      '<div class="form-grid">' +
+        '<div>' + bodies[step - 1]() +
+          '<div class="nav-btns">' +
+            (step > 1 ? '<button class="btn sec" id="bBack">Назад</button>' : '') +
+            (step < TOTAL
+              ? '<button class="btn" id="bNext">Далее</button>'
+              : '<button class="btn" id="bSave">Опубликовать</button>') +
+            (step === 1 ? '<a class="btn ghost" href="index.html" style="margin-left:auto">Отмена</a>' : '') +
+          '</div>' +
+        '</div>' +
+        previewHTML() +
+      '</div>';
+
+    bindStep();
+    if (step === 2) paintPhotos();
+    if (step === 3) countDescr();
+  }
+
+  /* ---------- Обработчики текущего шага ---------- */
+  function bindStep(){
+    const root = $('root');
+
+    root.addEventListener('click', function(e){
+      const c = e.target.closest('[data-cat]');
+      if (c){ F.cat = c.getAttribute('data-cat'); F.sub = ''; saveDraft(); render(); return; }
+
+      const s = e.target.closest('[data-sub]');
+      if (s){ F.sub = s.getAttribute('data-sub'); saveDraft(); render(); return; }
+
+      const cd = e.target.closest('[data-cond]');
+      if (cd){ F.cond = cd.getAttribute('data-cond'); saveDraft(); render(); return; }
+
+      const dl = e.target.closest('[data-dl]');
+      if (dl){ F.delivery = dl.getAttribute('data-dl') === '1'; saveDraft(); render(); return; }
+
+      if (e.target.id === 'depAuto'){
+        F.deposit = (Number(F.price) || 0) * 5;
+        saveDraft(); render(); return;
+      }
+    });
+
+    const bk = $('bBack'); if (bk) bk.addEventListener('click', function(){ step--; render(); });
+    const nx = $('bNext'); if (nx) nx.addEventListener('click', function(){ if (validate()) { step++; saveDraft(); render(); } });
+    const sv = $('bSave'); if (sv) sv.addEventListener('click', publish);
+
+    /* Поля шага 3 */
+    const nm = $('iName');
+    if (nm) nm.addEventListener('input', function(){ F.name = this.value; livePreview(); saveDraft(); });
+    const ds = $('iDescr');
+    if (ds) ds.addEventListener('input', function(){ F.descr = this.value; countDescr(); saveDraft(); });
+
+    /* Поля шага 4 */
+    const pr = $('iPrice');
+    if (pr) pr.addEventListener('input', function(){ F.price = this.value; livePreview(); saveDraft(); });
+    const dp = $('iDep');
+    if (dp) dp.addEventListener('input', function(){ F.deposit = this.value; livePreview(); saveDraft(); });
+    const tm = $('iTerms');
+    if (tm) tm.addEventListener('input', function(){ F.terms = this.value; saveDraft(); });
+
+    /* Поля шага 5 */
+    const dpr = $('iDp');
+    if (dpr) dpr.addEventListener('input', function(){ F.delivery_price = this.value; livePreview(); saveDraft(); });
+    const ad = $('iAddr');
+    if (ad) ad.addEventListener('input', function(){ F.address = this.value; saveDraft(); });
+
+    /* Шаг 2 — фото */
+    if (step === 2) bindPhotos();
+  }
+
+  function livePreview(){
+    const old = $1('.prev');
+    if (!old) return;
+    const tmp = document.createElement('div');
+    tmp.innerHTML = previewHTML();
+    old.replaceWith(tmp.firstChild);
+  }
+
+  function countDescr(){
+    const c = $('dCnt');
+    if (c) c.textContent = (F.descr || '').length;
+  }
+
+  /* ---------- Фото ---------- */
+  function paintPhotos(){
+    const box = $('photos');
+    if (!box) return;
+    box.innerHTML = F.imgs.map(function(u, i){
+      return '<div class="ph-i">' +
+               '<img src="' + esc(u) + '" alt="">' +
+               (i === 0 ? '<span class="main">Главное</span>' : '') +
+               '<button class="x" data-rm="' + i + '" title="Удалить">×</button>' +
+             '</div>';
+    }).join('');
+  }
+
+  function bindPhotos(){
+    const drop = $('drop'), file = $('file'), box = $('photos');
+    if (!drop) return;
+
+    drop.addEventListener('click', function(){ file.click(); });
+    file.addEventListener('change', function(){ handleFiles(this.files); this.value = ''; });
+
+    ['dragenter','dragover'].forEach(function(ev){
+      drop.addEventListener(ev, function(e){ e.preventDefault(); drop.classList.add('over'); });
+    });
+    ['dragleave','drop'].forEach(function(ev){
+      drop.addEventListener(ev, function(e){ e.preventDefault(); drop.classList.remove('over'); });
+    });
+    drop.addEventListener('drop', function(e){
+      if (e.dataTransfer && e.dataTransfer.files) handleFiles(e.dataTransfer.files);
+    });
+
+    box.addEventListener('click', function(e){
+      const r = e.target.closest('[data-rm]');
+      if (!r) return;
+      F.imgs.splice(Number(r.getAttribute('data-rm')), 1);
+      saveDraft(); paintPhotos(); livePreview();
+    });
+  }
+
+  async function handleFiles(list){
+    const files = Array.prototype.slice.call(list);
+    const free = 5 - F.imgs.length;
+    if (free <= 0){ toast('Уже добавлено 5 фотографий'); return; }
+    const take = files.slice(0, free);
+    if (files.length > free) toast('Добавлены первые ' + free + ' — всего можно 5');
+
+    for (let i = 0; i < take.length; i++){
+      const box = $('photos');
+      const stub = document.createElement('div');
+      stub.className = 'ph-i up';
+      stub.textContent = 'Загрузка…';
+      if (box) box.appendChild(stub);
+      try {
+        const url = await uploadPhoto(take[i]);
+        F.imgs.push(url);
+        saveDraft();
+      } catch(err){
+        toast('Фото не загрузилось: ' + err.message);
+      }
+      if (stub.parentNode) stub.remove();
+      paintPhotos(); livePreview();
+    }
+  }
+
+  /* ---------- Валидация ---------- */
+  function bad(id, on){
+    const el = $(id);
+    if (el) el.classList.toggle('bad', !!on);
+  }
+
+  function validate(){
+    if (step === 1){
+      if (!F.cat){ bad('fCat', true); toast('Выберите категорию'); return false; }
+      bad('fCat', false);
+    }
+    if (step === 3){
+      let ok = true;
+      if ((F.name || '').trim().length < 5){ bad('fName', true); ok = false; } else bad('fName', false);
+      if ((F.descr || '').trim().length < 20){ bad('fDescr', true); ok = false; } else bad('fDescr', false);
+      if (!ok){ toast('Заполните название и описание'); return false; }
+    }
+    if (step === 4){
+      let ok = true;
+      if (!(Number(F.price) > 0)){ bad('fPrice', true); ok = false; } else bad('fPrice', false);
+      if (Number(F.deposit) < 0){ bad('fDep', true); ok = false; } else bad('fDep', false);
+      if (!ok){ toast('Проверьте цену и залог'); return false; }
+    }
+    return true;
+  }
+
+  /* ---------- Публикация ---------- */
+  async function publish(){
+    if (!validate()) return;
+
+    const b = $('bSave');
+    b.disabled = true; b.textContent = 'Публикуем…';
+
+    const terms = [
+      F.terms,
+      F.address ? 'Адрес выдачи: ' + F.address : '',
+      'Состояние: ' + condTitle(F.cond)
+    ].filter(Boolean).join('\n');
+
+    try {
+      const t = await createTool({
+        name: F.name.trim(),
+        cat: F.cat,
+        sub: F.sub,
+        descr: F.descr.trim(),
+        price: F.price,
+        deposit: Number(F.deposit) || Number(F.price) * 5,
+        imgs: F.imgs,
+        delivery: F.delivery,
+        delivery_price: F.delivery_price,
+        terms: terms,
+        status: 'active'
+      });
+      dropDraft();
+      $('root').innerHTML =
+        '<div class="empty" style="padding:70px 20px">' +
+          '<svg viewBox="0 0 24 24" style="stroke:var(--grn)"><circle cx="12" cy="12" r="10"/>' +
+            '<path d="m8 12 3 3 5-6"/></svg>' +
+          '<b>Объявление опубликовано</b>' +
+          '<p>«' + esc(F.name) + '» уже в каталоге и доступно арендаторам.</p>' +
+          '<div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap">' +
+            (t && t.id ? '<a class="btn" href="tool.html?id=' + encodeURIComponent(t.id) + '">Посмотреть</a>' : '') +
+            '<a class="btn sec" href="account.html">Мои объявления</a>' +
+            '<a class="btn ghost" href="new.html">Разместить ещё</a>' +
+          '</div>' +
+        '</div>';
+      window.scrollTo(0, 0);
+    } catch(e){
+      b.disabled = false; b.textContent = 'Опубликовать';
+      toast('Не удалось опубликовать: ' + e.message);
+    }
+  }
+
+  /* ---------- Старт ---------- */
+  (async function init(){
+    await restoreSess();
+
+    if (!isAuthed()){ screenAuth('Нужно войти'); return; }
+    if (!isAdmin()){
+      screenAuth('Размещение доступно арендодателям');
+      return;
+    }
+
+    try {
+      const d = await loadCats();
+      CATS_DB = d.cats; SUBS_DB = d.subs;
+    } catch(e){
+      CATS_DB = CATS; SUBS_DB = SUBS;   /* запасной вариант — справочник из data.js */
+    }
+
+    const had = loadDraft();
+    render();
+    if (had && (F.name || F.cat || F.imgs.length)) toast('Восстановлен черновик');
+  })();
+})();
+</script>
+</body>
+</html>
