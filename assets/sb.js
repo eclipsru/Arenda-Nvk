@@ -580,3 +580,158 @@ async function autoModerate(ad){
     failed: failed
   };
 }
+
+/* ===========================================================
+   ЧАТ: диалоги, сообщения, вложения, realtime.
+   Таблица app_messages, RLS: видно только свою переписку.
+   =========================================================== */
+
+const MSG_FIELDS = 'id,from_email,to_email,text,img,audio,audio_dur,is_read,created_at,tool_id';
+
+/* Все сообщения, где я отправитель или получатель */
+async function loadMessages(limit){
+  if (!A.me) return [];
+  const me = encodeURIComponent(A.me);
+  return await api('/rest/v1/app_messages?select=' + MSG_FIELDS +
+    '&or=(from_email.eq.' + me + ',to_email.eq.' + me + ')' +
+    '&order=created_at.desc&limit=' + (limit || 400)) || [];
+}
+
+/* Переписка с конкретным собеседником, по возрастанию времени */
+async function loadThread(who){
+  if (!A.me || !who) return [];
+  const me = encodeURIComponent(A.me), w = encodeURIComponent(who);
+  const r = await api('/rest/v1/app_messages?select=' + MSG_FIELDS +
+    '&or=(and(from_email.eq.' + me + ',to_email.eq.' + w + '),' +
+        'and(from_email.eq.' + w + ',to_email.eq.' + me + '))' +
+    '&order=created_at.asc&limit=500') || [];
+  return r;
+}
+
+async function sendMessage(to, payload){
+  const row = {
+    from_email: A.me,
+    to_email:   to,
+    text:       payload.text || '',
+    img:        payload.img || '',
+    audio:      payload.audio || '',
+    audio_dur:  payload.audio_dur || 0
+  };
+  if (payload.tool_id) row.tool_id = payload.tool_id;
+  const r = await api('/rest/v1/app_messages', 'POST', row, { Prefer:'return=representation' });
+  return (r && r[0]) || null;
+}
+
+/* Пометить прочитанными всё от собеседника */
+async function markRead(who){
+  if (!A.me || !who) return;
+  try {
+    await api('/rest/v1/app_messages?to_email=eq.' + encodeURIComponent(A.me) +
+              '&from_email=eq.' + encodeURIComponent(who) + '&is_read=eq.false',
+              'PATCH', { is_read:true }, { Prefer:'return=minimal' });
+  } catch(e){}
+}
+
+async function unreadCount(){
+  if (!A.me) return 0;
+  try {
+    const r = await api('/rest/v1/app_messages?select=id&to_email=eq.' +
+                        encodeURIComponent(A.me) + '&is_read=eq.false&limit=200');
+    return (r || []).length;
+  } catch(e){ return 0; }
+}
+
+/* Сборка списка диалогов из плоского списка сообщений */
+function buildDialogs(msgs){
+  const map = {};
+  (msgs || []).forEach(function(m){
+    const mine = (m.from_email || '').toLowerCase() === A.me;
+    const who  = (mine ? m.to_email : m.from_email || '').toLowerCase();
+    if (!who || who === A.me) return;            /* заметки самому себе пропускаем */
+    if (!map[who]){
+      map[who] = { who:who, last:m, unread:0, count:0 };
+    }
+    map[who].count++;
+    if (new Date(m.created_at) > new Date(map[who].last.created_at)) map[who].last = m;
+    if (!mine && !m.is_read) map[who].unread++;
+  });
+  return Object.keys(map).map(function(k){ return map[k]; })
+    .sort(function(a,b){ return new Date(b.last.created_at) - new Date(a.last.created_at); });
+}
+
+/* Короткое описание последнего сообщения для списка диалогов */
+function msgPreview(m){
+  if (m.audio) return '🎤 Голосовое сообщение';
+  if (m.img)   return '📷 Фотография';
+  return m.text || '';
+}
+
+/* ---------- Загрузка голосового ---------- */
+async function uploadVoice(blob, ext){
+  if (!A.tok) throw new Error('Нужно войти');
+  const path = 'v' + Date.now() + '-' + Math.floor(Math.random()*1e5) + '.' + (ext || 'webm');
+  const r = await fetch(SB + '/storage/v1/object/voice/' + path, {
+    method:'POST',
+    headers:{ apikey:KEY, Authorization:'Bearer ' + A.tok, 'Content-Type': blob.type || 'audio/webm' },
+    body: blob
+  });
+  if (!r.ok) throw new Error(sbErr(await r.text()));
+  return SB + '/storage/v1/object/public/voice/' + path;
+}
+
+/* ---------- Realtime ----------
+   Подписка на новые сообщения через websocket. Если не выйдет —
+   вызывающий код продолжит работать на опросе. */
+function subscribeMessages(onInsert){
+  if (!A.tok) return null;
+  let ws = null, ref = 0, hb = null, closed = false;
+
+  try {
+    ws = new WebSocket(SB.replace('https://','wss://') +
+                       '/realtime/v1/websocket?apikey=' + KEY + '&vsn=1.0.0');
+  } catch(e){ return null; }
+
+  ws.onopen = function(){
+    ws.send(JSON.stringify({
+      topic:'realtime:public:app_messages',
+      event:'phx_join',
+      payload:{ config:{ postgres_changes:[
+        { event:'INSERT', schema:'public', table:'app_messages' }
+      ]}, access_token: A.tok },
+      ref: String(++ref)
+    }));
+    hb = setInterval(function(){
+      if (ws.readyState === 1){
+        ws.send(JSON.stringify({ topic:'phoenix', event:'heartbeat', payload:{}, ref:String(++ref) }));
+      }
+    }, 25000);
+  };
+
+  ws.onmessage = function(ev){
+    try {
+      const d = JSON.parse(ev.data);
+      if (d.event === 'postgres_changes' && d.payload && d.payload.data &&
+          d.payload.data.type === 'INSERT'){
+        onInsert(d.payload.data.record);
+      }
+    } catch(e){}
+  };
+
+  ws.onclose = function(){ if (hb) clearInterval(hb); };
+  ws.onerror = function(){ if (hb) clearInterval(hb); };
+
+  return {
+    close: function(){
+      closed = true;
+      if (hb) clearInterval(hb);
+      try { ws.close(); } catch(e){}
+    }
+  };
+}
+
+/* Подпись собеседника: имя из admins, иначе часть почты */
+function whoTitle(email){
+  const o = OWNER_CACHE[(email || '').toLowerCase()];
+  if (o && (o.full_name || o.company)) return o.full_name || o.company;
+  return (email || '').split('@')[0];
+}

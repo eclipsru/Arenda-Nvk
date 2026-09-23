@@ -140,7 +140,7 @@
         '</div>' +
 
         '<div style="display:flex;flex-direction:column;gap:9px;margin-top:16px">' +
-          '<button class="btn wide" data-soon="Чат с арендодателем">Написать</button>' +
+          '<button class="btn wide" id="writeBtn">Написать</button>' +
           '<button class="btn sec wide phone-btn" id="phoneBtn">Показать телефон</button>' +
           '<button class="btn ghost wide" id="favBtn" data-fav="' + ad.id + '">' +
             (favHas(ad.id) ? 'В избранном ♥' : 'В избранное') +
@@ -215,6 +215,27 @@
       x0 = null;
     }, {passive:true});
   }
+
+  /* ---------- Кнопка «Написать» ---------- */
+  $('writeBtn').addEventListener('click', async function(){
+    if (!isAuthed()) await restoreSess();
+
+    if (!isAuthed()){
+      openSheet('Нужно войти',
+        '<p style="color:var(--gr);line-height:1.6">Переписка доступна зарегистрированным ' +
+        'пользователям — так арендодатель видит, кому отвечает. ' +
+        'Можно и просто позвонить: ' + esc(owner.phone) + '.</p>',
+        '<a class="btn sec" href="tel:' + owner.phone.replace(/[^\d+]/g,'') + '" style="flex:1">Позвонить</a>' +
+        '<a class="btn" href="account.html" style="flex:1">Войти</a>');
+      return;
+    }
+    if ((ad.owner || '').toLowerCase() === A.me){
+      toast('Это ваше объявление');
+      return;
+    }
+    location.href = 'chat.html?who=' + encodeURIComponent(ad.owner) +
+                    '&tool=' + encodeURIComponent(ad.id);
+  });
 
   /* ---------- Показать телефон ---------- */
   var shown = false;

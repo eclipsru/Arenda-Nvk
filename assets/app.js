@@ -261,7 +261,9 @@ function headerHTML(active, q){
         IC.heart + '<span>Избранное</span>' +
         '<span class="dot fav-count" style="display:none">0</span>' +
       '</a>' +
-      '<a class="hlink" href="account.html#msg">' + IC.chat + '<span>Сообщения</span></a>' +
+      '<a class="hlink' + (active === 'chat' ? ' on' : '') + '" href="chat.html">' +
+        IC.chat + '<span>Сообщения</span>' +
+        '<span class="dot chat-count" style="display:none">0</span></a>' +
       '<a class="hlink' + (active === 'cab' ? ' on' : '') + '" href="account.html">' +
         IC.user + '<span>Кабинет</span></a>' +
       /* Пункт «Управление» дорисовывается после проверки роли — см. paintChiefLink */
@@ -276,7 +278,8 @@ function bnavHTML(active){
   const it = (key, href, icon, label, extra) =>
     '<a class="' + (active === key ? 'on' : '') + '" href="' + href + '"' + (extra || '') + '>' +
       icon + '<span>' + label + '</span>' +
-      (key === 'fav' ? '<span class="dot fav-count" style="display:none">0</span>' : '') +
+      (key === 'fav'  ? '<span class="dot fav-count" style="display:none">0</span>' : '') +
+      (key === 'chat' ? '<span class="dot chat-count" style="display:none">0</span>' : '') +
     '</a>';
 
   return '<nav class="bnav"><div class="bnav-in">' +
@@ -284,7 +287,7 @@ function bnavHTML(active){
     it('fav','favorites.html',IC.heart,'Избранное') +
     '<a class="mid" href="new.html">' +
       '<span class="plus">' + IC.plus + '</span><span>Разместить</span></a>' +
-    it('chat','account.html#msg',IC.chat,'Сообщения') +
+    it('chat','chat.html',IC.chat,'Сообщения') +
     it('cab','account.html',IC.user,'Кабинет') +
   '</div></nav>';
 }
@@ -389,6 +392,7 @@ function mountChrome(active, q){
   bindFavs();
   bindSoon();
   paintChiefLink();
+  paintChatBadge();
 
   const cb = $('cityBtn'); if (cb) cb.addEventListener('click', citySheet);
 
@@ -419,5 +423,20 @@ async function paintChiefLink(){
     if (typeof isChief === 'function' && isChief()){
       $$('.chief-link').forEach(function(el){ el.classList.remove('hide'); });
     }
+  } catch(e){}
+}
+
+
+/* Счётчик непрочитанных сообщений в шапке и нижнем меню */
+async function paintChatBadge(){
+  if (typeof unreadCount !== 'function') return;
+  try {
+    if (!isAuthed()) await restoreSess();
+    if (!isAuthed()) return;
+    const n = await unreadCount();
+    $$('.chat-count').forEach(function(el){
+      el.textContent = n;
+      el.style.display = n ? 'flex' : 'none';
+    });
   } catch(e){}
 }

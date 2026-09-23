@@ -1,0 +1,463 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Сообщения — Ива</title>
+<meta name="robots" content="noindex, nofollow">
+<meta name="theme-color" content="#101217">
+<link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="assets/theme.css">
+</head>
+<body>
+
+<div id="hdr"></div>
+
+<main class="page">
+  <div class="wrap" id="root">
+    <div class="empty" style="padding:70px 20px"><b>Загрузка…</b></div>
+  </div>
+</main>
+
+<div id="ftr"></div>
+<div id="bnav"></div>
+
+<script src="assets/data.js"></script>
+<script src="assets/sb.js"></script>
+<script src="assets/app.js"></script>
+<script>
+(function(){
+  mountChrome('chat', '');
+
+  let MSGS = [], DLGS = [], WHO = '', TOOL = null;
+  let sub = null, poll = null;
+  let rec = null, recChunks = [], recStart = 0, recTimer = null;
+
+  const P = new URLSearchParams(location.search);
+
+  /* ---------- Время ---------- */
+  function hhmm(s){
+    const d = new Date(s);
+    return ('0'+d.getHours()).slice(-2) + ':' + ('0'+d.getMinutes()).slice(-2);
+  }
+  function dayLabel(s){
+    const d = new Date(s), now = new Date();
+    const sameDay = function(a,b){ return a.toDateString() === b.toDateString(); };
+    if (sameDay(d, now)) return 'Сегодня';
+    const y = new Date(now); y.setDate(y.getDate()-1);
+    if (sameDay(d, y)) return 'Вчера';
+    return d.toLocaleDateString('ru-RU', {day:'numeric', month:'long'});
+  }
+  function shortTime(s){
+    const d = new Date(s), now = new Date();
+    if (d.toDateString() === now.toDateString()) return hhmm(s);
+    const diff = (now - d) / 86400000;
+    if (diff < 7) return ['вс','пн','вт','ср','чт','пт','сб'][d.getDay()];
+    return d.toLocaleDateString('ru-RU', {day:'2-digit', month:'2-digit'});
+  }
+
+  /* ---------- Нужен вход ---------- */
+  function screenAuth(){
+    $('root').innerHTML =
+      '<div class="empty" style="padding:70px 20px">' +
+        '<svg viewBox="0 0 24 24"><path d="M21 11.5a8.4 8.4 0 0 1-9 8.4 8.4 8.4 0 0 1-3.8-.9L3 21l2-5.2' +
+          'a8.4 8.4 0 0 1-.9-3.8 8.4 8.4 0 0 1 8.4-8.4h.5a8.4 8.4 0 0 1 8 8z"/></svg>' +
+        '<b>Войдите, чтобы переписываться</b>' +
+        '<p>Чат доступен зарегистрированным пользователям. ' +
+           'Можно и просто позвонить: +7 (908) 173-24-75.</p>' +
+        '<div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap">' +
+          '<a class="btn" href="account.html">Войти</a>' +
+          '<a class="btn sec" href="tel:+79081732475">Позвонить</a>' +
+        '</div>' +
+      '</div>';
+  }
+
+  /* ---------- Каркас ---------- */
+  function render(){
+    const inThread = !!WHO;
+    $('root').innerHTML =
+      '<div class="sect" style="padding-bottom:0"><div class="sect-h">' +
+        '<h2>Сообщения</h2>' +
+        '<span class="cnt" id="unreadLb"></span>' +
+      '</div></div>' +
+      '<div class="chat-wrap' + (inThread ? ' in-thread' : '') + '">' +
+        '<div class="dlg-list" id="dlgList"></div>' +
+        '<div class="thread" id="thread"></div>' +
+      '</div>';
+    paintDialogs();
+    paintThread();
+  }
+
+  /* ---------- Список диалогов ---------- */
+  function paintDialogs(){
+    const box = $('dlgList');
+    if (!box) return;
+
+    if (!DLGS.length && !WHO){
+      box.innerHTML = '<div class="empty" style="padding:40px 18px">' +
+        '<b style="font-size:15px">Переписок нет</b>' +
+        '<p style="font-size:13px">Напишите арендодателю из карточки инструмента — ' +
+        'диалог появится здесь.</p>' +
+        '<a class="btn sm" href="catalog.html">В каталог</a></div>';
+      return;
+    }
+
+    let list = DLGS.slice();
+    /* Новый собеседник, с которым ещё не переписывались */
+    if (WHO && !list.some(function(d){ return d.who === WHO; })){
+      list.unshift({ who:WHO, last:{ text:'Новый диалог', created_at:new Date().toISOString() },
+                     unread:0, count:0, fresh:true });
+    }
+
+    box.innerHTML = list.map(function(d){
+      return '<div class="dlg' + (d.who === WHO ? ' on' : '') + '" data-who="' + esc(d.who) + '">' +
+        '<div class="ava">' + esc(initials(whoTitle(d.who))) + '</div>' +
+        '<div class="dmid">' +
+          '<div class="dnm">' + esc(whoTitle(d.who)) + '</div>' +
+          '<div class="dlast">' + esc(d.fresh ? 'Новый диалог' : msgPreview(d.last)) + '</div>' +
+        '</div>' +
+        '<div class="dright">' +
+          '<span class="dtime">' + (d.fresh ? '' : shortTime(d.last.created_at)) + '</span>' +
+          (d.unread ? '<span class="dunread">' + d.unread + '</span>' : '') +
+        '</div>' +
+      '</div>';
+    }).join('');
+
+    box.onclick = function(e){
+      const d = e.target.closest('[data-who]');
+      if (!d) return;
+      openThread(d.getAttribute('data-who'));
+    };
+
+    const tot = DLGS.reduce(function(a,d){ return a + d.unread; }, 0);
+    const lb = $('unreadLb');
+    if (lb) lb.textContent = tot ? tot + ' ' + plural(tot,'непрочитанное','непрочитанных','непрочитанных') : '';
+  }
+
+  /* ---------- Переписка ---------- */
+  function paintThread(){
+    const box = $('thread');
+    if (!box) return;
+
+    if (!WHO){
+      box.innerHTML = '<div class="empty" style="margin:auto;padding:40px 20px">' +
+        '<svg viewBox="0 0 24 24"><path d="M21 11.5a8.4 8.4 0 0 1-9 8.4 8.4 8.4 0 0 1-3.8-.9L3 21l2-5.2' +
+          'a8.4 8.4 0 0 1-.9-3.8 8.4 8.4 0 0 1 8.4-8.4h.5a8.4 8.4 0 0 1 8 8z"/></svg>' +
+        '<b>Выберите диалог</b><p>Слева список переписок.</p></div>';
+      return;
+    }
+
+    const ms = MSGS.filter(function(m){
+      const f = (m.from_email||'').toLowerCase(), t = (m.to_email||'').toLowerCase();
+      return (f === A.me && t === WHO) || (f === WHO && t === A.me);
+    }).sort(function(a,b){ return new Date(a.created_at) - new Date(b.created_at); });
+
+    let body = '', lastDay = '';
+    ms.forEach(function(m){
+      const dl = dayLabel(m.created_at);
+      if (dl !== lastDay){ body += '<div class="th-day">' + esc(dl) + '</div>'; lastDay = dl; }
+      const mine = (m.from_email||'').toLowerCase() === A.me;
+
+      let inner = '';
+      if (m.tool_id && TOOL && String(TOOL.id) === String(m.tool_id)){
+        const ti = (TOOL.imgs && TOOL.imgs[0]) || TOOL.img || '';
+        inner += '<div class="tool-ref">' +
+          (ti ? '<img src="' + esc(ti) + '" alt="">' : '') +
+          '<span>' + esc(TOOL.name) + '</span></div>';
+      }
+      if (m.img)   inner += '<img class="bimg" src="' + esc(m.img) + '" alt="фото" data-big="' + esc(m.img) + '">';
+      if (m.audio) inner += '<audio controls preload="none" src="' + esc(m.audio) + '"></audio>';
+      if (m.text)  inner += esc(m.text);
+
+      body += '<div class="bub ' + (mine ? 'me' : 'they') + '">' + inner +
+        '<div class="btime">' + hhmm(m.created_at) +
+          (mine ? '<span>' + (m.is_read ? '✓✓' : '✓') + '</span>' : '') +
+        '</div></div>';
+    });
+
+    if (!ms.length){
+      body = '<div class="empty" style="margin:auto;padding:30px 20px">' +
+        '<b style="font-size:15px">Сообщений пока нет</b>' +
+        '<p style="font-size:13px">Напишите первым — арендодатель увидит сообщение в кабинете.</p></div>';
+    }
+
+    box.innerHTML =
+      '<div class="th-head">' +
+        '<button class="back" id="thBack" aria-label="Назад">' +
+          '<svg viewBox="0 0 24 24"><path d="m15 18-6-6 6-6"/></svg></button>' +
+        '<div class="ava">' + esc(initials(whoTitle(WHO))) + '</div>' +
+        '<div><div class="thnm">' + esc(whoTitle(WHO)) + '</div>' +
+          '<div class="thsub">' + esc(WHO) + '</div></div>' +
+      '</div>' +
+      '<div class="th-body" id="thBody">' + body + '</div>' +
+      '<div class="th-foot">' +
+        '<div class="th-in" id="thIn">' +
+          '<button class="icon-btn" id="bPhoto" title="Фотография">' +
+            '<svg viewBox="0 0 24 24"><path d="M3 9a2 2 0 0 1 2-2h2l1.5-2h7L17 7h2a2 2 0 0 1 2 2v9' +
+              'a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><circle cx="12" cy="13" r="3.4"/></svg></button>' +
+          '<textarea id="thText" rows="1" placeholder="Сообщение"></textarea>' +
+          '<button class="icon-btn" id="bMic" title="Голосовое">' +
+            '<svg viewBox="0 0 24 24"><rect x="9" y="2" width="6" height="11" rx="3"/>' +
+              '<path d="M5 11a7 7 0 0 0 14 0M12 18v4"/></svg></button>' +
+          '<button class="icon-btn send" id="bSend" title="Отправить">' +
+            '<svg viewBox="0 0 24 24"><path d="M22 2 11 13M22 2l-7 20-4-9-9-4z"/></svg></button>' +
+        '</div>' +
+        '<input type="file" id="thFile" accept="image/*" class="hide">' +
+      '</div>';
+
+    bindThread();
+    scrollDown();
+  }
+
+  function scrollDown(){
+    const b = $('thBody');
+    if (b) b.scrollTop = b.scrollHeight;
+  }
+
+  /* ---------- Обработчики окна переписки ---------- */
+  function bindThread(){
+    const back = $('thBack');
+    if (back) back.addEventListener('click', function(){
+      WHO = ''; history.replaceState(null,'','chat.html'); render();
+    });
+
+    const ta = $('thText'), send = $('bSend');
+
+    /* Авторост поля */
+    ta.addEventListener('input', function(){
+      this.style.height = 'auto';
+      this.style.height = Math.min(this.scrollHeight, 110) + 'px';
+    });
+    ta.addEventListener('keydown', function(e){
+      if (e.key === 'Enter' && !e.shiftKey){ e.preventDefault(); doSend(); }
+    });
+    send.addEventListener('click', doSend);
+
+    /* Фото */
+    $('bPhoto').addEventListener('click', function(){ $('thFile').click(); });
+    $('thFile').addEventListener('change', async function(){
+      const f = this.files && this.files[0];
+      this.value = '';
+      if (!f) return;
+      toast('Загружаем фото…');
+      try {
+        const url = await uploadPhoto(f);
+        await pushMessage({ img:url });
+      } catch(err){ toast('Не отправлено: ' + err.message); }
+    });
+
+    /* Голосовое */
+    $('bMic').addEventListener('click', toggleRec);
+
+    /* Просмотр фото */
+    $('thBody').addEventListener('click', function(e){
+      const im = e.target.closest('[data-big]');
+      if (im) lightbox(im.getAttribute('data-big'));
+    });
+  }
+
+  async function doSend(){
+    const ta = $('thText');
+    const t = ta.value.trim();
+    if (!t) return;
+    ta.value = ''; ta.style.height = 'auto';
+    await pushMessage({ text:t });
+  }
+
+  /* Общая отправка: оптимистично рисуем, потом синхронизируем */
+  async function pushMessage(payload){
+    const tmp = {
+      id: 'tmp' + Date.now(),
+      from_email: A.me, to_email: WHO,
+      text: payload.text || '', img: payload.img || '',
+      audio: payload.audio || '', audio_dur: payload.audio_dur || 0,
+      is_read: false, created_at: new Date().toISOString(),
+      tool_id: TOOL ? TOOL.id : null
+    };
+    MSGS.push(tmp);
+    paintThread();
+
+    try {
+      const saved = await sendMessage(WHO, Object.assign({}, payload,
+                      TOOL ? { tool_id: TOOL.id } : {}));
+      const i = MSGS.indexOf(tmp);
+      if (i !== -1 && saved) MSGS[i] = saved;
+      TOOL = null;                    /* привязка только к первому сообщению */
+      DLGS = buildDialogs(MSGS);
+      paintDialogs();
+    } catch(e){
+      const i = MSGS.indexOf(tmp);
+      if (i !== -1) MSGS.splice(i, 1);
+      paintThread();
+      toast('Не отправлено: ' + e.message);
+    }
+  }
+
+  /* ---------- Запись голосового ---------- */
+  async function toggleRec(){
+    if (rec){ stopRec(); return; }
+
+    if (!navigator.mediaDevices || !window.MediaRecorder){
+      toast('Браузер не умеет записывать звук');
+      return;
+    }
+    let stream;
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({ audio:true });
+    } catch(e){
+      toast('Нет доступа к микрофону');
+      return;
+    }
+
+    const mime = MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm' : '';
+    rec = new MediaRecorder(stream, mime ? { mimeType:mime } : undefined);
+    recChunks = [];
+    rec.ondataavailable = function(e){ if (e.data && e.data.size) recChunks.push(e.data); };
+
+    rec.onstop = async function(){
+      stream.getTracks().forEach(function(t){ t.stop(); });
+      clearInterval(recTimer);
+      const dur = Math.max(1, Math.round((Date.now() - recStart) / 1000));
+      const blob = new Blob(recChunks, { type: rec.mimeType || 'audio/webm' });
+      rec = null;
+      paintRecUI(false);
+
+      if (blob.size < 900){ toast('Слишком короткая запись'); return; }
+      toast('Отправляем голосовое…');
+      try {
+        const ext = (rec && rec.mimeType || 'audio/webm').indexOf('mp4') !== -1 ? 'm4a' : 'webm';
+        const url = await uploadVoice(blob, ext);
+        await pushMessage({ audio:url, audio_dur:dur, text:'' });
+      } catch(err){ toast('Не отправлено: ' + err.message); }
+    };
+
+    rec.start();
+    recStart = Date.now();
+    paintRecUI(true);
+    recTimer = setInterval(function(){
+      const el = $('recTime');
+      if (!el) return;
+      const s = Math.floor((Date.now() - recStart) / 1000);
+      el.textContent = Math.floor(s/60) + ':' + ('0' + (s%60)).slice(-2);
+      if (s >= 120) stopRec();          /* ограничение 2 минуты */
+    }, 250);
+  }
+
+  function stopRec(){ if (rec && rec.state !== 'inactive') rec.stop(); }
+
+  function paintRecUI(on){
+    const bar = $('thIn');
+    if (!bar) return;
+    if (on){
+      bar.innerHTML =
+        '<div class="rec-bar"><span class="dot"></span>' +
+          '<span class="rtime" id="recTime">0:00</span>' +
+          '<span class="rhint">идёт запись</span></div>' +
+        '<button class="icon-btn" id="recCancel" title="Отменить">' +
+          '<svg viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></svg></button>' +
+        '<button class="icon-btn rec" id="recStop" title="Отправить">' +
+          '<svg viewBox="0 0 24 24"><path d="M22 2 11 13M22 2l-7 20-4-9-9-4z"/></svg></button>';
+      $('recStop').addEventListener('click', stopRec);
+      $('recCancel').addEventListener('click', function(){
+        if (rec){ rec.onstop = function(){ paintRecUI(false); }; 
+                  try { rec.stream && rec.stream.getTracks().forEach(function(t){t.stop()}); } catch(e){}
+                  rec.stop(); rec = null; }
+        clearInterval(recTimer);
+        paintThread();
+      });
+    } else {
+      paintThread();
+    }
+  }
+
+  /* ---------- Просмотр фото ---------- */
+  function lightbox(src){
+    const d = document.createElement('div');
+    d.className = 'lightbox';
+    d.innerHTML = '<button class="x">×</button><img src="' + esc(src) + '" alt="">';
+    d.addEventListener('click', function(){ d.remove(); });
+    document.body.appendChild(d);
+  }
+
+  /* ---------- Открыть диалог ---------- */
+  async function openThread(who){
+    WHO = (who || '').toLowerCase();
+    history.replaceState(null, '', 'chat.html?who=' + encodeURIComponent(WHO));
+    render();
+    await markRead(WHO);
+    MSGS.forEach(function(m){
+      if ((m.from_email||'').toLowerCase() === WHO) m.is_read = true;
+    });
+    DLGS = buildDialogs(MSGS);
+    paintDialogs();
+    paintChatBadge();
+  }
+
+  /* ---------- Приём нового сообщения ---------- */
+  function onIncoming(m){
+    const f = (m.from_email||'').toLowerCase(), t = (m.to_email||'').toLowerCase();
+    if (f !== A.me && t !== A.me) return;
+    if (MSGS.some(function(x){ return String(x.id) === String(m.id); })) return;
+
+    MSGS.push(m);
+    DLGS = buildDialogs(MSGS);
+
+    const active = WHO && (f === WHO || t === WHO);
+    if (active){
+      paintThread();
+      if (f === WHO) markRead(WHO);
+    }
+    paintDialogs();
+    paintChatBadge();
+  }
+
+  /* ---------- Старт ---------- */
+  (async function init(){
+    await restoreSess();
+    if (!isAuthed()){ screenAuth(); return; }
+
+    await loadOwners();
+    MSGS = await loadMessages();
+    DLGS = buildDialogs(MSGS);
+
+    /* Переход из карточки: ?who=…&tool=… */
+    const qWho  = (P.get('who') || '').toLowerCase();
+    const qTool = P.get('tool');
+    if (qTool){
+      try { TOOL = await loadTool(qTool); } catch(e){ TOOL = null; }
+    }
+    if (qWho) { WHO = qWho; }
+
+    render();
+
+    if (WHO){
+      await markRead(WHO);
+      MSGS.forEach(function(m){
+        if ((m.from_email||'').toLowerCase() === WHO) m.is_read = true;
+      });
+      DLGS = buildDialogs(MSGS);
+      paintDialogs();
+    }
+
+    /* Realtime, с опросом как подстраховкой */
+    sub = subscribeMessages(onIncoming);
+    poll = setInterval(async function(){
+      try {
+        const fresh = await loadMessages();
+        if (fresh.length !== MSGS.length){
+          const known = {};
+          MSGS.forEach(function(m){ known[String(m.id)] = 1; });
+          fresh.forEach(function(m){ if (!known[String(m.id)]) onIncoming(m); });
+        }
+      } catch(e){}
+    }, 20000);
+
+    window.addEventListener('beforeunload', function(){
+      if (sub) sub.close();
+      if (poll) clearInterval(poll);
+    });
+  })();
+})();
+</script>
+</body>
+</html>
