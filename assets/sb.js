@@ -25,21 +25,7 @@ function applyAuthUser(user){
   A.userMeta = user.user_metadata || {};
   A.uname = A.userMeta.name || A.userMeta.full_name || A.uname || A.me.split('@')[0];
 }
-function cityFromProfileAddress(address){
-  const text = String(address || '').trim();
-  if (!text) return '';
-  const known = typeof CITIES !== 'undefined' ? CITIES.find(c=>{
-    const escaped=c.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
-    return new RegExp('(^|[^А-ЯЁа-яёA-Za-z])'+escaped+'(?=$|[^А-ЯЁа-яёA-Za-z])','i').test(text);
-  }) : '';
-  if (known) return known;
-  const marked = text.match(/(?:^|[,;]\s*)(?:г\.\s*|город\s+)([^,;\n]+)/i);
-  if (marked) return marked[1].trim();
-  const first = text.split(/[,;\n]/)[0].trim();
-  if (/^[А-ЯЁA-Z][А-ЯЁа-яёA-Za-z -]{1,79}$/.test(first) &&
-      !/(?:улица|проспект|область|район|край|переулок|шоссе|набережная)/i.test(first)) return first;
-  return '';
-}
+function cityFromProfileAddress(address){ return IvaGeo.addressCity(address); }
 async function loadProfileCity(){
   let city = typeof A.userMeta.city === 'string' ? A.userMeta.city.trim() : '';
   if (!city && A.admin) city = cityFromProfileAddress(A.admin.address);
@@ -49,12 +35,12 @@ async function loadProfileCity(){
       city = rows && rows[0] && rows[0].city || '';
     } catch(e){} // Отсутствие анкеты не мешает входу и работе профиля.
   }
-  A.profileCity = String(city || '').trim();
+  A.profileCity = IvaGeo.city(city);
   if (typeof applyProfileCity === 'function') applyProfileCity(A.profileCity);
   return A.profileCity;
 }
 async function saveProfileCity(city){
-  city=String(city || '').trim();
+  city=IvaGeo.city(city);
   if (city.length<2 || city.length>100) throw new Error('Укажите город от 2 до 100 символов');
   const user=await api('/auth/v1/user','PUT',{data:Object.assign({},A.userMeta,{city:city})});
   applyAuthUser(user);
@@ -223,7 +209,7 @@ async function loadCats(){
 
 /* ---------- Объявления ---------- */
 const TOOL_FIELDS = 'id,name,cat,sub,descr,price,deposit,imgs,img,delivery,' +
-                    'delivery_price,terms,owner_email,status,active,created_at';
+                    'delivery_price,terms,pickup_city,owner_email,status,active,created_at';
 
 /* Публичная витрина — только активные */
 async function loadPublicTools(){
@@ -258,6 +244,7 @@ async function createTool(data){
     delivery:       !!data.delivery,
     delivery_price: data.delivery ? (Number(data.delivery_price) || 0) : 0,
     terms:          data.terms || '',
+    pickup_city:    IvaGeo.city(data.pickup_city),
     owner_email:    A.me,
     status:         data.status || 'active',
     active:         (data.status || 'active') === 'active'
@@ -341,7 +328,7 @@ function toolToAd(t){
   if (/Состояние:\s*Новый/i.test(terms)) cond = 'new';
   else if (/Состояние:\s*Рабочее/i.test(terms)) cond = 'work';
   const mAddr = terms.match(/Адрес выдачи:\s*(.+)/);
-  const city  = mAddr ? (mAddr[1].split(',')[0].trim() || 'Новочеркасск') : 'Новочеркасск';
+  const city = IvaGeo.city(t.pickup_city) || (mAddr ? IvaGeo.addressCity(mAddr[1]) : 'Новочеркасск');
 
   return {
     id:        t.id,

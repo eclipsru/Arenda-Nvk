@@ -79,6 +79,7 @@ textarea.inp{resize:vertical;min-height:110px;font-family:inherit;line-height:1.
   .steps{gap:5px}
 }
 </style>
+<link rel="stylesheet" href="assets/geo.css?v=20260923-photon">
 </head>
 <body>
 
@@ -94,8 +95,9 @@ textarea.inp{resize:vertical;min-height:110px;font-family:inherit;line-height:1.
 <div id="bnav"></div>
 
 <script src="assets/data.js"></script>
-<script src="assets/sb.js?v=20260923-rental-profile"></script>
-<script src="assets/app.js?v=20260923-edit-profile-city"></script>
+<script src="assets/geo.js?v=20260923-photon"></script>
+<script src="assets/sb.js?v=20260923-photon"></script>
+<script src="assets/app.js?v=20260923-photon"></script>
 <script>
 (function(){
   mountChrome('new', '');
@@ -112,7 +114,7 @@ textarea.inp{resize:vertical;min-height:110px;font-family:inherit;line-height:1.
   /* Состояние формы */
   let F = {
     cat:'', sub:'', imgs:[], name:'', descr:'', cond:'good',
-    price:'', deposit:'', terms:'', delivery:false, delivery_price:40, address:''
+    price:'', deposit:'', terms:'', delivery:false, delivery_price:40, address:'', city:''
   };
 
   /* ---------- Черновик ---------- */
@@ -265,10 +267,11 @@ textarea.inp{resize:vertical;min-height:110px;font-family:inherit;line-height:1.
           '<input class="inp" id="iDp" type="number" min="0" max="10000" value="' + esc(F.delivery_price) + '">' +
           '<div class="hint">На площадке принято 40 ₽/км по городу.</div>' +
         '</div>' : '') +
+      '<div class="fld"><label for="iCity">Город выдачи</label><input class="inp" id="iCity" maxlength="100" placeholder="Начните вводить город…" value="'+esc(F.city||IvaGeo.addressCity(F.address))+'"><div class="hint">Только город — для поиска и фильтра объявлений.</div></div>' +
       '<div class="fld" style="margin-bottom:0">' +
-        '<label>Адрес выдачи</label>' +
-        '<input class="inp" id="iAddr" maxlength="140" placeholder="Новочеркасск, ул. Маресьева, 36" value="' + esc(F.address) + '">' +
-        '<div class="hint">Точный адрес видит только арендатор после согласования заявки.</div>' +
+        '<label for="iAddr">Адрес выдачи</label>' +
+        '<input class="inp" id="iAddr" maxlength="500" placeholder="Новочеркасск, ул. Маресьева, 36" value="' + esc(F.address) + '">' +
+        '<div class="hint">Точный адрес доступен всем посетителям. Выберите подсказку или введите адрес вручную.</div>' +
       '</div>' +
     '</div>';
   }
@@ -382,7 +385,12 @@ textarea.inp{resize:vertical;min-height:110px;font-family:inherit;line-height:1.
     const dpr = $('iDp');
     if (dpr) dpr.addEventListener('input', function(){ F.delivery_price = this.value; livePreview(); saveDraft(); });
     const ad = $('iAddr');
-    if (ad) ad.addEventListener('input', function(){ F.address = this.value; saveDraft(); });
+    if (ad) ad.addEventListener('input', function(){
+      F.address=this.value;const inferred=IvaGeo.addressCity(this.value);
+      if(inferred){F.city=inferred;if($('iCity'))$('iCity').value=inferred;}saveDraft();
+    });
+    const ci=$('iCity');
+    if(ci)ci.addEventListener('input',function(){F.city=this.value;saveDraft();});
 
     /* Шаг 2 — фото */
     if (step === 2) bindPhotos();
@@ -496,6 +504,10 @@ textarea.inp{resize:vertical;min-height:110px;font-family:inherit;line-height:1.
   /* ---------- Публикация ---------- */
   async function publish(){
     if (!validate()) return;
+    F.city=IvaGeo.city(F.city)||IvaGeo.addressCity(F.address);
+    if(F.address && !F.city){toast('Укажите город выдачи отдельно от улицы и дома');if($('iCity'))$('iCity').focus();return;}
+    const addressCity=IvaGeo.addressCity(F.address);
+    if(addressCity && F.city && !cityMatches(addressCity,F.city)){toast('Город и адрес выдачи не совпадают. Проверьте оба поля.');return;}
 
     const b = $('bSave');
     b.disabled = true; b.textContent = EDIT_ID ? 'Сохраняем…' : 'Публикуем…';
@@ -516,7 +528,8 @@ textarea.inp{resize:vertical;min-height:110px;font-family:inherit;line-height:1.
       imgs: F.imgs,
       delivery: F.delivery,
       delivery_price: Number(F.delivery_price) || 0,
-      terms: terms
+      terms: terms,
+      pickup_city: F.city
     };
 
     if (EDIT_ID){
@@ -611,6 +624,7 @@ textarea.inp{resize:vertical;min-height:110px;font-family:inherit;line-height:1.
           price:EDIT_SOURCE.price == null ? '' : EDIT_SOURCE.price,
           deposit:EDIT_SOURCE.deposit == null ? '' : EDIT_SOURCE.deposit,
           terms:lines.filter(line=>!/^\s*(?:Адрес выдачи|Состояние):/i.test(line)).join('\n').trim(),
+          city:parsed.city || '',
           address:addressLine ? addressLine.trim().replace(/^Адрес выдачи:\s*/i,'') : '',
           delivery:!!EDIT_SOURCE.delivery,delivery_price:EDIT_SOURCE.delivery_price == null ? 40 : EDIT_SOURCE.delivery_price
         };

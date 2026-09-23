@@ -303,6 +303,8 @@ textarea.inp{resize:vertical;min-height:70px}
   .cbar{border-radius:14px}
 }
 </style>
+<link rel="stylesheet" href="assets/geo.css?v=20260923-photon">
+<script src="assets/geo.js?v=20260923-photon"></script>
 </head>
 <body>
 <div class="app" id="app">
@@ -837,28 +839,20 @@ function orderSheet(){
 }
 async function photon(q){
   try{
-    var u='https://photon.komoot.io/api/?q='+encodeURIComponent(q+', Новочеркасск')+'&lang=ru&lat='+SKLAD.lat+'&lon='+SKLAD.lon+'&limit=5';
-    var r=await fetch(u);var j=await r.json();var f=j.features||[];
-    var sg=$('sugg');if(!sg)return;
-    if(!f.length){sg.classList.add('hide');return}
-    sg.innerHTML=f.map(function(ft,i){
-      var p=ft.properties||[];
-      var lbl=[p.name,p.city||p.district,p.state].filter(Boolean).join(', ');
-      return '<div data-i="'+i+'">'+esc(lbl)+'</div>';
-    }).join('');
+    var f=await IvaGeo.search(q,'address');
+    var sg=$('sugg');if(!sg||!$('oAddr')||$('oAddr').value.trim()!==q)return;
+    if(!f.length){sg.innerHTML='<div>Адрес не найден. Можно ввести вручную.</div>';sg.classList.remove('hide');return}
+    sg.innerHTML=f.map(function(p,i){return '<div data-i="'+i+'">'+esc(p.value)+(p.region?' · '+esc(p.region):'')+'</div>'}).join('')+'<small>Photon · © OpenStreetMap</small>';
     sg.classList.remove('hide');
     sg.onclick=function(e){
       var d=e.target.closest('[data-i]');if(!d)return;
-      var ft=f[+d.getAttribute('data-i')];
-      var p=ft.properties||{};
-      var lbl=[p.name,p.city||p.district,p.state].filter(Boolean).join(', ');
-      $('oAddr').value=lbl;S.daddr=lbl;
-      var c=ft.geometry&&ft.geometry.coordinates;
+      var p=f[+d.getAttribute('data-i')];$('oAddr').value=p.value;S.daddr=p.value;
+      var c=p.coordinates;
       if(c){var km=hav(SKLAD.lat,SKLAD.lon,c[1],c[0]);S.dkm=km;S.dsum=Math.max(1,Math.ceil(km))*DELIV_PER_KM*cartCount();
-        $('dtxt').textContent=Math.ceil(km)+' км × '+DELIV_PER_KM+' \u20BD × '+cartCount()+' инстр. = '+m(S.dsum)+' \u20BD'}
+        $('dtxt').textContent=Math.ceil(km)+' км × '+DELIV_PER_KM+' ₽ × '+cartCount()+' инстр. = '+m(S.dsum)+' ₽'}
       sg.classList.add('hide');if(S._rupd)S._rupd();
     };
-  }catch(e){}
+  }catch(e){var sg=$('sugg');if(sg&&$('oAddr')&&$('oAddr').value.trim()===q){sg.innerHTML='<div>Подсказки недоступны. Введите адрес вручную; стоимость доставки уточните у арендодателя.</div>';sg.classList.remove('hide');}}
 }
 function hav(a1,o1,a2,o2){var R=6371,dLa=(a2-a1)*Math.PI/180,dLo=(o2-o1)*Math.PI/180;var x=Math.sin(dLa/2)*Math.sin(dLa/2)+Math.cos(a1*Math.PI/180)*Math.cos(a2*Math.PI/180)*Math.sin(dLo/2)*Math.sin(dLo/2);return 2*R*Math.atan2(Math.sqrt(x),Math.sqrt(1-x))}
 

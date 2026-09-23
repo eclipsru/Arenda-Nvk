@@ -78,7 +78,7 @@ const RentalProfile = (function(){
       const model=initial();
       host.innerHTML='<div class="rp-head"><div><h2>Редактор профиля проката</h2><p class="rp-muted">Обязательны название и рабочий телефон. У добавленной точки — название, город и точный адрес.</p></div></div><div class="rp-note">Это публичные сведения. Не указывайте личные документы, пароли и реквизиты карт. Точки не меняют адреса уже опубликованных объявлений автоматически.</div><nav class="rp-nav" aria-label="Разделы редактора">'+[['about','О прокате'],['contacts','Контакты'],['points','Точки выдачи'],['delivery','Доставка'],['terms','Условия аренды']].map(g=>'<button type="button" data-section="'+g[0]+'">'+g[1]+'</button>').join('')+'</nav><form id="rentalEditor">'+groups.slice(0,2).map(g=>section(g,model.details)).join('')+'<section class="rp-section" id="rp-points"><h3>Точки выдачи</h3><p class="rp-muted">До 20 точек в любых городах. Первая — основная. Точное место получения инструмента согласуйте с арендатором.</p><div id="rentalPoints"></div><button class="btn sec sm" type="button" id="addPoint" style="margin-top:16px">+ Добавить точку</button></section>'+groups.slice(2).map(g=>section(g,model.details)).join('')+'<p class="rp-error" id="rentalError" role="alert"></p><div class="rp-actions" style="margin:20px 0"><button class="btn" type="submit" id="saveRental">Сохранить профиль</button><button class="btn sec" type="button" id="cancelRental">Отмена</button></div></form>';
       const form=host.querySelector('#rentalEditor');let points=model.locations;
-      const readPoints=()=>Array.from(form.querySelectorAll('[data-point]')).map(el=>{const p={id:el.dataset.point};el.querySelectorAll('[name^="point-"]').forEach(input=>p[input.name.slice(6)]=input.value.trim());return p;});
+      const readPoints=()=>Array.from(form.querySelectorAll('[data-point]')).map(el=>{const p={id:el.dataset.point};el.querySelectorAll('[name^="point-"]').forEach(input=>p[input.name.slice(6)]=input.value.trim());p.city=IvaGeo.city(p.city);return p;});
       function paintPoints(){form.querySelector('#rentalPoints').innerHTML=points.map(pointFields).join('');form.querySelector('#addPoint').disabled=points.length>=20;}
       paintPoints();
       host.querySelectorAll('[data-section]').forEach(b=>b.onclick=()=>host.querySelector('#rp-'+b.dataset.section).scrollIntoView({behavior:'smooth',block:'start'}));
@@ -94,6 +94,7 @@ const RentalProfile = (function(){
         e.preventDefault();if(!form.reportValidity())return;
         const d={};groups.forEach(g=>g[2].forEach(f=>d[f[0]]=form.elements[f[0]].value.trim()));
         points=readPoints();const error=form.querySelector('#rentalError');error.textContent='';
+        if(points.some(p=>IvaGeo.addressCity(p.address)&&!cityMatches(IvaGeo.addressCity(p.address),p.city))){error.textContent='Город и адрес точки не совпадают. Проверьте точку выдачи.';return;}
         const phones=[d.phone,...points.map(p=>p.phone).filter(Boolean)];
         if(phones.some(ph=>!/^\+?[0-9() .-]+$/.test(ph)||ph.replace(/\D/g,'').length<10||ph.replace(/\D/g,'').length>15)){error.textContent='Проверьте телефоны: от 10 до 15 цифр.';return;}
         if([d.website,d.vk].some(url=>url&&!/^https?:\/\/[^\s]+$/i.test(url))){error.textContent='Ссылки должны начинаться с https:// или http://.';return;}

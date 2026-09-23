@@ -105,14 +105,14 @@ function getCity(){
     try {
       const saved = localStorage.getItem(CITY_KEY);
       // Пустая строка — явный выбор «Все города», а не отсутствие настройки.
-      _selectedCity = saved === null ? 'Новочеркасск' : saved;
+      _selectedCity = saved === null ? 'Новочеркасск' : IvaGeo.city(saved);
     } catch(e){ _selectedCity = 'Новочеркасск'; }
   }
   return _selectedCity;
 }
 function setCity(c, manual){
   if (manual) _cityChosenManually = true;
-  _selectedCity = String(c || '').trim();
+  _selectedCity = IvaGeo.city(c);
   try {
     if (localStorage.getItem(CITY_KEY) !== _selectedCity) localStorage.setItem(CITY_KEY, _selectedCity);
   } catch(e){}
@@ -133,7 +133,7 @@ function applyProfileCity(city, force){
   if(window.onCityChanged)window.onCityChanged();
 }
 function cityKey(city){
-  return String(city || '').trim().toLowerCase().replace(/ё/g,'е')
+  return IvaGeo.city(city).toLowerCase().replace(/ё/g,'е')
     .replace(/^(?:город\s+|г\.\s*|г\s+)/,'').replace(/[–—]/g,'-')
     .replace(/\s*-\s*/g,'-').replace(/\s+/g,' ');
 }
@@ -142,7 +142,7 @@ function availableCities(){
   const result = [], seen = new Set();
   CITIES.concat(ADS.filter(a=>a.status==='active').map(a=>a.city), [getCity(), typeof A !== 'undefined' ? A.profileCity : '']).forEach(city=>{
     const key=cityKey(city);
-    if (key && !seen.has(key)){ seen.add(key); result.push(String(city).trim()); }
+    if (key && !seen.has(key)){ seen.add(key); result.push(IvaGeo.city(city)); }
   });
   // Сохранённый вариант написания должен оставаться выбираемым в select.
   const selected=getCity();
@@ -395,6 +395,7 @@ function footHTML(){
 function citySheet(){
   const cur = getCity();
   openSheet('Выберите город',
+    '<form class="city-search-form" id="citySearchForm"><label for="citySearch" class="small">Город или населённый пункт</label><input id="citySearch" class="inp" maxlength="100" placeholder="Начните вводить город…"><button class="btn sec sm" type="submit">Выбрать город</button><p class="geo-helper">Выберите подсказку или укажите город вручную. Улицу и дом сюда вводить не нужно.</p></form>' +
     '<div class="f-list" style="max-height:none">' +
       [''].concat(availableCities()).map(c =>
         '<div class="f-item' + (c === cur ? ' on' : '') + '" data-city="' + esc(c) + '">' +
@@ -402,6 +403,14 @@ function citySheet(){
         '</div>').join('') +
     '</div>', null);
 
+  function chooseTyped(){
+    const input=$('citySearch'),city=IvaGeo.city(input.value);
+    if(!city){input.setCustomValidity('Укажите город на русском языке, без улицы и дома');input.reportValidity();return;}
+    setCity(city,true);closeSheet();if(window.onCityChanged)window.onCityChanged();
+  }
+  IvaGeo.scan();
+  $('citySearch').addEventListener('geo:select',chooseTyped);
+  $('citySearchForm').onsubmit=function(e){e.preventDefault();chooseTyped();};
   $1('.sheet-b').addEventListener('click', function(e){
     const d = e.target.closest('[data-city]');
     if (!d) return;
