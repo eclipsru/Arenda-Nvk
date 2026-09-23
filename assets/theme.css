@@ -210,6 +210,11 @@ select.inp{cursor:pointer;appearance:none;
 }
 .layout{display:grid;grid-template-columns:262px minmax(0,1fr);gap:20px;align-items:start;padding-bottom:40px}
 .layout.home{grid-template-columns:306px minmax(0,1fr)}
+/* Одинаковый отступ и заголовок с блоком категорий справа. */
+.home-filter-column{padding-top:20px;min-width:0}
+/* Высокая панель прокручивается вместе со страницей: все пункты доступны. */
+.home-filter-column .filters{position:static}
+.home-filter-column .f-list{max-height:none;overflow:visible}
 .filters{background:var(--card);border:1px solid var(--line);border-radius:var(--r);
   padding:16px;position:sticky;top:calc(var(--head-h) + 14px)}
 .f-grp{padding:13px 0;border-bottom:1px solid var(--line)}
@@ -548,5 +553,6 @@ select.inp{cursor:pointer;appearance:none;
 }
 @media (max-width:860px){
   .layout.home{grid-template-columns:1fr}
+  .layout.home .home-filter-column{display:none}
   .layout.home .filters{display:none}
 }

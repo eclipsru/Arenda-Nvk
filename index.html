@@ -7,7 +7,7 @@
 <meta name="description" content="Ива — площадка аренды инструмента: электроинструмент, стройоборудование, садовая техника. Цена за сутки, возвратный залог, доставка по городу.">
 <meta name="theme-color" content="#101217">
 <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
-<link rel="stylesheet" href="assets/theme.css?v=20260923-favorites-condition">
+<link rel="stylesheet" href="assets/theme.css?v=20260923-global-search">
 </head>
 <body>
 
@@ -18,8 +18,13 @@
 
     <div class="layout home">
 
-      <!-- Постоянный фильтр слева -->
-      <aside class="filters" id="filters"></aside>
+      <!-- Заголовок на уровне «Категории», панель — на уровне плиток -->
+      <aside class="home-filter-column" aria-labelledby="globalSearchTitle">
+        <div class="cats-head">
+          <h2 id="globalSearchTitle">Глобальный поиск</h2>
+        </div>
+        <div class="filters" id="filters"></div>
+      </aside>
 
       <section>
         <!-- Плитки категорий / подкатегорий -->
