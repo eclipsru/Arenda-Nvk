@@ -165,7 +165,7 @@ textarea.inp{resize:vertical;min-height:70px}
 .umenu b:hover{background:#2A2013;color:var(--or)}
 .umenu a{color:var(--red)}
 .umenu a:hover{background:#2d1113}
-.citybtn{display:flex;align-items:center;gap:6px;background:none;color:var(--tx);font-size:13px;font-weight:600;padding:9px 10px;border-radius:9px;flex:0 0 auto}
+.citybtn{display:flex;align-items:center;gap:6px;background:none;color:var(--tx);font-size:13px;font-weight:600;padding:9px 10px;border-radius:9px;flex:0 0 auto;margin-left:2px}
 .citybtn:hover{background:var(--card)}
 .citybtn svg{width:14px;height:14px;fill:var(--or);flex:0 0 14px}
 .tsrch-w{position:relative;flex:1;min-width:160px}
@@ -270,11 +270,11 @@ textarea.inp{resize:vertical;min-height:70px}
       </div></div>
       <div class="th-in">
         <div class="slogo" data-n="home"><img src="iva_logo.png" alt=""><div><b>Ива</b><span>Инструмент в аренду</span></div></div>
-        <button class="citybtn" id="cityBtn"><svg viewBox="0 0 24 24"><path d="M12 2a7 7 0 0 0-7 7c0 5.2 7 13 7 13s7-7.8 7-13a7 7 0 0 0-7-7zm0 9.5A2.5 2.5 0 1 1 12 6a2.5 2.5 0 0 1 0 5.5z"/></svg><span id="cityName">Новочеркасск</span></button>
         <div class="tsrch-w">
           <div class="tsrch"><svg viewBox="0 0 24 24"><path d="M10 2a8 8 0 1 0 4.9 14.3l5.4 5.4 1.4-1.4-5.4-5.4A8 8 0 0 0 10 2zm0 2a6 6 0 1 1 0 12 6 6 0 0 1 0-12z"/></svg><input id="tq" placeholder="Поиск инструментов" autocomplete="off"><button id="tfind">Найти</button></div>
           <div class="mega hide" id="mega"><div class="mega-l" id="megaL"></div><div class="mega-r" id="megaR"></div></div>
         </div>
+        <button class="citybtn" id="cityBtn"><svg viewBox="0 0 24 24"><path d="M12 2a7 7 0 0 0-7 7c0 5.2 7 13 7 13s7-7.8 7-13a7 7 0 0 0-7-7zm0 9.5A2.5 2.5 0 1 1 12 6a2.5 2.5 0 0 1 0 5.5z"/></svg><span id="cityName">Новочеркасск</span></button>
       </div>
       <div class="catrow" id="catRow"></div>
     </header>
@@ -433,7 +433,7 @@ async function enter(){
   $('whoami').textContent=S.uname||S.me;
   var cl2=$('cityName');if(cl2)cl2.textContent=S.city||'Новочеркасск';
   setUava();
-  var ab=document.querySelector('#tophead .place');if(ab)ab.style.display=isAdmin()?'':'none';
+  updPlace();
   var ac=cget('admins',300000);
   if(ac){S.admin=findMe(ac)}else{loadAdmins()}
   try{
@@ -446,7 +446,7 @@ async function enter(){
 }
 function findMe(lst){for(var i=0;i<lst.length;i++){if((lst[i].email||'').toLowerCase()===S.me)return lst[i]}return null}
 async function loadAdmins(){
-  try{var a=await api('/rest/v1/admins?select=email,role,active,fee_pct,debt_limit,full_name,company,phone,address,org_address,work_hours,avatar');cset('admins',a);if(!S.admin)S.admin=findMe(a);setUava()}catch(e){}
+  try{var a=await api('/rest/v1/admins?select=email,role,active,fee_pct,debt_limit,full_name,company,phone,address,org_address,work_hours,avatar');cset('admins',a);if(!S.admin)S.admin=findMe(a);setUava();updPlace()}catch(e){}
 }
 async function loadBase(){
   var c=cget('base',180000);
@@ -458,7 +458,7 @@ async function loadBase(){
     var lm=await api('/rest/v1/limited_admins?select=email');
     S.tools=tl;S.cats=cl;S.subs=sc;S.limited=(lm||[]).map(function(x){return (x.email||'').toLowerCase()});
     cset('base',{tools:tl,cats:cl,subs:sc,limited:S.limited});
-    renderMega();
+    renderMega();updPlace();
     if(S.screen==='home')go('home');
   }catch(e){if(!c)toast('Не удалось загрузить каталог: '+e.message)}
   loadLikes();
@@ -552,6 +552,9 @@ function myTools(){var lm=S.limited||[];var city=(S.city||'').trim().toLowerCase
   if(city&&city!=='новочеркасск'){var al=cget('admins',300000)||[];
     if(al.length)return S.tools.filter(function(t){var a=adminByMail(t.owner_email);var ad=((a&&a.address)||'').toLowerCase();return lm.indexOf((t.owner_email||'').toLowerCase())<0&&ad.indexOf(city)>=0})}
   return S.tools.filter(function(t){return lm.indexOf((t.owner_email||'').toLowerCase())<0})}
+function updPlace(){var ab=document.querySelector('#tophead .place');if(!ab)return;
+  var lim=S.limited.indexOf(S.me)>=0;
+  ab.style.display=(isAdmin()&&!lim)?'':'none'}
 function renderCatRow(){var cr=$('catRow');if(!cr)return;var h='<button class="'+(S.cat===''?'on':'')+'" data-c="">Все</button>';for(var i=0;i<S.cats.length;i++){var c=S.cats[i];h+='<button class="'+(S.cat===c.key?'on':'')+'" data-c="'+esc(c.key)+'">'+esc(c.title)+'</button>'}cr.innerHTML=h;cr.onclick=function(e){var b=e.target.closest('[data-c]');if(!b)return;S.cat=b.getAttribute('data-c');S.sub='';S.favOnly=false;go('home')}}
 function hdrSearch(){var tq=$('tq');if(!tq)return;tq.value=S.q;tq.oninput=function(){S.q=this.value;if(this.value.trim())S.favOnly=false;var g=$('grid');if(S.screen==='home'&&g){g.innerHTML=tilesHtml();var d=$('dash');if(d)d.innerHTML=dashInner()}else if(S.screen!=='home'&&this.value.trim())go('home')};
   var tf=$('tfind');if(tf)tf.onclick=function(){if(S.screen!=='home')go('home')}}
@@ -965,8 +968,10 @@ function cabBody(){
 async function cabTools(t){
   var b=$(t||'cabBody');b.innerHTML='<div class="empt">Загрузка…</div>';
   try{
+    var lim=S.limited.indexOf(S.me)>=0;
     var tl=await api('/rest/v1/tools?select=*&owner_email=eq.'+encodeURIComponent(S.me)+'&order=created_at.desc&limit=200');
-    var h='<button class="btn" style="width:100%;margin-top:12px" id="addT">＋ Добавить инструмент</button>';
+    var h=lim?'<div class="card" style="border-color:#5A2B2B;background:#241417"><b style="color:var(--red)">ДОСТУП ОГРАНИЧЕН</b><div class="hint">Задолженность по комиссии превышает лимит. Погасите её, чтобы снова добавлять инструменты.</div></div>'
+      :'<button class="btn" style="width:100%;margin-top:12px" id="addT">＋ Добавить инструмент</button>';
     h+=(tl||[]).map(function(t){
       return '<div class="card" data-id="'+t.id+'" style="display:flex;gap:10px;align-items:center;cursor:pointer">'
       +(t.img?'<img src="'+esc(t.img)+'" style="width:52px;height:52px;border-radius:10px;object-fit:cover">':'<div style="width:52px;height:52px;border-radius:10px;background:var(--field)"></div>')
@@ -974,11 +979,12 @@ async function cabTools(t){
       +'<span class="badge '+(t.active!==false?'b-new':'b-closed')+'">'+(t.active!==false?'Виден':'Скрыт')+'</span></div>';
     }).join('');
     b.innerHTML=h;
-    $('addT').onclick=function(){toolForm(null)};
+    var at2=$('addT');if(at2)at2.onclick=function(){toolForm(null)};
     b.onclick=function(e){var c=e.target.closest('[data-id]');if(c&&c.id!=='addT')toolForm(c.getAttribute('data-id'))};
   }catch(e){b.innerHTML='<div class="empt">Ошибка: '+esc(e.message)+'</div>'}
 }
 function toolForm(id){
+  if(!id&&S.limited.indexOf(S.me)>=0){toast('Доступ ограничен: погасите задолженность по комиссии');return}
   var t=id?tById(id):null;
   if(t&&!t.owner_email)t=null;
   var h='<div class="sheet"><div class="grab"></div><h3>'+(t?'Инструмент':'Новый инструмент')+'</h3>'
