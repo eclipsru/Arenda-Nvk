@@ -639,6 +639,67 @@ textarea.inp{resize:vertical;min-height:110px;font-family:inherit;line-height:1.
       }
     }
     const had = loadDraft();
+
+    try {
+      const pRows = await api('/rest/v1/landlord_profiles?select=details,locations&owner_email=eq.' + encodeURIComponent((A.admin && A.admin.email) || A.me));
+      const profile = (pRows && pRows[0]) || null;
+      const pDetails = (profile && profile.details) || {};
+      const pLocs = (profile && Array.isArray(profile.locations)) ? profile.locations : [];
+      const primaryLoc = pLocs[0] || null;
+
+      let pfCity = (primaryLoc && primaryLoc.city) || A.profileCity || (A.admin && cityFromProfileAddress(A.admin.address)) || '';
+      let pfAddress = (primaryLoc && primaryLoc.address) || (A.admin && A.admin.address) || '';
+      if (!pfCity && pfAddress) pfCity = cityFromProfileAddress(pfAddress) || '';
+
+      let pfDelivery = false;
+      let pfDeliveryPrice = 40;
+      const rawDp = pDetails.delivery_price != null ? String(pDetails.delivery_price).trim() : '';
+      const rawDa = pDetails.delivery_area != null ? String(pDetails.delivery_area).trim() : '';
+      const noDeliv = /^(?:нет|только\s*самовывоз|нет\s*доставки)/i.test(rawDa) || /^(?:нет|0)/i.test(rawDp);
+
+      if (rawDp && !noDeliv) {
+        const numMatch = rawDp.match(/\d+/);
+        if (numMatch) {
+          pfDeliveryPrice = parseInt(numMatch[0], 10);
+          pfDelivery = true;
+        } else {
+          pfDelivery = true;
+        }
+      } else if (rawDa && !noDeliv) {
+        pfDelivery = true;
+      }
+
+      const termsParts = [];
+      if (pDetails.min_rental) termsParts.push('Мин. срок: ' + pDetails.min_rental.trim());
+      if (pDetails.deposit_terms) termsParts.push('Залог: ' + pDetails.deposit_terms.trim());
+      if (pDetails.delivery_terms) termsParts.push('Доставка: ' + pDetails.delivery_terms.trim());
+      const pfTerms = termsParts.join('\n').slice(0, 500);
+
+      if (!had) {
+        if (pfCity) F.city = pfCity;
+        if (pfAddress) F.address = pfAddress;
+        if (pfDelivery) {
+          F.delivery = true;
+          F.delivery_price = pfDeliveryPrice;
+        }
+        if (pfTerms && !F.terms) {
+          F.terms = pfTerms;
+        }
+      } else {
+        if (!F.city && pfCity) F.city = pfCity;
+        if (!F.address && pfAddress) F.address = pfAddress;
+        if (!F.terms && pfTerms) F.terms = pfTerms;
+      }
+    } catch(err){
+      if (!had) {
+        if (A.profileCity) F.city = A.profileCity;
+        if (A.admin && A.admin.address) {
+          F.address = A.admin.address;
+          if (!F.city) F.city = cityFromProfileAddress(A.admin.address) || '';
+        }
+      }
+    }
+
     render();
     if (had && (F.name || F.cat || F.imgs.length)) toast('Восстановлен черновик');
   })();

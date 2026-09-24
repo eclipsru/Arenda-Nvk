@@ -10,9 +10,7 @@ const RentalProfile = (function(){
       ['contact_name','Контактное лицо','text','Как к вам обращаться',150],
       ['contact_role','Должность','text','Например: управляющий пунктом проката',150],
       ['phone','Рабочий телефон *','tel','+7 900 000-00-00',100],
-      ['public_email','Публичный email','email','Для обращений арендаторов, не обязательно email входа',300],
-      ['website','Сайт','url','https://…',300],
-      ['vk','Страница ВК','url','https://vk.com/…',300]]],
+      ['public_email','Публичный email','email','Для обращений арендаторов, не обязательно email входа',300]]],
     ['delivery','Доставка',[
       ['delivery_area','Зона доставки','text','Города или радиус; «Нет доставки», если только самовывоз',300],
       ['delivery_price','Стоимость доставки','text','Тариф, минимальная стоимость или по согласованию',300],
@@ -58,7 +56,7 @@ const RentalProfile = (function(){
     const a=A.admin;
     function initial(){
       if(saved.revision)return JSON.parse(JSON.stringify(saved));
-      return {revision:0,details:{display_name:a.company||a.full_name||A.uname||'',contact_name:a.full_name||'',phone:a.phone||A.userMeta.phone||'',website:application&&application.website||''},locations:a.address?[{id:'legacy-main',name:'Основная точка',city:cityFromProfileAddress(a.address)||A.profileCity||'',address:a.address,phone:'',hours:a.work_hours||'',directions:''}]:[]};
+      return {revision:0,details:{display_name:a.company||a.full_name||A.uname||'',contact_name:a.full_name||'',phone:a.phone||A.userMeta.phone||''},locations:a.address?[{id:'legacy-main',name:'Основная точка',city:cityFromProfileAddress(a.address)||A.profileCity||'',address:a.address,phone:'',hours:a.work_hours||'',directions:''}]:[]};
     }
     function view(){
       dirty=false;const model=initial(),d=model.details,points=model.locations;
@@ -97,7 +95,6 @@ const RentalProfile = (function(){
         if(points.some(p=>IvaGeo.addressCity(p.address)&&!cityMatches(IvaGeo.addressCity(p.address),p.city))){error.textContent='Город и адрес точки не совпадают. Проверьте точку выдачи.';return;}
         const phones=[d.phone,...points.map(p=>p.phone).filter(Boolean)];
         if(phones.some(ph=>!/^\+?[0-9() .-]+$/.test(ph)||ph.replace(/\D/g,'').length<10||ph.replace(/\D/g,'').length>15)){error.textContent='Проверьте телефоны: от 10 до 15 цифр.';return;}
-        if([d.website,d.vk].some(url=>url&&!/^https?:\/\/[^\s]+$/i.test(url))){error.textContent='Ссылки должны начинаться с https:// или http://.';return;}
         if(points.some(p=>['name','city','address'].some(k=>p[k].length<2))||d.display_name.length<2){error.textContent='Название проката, название точки, город и адрес должны содержать не менее двух символов.';return;}
         const controls=Array.from(form.elements);controls.forEach(el=>el.disabled=true);host.classList.add('rp-saving');
         try{
@@ -107,7 +104,10 @@ const RentalProfile = (function(){
         finally{host.classList.remove('rp-saving');}
       };
     }
-    function section(g,d){return '<section class="rp-section" id="rp-'+g[0]+'"><h3>'+g[1]+'</h3><div class="rp-grid">'+g[2].map(f=>field(f,d[f[0]])).join('')+'</div></section>';}
+    function section(g,d){
+      const hint=g[0]==='delivery'?'<div class="rp-note" style="margin:0 0 16px 0;">Данные, которые указываются в этом пункте, будут автоматически применяться во всех инструментах, которые вы добавляете (с возможностью изменить в каждом объявлении). Если у вас для всего инструмента стоимость доставки разная, можете оставить этот пункт пустым.</div>':'';
+      return '<section class="rp-section" id="rp-'+g[0]+'"><h3>'+g[1]+'</h3>'+hint+'<div class="rp-grid">'+g[2].map(f=>field(f,d[f[0]])).join('')+'</div></section>';
+    }
     view();
   }
   return {mount,allowLeave:function(){if(!dirty)return true;if(!confirm('В профиле есть несохранённые изменения. Выйти без сохранения?'))return false;dirty=false;return true;}};

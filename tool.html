@@ -77,7 +77,6 @@
     contactBlock='<div class="public-pickups"><p><b>Рабочий телефон:</b> <a href="tel:'+owner.phone.replace(/[^\d+]/g,'')+'">'+esc(owner.phone)+'</a></p>'+
       (rd.contact_name?'<p>Контакт: '+esc(rd.contact_name)+(rd.contact_role?' · '+esc(rd.contact_role):'')+'</p>':'')+
       (rd.public_email?'<p>Email: '+esc(rd.public_email)+'</p>':'')+
-      ['website','vk'].map(function(k){return /^https?:\/\/[^\s]+$/i.test(rd[k]||'')?'<p><a target="_blank" rel="noopener noreferrer" href="'+esc(rd[k])+'">'+(k==='vk'?'Страница ВК':'Сайт проката')+' ↗</a></p>':'';}).join('')+
       ((publicRental.locations||[]).length?'<details><summary>Все точки выдачи арендодателя ('+publicRental.locations.length+')</summary><p class="muted">Наличие этого инструмента в конкретной точке уточняйте у арендодателя.</p>'+publicRental.locations.map(function(p){return '<p><b>'+esc(p.name)+'</b><br>'+esc(p.city+', '+p.address)+(p.hours?'<br>'+esc(p.hours):'')+(p.phone?'<br>Телефон: '+esc(p.phone):'')+(p.directions?'<br>'+esc(p.directions):'')+'<br><a target="_blank" rel="noopener noreferrer" href="https://yandex.ru/maps/?text='+encodeURIComponent(p.city+', '+p.address)+'">На карте ↗</a></p>';}).join('')+'</details>':'')+'</div>';
   }
   var dep = depositOf(ad);
