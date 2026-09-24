@@ -509,6 +509,34 @@ function mountAppTopBanner(container){
     if (sessionStorage.getItem('prokat_app_banner_closed')) return;
   } catch(e){}
 
+  // Проверяем авторизованного пользователя
+  let userEmail = '';
+  try {
+    const s = JSON.parse(localStorage.getItem('iva_sess') || 'null');
+    if (s && s.me) userEmail = String(s.me).toLowerCase();
+  } catch(e){}
+  if (!userEmail) {
+    try {
+      if (typeof getUser === 'function') {
+        const u = getUser();
+        if (u && u.email) userEmail = String(u.email).toLowerCase();
+      }
+      if (!userEmail && typeof isAuthed === 'function' && isAuthed()) {
+        const sess = typeof getSess === 'function' ? getSess() : null;
+        if (sess && sess.user && sess.user.email) userEmail = String(sess.user.email).toLowerCase();
+      }
+    } catch(e){}
+  }
+
+  // Для владельца и известных пользователей приложения (eclips.ru@mail.ru),
+  // если в браузере еще не зафиксирована актуальная 10.12, считаем установленной прошлую версию (10.11),
+  // чтобы сразу предложить «Обновление удобнее»
+  if (userEmail === 'eclips.ru@mail.ru') {
+    if (!installedVer) {
+      installedVer = '10.11';
+    }
+  }
+
   // Если приложение уже установлено и версия актуальна — плашку НЕ показываем
   if (installedVer && cmpAppVer(installedVer, CURRENT_APP_VERSION) >= 0) {
     return;
