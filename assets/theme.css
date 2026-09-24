@@ -587,3 +587,170 @@ select.inp{cursor:pointer;appearance:none;
 .review-callout{padding:14px 18px;border-radius:var(--r);background:var(--field);border:1px dashed var(--line);color:var(--gr);font-size:13.5px;margin:14px 0;line-height:1.5}
 .review-chief-actions{display:flex;gap:8px;margin-top:10px}
 
+/* ---------- Верхняя плашка приложения («В приложении удобней» / «Обновление удобнее») ---------- */
+.app-top-banner {
+  position: relative;
+  z-index: 100;
+  background: linear-gradient(90deg, #15181F 0%, #1D212B 100%);
+  border-bottom: 1px solid rgba(255, 143, 31, 0.45);
+  color: var(--tx);
+  overflow: hidden;
+  max-height: 80px;
+  opacity: 1;
+  transform: translateY(0);
+  transition: max-height 0.38s cubic-bezier(0.4, 0, 0.2, 1),
+              opacity 0.32s ease,
+              transform 0.35s cubic-bezier(0.4, 0, 0.2, 1),
+              padding 0.35s ease;
+  box-shadow: 0 4px 18px rgba(0,0,0,0.4);
+}
+
+.app-top-banner.closing {
+  max-height: 0 !important;
+  opacity: 0 !important;
+  transform: translateY(-100%) !important;
+  border-bottom-color: transparent !important;
+  padding-top: 0 !important;
+  padding-bottom: 0 !important;
+  pointer-events: none;
+}
+
+.app-tb-wrap {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  gap: 8px;
+  min-height: 48px;
+}
+
+.app-tb-left {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-width: 0;
+  flex: 1;
+  text-decoration: none;
+  color: inherit;
+}
+
+.app-tb-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  flex-shrink: 0;
+  object-fit: cover;
+  background: #101217;
+}
+
+.app-tb-text {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  line-height: 1.15;
+}
+
+.app-tb-title {
+  font-size: 13.5px;
+  font-weight: 700;
+  color: var(--tx);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.app-tb-title .app-tb-star {
+  color: var(--or);
+  font-size: 12px;
+}
+
+.app-tb-sub {
+  font-size: 11px;
+  color: var(--gr);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-top: 2px;
+}
+
+.app-tb-right {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.app-tb-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--or);
+  color: #fff !important;
+  font-size: 12px;
+  font-weight: 700;
+  padding: 6px 13px;
+  border-radius: 14px;
+  text-decoration: none;
+  white-space: nowrap;
+  box-shadow: 0 2px 8px rgba(255, 143, 31, 0.35);
+  transition: transform 0.15s, background-color 0.15s;
+}
+
+.app-tb-btn:active {
+  transform: scale(0.96);
+}
+
+.app-tb-close {
+  background: transparent;
+  border: none;
+  color: var(--g2);
+  font-size: 20px;
+  line-height: 1;
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  padding: 0;
+  border-radius: 50%;
+}
+
+.app-tb-close:hover {
+  color: var(--tx);
+  background: rgba(255,255,255,0.06);
+}
+
+.app-tb-progress {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: rgba(255,255,255,0.08);
+}
+
+.app-tb-bar {
+  height: 100%;
+  width: 100%;
+  background: var(--or);
+  transform-origin: left center;
+  animation: appTbCountdown 5s linear forwards;
+}
+
+@keyframes appTbCountdown {
+  from { width: 100%; }
+  to { width: 0%; }
+}
+
+@media (min-width: 769px) {
+  .app-top-banner {
+    display: none !important;
+  }
+}
+
+

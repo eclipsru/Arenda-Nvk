@@ -475,11 +475,138 @@ function bindSoon(){
   });
 }
 
+/* ---------- Верхняя плашка приложения («В приложении удобней» / «Обновление удобнее») ---------- */
+const CURRENT_APP_VERSION = '10.12';
+const APP_DOWNLOAD_URL = 'https://eclipsru.github.io/Arenda-Nvk/ProkatInstrumenta.apk';
+
+function cmpAppVer(v1, v2){
+  if (!v1 || !v2) return 0;
+  const p1 = String(v1).replace(/[^0-9.]/g, '').split('.').map(Number);
+  const p2 = String(v2).replace(/[^0-9.]/g, '').split('.').map(Number);
+  const len = Math.max(p1.length, p2.length);
+  for (let i = 0; i < len; i++){
+    const a = p1[i] || 0, b = p2[i] || 0;
+    if (a > b) return 1;
+    if (a < b) return -1;
+  }
+  return 0;
+}
+
+function isMobileDevice(){
+  return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || window.innerWidth <= 768;
+}
+
+function isInsideNativeApp(){
+  return !!(window.IS_PROKAT_APP || window.isNativeApp || /ProkatApp|ProkatInstrumenta/i.test(navigator.userAgent) || location.search.indexOf('from_app=1') !== -1);
+}
+
+function mountAppTopBanner(container){
+  if (!isMobileDevice() || isInsideNativeApp()) return;
+
+  let installedVer = null;
+  try {
+    installedVer = localStorage.getItem('prokat_app_installed_ver');
+    if (sessionStorage.getItem('prokat_app_banner_closed')) return;
+  } catch(e){}
+
+  // Если приложение уже установлено и версия актуальна — плашку НЕ показываем
+  if (installedVer && cmpAppVer(installedVer, CURRENT_APP_VERSION) >= 0) {
+    return;
+  }
+
+  // Если версия старее текущей — «Обновление удобнее», иначе «В приложении удобней»
+  const isUpdate = !!(installedVer && cmpAppVer(CURRENT_APP_VERSION, installedVer) > 0);
+
+  const titleText = isUpdate ? 'Обновление удобнее' : 'В приложении удобней';
+  const subText = isUpdate ? 'Новая версия: отзывы, рейтинг и точки выдачи' : 'Быстрый заказ, избранное и чат с прокатом';
+  const btnText = isUpdate ? 'Обновить' : 'Скачать';
+
+  const banner = document.createElement('div');
+  banner.id = 'appTopBanner';
+  banner.className = 'app-top-banner';
+  banner.innerHTML =
+    '<div class="app-tb-wrap">' +
+      '<a class="app-tb-left" href="' + esc(APP_DOWNLOAD_URL) + '" id="appTbLink">' +
+        '<img class="app-tb-icon" src="assets/logo.png" alt="Ива">' +
+        '<div class="app-tb-text">' +
+          '<b class="app-tb-title">' + esc(titleText) + ' <span class="app-tb-star">★</span></b>' +
+          '<span class="app-tb-sub">' + esc(subText) + '</span>' +
+        '</div>' +
+      '</a>' +
+      '<div class="app-tb-right">' +
+        '<a class="app-tb-btn" href="' + esc(APP_DOWNLOAD_URL) + '" id="appTbBtn">' + esc(btnText) + '</a>' +
+        '<button class="app-tb-close" id="appTbClose" aria-label="Закрыть">×</button>' +
+      '</div>' +
+    '</div>' +
+    '<div class="app-tb-progress"><div class="app-tb-bar"></div></div>';
+
+  if (container && container.firstChild) {
+    container.insertBefore(banner, container.firstChild);
+  } else if (container) {
+    container.appendChild(banner);
+  } else {
+    document.body.insertBefore(banner, document.body.firstChild);
+  }
+
+  let timer = null;
+  const dismiss = (markInstalled) => {
+    if (timer) { clearTimeout(timer); timer = null; }
+    if (markInstalled) {
+      try { localStorage.setItem('prokat_app_installed_ver', CURRENT_APP_VERSION); } catch(e){}
+    }
+    banner.classList.add('closing');
+    setTimeout(() => {
+      if (banner.parentNode) banner.parentNode.removeChild(banner);
+    }, 400);
+  };
+
+  const recordDownload = () => {
+    try { localStorage.setItem('prokat_app_installed_ver', CURRENT_APP_VERSION); } catch(e){}
+    dismiss(true);
+  };
+
+  const btn = banner.querySelector('#appTbBtn');
+  const link = banner.querySelector('#appTbLink');
+  const close = banner.querySelector('#appTbClose');
+
+  if (btn) btn.addEventListener('click', recordDownload);
+  if (link) link.addEventListener('click', recordDownload);
+
+  if (close) {
+    close.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      try { sessionStorage.setItem('prokat_app_banner_closed', '1'); } catch(e){}
+      dismiss(false);
+    });
+  }
+
+  // Ссылка исчезает через ровно 5 секунд
+  timer = setTimeout(() => {
+    dismiss(false);
+  }, 5000);
+}
+
+// Запоминаем скачивание при любом клике по ссылке на APK на всем сайте
+document.addEventListener('click', function(e){
+  const a = e.target.closest ? e.target.closest('a[href*="ProkatInstrumenta.apk"]') : null;
+  if (a) {
+    try { localStorage.setItem('prokat_app_installed_ver', CURRENT_APP_VERSION); } catch(err){}
+    const b = document.getElementById('appTopBanner');
+    if (b) {
+      b.classList.add('closing');
+      setTimeout(() => { if (b.parentNode) b.parentNode.removeChild(b); }, 400);
+    }
+  }
+});
+
 /* ---------- Инициализация общего каркаса ---------- */
 function mountChrome(active, q){
   const h = $('hdr');   if (h) h.innerHTML = headerHTML(active, q);
   const b = $('bnav');  if (b) b.innerHTML = bnavHTML(active);
   const f = $('ftr');   if (f) f.innerHTML = footHTML();
+
+  mountAppTopBanner(h);
 
   paintFavCount();
   bindFavs();
