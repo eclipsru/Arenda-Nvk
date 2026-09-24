@@ -447,20 +447,118 @@
   }
 
   
-  /* ---------- Рассылка по РФ (Вариант 1: Под реальную заявку) ---------- */
+  /* ---------- Рассылка по РФ (Вариант 1: Под реальную заявку) - РАСШИРЕННАЯ ВЕРСИЯ ---------- */
+  const OUTREACH_DEFAULT_TEMPLATE = `Здравствуйте, {{name}}! Это единый сервис проката инструмента ({{city}}).
+
+У нас прямо сейчас висит подтвержденная клиентская заявка на аренду: {{tool}} x1 на {{days}} суток.
+Клиент готов внести оплату и залог.
+
+Мы бесплатно передаем этот заказ вам, так как наши основные склады в городе загружены.
+Заберите прямой контакт клиента по ссылке:
+👉 {{link}}
+
+(Ссылка активна 40 минут. Заказ заберет первый подтвердивший прокат)`;
+
+  // Расширенный список городов РФ — 150+ городов, включая Ростовскую область и все миллионники
+  const RUS_CITIES_EXTENDED = [
+    // Миллионники и крупные областные центры
+    "Москва","Санкт-Петербург","Новосибирск","Екатеринбург","Казань","Нижний Новгород","Челябинск","Самара","Омск","Ростов-на-Дону",
+    "Уфа","Красноярск","Воронеж","Пермь","Волгоград","Краснодар","Саратов","Тюмень","Тольятти","Ижевск",
+    "Барнаул","Ульяновск","Иркутск","Хабаровск","Ярославль","Владивосток","Махачкала","Томск","Оренбург","Кемерово",
+    "Новокузнецк","Рязань","Астрахань","Набережные Челны","Пенза","Липецк","Киров","Чебоксары","Калининград","Тула",
+    "Курск","Севастополь","Сочи","Ставрополь","Улан-Удэ","Тверь","Магнитогорск","Иваново","Брянск","Белгород",
+    "Сургут","Владимир","Архангельск","Чита","Калуга","Смоленск","Волжский","Курган","Орёл","Череповец",
+    "Вологда","Владикавказ","Саранск","Мурманск","Тамбов","Грозный","Стерлитамак","Кострома","Петрозаводск","Нижневартовск",
+    "Йошкар-Ола","Новороссийск","Балаково","Химки","Нальчик","Сыктывкар","Шахты","Дзержинск","Орск","Таганрог",
+    "Нижнекамск","Братск","Благовещенск","Энгельс","Ангарск","Королёв","Великий Новгород","Мытищи","Старый Оскол","Люберцы",
+    "Псков","Бийск","Южно-Сахалинск","Прокопьевск","Армавир","Подольск","Северодвинск","Абакан","Норильск","Сызрань",
+    "Волгодонск","Новочеркасск","Каменск-Шахтинский","Батайск","Новошахтинск","Азов","Гуково","Сальск","Донецк","Белая Калитва",
+    "Красный Сулин","Миллерово","Аксай","Зерноград","Морозовск","Зверево","Пролетарск","Цимлянск","Семикаракорск","Константиновск",
+    // Ростовская область - дополнительные
+    "Матвеев Курган","Чалтырь","Персиановский","Новоалександровск","Орловский","Зимовники","Кагальницкая","Тацинская","Обливская","Вешенская",
+    "Багаевская","Егорлыкская","Мечетинская","Целина","Песчанокопское","Ремонтное","Дубовское","Заветное","Гигант",
+    // Юг России - популярные для проката
+    "Кропоткин","Тихорецк","Геленджик","Анапа","Майкоп","Ейск","Крымск","Славянск-на-Кубани","Лабинск","Курганинск",
+    "Апшеронск","Горячий Ключ","Туапсе","Белореченск","Усть-Лабинск","Кореновск","Тимашевск","Приморско-Ахтарск","Темрюк","Абинск",
+    "Новокубанск","Гулькевичи","Каневская","Ленинградская","Кущевская","Павловская","Староминская","Динская","Северская",
+    // Крым и новые регионы
+    "Симферополь","Ялта","Евпатория","Керчь","Феодосия","Судак","Алушта","Бахчисарай","Джанкой","Армянск",
+    // Кавказ
+    "Пятигорск","Кисловодск","Ессентуки","Минеральные Воды","Железноводск","Лермонтов","Невинномысск","Черкесск","Моздок"
+  ];
+
   let OUTREACH_CACHE = { landlords: [], orders: [] };
-  let OUTREACH_STATE = { selectedCity: '', selectedOrderId: '', previewName: '', sending: false };
+  let OUTREACH_STATE = { selectedCity: '', selectedOrderId: '', citySearch: '', template: null, sending: false };
+
+  function getOutreachTemplate(){
+    if (OUTREACH_STATE.template) return OUTREACH_STATE.template;
+    try {
+      const saved = localStorage.getItem('iva_outreach_template_v2');
+      if (saved && saved.trim().length > 10){ OUTREACH_STATE.template = saved; return saved; }
+    } catch(e){}
+    OUTREACH_STATE.template = OUTREACH_DEFAULT_TEMPLATE;
+    return OUTREACH_DEFAULT_TEMPLATE;
+  }
+  function saveOutreachTemplate(tpl){
+    OUTREACH_STATE.template = tpl;
+    try { localStorage.setItem('iva_outreach_template_v2', tpl); } catch(e){}
+  }
+  function getCustomCities(){
+    try { const s = localStorage.getItem('iva_custom_cities_v2'); if (s) return JSON.parse(s); } catch(e){}
+    return [];
+  }
+  function saveCustomCities(arr){
+    try { localStorage.setItem('iva_custom_cities_v2', JSON.stringify(arr)); } catch(e){}
+  }
+  function getAllCitiesList(citiesMap){
+    const custom = getCustomCities();
+    const baseFromDb = Object.keys(citiesMap || {});
+    const mergedSet = {};
+    const merged = [];
+    [...baseFromDb, ...RUS_CITIES_EXTENDED, ...custom].forEach(function(c){
+      const t = (c||'').trim(); if (!t) return; const key = t.toLowerCase();
+      if (!mergedSet[key]){ mergedSet[key]=true; merged.push(t); }
+    });
+    return merged.sort(function(a,b){ return a.localeCompare(b,'ru'); });
+  }
+  function applyOutreachTemplate(tpl, data){
+    let s = tpl;
+    for (const k in data){
+      const v = data[k]==null ? '' : String(data[k]);
+      const re = new RegExp('\\{\\{\\s*'+k+'\\s*\\}\\}','gi');
+      s = s.replace(re, v);
+    }
+    return s;
+  }
+  function buildOutreachMessage(landlord, city, order){
+    const tpl = getOutreachTemplate();
+    const toolName = order ? (order.tools || 'Инструмент') : 'Виброплита 80-90 кг';
+    const toolDays = order ? (order.days || 1) : 1;
+    const orderId = order ? order.id : '49';
+    const claimLink = 'https://eclipsru.github.io/Arenda-Nvk/claim.html?id=' + orderId;
+    const data = {
+      name: landlord ? landlord.name : 'СтройПрокат',
+      city: city || 'ваш город',
+      tool: toolName,
+      days: toolDays,
+      link: claimLink,
+      order_id: orderId,
+      phone: landlord ? landlord.phone : '',
+      address: landlord ? (landlord.address||'') : '',
+      source: landlord ? (landlord.source||'') : ''
+    };
+    return applyOutreachTemplate(tpl, data);
+  }
 
   function viewOutreach(){
-    // Собираем уникальные города
     const citiesMap = {};
-    (OUTREACH_CACHE.landlords || []).forEach(function(l){
-      citiesMap[l.city] = (citiesMap[l.city] || 0) + 1;
-    });
-    const cityList = Object.keys(citiesMap).sort();
+    (OUTREACH_CACHE.landlords || []).forEach(function(l){ citiesMap[l.city] = (citiesMap[l.city]||0)+1; });
+    const allCities = getAllCitiesList(citiesMap);
+    const search = (OUTREACH_STATE.citySearch||'').toLowerCase().trim();
+    const filteredCities = search ? allCities.filter(function(c){ return c.toLowerCase().includes(search); }) : allCities;
 
     const orders = (D.orders || []).filter(function(o){ return o.status !== 'cancelled'; });
-    const selCity = OUTREACH_STATE.selectedCity || cityList[0] || '';
+    const selCity = OUTREACH_STATE.selectedCity || filteredCities[0] || allCities[0] || '';
     const basesInCity = (OUTREACH_CACHE.landlords || []).filter(function(l){ return l.city === selCity; });
 
     let orderOptions = '<option value="">-- Выберите реальный заказ клиента --</option>';
@@ -470,46 +568,81 @@
     });
 
     let cityOptions = '';
-    cityList.forEach(function(c){
+    filteredCities.forEach(function(c){
       const sel = (c === selCity) ? ' selected' : '';
-      cityOptions += '<option value="' + esc(c) + '"' + sel + '>' + esc(c) + ' (' + citiesMap[c] + ' баз)</option>';
+      const cnt = citiesMap[c] || 0;
+      cityOptions += '<option value="' + esc(c) + '"' + sel + '>' + esc(c) + ' (' + cnt + ' баз)</option>';
     });
 
-    // Получаем текущий выбранный заказ
     const curOrder = orders.find(function(o){ return String(o.id) === String(OUTREACH_STATE.selectedOrderId); }) || orders[0] || null;
-    const sampleLandlord = basesInCity[0] || { name: 'СтройПрокат', phone: '79XXXXXXXXX' };
+    const sampleLandlord = basesInCity[0] || { name: 'СтройПрокат', phone: '79081730020', address: 'ул. Примерная, 1' };
 
-    const toolName = curOrder ? (curOrder.tools || 'Виброплита 80-90 кг') : 'Виброплита 80-90 кг';
-    const toolDays = curOrder ? (curOrder.days || 1) : 2;
-    const orderId = curOrder ? curOrder.id : '49';
-    const claimLink = 'https://eclipsru.github.io/Arenda-Nvk/claim.html?id=' + orderId;
+    const sampleMsg = buildOutreachMessage(sampleLandlord, selCity, curOrder);
+    const tplCurrent = getOutreachTemplate();
 
-    const sampleMsg = 'Здравствуйте, ' + sampleLandlord.name + '! Это единый сервис проката инструмента (' + (selCity || 'ваш город') + ').\n\n' +
-      'У нас прямо сейчас висит подтвержденная клиентская заявка на аренду: ' + toolName + ' на ' + toolDays + ' суток.\n' +
-      'Клиент готов внести оплату и залог.\n\n' +
-      'Мы бесплатно передаем этот заказ вам, так как наши основные склады в городе загружены.\n' +
-      'Заберите прямой контакт клиента по ссылке:\n' +
-      '👉 ' + claimLink + '\n\n' +
-      '(Ссылка активна 40 минут. Заказ заберет первый подтвердивший прокат)';
+    return '<div class="sect-h"><h2 style="font-size:17px">🚀 Рассылка по базам проката (Вариант 1: Под реальную заявку)</h2>' +
+        '<span class="cnt" style="margin-left:auto">' + allCities.length + ' городов · ' + (OUTREACH_CACHE.landlords||[]).length + ' баз</span></div>' +
+      '<div style="background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:18px;margin-bottom:20px;">' +
 
-    return '<div class="sect-h"><h2 style="font-size:17px">🚀 Рассылка по базам проката (Вариант 1: Под реальную заявку)</h2></div>' +
-      '<div style="background:var(--card);border:1px solid var(--bdr);border-radius:var(--r-m);padding:18px;margin-bottom:20px;">' +
-        '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:16px;margin-bottom:16px;">' +
+        '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:16px;margin-bottom:18px;">' +
           '<div>' +
-            '<label style="display:block;font-size:13px;font-weight:600;color:var(--g2);margin-bottom:6px">1. Выберите город рассылки:</label>' +
-            '<select id="outreachCitySelect" class="f-inp" style="width:100%">' + cityOptions + '</select>' +
-            '<div class="small muted" style="margin-top:4px">Найдено в базе 2ГИС/Яндекс: <b>' + basesInCity.length + ' прокатов</b></div>' +
+            '<label style="display:block;font-size:13px;font-weight:600;color:var(--g2);margin-bottom:6px">1. Город рассылки (расширенный список):</label>' +
+            '<div style="display:flex;gap:8px">' +
+              '<select id="outreachCitySelect" class="f-inp" style="flex:1">' + cityOptions + '</select>' +
+            '</div>' +
+            '<div style="display:flex;gap:6px;margin-top:8px">' +
+              '<input id="outreachCitySearch" class="f-inp" placeholder="🔍 Поиск города..." value="' + esc(OUTREACH_STATE.citySearch||'') + '" style="flex:1">' +
+              '<button id="btnClearCitySearch" class="btn sm sec" title="Очистить поиск">✕</button>' +
+            '</div>' +
+            '<div class="small muted" style="margin-top:6px;display:flex;gap:8px;flex-wrap:wrap;align-items:center">' +
+              '<span>В базе <b>' + basesInCity.length + '</b> прокатов в городе <b>' + esc(selCity) + '</b></span>' +
+              '<span>·</span>' +
+              '<span>Всего городов: <b>' + allCities.length + '</b></span>' +
+            '</div>' +
+            '<div style="margin-top:10px;display:flex;gap:6px">' +
+              '<input id="outreachNewCity" class="f-inp" placeholder="+ Добавить новый город" style="flex:1;font-size:13px">' +
+              '<button id="btnAddCustomCity" class="btn sm sec">Добавить</button>' +
+            '</div>' +
           '</div>' +
           '<div>' +
             '<label style="display:block;font-size:13px;font-weight:600;color:var(--g2);margin-bottom:6px">2. Горячая заявка клиента:</label>' +
             '<select id="outreachOrderSelect" class="f-inp" style="width:100%">' + orderOptions + '</select>' +
             '<div class="small muted" style="margin-top:4px">Контакты клиента откроются первому нажавшему ссылку</div>' +
+            '<div style="margin-top:12px;background:var(--field);border:1px solid var(--line);border-radius:8px;padding:10px">' +
+              '<div style="font-size:12px;color:var(--g2);margin-bottom:4px">Ссылка для клиента:</div>' +
+              '<div style="font-size:13px;word-break:break-all">https://eclipsru.github.io/Arenda-Nvk/claim.html?id=' + esc(curOrder ? curOrder.id : '49') + '</div>' +
+            '</div>' +
           '</div>' +
         '</div>' +
 
+        '<div style="margin-bottom:18px;border:1px solid var(--line);border-radius:10px;padding:14px;background:var(--field)">' +
+          '<label style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:8px">' +
+            '<span style="font-size:13px;font-weight:700;color:var(--tx)">✏️ Шаблон сообщения (редактируемый):</span>' +
+            '<span class="small muted">переменные: {{name}} {{city}} {{tool}} {{days}} {{link}} {{order_id}}</span>' +
+          '</label>' +
+          '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px">' +
+            '<button class="chip" data-ph="{{name}}" style="font-size:12px">+ {{name}}</button>' +
+            '<button class="chip" data-ph="{{city}}" style="font-size:12px">+ {{city}}</button>' +
+            '<button class="chip" data-ph="{{tool}}" style="font-size:12px">+ {{tool}}</button>' +
+            '<button class="chip" data-ph="{{days}}" style="font-size:12px">+ {{days}}</button>' +
+            '<button class="chip" data-ph="{{link}}" style="font-size:12px">+ {{link}}</button>' +
+            '<button class="chip" data-ph="{{order_id}}" style="font-size:12px">+ {{order_id}}</button>' +
+            '<button class="chip" data-ph="{{phone}}" style="font-size:12px">+ {{phone}}</button>' +
+            '<button class="chip" data-ph="{{address}}" style="font-size:12px">+ {{address}}</button>' +
+          '</div>' +
+          '<textarea id="outreachTemplateEdit" class="f-inp" rows="9" style="width:100%;font-family:monospace;font-size:13.5px;line-height:1.5;white-space:pre-wrap">' + esc(tplCurrent) + '</textarea>' +
+          '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:10px">' +
+            '<button id="btnSaveTpl" class="btn sm" style="background:var(--grn);font-weight:700">💾 Сохранить шаблон</button>' +
+            '<button id="btnResetTpl" class="btn sm sec">↺ Сбросить к дефолту</button>' +
+            '<button id="btnCopyTpl" class="btn sm sec">📋 Копировать</button>' +
+            '<span id="tplStatus" class="small" style="color:var(--grn);font-weight:600"></span>' +
+          '</div>' +
+          '<div class="small muted" style="margin-top:8px;line-height:1.4">Подсказка: <b>{{name}}</b> — название проката, <b>{{city}}</b> — город, <b>{{tool}}</b> — инструмент из заявки, <b>{{days}}</b> — срок, <b>{{link}}</b> — ссылка claim, <b>{{order_id}}</b> — номер заказа. Шаблон сохраняется в браузере (localStorage) и применяется ко всем сообщениям.</div>' +
+        '</div>' +
+
         '<div style="margin-bottom:16px;">' +
-          '<label style="display:block;font-size:13px;font-weight:600;color:var(--g2);margin-bottom:6px">Предпросмотр сообщения в WhatsApp (для первой базы):</label>' +
-          '<div style="background:#0f172a;border:1px solid #1e293b;border-radius:var(--r-s);padding:14px;font-size:13.5px;line-height:1.6;white-space:pre-wrap;color:#e2e8f0;font-family:monospace;">' +
+          '<label style="display:block;font-size:13px;font-weight:600;color:var(--g2);margin-bottom:6px">👁️ Предпросмотр сообщения в WhatsApp (для первой базы):</label>' +
+          '<div style="background:#0f172a;border:1px solid #1e293b;border-radius:10px;padding:14px;font-size:13.5px;line-height:1.6;white-space:pre-wrap;color:#e2e8f0;font-family:monospace;">' +
             esc(sampleMsg) +
           '</div>' +
         '</div>' +
@@ -521,23 +654,20 @@
           '<a id="btnTestSingleWa" href="https://wa.me/' + esc(sampleLandlord.phone) + '?text=' + encodeURIComponent(sampleMsg) + '" target="_blank" class="btn sec">' +
             '💬 Тест на свой номер WhatsApp' +
           '</a>' +
+          '<button id="btnCopyAllLinks" class="btn sec sm">📋 Скопировать все ссылки WA</button>' +
         '</div>' +
         '<div id="outreachStatus" style="margin-top:14px;font-size:13px;"></div>' +
       '</div>' +
 
-      '<div class="sect-h"><h2 style="font-size:15px">Базы проката в городе ' + esc(selCity) + '</h2></div>' +
+      '<div class="sect-h"><h2 style="font-size:15px">Базы проката в городе ' + esc(selCity) + '</h2>' +
+        '<span class="cnt">' + basesInCity.length + ' шт.</span>' +
+        (basesInCity.length ? '<button id="btnExportCity" class="btn sm sec" style="margin-left:auto">Экспорт CSV</button>' : '') +
+      '</div>' +
       '<div class="tbl-wrap"><table class="tbl"><thead><tr>' +
         '<th>Название организации</th><th>Телефон (WhatsApp)</th><th>Адрес</th><th>Источник</th><th>Статус</th><th>Действие</th>' +
       '</tr></thead><tbody>' +
       (basesInCity.length ? basesInCity.map(function(l){
-        const itemMsg = 'Здравствуйте, ' + l.name + '! Это единый сервис проката инструмента (' + (selCity || 'город') + ').\n\n' +
-          'У нас прямо сейчас висит подтвержденная клиентская заявка на аренду: ' + toolName + ' на ' + toolDays + ' суток.\n' +
-          'Клиент готов внести оплату и залог.\n\n' +
-          'Мы бесплатно передаем этот заказ вам, так как наши основные склады в городе загружены.\n' +
-          'Заберите прямой контакт клиента по ссылке:\n' +
-          '👉 ' + claimLink + '\n\n' +
-          '(Ссылка активна 40 минут. Заказ заберет первый подтвердивший прокат)';
-
+        const itemMsg = buildOutreachMessage(l, selCity, curOrder);
         const waUrl = 'https://wa.me/' + l.phone + '?text=' + encodeURIComponent(itemMsg);
         return '<tr>' +
           '<td><b>' + esc(l.name) + '</b></td>' +
@@ -547,8 +677,18 @@
           '<td class="small">' + (l.status === 'sent' ? '<span style="color:var(--grn)">✓ Отправлено</span>' : '<span style="color:var(--yel)">Новый</span>') + '</td>' +
           '<td><a href="' + waUrl + '" target="_blank" class="mini-btn ok">Открыть в WA</a></td>' +
         '</tr>';
-      }).join('') : '<tr><td colspan="6" class="muted" style="text-align:center;padding:20px;">В этом городе пока нет баз. Загрузите базу через парсер.</td></tr>') +
-      '</tbody></table></div>';
+      }).join('') : '<tr><td colspan="6" class="muted" style="text-align:center;padding:20px;">В этом городе пока нет баз. Добавьте базы через парсер или выберите другой город из расширенного списка (' + allCities.length + ' городов доступно).</td></tr>') +
+      '</tbody></table></div>' +
+
+      '<div style="margin-top:18px;background:var(--card);border:1px dashed var(--line);border-radius:10px;padding:14px">' +
+        '<div style="font-size:13px;font-weight:600;margin-bottom:6px">📊 Статистика по городам (топ 20):</div>' +
+        '<div style="display:flex;gap:8px;flex-wrap:wrap">' +
+          Object.entries(citiesMap).sort(function(a,b){return b[1]-a[1];}).slice(0,20).map(function(pair){
+            return '<span class="badge act" style="font-size:12px">' + esc(pair[0]) + ': ' + pair[1] + '</span>';
+          }).join('') +
+          (Object.keys(citiesMap).length===0 ? '<span class="small muted">Пока нет данных — добавьте базы</span>' : '') +
+        '</div>' +
+      '</div>';
   }
 
 /* ---------- Рендер ---------- */
@@ -580,6 +720,33 @@
   }
 
   /* ---------- Обработчики ---------- */
+  document.addEventListener('input', function(e){
+    if (e.target.id === 'outreachCitySearch'){
+      OUTREACH_STATE.citySearch = e.target.value;
+      clearTimeout(window._outreachSearchTimer);
+      window._outreachSearchTimer = setTimeout(function(){ render(); }, 250);
+    } else if (e.target.id === 'outreachTemplateEdit'){
+      const val = e.target.value;
+      OUTREACH_STATE.template = val;
+      clearTimeout(window._outreachTplTimer);
+      window._outreachTplTimer = setTimeout(function(){
+        try {
+          const citiesMap = {};
+          (OUTREACH_CACHE.landlords || []).forEach(function(l){ citiesMap[l.city] = (citiesMap[l.city]||0)+1; });
+          const allCities = getAllCitiesList(citiesMap);
+          const orders = (D.orders || []).filter(function(o){ return o.status !== 'cancelled'; });
+          const selCity = OUTREACH_STATE.selectedCity || allCities[0] || '';
+          const basesInCity = (OUTREACH_CACHE.landlords || []).filter(function(l){ return l.city === selCity; });
+          const curOrder = orders.find(function(o){ return String(o.id) === String(OUTREACH_STATE.selectedOrderId); }) || orders[0] || null;
+          const sampleLandlord = basesInCity[0] || { name: 'СтройПрокат', phone: '79081730020', address: 'ул. Примерная, 1' };
+          const msg = buildOutreachMessage(sampleLandlord, selCity, curOrder);
+          const allPreviews = document.querySelectorAll('div[style*="background:#0f172a"]');
+          if (allPreviews.length) allPreviews[0].textContent = msg;
+        } catch(err){}
+      }, 300);
+    }
+  });
+
   document.addEventListener('change', function(e){
     if (e.target.id === 'outreachCitySelect'){
       OUTREACH_STATE.selectedCity = e.target.value;
@@ -591,6 +758,143 @@
   });
 
   document.addEventListener('click', async function(e){
+    const phBtn = e.target.closest('[data-ph]');
+    if (phBtn && phBtn.closest('#root')){
+      const ta = $('outreachTemplateEdit');
+      if (ta){
+        const ph = phBtn.getAttribute('data-ph');
+        const start = ta.selectionStart || ta.value.length;
+        const end = ta.selectionEnd || ta.value.length;
+        const before = ta.value.substring(0, start);
+        const after = ta.value.substring(end);
+        ta.value = before + ph + after;
+        ta.selectionStart = ta.selectionEnd = start + ph.length;
+        ta.focus();
+        OUTREACH_STATE.template = ta.value;
+        ta.dispatchEvent(new Event('input', {bubbles:true}));
+      }
+      return;
+    }
+
+    if (e.target.id === 'btnClearCitySearch'){
+      OUTREACH_STATE.citySearch = '';
+      render();
+      return;
+    }
+    if (e.target.id === 'btnAddCustomCity'){
+      const inp = $('outreachNewCity');
+      const val = (inp && inp.value || '').trim();
+      if (!val){ toast('Введите название города'); return; }
+      if (val.length < 2){ toast('Слишком короткое название'); return; }
+      const custom = getCustomCities();
+      if (custom.map(function(c){return c.toLowerCase();}).includes(val.toLowerCase()) || RUS_CITIES_EXTENDED.map(function(c){return c.toLowerCase();}).includes(val.toLowerCase())){
+        toast('Город уже в списке');
+        OUTREACH_STATE.selectedCity = val;
+        OUTREACH_STATE.citySearch = '';
+        render();
+        return;
+      }
+      custom.push(val);
+      saveCustomCities(custom);
+      OUTREACH_STATE.selectedCity = val;
+      OUTREACH_STATE.citySearch = '';
+      toast('Город добавлен: ' + val);
+      render();
+      return;
+    }
+    if (e.target.id === 'btnSaveTpl'){
+      const ta = $('outreachTemplateEdit');
+      if (!ta){ return; }
+      const val = ta.value.trim();
+      if (val.length < 10){ toast('Шаблон слишком короткий'); return; }
+      saveOutreachTemplate(val);
+      const st = $('tplStatus');
+      if (st){ st.textContent = '✓ Сохранено'; setTimeout(function(){ st.textContent=''; }, 2000); }
+      toast('Шаблон сохранён');
+      render();
+      return;
+    }
+    if (e.target.id === 'btnResetTpl'){
+      if (!confirm('Сбросить шаблон к стандартному? Ваш текущий шаблон будет утерян.')) return;
+      try { localStorage.removeItem('iva_outreach_template_v2'); } catch(err){}
+      OUTREACH_STATE.template = OUTREACH_DEFAULT_TEMPLATE;
+      toast('Шаблон сброшен');
+      render();
+      return;
+    }
+    if (e.target.id === 'btnCopyTpl'){
+      const ta = $('outreachTemplateEdit');
+      if (!ta) return;
+      try {
+        navigator.clipboard.writeText(ta.value).then(function(){ toast('Скопировано в буфер'); }, function(){ ta.select(); document.execCommand('copy'); toast('Скопировано'); });
+      } catch(err){
+        ta.select(); document.execCommand('copy'); toast('Скопировано');
+      }
+      return;
+    }
+    if (e.target.id === 'btnCopyAllLinks'){
+      try {
+        const citiesMap = {};
+        (OUTREACH_CACHE.landlords || []).forEach(function(l){ citiesMap[l.city] = (citiesMap[l.city]||0)+1; });
+        const allCities = getAllCitiesList(citiesMap);
+        const orders = (D.orders || []).filter(function(o){ return o.status !== 'cancelled'; });
+        const selCity = OUTREACH_STATE.selectedCity || allCities[0] || '';
+        const basesInCity = (OUTREACH_CACHE.landlords || []).filter(function(l){ return l.city === selCity; });
+        const curOrder = orders.find(function(o){ return String(o.id) === String(OUTREACH_STATE.selectedOrderId); }) || orders[0] || null;
+        const links = basesInCity.map(function(l){
+          const msg = buildOutreachMessage(l, selCity, curOrder);
+          return 'https://wa.me/' + l.phone + '?text=' + encodeURIComponent(msg);
+        }).join('\n');
+        if (!links){ toast('Нет баз в этом городе'); return; }
+        navigator.clipboard.writeText(links).then(function(){ toast('Скопировано ' + basesInCity.length + ' ссылок'); }, function(){
+          const ta = document.createElement('textarea'); ta.value = links; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); ta.remove(); toast('Скопировано ' + basesInCity.length + ' ссылок');
+        });
+      } catch(err){ toast('Не удалось скопировать: ' + err.message); }
+      return;
+    }
+    if (e.target.id === 'btnLaunchOutreach'){
+      const citiesMap = {};
+      (OUTREACH_CACHE.landlords || []).forEach(function(l){ citiesMap[l.city] = (citiesMap[l.city]||0)+1; });
+      const allCities = getAllCitiesList(citiesMap);
+      const orders = (D.orders || []).filter(function(o){ return o.status !== 'cancelled'; });
+      const selCity = OUTREACH_STATE.selectedCity || allCities[0] || '';
+      const basesInCity = (OUTREACH_CACHE.landlords || []).filter(function(l){ return l.city === selCity; });
+      if (!basesInCity.length){ toast('В городе ' + selCity + ' нет баз для рассылки'); return; }
+      const curOrder = orders.find(function(o){ return String(o.id) === String(OUTREACH_STATE.selectedOrderId); }) || orders[0] || null;
+      const status = $('outreachStatus');
+      if (status){
+        status.innerHTML = '<div style="background:#0f172a;border:1px solid #1e293b;border-radius:8px;padding:12px">' +
+          '<b>🚀 Запуск рассылки: ' + basesInCity.length + ' баз в городе ' + esc(selCity) + '</b><br>' +
+          '<div class="small muted" style="margin-top:6px">Откроется первое окно WhatsApp. После отправки вернитесь и нажмите на следующую ссылку. Браузер блокирует массовое открытие вкладок — поэтому открываем по одному.</div>' +
+          '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:10px">' +
+          basesInCity.map(function(l, i){
+            const msg = buildOutreachMessage(l, selCity, curOrder);
+            const waUrl = 'https://wa.me/' + l.phone + '?text=' + encodeURIComponent(msg);
+            return '<a href="' + waUrl + '" target="_blank" class="mini-btn ok" style="font-size:12px">' + (i+1) + '. ' + esc(l.name) + '</a>';
+          }).join('') +
+          '</div></div>';
+      }
+      const first = basesInCity[0];
+      const firstMsg = buildOutreachMessage(first, selCity, curOrder);
+      window.open('https://wa.me/' + first.phone + '?text=' + encodeURIComponent(firstMsg), '_blank');
+      return;
+    }
+    if (e.target.id === 'btnExportCity'){
+      try {
+        const citiesMap = {};
+        (OUTREACH_CACHE.landlords || []).forEach(function(l){ citiesMap[l.city] = (citiesMap[l.city]||0)+1; });
+        const allCities = getAllCitiesList(citiesMap);
+        const selCity = OUTREACH_STATE.selectedCity || allCities[0] || '';
+        const basesInCity = (OUTREACH_CACHE.landlords || []).filter(function(l){ return l.city === selCity; });
+        const rows = [['Название','Телефон','Адрес','Источник','Статус']].concat(basesInCity.map(function(l){ return [l.name, l.phone, l.address||'', l.source||'', l.status||'']; }));
+        const csv = rows.map(function(r){ return r.map(function(c){ return '"' + String(c).replace(/"/g,'""') + '"'; }).join(','); }).join('\n');
+        const blob = new Blob([csv], {type:'text/csv;charset=utf-8;'});
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a'); a.href = url; a.download = 'bases_' + selCity + '.csv'; document.body.appendChild(a); a.click(); a.remove(); setTimeout(function(){ URL.revokeObjectURL(url); }, 1000);
+      } catch(err){ toast('Не удалось экспортировать: ' + err.message); }
+      return;
+    }
+
     const lr=e.target.closest('[data-review-application]');
     if(lr){ const a=D.landlordApps.find(x=>x.id===lr.dataset.reviewApplication);if(a)reviewLandlordDialog(a,refreshLandlords);return; }
     const refresh=e.target.closest('[data-refresh-landlords]');
