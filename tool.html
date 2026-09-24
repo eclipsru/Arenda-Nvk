@@ -163,6 +163,18 @@
           'Расходники (диски, буры, леска) — за счёт арендатора.' +
         '</p>' +
       '</div>' +
+
+      /* Отзывы и рейтинг */
+      '<div class="box reviews-box" id="reviewsBlock">' +
+        '<div class="reviews-head">' +
+          '<div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">' +
+            '<h3 style="margin:0">Отзывы об инструменте</h3>' +
+            '<div id="reviewsSummary"></div>' +
+          '</div>' +
+        '</div>' +
+        '<div id="reviewFormArea"></div>' +
+        '<div id="reviewsList"><div style="color:var(--g2);padding:10px 0">Загрузка отзывов…</div></div>' +
+      '</div>' +
     '</div>' +
 
     /* --- Правая колонка --- */
@@ -191,7 +203,7 @@
             '<div class="nm">' + esc(owner.name) +
               (owner.verified ? ' <span class="badge new" style="margin-left:4px">Проверен</span>' : '') +
             '</div>' +
-            '<div class="rt"><span class="star">★</span>' + owner.rating.toFixed(1) +
+            '<div class="rt" id="landlordRatingBlock"><span class="star">★</span>' + owner.rating.toFixed(1) +
               ' · ' + owner.deals + ' ' + plural(owner.deals,'сделка','сделки','сделок') + '</div>' +
           '</div>' +
         '</div>' +
@@ -625,6 +637,238 @@
     var b = $('favBtn');
     if (b) b.textContent = favHas(ad.id) ? 'В избранном ♥' : 'В избранное';
   };
+
+  /* ---------- Отзывы и рейтинг ---------- */
+  function formatReviewDate(iso){
+    if (!iso) return '';
+    try {
+      var d = new Date(iso);
+      return d.toLocaleDateString('ru-RU', { day:'numeric', month:'long', year:'numeric' });
+    } catch(e){
+      return String(iso).slice(0, 10);
+    }
+  }
+
+  async function initLandlordRating(ownerEmail){
+    try {
+      var lr = await getLandlordRating(ownerEmail);
+      var el = $('landlordRatingBlock');
+      if (!el) return;
+      if (lr && lr.reviews_count > 0){
+        el.innerHTML = '<span class="star">★</span>' + Number(lr.rating).toFixed(1) +
+          ' · ' + lr.reviews_count + ' ' + plural(lr.reviews_count, 'отзыв', 'отзыва', 'отзывов');
+      } else {
+        el.innerHTML = '<span class="star" style="color:var(--g2)">★</span>новый арендодатель';
+      }
+    } catch(e){}
+  }
+
+  async function initReviews(ad){
+    var listEl = $('reviewsList');
+    var formArea = $('reviewFormArea');
+    var summaryEl = $('reviewsSummary');
+    if (!listEl) return;
+
+    var reviews = [];
+    var can = { allowed: false, reason: 'auth_required' };
+
+    async function reloadData(){
+      var [rRes, cRes] = await Promise.allSettled([
+        loadToolReviews(ad.id),
+        isAuthed() ? canUserReview(ad.id) : Promise.resolve({ allowed: false, reason: 'auth_required' })
+      ]);
+      reviews = rRes.status === 'fulfilled' ? (rRes.value || []) : [];
+      can = cRes.status === 'fulfilled' ? (cRes.value || { allowed: false }) : { allowed: false };
+    }
+
+    await reloadData();
+
+    function renderSummary(){
+      var pub = reviews.filter(function(r){ return r.status === 'published'; });
+      if (!pub.length){
+        summaryEl.innerHTML = '<span class="badge" style="background:var(--field);color:var(--g2);border:1px solid var(--line)">Нет отзывов</span>';
+      } else {
+        var sum = pub.reduce(function(acc, r){ return acc + (Number(r.rating) || 0); }, 0);
+        var avg = (sum / pub.length).toFixed(1);
+        summaryEl.innerHTML = '<span class="rating-badge rating-badge-large"><span class="star">★</span> ' + avg + '</span>' +
+          '<span class="muted" style="font-size:14px">(' + pub.length + ' ' + plural(pub.length, 'отзыв', 'отзыва', 'отзывов') + ')</span>';
+      }
+    }
+
+    function renderForm(initialRating, initialText, isEdit){
+      var curRating = initialRating || 5;
+      var starsHTML = [1,2,3,4,5].map(function(s){
+        return '<button type="button" class="star-btn' + (s <= curRating ? ' on' : '') + '" data-star="' + s + '" title="' + s + ' звёзд">★</button>';
+      }).join('');
+
+      formArea.innerHTML = '<div class="review-form">' +
+        '<h4>' + (isEdit ? 'Редактировать отзыв' : 'Оставить отзыв об инструменте') + '</h4>' +
+        '<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">' +
+          '<span style="font-size:13.5px;color:var(--gr)">Ваша оценка:</span>' +
+          '<div class="stars-picker" id="starsPicker">' + starsHTML + '</div>' +
+        '</div>' +
+        '<textarea class="inp" id="reviewTextInput" maxlength="1000" placeholder="Поделитесь впечатлениями: состояние инструмента, удобство работы, комплектность…">' + esc(initialText || '') + '</textarea>' +
+        '<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">' +
+          '<button class="btn sm" id="submitReviewBtn">' + (isEdit ? 'Сохранить изменения' : 'Опубликовать отзыв') + '</button>' +
+          (isEdit ? '<button class="btn sec sm" id="cancelReviewEditBtn" type="button">Отмена</button>' : '') +
+          '<span class="small muted" style="margin-left:auto"><span id="reviewCharCount">' + (initialText || '').length + '</span>/1000</span>' +
+        '</div>' +
+        '<div id="reviewFormErr" style="color:var(--red);font-size:13px;margin-top:8px"></div>' +
+      '</div>';
+
+      var picker = $('starsPicker');
+      picker.addEventListener('click', function(e){
+        var btn = e.target.closest('[data-star]');
+        if (!btn) return;
+        curRating = Number(btn.dataset.star);
+        picker.querySelectorAll('[data-star]').forEach(function(b){
+          b.classList.toggle('on', Number(b.dataset.star) <= curRating);
+        });
+      });
+
+      var tx = $('reviewTextInput');
+      tx.addEventListener('input', function(){
+        $('reviewCharCount').textContent = this.value.length;
+      });
+
+      if (isEdit){
+        $('cancelReviewEditBtn').addEventListener('click', function(){
+          renderFormArea();
+        });
+      }
+
+      $('submitReviewBtn').addEventListener('click', async function(){
+        var btn = this;
+        var text = $('reviewTextInput').value.trim();
+        var errEl = $('reviewFormErr');
+        errEl.textContent = '';
+        btn.disabled = true;
+        btn.textContent = 'Сохраняем…';
+
+        try {
+          await submitReview(ad.id, curRating, text, A.uname);
+          toast(isEdit ? 'Отзыв обновлён!' : 'Спасибо за отзыв!');
+          await reloadData();
+          renderSummary();
+          renderFormArea();
+          renderList();
+          initLandlordRating(ad.owner);
+        } catch(err){
+          btn.disabled = false;
+          btn.textContent = isEdit ? 'Сохранить изменения' : 'Опубликовать отзыв';
+          errEl.textContent = 'Не удалось сохранить отзыв: ' + err.message;
+        }
+      });
+    }
+
+    function renderFormArea(){
+      if (!isAuthed()){
+        formArea.innerHTML = '<div class="review-callout">Оставить отзыв могут арендаторы после оформления заявки на инструмент. ' +
+          '<a href="cabinet.html" style="color:var(--or);font-weight:600">Войдите в аккаунт</a>, если вы уже брали этот инструмент.</div>';
+        return;
+      }
+
+      if (can.reason === 'own_tool'){
+        formArea.innerHTML = '';
+        return;
+      }
+
+      if (!can.allowed){
+        formArea.innerHTML = '<div class="review-callout">Отзыв могут оставить арендаторы после оформления заявки на этот инструмент.</div>';
+        return;
+      }
+
+      // User has rented the tool and can review!
+      if (can.has_review && can.review){
+        var myR = can.review;
+        formArea.innerHTML = '<div class="review-card" style="border-color:var(--or);margin:16px 0;background:var(--or-soft)">' +
+          '<div class="review-card-head">' +
+            '<div>' +
+              '<span class="review-author">' + esc(myR.author_name || 'Вы') + '<span class="review-my-tag">Ваш отзыв</span></span>' +
+              '<div class="review-stars">' + '★'.repeat(myR.rating) + '☆'.repeat(5 - myR.rating) + '</div>' +
+            '</div>' +
+            '<div style="display:flex;align-items:center;gap:10px">' +
+              '<span class="review-date">' + formatReviewDate(myR.updated_at || myR.created_at) + (myR.updated_at !== myR.created_at ? ' (изменён)' : '') + '</span>' +
+              '<button type="button" class="review-edit-btn" id="openEditReviewBtn" title="Редактировать отзыв">' +
+                '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>' +
+                'Редактировать' +
+              '</button>' +
+            '</div>' +
+          '</div>' +
+          (myR.text ? '<div class="review-text">' + esc(myR.text) + '</div>' : '') +
+        '</div>';
+
+        $('openEditReviewBtn').addEventListener('click', function(){
+          renderForm(myR.rating, myR.text, true);
+        });
+        return;
+      }
+
+      // User hasn't left a review yet: show form
+      renderForm(5, '', false);
+    }
+
+    function renderList(){
+      var displayReviews = reviews.filter(function(r){
+        // Do not show user's own review twice if already shown in formArea
+        if (can.has_review && can.review && r.id === can.review.id) return false;
+        return r.status === 'published' || isChief();
+      });
+
+      if (!displayReviews.length && (!can.has_review || !can.review)){
+        listEl.innerHTML = '<div class="empty" style="padding:24px 10px"><p style="color:var(--g2)">Пока никто не оставил отзыв на этот инструмент. Будьте первыми!</p></div>';
+        return;
+      }
+
+      listEl.innerHTML = '<div class="review-list">' + displayReviews.map(function(r){
+        var isChiefUser = isChief();
+        var isHidden = r.status === 'hidden';
+        var modBtn = isChiefUser
+          ? ('<button class="btn sec xs" data-mod-review="' + r.id + '" data-set-status="' + (isHidden ? 'published' : 'hidden') + '">' +
+             (isHidden ? 'Восстановить' : 'Скрыть спам') + '</button>')
+          : '';
+
+        return '<div class="review-card' + (isHidden ? ' muted' : '') + '" data-rid="' + r.id + '">' +
+          '<div class="review-card-head">' +
+            '<div>' +
+              '<span class="review-author">' + esc(r.author_name || 'Арендатор') + (isHidden ? ' <span class="badge" style="background:var(--red);color:#fff">Скрыт</span>' : '') + '</span>' +
+              '<div class="review-stars">' + '★'.repeat(r.rating) + '☆'.repeat(5 - r.rating) + '</div>' +
+            '</div>' +
+            '<div style="display:flex;align-items:center;gap:10px">' +
+              '<span class="review-date">' + formatReviewDate(r.updated_at || r.created_at) + (r.updated_at && r.created_at && r.updated_at !== r.created_at ? ' (изменён)' : '') + '</span>' +
+              modBtn +
+            '</div>' +
+          '</div>' +
+          (r.text ? '<div class="review-text">' + esc(r.text) + '</div>' : '') +
+        '</div>';
+      }).join('') + '</div>';
+
+      listEl.querySelectorAll('[data-mod-review]').forEach(function(btn){
+        btn.addEventListener('click', async function(){
+          var rId = this.dataset.modReview;
+          var newStatus = this.dataset.setStatus;
+          this.disabled = true;
+          try {
+            await toggleReviewStatus(rId, newStatus);
+            toast(newStatus === 'hidden' ? 'Отзыв скрыт' : 'Отзыв опубликован');
+            await reloadData();
+            renderSummary();
+            renderList();
+          } catch(e){
+            this.disabled = false;
+            toast('Ошибка модерации: ' + e.message);
+          }
+        });
+      });
+    }
+
+    renderSummary();
+    renderFormArea();
+    renderList();
+  }
+
+  initLandlordRating(ad.owner);
+  initReviews(ad);
 })();
 </script>
 </body>

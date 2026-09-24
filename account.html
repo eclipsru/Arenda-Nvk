@@ -132,6 +132,7 @@
   let MY = [];
   let ORDERS = [];
   let FEES = [];
+  let REVIEWS = [];
   let SUB_TAB = 'all';       // фильтр по статусу объявлений
   let SUB_TAB_ORD = 'all';   // фильтр по статусу заявок
 
@@ -265,7 +266,9 @@
         '<button data-tab="orders" class="' + (TAB==='orders'?'on':'') + '">' +
           'Заявки' + (activeOrdersCnt ? '<span class="n">' + activeOrdersCnt + '</span>' : '') + '</button>' +
         '<button data-tab="fee" class="' + (TAB==='fee'?'on':'') + '">' +
-          'Комиссия и оплата' + (fStat.debt > 0 ? '<span class="n warn">!</span>' : '') + '</button>'
+          'Комиссия и оплата' + (fStat.debt > 0 ? '<span class="n warn">!</span>' : '') + '</button>' +
+        '<button data-tab="reviews" class="' + (TAB==='reviews'?'on':'') + '">' +
+          'Отзывы' + (REVIEWS.length ? '<span class="n">' + REVIEWS.length + '</span>' : '') + '</button>'
       :
         '<button data-tab="orders" class="' + (TAB==='orders'?'on':'') + '">' +
           'Мои заявки' + (ORDERS.length ? '<span class="n">' + ORDERS.length + '</span>' : '') + '</button>'
@@ -694,6 +697,62 @@
     };
   }
 
+  /* ---------- Отзывы ---------- */
+  function viewReviews(){
+    if (!isAdmin()){
+      return '<div class="empty"><b>Раздел доступен арендодателям</b><p>Здесь отображаются отзывы клиентов о вашем инструменте.</p></div>';
+    }
+
+    if (!REVIEWS.length){
+      return '<div class="empty">' +
+        '<b>Отзывов пока нет</b>' +
+        '<p>Когда арендаторы оставят отзывы на ваши инструменты, они появятся в этом разделе.</p>' +
+      '</div>';
+    }
+
+    const pub = REVIEWS.filter(function(r){ return r.status === 'published'; });
+    const sum = pub.reduce(function(acc, r){ return acc + (Number(r.rating) || 0); }, 0);
+    const avg = pub.length ? (sum / pub.length).toFixed(1) : '0.0';
+
+    return '<div class="box" style="margin-bottom:18px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:14px">' +
+      '<div>' +
+        '<div style="font-size:13px;color:var(--g2);margin-bottom:4px">Общий рейтинг вашего проката</div>' +
+        '<div class="rating-badge rating-badge-large"><span class="star">★</span> ' + avg +
+          ' <span class="muted" style="font-size:14px;font-weight:400">(' + pub.length + ' ' + plural(pub.length, 'отзыв', 'отзыва', 'отзывов') + ')</span>' +
+        '</div>' +
+      '</div>' +
+      '<div style="font-size:13px;color:var(--gr)">' +
+        'Всего отзывов: <b>' + REVIEWS.length + '</b>' +
+      '</div>' +
+    '</div>' +
+    '<div class="review-list">' + REVIEWS.map(function(r){
+      const isHidden = r.status === 'hidden';
+      const toolTitle = (r.tools && r.tools.name) || 'Инструмент';
+      const modBtn = isChief()
+        ? ('<button class="btn sec xs" data-mod-review="' + r.id + '" data-set-status="' + (isHidden ? 'published' : 'hidden') + '">' +
+           (isHidden ? 'Восстановить' : 'Скрыть спам') + '</button>')
+        : '';
+
+      return '<div class="review-card' + (isHidden ? ' muted' : '') + '">' +
+        '<div class="review-card-head">' +
+          '<div>' +
+            '<a href="tool.html?id=' + encodeURIComponent(r.tool_id) + '" style="font-weight:700;font-size:15px;color:var(--tx)">' + esc(toolTitle) + ' ↗</a>' +
+            '<div style="margin-top:4px;display:flex;align-items:center;gap:8px;flex-wrap:wrap">' +
+              '<span class="review-stars">' + '★'.repeat(r.rating) + '☆'.repeat(5 - r.rating) + '</span>' +
+              '<span class="muted" style="font-size:13px">· ' + esc(r.author_name || 'Арендатор') + '</span>' +
+              (isHidden ? ' <span class="badge" style="background:var(--red);color:#fff">Скрыт</span>' : '') +
+            '</div>' +
+          '</div>' +
+          '<div style="display:flex;align-items:center;gap:10px">' +
+            '<span class="review-date">' + niceDate(r.updated_at || r.created_at) + '</span>' +
+            modBtn +
+          '</div>' +
+        '</div>' +
+        (r.text ? '<div class="review-text">' + esc(r.text) + '</div>' : '') +
+      '</div>';
+    }).join('') + '</div>';
+  }
+
   /* ---------- Избранное ---------- */
   function viewFav(){
     const ids = favList();
@@ -755,6 +814,7 @@
     let inner;
     if (TAB === 'fee')           inner = viewFee();
     else if (TAB === 'orders')   inner = viewOrders();
+    else if (TAB === 'reviews')  inner = viewReviews();
     else if (TAB === 'fav')      inner = viewFav();
     else if (TAB === 'msg')      inner = viewMsg();
     else if (TAB === 'prof')     inner = viewProf();
@@ -811,6 +871,24 @@
       const id = ordDo.getAttribute('data-id');
       const act = ordDo.getAttribute('data-ord-do');
       if (id && act) doOrderAction(id, act, ordDo);
+      return;
+    }
+
+    const modRev = e.target.closest('[data-mod-review]');
+    if (modRev){
+      const rId = modRev.getAttribute('data-mod-review');
+      const st = modRev.getAttribute('data-set-status');
+      modRev.disabled = true;
+      toggleReviewStatus(rId, st).then(function(){
+        toast(st === 'hidden' ? 'Отзыв скрыт' : 'Отзыв опубликован');
+        loadLandlordReviews(A.me).then(function(revs){
+          REVIEWS = revs || [];
+          render();
+        });
+      }).catch(function(err){
+        modRev.disabled = false;
+        toast('Ошибка: ' + err.message);
+      });
       return;
     }
 
@@ -916,16 +994,18 @@
     const showcase = hydrateShowcase(); // Избранное берём из живой витрины, а не демо-данных.
     if (isAdmin()){
       try {
-        const [myTools, myParts, myFees] = await Promise.allSettled([
+        const [myTools, myParts, myFees, myReviews] = await Promise.allSettled([
           loadMyTools(),
           loadMyOrderParts(),
-          loadMyFeePayments()
+          loadMyFeePayments(),
+          loadLandlordReviews(A.me)
         ]);
         MY = myTools.status === 'fulfilled' ? (myTools.value || []) : [];
         ORDERS = myParts.status === 'fulfilled' ? (myParts.value || []) : [];
         FEES = myFees.status === 'fulfilled' ? (myFees.value || []) : [];
+        REVIEWS = myReviews.status === 'fulfilled' ? (myReviews.value || []) : [];
       } catch(e){
-        MY = []; ORDERS = []; FEES = [];
+        MY = []; ORDERS = []; FEES = []; REVIEWS = [];
         toast('Не удалось загрузить данные: ' + e.message);
       }
     } else if (isAuthed()){

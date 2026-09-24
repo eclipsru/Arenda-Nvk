@@ -209,7 +209,7 @@ async function loadCats(){
 
 /* ---------- Объявления ---------- */
 const TOOL_FIELDS = 'id,name,cat,sub,descr,price,deposit,imgs,img,delivery,' +
-                    'delivery_price,terms,pickup_city,owner_email,status,active,created_at';
+                    'delivery_price,terms,pickup_city,owner_email,status,active,rating,reviews_count,created_at';
 
 /* Публичная витрина — только активные */
 async function loadPublicTools(){
@@ -350,6 +350,8 @@ function toolToAd(t){
     },
     city:      city,
     cond:      cond,
+    rating:    Number(t.rating) || 0,
+    reviews_count: Number(t.reviews_count) || 0,
     delivery:  !!t.delivery,
     delivery_price: Number(t.delivery_price) || 0,
     pickup_city: t.pickup_city || '',
@@ -799,3 +801,68 @@ function whoTitle(email){
   if (o && (o.full_name || o.company)) return o.full_name || o.company;
   return (email || '').split('@')[0];
 }
+
+/* ===========================================================
+   ОТЗЫВЫ И РЕЙТИНГ
+   =========================================================== */
+
+/* Загрузка отзывов к инструменту */
+async function loadToolReviews(toolId){
+  if (!toolId) return [];
+  try {
+    return await api('/rest/v1/reviews?tool_id=eq.' + encodeURIComponent(toolId) +
+                     '&order=created_at.desc') || [];
+  } catch(e){
+    return [];
+  }
+}
+
+/* Проверка, может ли текущий пользователь оставить/отредактировать отзыв */
+async function canUserReview(toolId){
+  if (!toolId || !isAuthed()) return { allowed: false, reason: 'auth_required' };
+  try {
+    return await api('/rest/v1/rpc/can_user_review', 'POST', { p_tool_id: toolId });
+  } catch(e){
+    return { allowed: false, reason: 'error', error: e.message };
+  }
+}
+
+/* Публикация / обновление отзыва */
+async function submitReview(toolId, rating, text, authorName){
+  return await api('/rest/v1/rpc/submit_review', 'POST', {
+    p_tool_id: toolId,
+    p_rating: Number(rating),
+    p_text: text || '',
+    p_author_name: authorName || ''
+  });
+}
+
+/* Общий рейтинг арендодателя (проката) */
+async function getLandlordRating(ownerEmail){
+  if (!ownerEmail) return { rating: 0, reviews_count: 0 };
+  try {
+    return await api('/rest/v1/rpc/get_landlord_rating', 'POST', { p_owner_email: ownerEmail });
+  } catch(e){
+    return { rating: 0, reviews_count: 0 };
+  }
+}
+
+/* Модерация отзыва (chief) */
+async function toggleReviewStatus(reviewId, status){
+  return await api('/rest/v1/rpc/toggle_review_status', 'POST', {
+    p_review_id: reviewId,
+    p_status: status
+  });
+}
+
+/* Отзывы на инструменты конкретного арендодателя */
+async function loadLandlordReviews(ownerEmail){
+  try {
+    return await api('/rest/v1/reviews?select=*,tools!inner(name,owner_email)' +
+                     (ownerEmail ? '&tools.owner_email=eq.' + encodeURIComponent(ownerEmail) : '') +
+                     '&order=created_at.desc&limit=200') || [];
+  } catch(e){
+    return [];
+  }
+}
+

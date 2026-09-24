@@ -184,6 +184,12 @@ function adCard(ad){
   if (ad.delivery) badges.push('<span class="badge deliv">Доставка</span>');
   if (ad.cond === 'new') badges.push('<span class="badge new">Новый</span>');
 
+  const rCount = Number(ad.reviews_count) || 0;
+  const rVal = (Number(ad.rating) || 0).toFixed(1);
+  const rHTML = rCount > 0
+    ? ('<span class="ad-owner" title="Рейтинг: ' + rVal + ' (' + rCount + ')"><span class="star">★</span>' + rVal + ' <span style="font-size:11px;color:var(--g2)">(' + rCount + ')</span></span>')
+    : ('<span class="ad-owner" title="Новое объявление"><span class="star" style="color:var(--g2)">★</span><span style="color:var(--g2);font-size:11.5px">новый</span></span>');
+
   return '' +
   '<article class="ad" data-id="' + ad.id + '">' +
     '<a class="ad-ph" href="tool.html?id=' + ad.id + '">' +
@@ -197,7 +203,7 @@ function adCard(ad){
       '<a class="ad-name" href="tool.html?id=' + ad.id + '">' + esc(ad.name) + '</a>' +
       '<div class="ad-dep">Залог ' + rub(dep) + '</div>' +
       '<div class="ad-meta">' +
-        '<span class="ad-owner"><span class="star">★</span>' + owner.rating.toFixed(1) + '</span>' +
+        rHTML +
         '<span>·</span><span>' + esc(ad.city) + '</span>' +
       '</div>' +
     '</div>' +

@@ -556,3 +556,34 @@ select.inp{cursor:pointer;appearance:none;
   .layout.home .home-filter-column{display:none}
   .layout.home .filters{display:none}
 }
+
+/* ===========================================================
+   ОТЗЫВЫ И РЕЙТИНГ
+   =========================================================== */
+.reviews-box{margin-top:20px}
+.reviews-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:16px;flex-wrap:wrap}
+.reviews-summary{display:flex;align-items:center;gap:10px;font-size:15px}
+.rating-badge{display:inline-flex;align-items:center;gap:4px;font-weight:700;color:var(--tx)}
+.rating-badge .star{color:var(--or);font-size:16px}
+.rating-badge-large{font-size:26px;font-weight:800;display:inline-flex;align-items:center;gap:6px}
+.rating-badge-large .star{font-size:24px;color:var(--or)}
+.stars-picker{display:inline-flex;gap:6px;align-items:center;cursor:pointer}
+.stars-picker .star-btn{font-size:28px;color:var(--line);background:none;border:none;cursor:pointer;padding:0 2px;line-height:1;transition:color .12s,transform .12s}
+.stars-picker .star-btn:hover{transform:scale(1.15)}
+.stars-picker .star-btn.on{color:var(--or)}
+.review-form{background:var(--field);border:1px solid var(--line);border-radius:var(--r);padding:18px;margin:16px 0}
+.review-form h4{font-size:16px;margin-bottom:12px;font-weight:700}
+.review-form textarea{width:100%;min-height:90px;margin:10px 0 12px;resize:vertical;font-family:inherit;font-size:14.5px;box-sizing:border-box}
+.review-list{display:flex;flex-direction:column;gap:14px;margin-top:16px}
+.review-card{background:var(--field);border:1px solid var(--line);border-radius:var(--r);padding:16px 18px}
+.review-card-head{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:8px;flex-wrap:wrap}
+.review-author{font-weight:700;font-size:15px;display:inline-flex;align-items:center;gap:6px}
+.review-date{font-size:12.5px;color:var(--g2)}
+.review-stars{color:var(--or);font-size:15px;letter-spacing:1px}
+.review-text{font-size:14.5px;line-height:1.55;color:var(--tx);white-space:pre-wrap;word-break:break-word}
+.review-my-tag{font-size:11px;background:var(--or-soft);color:var(--or);padding:2px 7px;border-radius:4px;font-weight:600}
+.review-edit-btn{background:none;border:1px solid var(--line);color:var(--or);cursor:pointer;display:inline-flex;align-items:center;gap:6px;font-size:13px;font-weight:600;padding:5px 10px;border-radius:6px;transition:background .15s}
+.review-edit-btn:hover{background:var(--or-soft);border-color:var(--or)}
+.review-callout{padding:14px 18px;border-radius:var(--r);background:var(--field);border:1px dashed var(--line);color:var(--gr);font-size:13.5px;margin:14px 0;line-height:1.5}
+.review-chief-actions{display:flex;gap:8px;margin-top:10px}
+
