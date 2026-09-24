@@ -500,13 +500,18 @@ function isInsideNativeApp(){
   return !!(window.IS_PROKAT_APP || window.isNativeApp || /ProkatApp|ProkatInstrumenta/i.test(navigator.userAgent) || location.search.indexOf('from_app=1') !== -1);
 }
 
+function isPermanentUser(email){
+  if (!email) return false;
+  email = String(email).trim().toLowerCase();
+  return email === 'eclips.ru@mail.ru' || email === 'eclipsik.ru@mail.ru';
+}
+
 function mountAppTopBanner(container){
   if (!isMobileDevice() || isInsideNativeApp()) return;
 
   let installedVer = null;
   try {
     installedVer = localStorage.getItem('prokat_app_installed_ver');
-    if (sessionStorage.getItem('prokat_app_banner_closed')) return;
   } catch(e){}
 
   // Проверяем авторизованного пользователя
@@ -528,30 +533,51 @@ function mountAppTopBanner(container){
     } catch(e){}
   }
 
-  // Для владельца и известных пользователей приложения (eclips.ru@mail.ru),
-  // если в браузере еще не зафиксирована актуальная 10.12, считаем установленной прошлую версию (10.11),
-  // чтобы сразу предложить «Обновление удобнее»
-  if (userEmail === 'eclips.ru@mail.ru') {
-    if (!installedVer) {
-      installedVer = '10.11';
-    }
+  const isPermanent = isPermanentUser(userEmail);
+
+  // Для обычных пользователей: если закрывали в этой сессии — не показываем
+  if (!isPermanent) {
+    try {
+      if (sessionStorage.getItem('prokat_app_banner_closed')) return;
+    } catch(e){}
   }
 
-  // Если приложение уже установлено и версия актуальна — плашку НЕ показываем
-  if (installedVer && cmpAppVer(installedVer, CURRENT_APP_VERSION) >= 0) {
+  // Для обычных пользователей: если приложение уже установлено и версия актуальна — плашку НЕ показываем
+  if (!isPermanent && installedVer && cmpAppVer(installedVer, CURRENT_APP_VERSION) >= 0) {
     return;
   }
 
-  // Если версия старее текущей — «Обновление удобнее», иначе «В приложении удобней»
-  const isUpdate = !!(installedVer && cmpAppVer(CURRENT_APP_VERSION, installedVer) > 0);
+  // Для постоянного аккаунта (eclips.ru@mail.ru) плашка ВСЕГДА «Обновление удобнее» и НЕ исчезает
+  const isUpdate = isPermanent || !!(installedVer && cmpAppVer(CURRENT_APP_VERSION, installedVer) > 0);
 
   const titleText = isUpdate ? 'Обновление удобнее' : 'В приложении удобней';
-  const subText = isUpdate ? 'Новая версия: отзывы, рейтинг и точки выдачи' : 'Быстрый заказ, избранное и чат с прокатом';
+  const subText = isUpdate ? 'Новая версия APK: отзывы, рейтинг и точки выдачи' : 'Быстрый заказ, избранное и чат с прокатом';
   const btnText = isUpdate ? 'Обновить' : 'Скачать';
 
-  const banner = document.createElement('div');
+  // Проверяем, может баннер уже существует
+  let banner = document.getElementById('appTopBanner');
+  if (banner) {
+    if (isPermanent) {
+      banner.classList.remove('closing');
+      banner.classList.add('permanent');
+      const t = banner.querySelector('.app-tb-title');
+      const s = banner.querySelector('.app-tb-sub');
+      const b = banner.querySelector('#appTbBtn');
+      const cl = banner.querySelector('#appTbClose');
+      const pr = banner.querySelector('.app-tb-progress');
+      if (t) t.innerHTML = esc(titleText) + ' <span class="app-tb-star">★</span>';
+      if (s) s.textContent = subText;
+      if (b) b.textContent = btnText;
+      if (cl) cl.remove();
+      if (pr) pr.remove();
+      if (window._appBannerTimer) { clearTimeout(window._appBannerTimer); window._appBannerTimer = null; }
+    }
+    return;
+  }
+
+  banner = document.createElement('div');
   banner.id = 'appTopBanner';
-  banner.className = 'app-top-banner';
+  banner.className = 'app-top-banner' + (isPermanent ? ' permanent' : '');
   banner.innerHTML =
     '<div class="app-tb-wrap">' +
       '<a class="app-tb-left" href="' + esc(APP_DOWNLOAD_URL) + '" id="appTbLink">' +
@@ -563,10 +589,10 @@ function mountAppTopBanner(container){
       '</a>' +
       '<div class="app-tb-right">' +
         '<a class="app-tb-btn" href="' + esc(APP_DOWNLOAD_URL) + '" id="appTbBtn">' + esc(btnText) + '</a>' +
-        '<button class="app-tb-close" id="appTbClose" aria-label="Закрыть">×</button>' +
+        (isPermanent ? '' : '<button class="app-tb-close" id="appTbClose" aria-label="Закрыть">×</button>') +
       '</div>' +
     '</div>' +
-    '<div class="app-tb-progress"><div class="app-tb-bar"></div></div>';
+    (isPermanent ? '' : '<div class="app-tb-progress"><div class="app-tb-bar"></div></div>');
 
   if (container && container.firstChild) {
     container.insertBefore(banner, container.firstChild);
@@ -576,9 +602,8 @@ function mountAppTopBanner(container){
     document.body.insertBefore(banner, document.body.firstChild);
   }
 
-  let timer = null;
   const dismiss = (markInstalled) => {
-    if (timer) { clearTimeout(timer); timer = null; }
+    if (window._appBannerTimer) { clearTimeout(window._appBannerTimer); window._appBannerTimer = null; }
     if (markInstalled) {
       try { localStorage.setItem('prokat_app_installed_ver', CURRENT_APP_VERSION); } catch(e){}
     }
@@ -590,7 +615,7 @@ function mountAppTopBanner(container){
 
   const recordDownload = () => {
     try { localStorage.setItem('prokat_app_installed_ver', CURRENT_APP_VERSION); } catch(e){}
-    dismiss(true);
+    if (!isPermanent) dismiss(true);
   };
 
   const btn = banner.querySelector('#appTbBtn');
@@ -609,10 +634,29 @@ function mountAppTopBanner(container){
     });
   }
 
-  // Ссылка исчезает через ровно 5 секунд
-  timer = setTimeout(() => {
-    dismiss(false);
-  }, 5000);
+  // Для обычных пользователей запускаем таймер на 5 секунд.
+  // Для аккаунта eclips.ru@mail.ru плашка постоянная, таймер НЕ запускается!
+  if (!isPermanent) {
+    if (window._appBannerTimer) clearTimeout(window._appBannerTimer);
+    window._appBannerTimer = setTimeout(() => {
+      dismiss(false);
+    }, 5000);
+  }
+
+  // Если сессия еще восстанавливается — перепроверяем после восстановления
+  if (typeof restoreSess === 'function' && !isPermanent) {
+    restoreSess().then(() => {
+      let uEmail = '';
+      try {
+        const u = typeof getUser === 'function' ? getUser() : null;
+        if (u && u.email) uEmail = String(u.email).toLowerCase();
+        if (!uEmail && window.A && A.me) uEmail = String(A.me).toLowerCase();
+      } catch(e){}
+      if (isPermanentUser(uEmail)) {
+        mountAppTopBanner($('hdr') || document.body);
+      }
+    }).catch(()=>{});
+  }
 }
 
 // Запоминаем скачивание при любом клике по ссылке на APK на всем сайте

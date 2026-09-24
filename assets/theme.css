@@ -605,6 +605,11 @@ select.inp{cursor:pointer;appearance:none;
   box-shadow: 0 4px 18px rgba(0,0,0,0.4);
 }
 
+.app-top-banner.permanent {
+  border-bottom: 1px solid var(--or);
+  background: linear-gradient(90deg, #181C25 0%, #242A38 100%);
+}
+
 .app-top-banner.closing {
   max-height: 0 !important;
   opacity: 0 !important;
