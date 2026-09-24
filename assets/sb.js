@@ -351,6 +351,8 @@ function toolToAd(t){
     city:      city,
     cond:      cond,
     delivery:  !!t.delivery,
+    delivery_price: Number(t.delivery_price) || 0,
+    pickup_city: t.pickup_city || '',
     photos:    Math.max(imgs.length, 1),
     photoList: imgs,
     status:    t.status || 'active',

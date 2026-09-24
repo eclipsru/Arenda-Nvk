@@ -9,6 +9,23 @@
 <link rel="stylesheet" href="assets/theme.css?v=20260923-global-search">
 <link rel="stylesheet" href="assets/profile.css?v=20260923-rental-profile">
 <link rel="stylesheet" href="assets/geo.css?v=20260923-photon">
+<style>
+.toggle-row{display:flex;align-items:center;justify-content:space-between;cursor:pointer;
+  background:var(--field);border:1px solid var(--line);border-radius:10px;padding:11px 14px;
+  user-select:none;transition:.15s}
+.toggle-row:hover{border-color:var(--line-2)}
+.toggle-row .tg-info{flex:1;min-width:0;padding-right:12px}
+.toggle-row .tg-title{font-weight:600;font-size:14px}
+.toggle-row .tg-sub{font-size:12.5px;color:var(--g2);margin-top:2px}
+.sw{position:relative;width:44px;height:24px;background:var(--line-2);border-radius:12px;
+  flex:0 0 44px;cursor:pointer;transition:background .2s ease;display:inline-block}
+.sw.on{background:var(--or)}
+.sw i{position:absolute;top:2px;left:2px;width:20px;height:20px;border-radius:50%;
+  background:#fff;transition:transform .2s ease;box-shadow:0 1px 3px rgba(0,0,0,.3)}
+.sw.on i{transform:translateX(20px)}
+.no-delivery-banner{background:rgba(255,138,128,.12);border:1px solid rgba(255,138,128,.3);
+  color:var(--red);padding:11px 14px;border-radius:10px;font-size:13.5px;display:flex;align-items:center;gap:10px}
+</style>
 </head>
 <body>
 
@@ -76,7 +93,7 @@
     specRows += '<div class="spec"><dt>' + esc(k) + '</dt><dd>' + esc(ad.specs[k]) + '</dd></div>';
   });
   specRows += '<div class="spec"><dt>Доставка</dt><dd>' +
-    (ad.delivery ? 'Есть, 40 ₽/км по городу' : 'Только самовывоз') + '</dd></div>';
+    (ad.delivery ? ('Есть, ' + (ad.delivery_price || 40) + ' ₽/км') : 'Только самовывоз') + '</dd></div>';
   specRows += '<div class="spec"><dt>Минимальный срок</dt><dd>1 сутки</dd></div>';
 
   /* ---------- Похожие ---------- */
@@ -245,13 +262,47 @@
 
     var pickupAddr = ((ad.terms||'').match(/Адрес выдачи:\s*(.+)/)||[])[1] || ad.pickup_city || ad.city || 'Уточняйте у арендодателя';
     var hasDelivery = !!ad.delivery;
+    var delivRate = Number(ad.delivery_price) || 40;
     var defaultName = A.uname || (A.userMeta && (A.userMeta.full_name || A.userMeta.name)) || '';
     var defaultPhone = (A.userMeta && A.userMeta.phone) || (A.admin && A.admin.phone) || '';
 
     var days = 1;
-    var meth = 'pickup'; // 'pickup' | 'delivery'
+    var isDelivery = false; // toggle switch for delivery
+    var isRoundTrip = false; // toggle switch for round trip
     var savedAddr = '';
     var savedComment = '';
+    var destCoords = null;
+    var deliveryKm = 0;
+
+    var originCoords = { lat: 47.4526182, lon: 40.1008652 }; // Базовая точка: Новочеркасск, ул. Маресьева, 36
+    if (window.IvaGeo && pickupAddr){
+      IvaGeo.search(pickupAddr, 'address').then(function(res){
+        if (res && res[0] && res[0].coordinates){
+          originCoords = { lat: res[0].coordinates[1], lon: res[0].coordinates[0] };
+          if (destCoords) updateDistance();
+        }
+      }).catch(function(){});
+    }
+
+    function havDist(lat1, lon1, lat2, lon2){
+      var R = 6371;
+      var dLat = (lat2 - lat1) * Math.PI / 180;
+      var dLon = (lon2 - lon1) * Math.PI / 180;
+      var a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+              Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+              Math.sin(dLon/2) * Math.sin(dLon/2);
+      var c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+      return Math.max(1, Math.ceil(R * c));
+    }
+
+    function updateDistance(){
+      if (destCoords){
+        deliveryKm = havDist(originCoords.lat, originCoords.lon, destCoords.lat, destCoords.lon);
+      } else {
+        deliveryKm = 0;
+      }
+      renderOrderSheet();
+    }
 
     function saveCurrentInputs(){
       var nm = $('ordName'), ph = $('ordPhone'), adInput = $('ordDeliveryAddr'), cm = $('ordComment');
@@ -263,7 +314,66 @@
 
     function renderOrderSheet(){
       var rentSum = (Number(ad.price) || 0) * days;
-      var totalSum = rentSum + dep;
+      var km = deliveryKm > 0 ? deliveryKm : 1;
+      var oneWayCost = km * delivRate;
+      var deliveryCost = isDelivery ? (isRoundTrip ? oneWayCost * 2 : oneWayCost) : 0;
+      var totalSum = rentSum + dep + deliveryCost;
+
+      var distText = '';
+      if (isDelivery){
+        if (deliveryKm > 0){
+          distText = 'Расстояние: <b>' + deliveryKm + ' км</b> · ' + delivRate + ' ₽/км' +
+            (isRoundTrip ? ' · <b>Туда и обратно (×2)</b> = <b>' + rub(deliveryCost) + '</b>' : ' = <b>' + rub(deliveryCost) + '</b>');
+        } else if (savedAddr.trim()){
+          distText = 'Расчёт: от <b>' + rub(deliveryCost) + '</b> (' + (isRoundTrip ? 'туда и обратно, 2 × ' : '') + '1 км по ' + delivRate + ' ₽/км, точный километраж подтвердит арендодатель).';
+        } else {
+          distText = 'Укажите адрес доставки для расчёта расстояния по тарифу ' + delivRate + ' ₽/км.';
+        }
+      }
+
+      var deliverySectionHtml = '';
+      if (!hasDelivery){
+        deliverySectionHtml =
+          '<div class="fld">' +
+            '<label style="display:block;font-size:13px;font-weight:600;margin-bottom:6px">Способ получения</label>' +
+            '<div class="no-delivery-banner">' +
+              '<b style="font-size:14px;white-space:nowrap">Доставки нет!</b>' +
+              '<span style="color:var(--tx)">Только самовывоз: <b>' + esc(pickupAddr) + '</b></span>' +
+            '</div>' +
+          '</div>';
+      } else {
+        deliverySectionHtml =
+          '<div class="fld">' +
+            '<label style="display:block;font-size:13px;font-weight:600;margin-bottom:6px">Способ получения</label>' +
+            '<div class="toggle-row" id="rowDelivery">' +
+              '<div class="tg-info">' +
+                '<div class="tg-title">Доставка</div>' +
+                '<div class="tg-sub">Стоимость по объявлению: ' + delivRate + ' ₽ за 1 км</div>' +
+              '</div>' +
+              '<div class="sw' + (isDelivery ? ' on' : '') + '" id="swDelivery"><i></i></div>' +
+            '</div>' +
+            (!isDelivery ?
+              '<div style="font-size:13px;color:var(--gr);margin-top:6px;padding:2px 2px">' +
+                'Выдача: Самовывоз, <b style="color:var(--tx)">' + esc(pickupAddr) + '</b>' +
+              '</div>' :
+              '<div id="deliveryDetailsBox" style="margin-top:10px;display:flex;flex-direction:column;gap:10px">' +
+                '<div>' +
+                  '<label style="display:block;font-size:13px;font-weight:600;margin-bottom:6px">Адрес доставки *</label>' +
+                  '<input class="inp" id="ordDeliveryAddr" placeholder="Город, улица, дом" value="' + esc(savedAddr) + '" autocomplete="street-address">' +
+                  '<div id="delivDistCalc" style="font-size:12.5px;color:var(--gr);margin-top:6px;line-height:1.4">' + distText + '</div>' +
+                '</div>' +
+                '<div class="toggle-row" id="rowRoundTrip" style="background:var(--card);border-color:var(--line)">' +
+                  '<div class="tg-info">' +
+                    '<div class="tg-title">Туда и обратно</div>' +
+                    '<div class="tg-sub">Доставка и возврат инструмента курьером (удваивает стоимость доставки)</div>' +
+                  '</div>' +
+                  '<div class="sw' + (isRoundTrip ? ' on' : '') + '" id="swRoundTrip"><i></i></div>' +
+                '</div>' +
+              '</div>'
+            ) +
+          '</div>';
+      }
+
       var h =
         '<div class="order-sheet-wrap" style="display:flex;flex-direction:column;gap:13px">' +
           '<div style="display:flex;gap:12px;background:var(--field);padding:10px 12px;border-radius:10px;align-items:center">' +
@@ -290,25 +400,12 @@
             '</div>' +
           '</div>' +
 
-          '<div class="fld">' +
-            '<label style="display:block;font-size:13px;font-weight:600;margin-bottom:6px">Способ получения</label>' +
-            '<div class="tabs" style="margin-bottom:8px" id="ordMethodTabs">' +
-              '<button type="button" class="' + (meth==='pickup'?'on':'') + '" data-meth="pickup">Самовывоз</button>' +
-              (hasDelivery ? '<button type="button" class="' + (meth==='delivery'?'on':'') + '" data-meth="delivery">Доставка</button>' : '') +
-            '</div>' +
-            (meth === 'pickup' ?
-              '<div id="ordPickupBox" style="font-size:13.5px;color:var(--gr);padding:4px 0">' +
-                'Выдача: <b style="color:var(--tx)">' + esc(pickupAddr) + '</b>' +
-              '</div>' :
-              '<div id="ordDeliveryBox" style="margin-top:4px">' +
-                '<input class="inp" id="ordDeliveryAddr" placeholder="Адрес доставки: улица, дом, город" value="' + esc(savedAddr) + '" autocomplete="street-address">' +
-                '<p class="small muted" style="margin-top:6px">Доставка: 40 ₽/км (рассчитывается арендодателем при согласовании).</p>' +
-              '</div>') +
-          '</div>' +
+          deliverySectionHtml +
 
           '<div class="fld"><label style="display:block;font-size:13px;font-weight:600;margin-bottom:6px">Комментарий (необязательно)</label>' +
             '<textarea class="inp" id="ordComment" rows="2" placeholder="Удобное время встречи или пожелания">' + esc(savedComment) + '</textarea></div>' +
 
+          /* Чек заказа */
           '<div class="card" style="background:var(--field);border:1px solid var(--line);border-radius:10px;padding:12px">' +
             '<div style="display:flex;justify-content:space-between;font-size:13.5px;margin-bottom:6px">' +
               '<span class="muted">Аренда (' + days + ' ' + plural(days,'сут.','сут.','сут.') + '):</span>' +
@@ -318,6 +415,16 @@
               '<span class="muted">Возвратный залог:</span>' +
               '<b>' + rub(dep) + '</b>' +
             '</div>' +
+            (isDelivery ?
+              '<div style="display:flex;justify-content:space-between;font-size:13.5px;margin-bottom:6px">' +
+                '<span class="muted">Доставка ' + (isRoundTrip ? '(туда и обратно' + (deliveryKm ? ', 2 × ' + deliveryKm + ' км' : '') + ')' : (deliveryKm ? '(' + deliveryKm + ' км)' : '')) + ':</span>' +
+                '<b style="color:var(--or)">' + (deliveryCost > 0 ? rub(deliveryCost) : (delivRate + ' ₽/км')) + '</b>' +
+              '</div>' :
+              '<div style="display:flex;justify-content:space-between;font-size:13.5px;margin-bottom:6px">' +
+                '<span class="muted">Получение:</span>' +
+                '<b>Самовывоз (0 ₽)</b>' +
+              '</div>'
+            ) +
             '<div style="display:flex;justify-content:space-between;font-size:15px;font-weight:700;border-top:1px solid var(--line);padding-top:8px;margin-top:6px">' +
               '<span>Итого при получении:</span>' +
               '<span style="color:var(--or)">' + rub(totalSum) + '</span>' +
@@ -335,8 +442,29 @@
 
       openSheet('Оформление заявки', h, f);
 
-      if (meth === 'delivery' && $('ordDeliveryAddr') && window.IvaGeo){
-        IvaGeo.attach($('ordDeliveryAddr'), { mode:'address' });
+      var addrInp = $('ordDeliveryAddr');
+      if (isDelivery && addrInp && window.IvaGeo){
+        IvaGeo.attach(addrInp, { mode:'address' });
+        addrInp.addEventListener('geo:select', function(e){
+          var detail = e.detail;
+          if (detail && detail.coordinates){
+            destCoords = { lat: detail.coordinates[1], lon: detail.coordinates[0] };
+            deliveryKm = havDist(originCoords.lat, originCoords.lon, destCoords.lat, destCoords.lon);
+            renderOrderSheet();
+          }
+        });
+        addrInp.addEventListener('change', function(){
+          savedAddr = this.value;
+          if (window.IvaGeo && this.value.trim().length >= 4 && !destCoords){
+            IvaGeo.search(this.value.trim(), 'address').then(function(res){
+              if (res && res[0] && res[0].coordinates){
+                destCoords = { lat: res[0].coordinates[1], lon: res[0].coordinates[0] };
+                deliveryKm = havDist(originCoords.lat, originCoords.lon, destCoords.lat, destCoords.lon);
+                renderOrderSheet();
+              }
+            }).catch(function(){});
+          }
+        });
       }
 
       $('ordCancel').onclick = closeSheet;
@@ -356,13 +484,21 @@
         }
       };
 
-      $$('#ordMethodTabs button').forEach(function(b){
-        b.onclick = function(){
+      if ($('rowDelivery')){
+        $('rowDelivery').onclick = function(){
           saveCurrentInputs();
-          meth = b.getAttribute('data-meth');
+          isDelivery = !isDelivery;
           renderOrderSheet();
         };
-      });
+      }
+
+      if ($('rowRoundTrip')){
+        $('rowRoundTrip').onclick = function(){
+          saveCurrentInputs();
+          isRoundTrip = !isRoundTrip;
+          renderOrderSheet();
+        };
+      }
 
       $('ordSend').onclick = doSubmitOrder;
     }
@@ -387,7 +523,7 @@
         errEl.style.display = 'block';
         return;
       }
-      if (meth === 'delivery' && !dAddr){
+      if (isDelivery && !dAddr){
         errEl.textContent = 'Укажите адрес доставки';
         errEl.style.display = 'block';
         return;
@@ -397,12 +533,19 @@
       btn.disabled = true;
       btn.textContent = 'Отправляем…';
 
-      var getMethodText = (meth === 'delivery')
-        ? ('Доставка: ' + dAddr)
+      var km = deliveryKm > 0 ? deliveryKm : 1;
+      var oneWay = km * delivRate;
+      var delivCost = isDelivery ? (isRoundTrip ? oneWay * 2 : oneWay) : 0;
+
+      var getMethodText = isDelivery
+        ? ('Доставка' + (isRoundTrip ? ' (туда-обратно)' : '') + ': ' + dAddr + ' — ' + rub(delivCost) + (deliveryKm ? (' (' + (isRoundTrip ? '2 × ' : '') + deliveryKm + ' км по ' + delivRate + ' ₽/км)') : ''))
         : ('Самовывоз, ' + pickupAddr);
 
       var commentPayload = 'Срок аренды: ' + days + ' ' + plural(days, 'сутки', 'суток', 'суток') +
-        ' · Стоимость: ' + rub((Number(ad.price)||0) * days) + ' · Залог: ' + rub(dep);
+        ' · Стоимость аренды: ' + rub((Number(ad.price)||0) * days) + ' · Залог: ' + rub(dep);
+      if (isDelivery){
+        commentPayload += '\nДоставка: ' + (isRoundTrip ? 'туда и обратно (×2)' : 'в одну сторону') + ' — ' + rub(delivCost) + (deliveryKm ? (' (' + (isRoundTrip ? '2 × ' : '') + deliveryKm + ' км)') : '');
+      }
       if (cmt) commentPayload += '\n\n' + cmt;
 
       try {
@@ -411,7 +554,7 @@
           p_phone: ph,
           p_tools: ad.name,
           p_get_method: getMethodText,
-          p_address: (meth === 'delivery' ? dAddr : ''),
+          p_address: (isDelivery ? dAddr : ''),
           p_comment: commentPayload,
           p_user_email: (A.me || ''),
           p_days: days

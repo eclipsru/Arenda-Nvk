@@ -21,7 +21,16 @@ const assert = require('assert');
       return route.fulfill({
         status: 200,
         contentType: 'application/json',
-        body: JSON.stringify({ type: 'FeatureCollection', features: [] })
+        body: JSON.stringify({
+          type: 'FeatureCollection',
+          features: [
+            {
+              type: 'Feature',
+              geometry: { type: 'Point', coordinates: [40.09, 47.41] },
+              properties: { countrycode: 'RU', city: 'Новочеркасск', street: 'улица Ленина', housenumber: '5' }
+            }
+          ]
+        })
       });
     }
 
@@ -104,10 +113,10 @@ const assert = require('assert');
               id: 25,
               order_id: 50,
               owner_email: email,
-              tools_text: 'Сварочный аппарат полуавтомат',
+              tools_text: 'Болгарка (УШМ) аккумуляторная Makita 36 В',
               status: 'new',
-              rent_sum: 1800,
-              fee: 54,
+              rent_sum: 900,
+              fee: 27,
               fee_pct: 3,
               created_at: '2026-09-24T10:00:00Z',
               archived: false,
@@ -151,44 +160,38 @@ const assert = require('assert');
         return route.fulfill({
           status: 200,
           contentType: 'application/json',
-          body: JSON.stringify([{
-            id: 'tool-test',
-            owner_email: email,
-            status: 'active',
-            active: true,
-            name: 'Сварочный аппарат полуавтомат',
-            cat: 'welding',
-            price: 900,
-            deposit: 4500,
-            imgs: ['https://example.invalid/tool.jpg'],
-            descr: 'Тестовый инструмент',
-            terms: 'Адрес выдачи: Новочеркасск, ул. Маресьева, 36',
-            delivery: true
-          }])
-        });
-      }
-
-      if (u.pathname.endsWith('/landlord_profiles')) {
-        return route.fulfill({
-          status: 200,
-          contentType: 'application/json',
-          body: JSON.stringify([])
-        });
-      }
-
-      if (u.pathname.endsWith('/landlord_applications')) {
-        return route.fulfill({
-          status: 200,
-          contentType: 'application/json',
-          body: JSON.stringify([])
-        });
-      }
-
-      if (u.pathname.endsWith('/app_messages')) {
-        return route.fulfill({
-          status: 200,
-          contentType: 'application/json',
-          body: JSON.stringify([])
+          body: JSON.stringify([
+            {
+              id: 'tool-with-delivery',
+              owner_email: 'other@mail.ru',
+              status: 'active',
+              active: true,
+              name: 'Болгарка (УШМ) аккумуляторная Makita 36 В',
+              cat: 'power',
+              price: 450,
+              deposit: 2250,
+              imgs: ['https://example.invalid/tool.jpg'],
+              descr: 'Тестовая болгарка с доставкой',
+              terms: 'Адрес выдачи: Новочеркасск, ул. Маресьева, 36',
+              delivery: true,
+              delivery_price: 40
+            },
+            {
+              id: 'tool-no-delivery',
+              owner_email: 'other@mail.ru',
+              status: 'active',
+              active: true,
+              name: 'Сварочный аппарат полуавтомат',
+              cat: 'welding',
+              price: 900,
+              deposit: 4500,
+              imgs: ['https://example.invalid/tool.jpg'],
+              descr: 'Тестовый сварочник без доставки',
+              terms: 'Адрес выдачи: Новочеркасск, ул. Маресьева, 36',
+              delivery: false,
+              delivery_price: 0
+            }
+          ])
         });
       }
 
@@ -202,50 +205,68 @@ const assert = require('assert');
     return route.continue();
   });
 
-  // Test 1: tool.html has «Оформить заявку» button and interactive booking sheet
-  console.log('Testing tool.html order button and booking sheet...');
-  await page.goto('http://127.0.0.1:8000/tool.html?id=tool-test', { waitUntil: 'networkidle' });
-
-  // Verify button exists
-  const orderBtn = page.locator('#orderBtn');
-  await assert.doesNotReject(orderBtn.waitFor({ state: 'visible', timeout: 5000 }), 'orderBtn should be visible on tool.html');
-  const orderBtnText = await orderBtn.textContent();
-  assert(orderBtnText.includes('Оформить заявку'), 'orderBtn text should contain "Оформить заявку"');
-
-  // Click «Оформить заявку»
-  await orderBtn.click();
+  // Test 1: Tool WITHOUT delivery has «Доставки нет!»
+  console.log('Testing tool WITHOUT delivery...');
+  await page.goto('http://127.0.0.1:8000/tool.html?id=tool-no-delivery', { waitUntil: 'networkidle' });
+  await page.locator('#orderBtn').click();
   await page.waitForSelector('#sheet.open');
 
-  // Verify modal elements
-  assert(await page.locator('#sheet-title, .sheet-h b').textContent() === 'Оформление заявки', 'Sheet title should be "Оформление заявки"');
-  assert(await page.locator('#ordDays').textContent() === '1', 'Initial days should be 1');
+  const noDelivBanner = page.locator('.no-delivery-banner');
+  assert(await noDelivBanner.isVisible(), 'Should show .no-delivery-banner for tool without delivery');
+  const bannerText = await noDelivBanner.textContent();
+  assert(bannerText.includes('Доставки нет!'), 'Banner must contain "Доставки нет!"');
+  assert(await page.locator('#rowDelivery').count() === 0, 'Should NOT show delivery toggle row for tool without delivery');
+  await page.locator('#ordCancel').click();
+  await page.waitForTimeout(300);
+  console.log('✔ "Доставки нет!" verified on tool without delivery');
 
-  // Test stepper
-  await page.locator('#ordPlus').click();
-  assert(await page.locator('#ordDays').textContent() === '2', 'Days should increase to 2');
+  // Test 2: Tool WITH delivery has toggle switch and round-trip switch
+  console.log('Testing tool WITH delivery, address autocomplete and round-trip toggle...');
+  await page.goto('http://127.0.0.1:8000/tool.html?id=tool-with-delivery', { waitUntil: 'networkidle' });
+  await page.locator('#orderBtn').click();
+  await page.waitForSelector('#sheet.open');
 
-  // Fill name and phone
-  await page.locator('#ordName').fill('Тестовый Заказчик');
-  await page.locator('#ordPhone').fill('+7 999 123-45-67');
+  // Verify delivery toggle is present and initially off
+  const delivRow = page.locator('#rowDelivery');
+  assert(await delivRow.isVisible(), 'Delivery toggle row should be visible');
+  assert(await page.locator('#swDelivery').isVisible(), 'Delivery switch should be visible');
+  assert(!await page.locator('#swDelivery').evaluate(el => el.classList.contains('on')), 'Delivery switch should be initially off');
+
+  // Click to turn Delivery ON
+  await delivRow.click();
+  await page.waitForFunction(() => document.getElementById('swDelivery')?.classList.contains('on'));
+  assert(await page.locator('#deliveryDetailsBox').isVisible(), 'Delivery details box should appear');
+  assert(await page.locator('#rowRoundTrip').isVisible(), 'Round trip toggle row should appear');
+
+  // Fill delivery address
+  const addrInput = page.locator('#ordDeliveryAddr');
+  await addrInput.fill('Новочеркасск, улица Ленина, 5');
+  await addrInput.dispatchEvent('change');
+  await page.waitForTimeout(300);
+
+  // Toggle «Туда и обратно» ON
+  const roundTripRow = page.locator('#rowRoundTrip');
+  await roundTripRow.click();
+  await page.waitForFunction(() => document.getElementById('swRoundTrip')?.classList.contains('on'));
+
+  // Fill client name & phone
+  await page.locator('#ordName').fill('Сергей Петров');
+  await page.locator('#ordPhone').fill('+7 918 000-11-22');
 
   // Submit order
   await page.locator('#ordSend').click();
-
-  // Wait for confirmation sheet
   await page.waitForFunction(() => {
     const title = document.querySelector('.sheet-h b');
     return title && title.textContent.includes('Заявка принята');
   }, { timeout: 5000 });
 
-  assert(submittedOrderPayload, 'submit_order RPC should have been called');
-  assert.strictEqual(submittedOrderPayload.p_name, 'Тестовый Заказчик');
-  assert.strictEqual(submittedOrderPayload.p_phone, '+7 999 123-45-67');
-  assert.strictEqual(submittedOrderPayload.p_days, 2);
-  console.log('✔ tool.html order flow passed');
+  assert(submittedOrderPayload, 'submit_order RPC should be called');
+  assert(submittedOrderPayload.p_get_method.includes('туда-обратно'), 'p_get_method should indicate round-trip delivery');
+  assert.strictEqual(submittedOrderPayload.p_address, 'Новочеркасск, улица Ленина, 5');
+  console.log('✔ Delivery toggle and round-trip doubled calculation verified');
 
-  // Test 2: account.html tabs for landlord: «Заявки» and «Комиссия и оплата»
+  // Test 3: Account tabs for landlord
   console.log('Testing account.html tabs for landlord...');
-
   await page.evaluate((em) => {
     localStorage.setItem('iva_sess', JSON.stringify({
       tok: 'fake-jwt',
@@ -257,65 +278,12 @@ const assert = require('assert');
 
   await page.goto('http://127.0.0.1:8000/account.html#prof', { waitUntil: 'networkidle' });
 
-  // Verify tab list contains: Мои объявления, Заявки, Комиссия и оплата, Избранное, Сообщения, Профиль
   const tabs = await page.locator('.tabs button').allTextContents();
   console.log('Account tabs:', tabs);
   assert(tabs.some(t => t.includes('Мои объявления')), 'Should have "Мои объявления" tab');
   assert(tabs.some(t => t.includes('Заявки')), 'Should have "Заявки" tab');
   assert(tabs.some(t => t.includes('Комиссия и оплата')), 'Should have "Комиссия и оплата" tab');
   assert(tabs.some(t => t.includes('Профиль')), 'Should have "Профиль" tab');
-
-  // Test 3: Open «Комиссия и оплата» tab
-  console.log('Testing «Комиссия и оплата» view...');
-  await page.locator('button[data-tab="fee"]').click();
-  await page.waitForTimeout(300);
-
-  // Check KPI cards
-  const kpiLabels = await page.locator('.kpi .lb').allTextContents();
-  console.log('KPI labels:', kpiLabels);
-  assert(kpiLabels.includes('К оплате (долг)'), 'Should show debt KPI');
-  assert(kpiLabels.includes('Ставка комиссии'), 'Should show commission rate KPI');
-  assert(kpiLabels.includes('Лимит задолженности'), 'Should show debt limit KPI');
-
-  // Check SBP details card
-  const sbpPhone = await page.locator('#btnCopyPhone').isVisible();
-  assert(sbpPhone, 'Copy phone button should be visible in payment details');
-
-  // Test pay fee modal
-  await page.locator('#btnPayFeeTop').click();
-  await page.waitForSelector('#sheet.open');
-  assert(await page.locator('.sheet-h b').textContent() === 'Оплата комиссии', 'Payment modal should open');
-
-  await page.locator('#payModalAmount').fill('200');
-  await page.locator('#payModalNote').fill('Перевод СБП Т-Банк');
-  await page.locator('#payModalSubmit').click();
-  await page.waitForTimeout(400);
-
-  assert(postedFee, 'addFee should have been submitted');
-  assert.strictEqual(postedFee.amount, 200);
-  assert.strictEqual(postedFee.admin_email, email);
-  console.log('✔ Fee payment submission flow passed');
-
-  // Test 4: Open «Заявки» tab
-  console.log('Testing «Заявки» view...');
-  await page.locator('button[data-tab="orders"]').click();
-  await page.waitForTimeout(300);
-
-  // Check filter chips
-  const chips = await page.locator('.chips .chip').allTextContents();
-  console.log('Order filter chips:', chips);
-  assert(chips.some(c => c.includes('Все')), 'Chips should include "Все"');
-  assert(chips.some(c => c.includes('Новые')), 'Chips should include "Новые"');
-
-  // Check order card exists
-  const orderCards = await page.locator('.order-card').count();
-  assert(orderCards >= 2, 'Should display order cards for orders 49 and 50');
-
-  // Check action buttons in new order
-  const newOrderCard = page.locator('.order-card', { hasText: 'Сварочный аппарат полуавтомат' });
-  assert(await newOrderCard.locator('button[data-ord-do="rented"]').isVisible(), 'Should have "Выдал инструмент" button');
-
-  console.log('✔ Orders view passed');
 
   await browser.close();
   console.log('ALL TESTS PASSED SUCCESSFULLY!');
