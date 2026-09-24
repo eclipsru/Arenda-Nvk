@@ -476,11 +476,11 @@ function bindSoon(){
 }
 
 /* ---------- Верхняя плашка загрузки нативного приложения ---------- */
-// Это ВОЗВРАТ к прежней сборке 10.11, а не обновление до новой версии.
-// Сравнение номеров тут нельзя использовать: прежняя веб-плашка ошибочно
-// записывала «установлено 10.12» уже при клике, а APK на деле был 10.11.
-const APP_RELEASE_ID = '10.11-recovery-20260924';
-const APP_DOWNLOAD_URL = 'ProkatInstrumenta-10.11-recovery.apk';
+// Версия 10.12: исправлен вход — после логина e-mail не проставлялся в память,
+// поэтому до перезапуска кабинет показывал чужие данные владельца площадки.
+// Подпись сборки новая: поверх старой APK не ставится — нужна переустановка.
+const APP_RELEASE_ID = '10.12-loginfix-20260924';
+const APP_DOWNLOAD_URL = 'ProkatInstrumenta-10.12.apk';
 
 function isMobileDevice(){
   return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || window.innerWidth <= 768;
@@ -533,14 +533,14 @@ function mountAppTopBanner(container){
     } catch(e){}
   }
 
-  // Повторно не показываем только если скачали ИМЕННО восстановленный файл.
-  // Запись прошлой версии не скрывает доступ к откату.
+  // Повторно не показываем только если скачали ИМЕННО актуальный файл.
+  // Запись прошлой версии не скрывает доступ к обновлению.
   if (!isPermanent && downloadedRelease === APP_RELEASE_ID) return;
 
-  const isRecovery = isPermanent || !!oldDownload;
-  const titleText = isRecovery ? 'Восстановленная версия 10.11' : 'Ива для Android · 10.11';
-  const subText = isRecovery
-    ? 'Если не устанавливается — удалите старый APK и попробуйте снова'
+  const hadApp = isPermanent || !!oldDownload;
+  const titleText = hadApp ? 'Обновление · версия 10.12' : 'Ива для Android · 10.12';
+  const subText = hadApp
+    ? 'Исправлен вход в кабинет. Перед установкой удалите старую версию'
     : 'Нативное приложение: каталог, заявки и чат';
   const btnText = 'Скачать';
 
@@ -636,7 +636,7 @@ function mountAppTopBanner(container){
 
 // Клик означает скачивание, НЕ успешную установку (подписи версий могут отличаться).
 document.addEventListener('click', function(e){
-  const a = e.target.closest ? e.target.closest('a[href*="ProkatInstrumenta-10.11-recovery.apk"]') : null;
+  const a = e.target.closest ? e.target.closest('a[href*="ProkatInstrumenta-10.12.apk"]') : null;
   if (!a) return;
   try { localStorage.setItem('prokat_app_download_release', APP_RELEASE_ID); } catch(err){}
   const b = document.getElementById('appTopBanner');

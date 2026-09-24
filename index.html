@@ -88,7 +88,7 @@
 <script src="assets/data.js"></script>
 <script src="assets/geo.js?v=20260923-photon"></script>
 <script src="assets/sb.js?v=20260923-photon"></script>
-<script src="assets/app.js?v=20260924-apk-recovery"></script>
+<script src="assets/app.js?v=20260924-apk-1012"></script>
 <script src="assets/partners.js?v=20260923-info-spacing"></script>
 <script>
 (function(){
@@ -400,24 +400,7 @@
 })();
 </script>
 
-<!-- Баннер «В приложении удобней» (моб. версия, 5 сек) -->
-<style>
-#appTopBanner{position:fixed;top:0;left:0;right:0;z-index:99999;display:flex;align-items:center;justify-content:center;gap:10px;
-padding:12px 44px 12px 16px;background:linear-gradient(90deg,#ff7a00,#ff9f1c);color:#fff;font:600 15px/1.2 system-ui,-apple-system,sans-serif;
-text-decoration:none;box-shadow:0 2px 10px rgba(0,0,0,.25);transform:translateY(-110%);transition:transform .35s ease}
-#appTopBanner.show{transform:translateY(0)}
-#appTopBanner .x{position:absolute;right:8px;top:50%;transform:translateY(-50%);background:none;border:0;color:#fff;font-size:22px;padding:4px 8px;cursor:pointer}
-</style>
-<a id="appTopBanner" href="ProkatInstrumenta-10.11-recovery.apk" download>📱 В приложении удобней — скачать<button class="x" type="button" aria-label="Закрыть">×</button></a>
-<script>
-(function(){
-  var b=document.getElementById('appTopBanner');
-  var mobile=window.matchMedia('(max-width: 768px)').matches||/Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
-  if(!mobile){b.remove();return;}
-  b.querySelector('.x').addEventListener('click',function(e){e.preventDefault();e.stopPropagation();b.classList.remove('show');});
-  setTimeout(function(){b.classList.add('show');},300);
-  setTimeout(function(){b.classList.remove('show');setTimeout(function(){b.remove();},400);},5300);
-})();
-</script>
+<!-- Баннер скачивания APK рисует mountAppTopBanner() из assets/app.js
+     (inline-дубль с тем же id убран: он ломал общий баннер и показывал старую ссылку) -->
 </body>
 </html>

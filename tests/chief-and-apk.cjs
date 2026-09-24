@@ -5,7 +5,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 
 const BASE = process.env.SITE_BASE_URL || 'http://127.0.0.1:8000';
-const APK = 'ProkatInstrumenta-10.11-recovery.apk';
+const APK = 'ProkatInstrumenta-10.12.apk';
 
 (async () => {
   const browser = await chromium.launch({ headless: true });
@@ -48,7 +48,7 @@ moneyStats = () => ({ rent:0, fee:0, paid:0, owed:0, byAdmin:{} });
       }));
       await page.goto(`${BASE}/chief.html`);
       await page.locator('.apk-recovery').waitFor({ timeout: 10000 });
-      assert.match(await page.locator('.apk-recovery').innerText(), /восстановленная версия 10\.11/);
+      assert.match(await page.locator('.apk-recovery').innerText(), /обновлённая версия 10\.12/);
       assert.match(await page.locator('.apk-recovery').innerText(), /удалите текущую версию/);
       assert.equal(await page.locator('#root a[href$=".apk"]').count(), 2);
       assert.equal(new URL(await page.locator('.apk-recovery a').getAttribute('href'), `${BASE}/chief.html`).pathname.split('/').pop(), APK);
@@ -57,7 +57,7 @@ moneyStats = () => ({ rent:0, fee:0, paid:0, owed:0, byAdmin:{} });
       assert.deepEqual(errors, []);
       const response = await page.request.get(`${BASE}/${APK}`);
       assert.equal(response.status(), 200, 'APK must be publicly downloadable');
-      assert.equal((await response.body()).length, 1095737, 'Correct APK file is served');
+      assert.equal((await response.body()).length, 1095671, 'Correct APK file is served');
       await page.close();
     }
     console.log('Chief cabinet, access control, outreach and native APK link: OK');
