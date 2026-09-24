@@ -1,0 +1,13 @@
+# Local dependencies and build artifacts
+node_modules/
+.cache/
+*.log
+
+# Never commit authentication material or an Android signing key
+.env
+.env.*
+*.keystore
+*.jks
+*.p12
+*.pem
+КЛЮЧИ-ДОСТУПЫ.md

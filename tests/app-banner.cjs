@@ -1,140 +1,100 @@
 const { chromium } = require('playwright');
-const assert = require('assert');
+const assert = require('node:assert/strict');
+
+const BASE = process.env.SITE_BASE_URL || 'http://127.0.0.1:8000';
+const APK_NAME = 'ProkatInstrumenta-10.11-recovery.apk';
+const RELEASE = '10.11-recovery-20260924';
+const MOBILE = {
+  viewport: { width: 375, height: 667 },
+  userAgent: 'Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 Mobile Safari/537.36'
+};
 
 async function runTests() {
-  console.log('--- Starting App Top Banner Tests ---');
   const browser = await chromium.launch({ headless: true });
+  try {
+    // First visit: shows the restored native APK, then disappears after 5 seconds.
+    {
+      const context = await browser.newContext(MOBILE);
+      const page = await context.newPage();
+      await page.goto(`${BASE}/index.html`);
+      const banner = page.locator('#appTopBanner');
+      await banner.waitFor({ state: 'visible', timeout: 5000 });
+      assert.match(await banner.innerText(), /Ива для Android · 10\.11/);
+      assert.equal((await page.locator('#appTbBtn').innerText()).trim(), 'Скачать');
+      assert.ok((await page.locator('#appTbBtn').getAttribute('href')).endsWith(APK_NAME));
+      assert.equal(await banner.locator('.app-tb-bar').count(), 1);
+      await page.waitForTimeout(5600);
+      assert.equal(await banner.count(), 0, 'Non-owner banner closes automatically');
+      await context.close();
+    }
 
-  // Test 1: Fresh mobile user
-  console.log('Test 1: Fresh mobile user sees "В приложении удобней" and it auto-dismisses after 5s');
-  {
-    const context = await browser.newContext({
-      viewport: { width: 375, height: 667 },
-      userAgent: 'Mozilla/5.0 (Linux; Android 13; SM-G981B) AppleWebKit/537.36 Mobile Safari/537.36'
-    });
-    const page = await context.newPage();
-    await page.goto('http://localhost:8000/index.html');
+    // Clicking the link means "downloaded", not "installed". A real APK is served.
+    {
+      const context = await browser.newContext(MOBILE);
+      const page = await context.newPage();
+      await page.addInitScript(() => localStorage.setItem('prokat_app_installed_ver', '10.12'));
+      await page.goto(`${BASE}/index.html`);
+      const banner = page.locator('#appTopBanner');
+      await banner.waitFor({ state: 'visible', timeout: 5000 });
+      assert.match(await banner.innerText(), /Восстановленная версия 10\.11/);
+      assert.match(await banner.innerText(), /удалите старый APK/);
+      const [download] = await Promise.all([
+        page.waitForEvent('download'),
+        page.locator('#appTbBtn').click()
+      ]);
+      assert.equal(download.suggestedFilename(), APK_NAME);
+      assert.equal(await page.evaluate(() => localStorage.getItem('prokat_app_download_release')), RELEASE);
+      assert.equal(await page.evaluate(() => localStorage.getItem('prokat_app_installed_ver')), '10.12', 'Do not claim installation on download');
+      await context.close();
+    }
 
-    // Banner should be visible
-    const banner = page.locator('#appTopBanner');
-    await banner.waitFor({ state: 'visible', timeout: 3000 });
+    // A previous visit to this *specific* release suppresses repeats.
+    {
+      const context = await browser.newContext(MOBILE);
+      const page = await context.newPage();
+      await page.addInitScript(release => localStorage.setItem('prokat_app_download_release', release), RELEASE);
+      await page.goto(`${BASE}/index.html`);
+      assert.equal(await page.locator('#appTopBanner').count(), 0);
+      await context.close();
+    }
 
-    const title = await page.locator('#appTopBanner .app-tb-title').textContent();
-    console.log('  Banner title:', title.trim());
-    assert(title.includes('В приложении удобней'), 'Expected title to contain "В приложении удобней"');
+    // Owner can always find the APK; banner never auto-dismisses.
+    {
+      const context = await browser.newContext(MOBILE);
+      const page = await context.newPage();
+      await page.addInitScript(release => {
+        localStorage.setItem('iva_sess', JSON.stringify({ me: 'eclips.ru@mail.ru' }));
+        localStorage.setItem('prokat_app_download_release', release);
+      }, RELEASE);
+      await page.goto(`${BASE}/index.html`);
+      const banner = page.locator('#appTopBanner');
+      await banner.waitFor({ state: 'visible', timeout: 5000 });
+      assert.match(await banner.innerText(), /Восстановленная версия 10\.11/);
+      assert.equal(await banner.locator('#appTbClose').count(), 0);
+      await page.waitForTimeout(5600);
+      assert.equal(await banner.count(), 1);
+      await context.close();
+    }
 
-    const btn = await page.locator('#appTopBanner #appTbBtn').textContent();
-    console.log('  Button text:', btn.trim());
-    assert.strictEqual(btn.trim(), 'Скачать');
+    // No banner on desktop; it is available on catalogue for mobile.
+    {
+      const context = await browser.newContext({ viewport: { width: 1280, height: 800 } });
+      const page = await context.newPage();
+      await page.goto(`${BASE}/index.html`);
+      assert.equal(await page.locator('#appTopBanner').count(), 0);
+      await context.close();
+    }
+    {
+      const context = await browser.newContext(MOBILE);
+      const page = await context.newPage();
+      await page.goto(`${BASE}/catalog.html`);
+      await page.locator('#appTopBanner').waitFor({ state: 'visible', timeout: 5000 });
+      await context.close();
+    }
 
-    // Check progress bar exists
-    const bar = await page.locator('#appTopBanner .app-tb-bar').count();
-    assert.strictEqual(bar, 1, 'Expected progress bar to exist');
-
-    // Wait 5.5s to verify auto-dismiss
-    console.log('  Waiting 5.5s for auto-dismiss...');
-    await page.waitForTimeout(5600);
-
-    const isHidden = await banner.count();
-    console.log('  Banner count after 5.5s:', isHidden);
-    assert.strictEqual(isHidden, 0, 'Banner should be removed after 5 seconds');
-    await context.close();
+    console.log('App banner, rollback link and download: 6 cases OK');
+  } finally {
+    await browser.close();
   }
-
-  // Test 2: User with current version already installed
-  console.log('\nTest 2: User with current version installed does NOT see banner');
-  {
-    const context = await browser.newContext({
-      viewport: { width: 375, height: 667 },
-      userAgent: 'Mozilla/5.0 (Linux; Android 13; SM-G981B) AppleWebKit/537.36 Mobile Safari/537.36'
-    });
-    const page = await context.newPage();
-    await page.addInitScript(() => {
-      localStorage.setItem('prokat_app_installed_ver', '10.12');
-    });
-    await page.goto('http://localhost:8000/index.html');
-    await page.waitForTimeout(1000);
-
-    const bannerCount = await page.locator('#appTopBanner').count();
-    console.log('  Banner count for installed user:', bannerCount);
-    assert.strictEqual(bannerCount, 0, 'Banner should NOT be shown for users with current version installed');
-    await context.close();
-  }
-
-  // Test 3: User with older version installed gets "Обновление удобнее"
-  console.log('\nTest 3: User with older version (10.10) sees "Обновление удобнее"');
-  {
-    const context = await browser.newContext({
-      viewport: { width: 375, height: 667 },
-      userAgent: 'Mozilla/5.0 (Linux; Android 13; SM-G981B) AppleWebKit/537.36 Mobile Safari/537.36'
-    });
-    const page = await context.newPage();
-    await page.addInitScript(() => {
-      localStorage.setItem('prokat_app_installed_ver', '10.10');
-    });
-    await page.goto('http://localhost:8000/index.html');
-
-    const banner = page.locator('#appTopBanner');
-    await banner.waitFor({ state: 'visible', timeout: 3000 });
-
-    const title = await page.locator('#appTopBanner .app-tb-title').textContent();
-    console.log('  Banner title:', title.trim());
-    assert(title.includes('Обновление удобнее'), 'Expected title to contain "Обновление удобнее"');
-
-    const btn = await page.locator('#appTopBanner #appTbBtn').textContent();
-    console.log('  Button text:', btn.trim());
-    assert.strictEqual(btn.trim(), 'Обновить');
-
-    // Click update button to verify it saves new version
-    await page.locator('#appTopBanner #appTbBtn').click();
-    await page.waitForTimeout(500);
-
-    const savedVer = await page.evaluate(() => localStorage.getItem('prokat_app_installed_ver'));
-    console.log('  Saved version in localStorage after click:', savedVer);
-    assert.strictEqual(savedVer, '10.12', 'Expected version 10.12 to be saved in localStorage');
-    await context.close();
-  }
-
-  // Test 4: Desktop user does not see banner
-  console.log('\nTest 4: Desktop user does not see mobile banner');
-  {
-    const context = await browser.newContext({
-      viewport: { width: 1280, height: 800 },
-      userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36'
-    });
-    const page = await context.newPage();
-    await page.goto('http://localhost:8000/index.html');
-    await page.waitForTimeout(1000);
-
-    const bannerCount = await page.locator('#appTopBanner').count();
-    console.log('  Banner count on desktop:', bannerCount);
-    assert.strictEqual(bannerCount, 0, 'Desktop user should NOT see mobile app banner');
-    await context.close();
-  }
-
-  // Test 5: Verify on catalog and tool page on mobile
-  console.log('\nTest 5: Verify banner appears on catalog.html on mobile');
-  {
-    const context = await browser.newContext({
-      viewport: { width: 375, height: 667 },
-      userAgent: 'Mozilla/5.0 (Linux; Android 13; SM-G981B) AppleWebKit/537.36 Mobile Safari/537.36'
-    });
-    const page = await context.newPage();
-    await page.goto('http://localhost:8000/catalog.html');
-
-    const banner = page.locator('#appTopBanner');
-    await banner.waitFor({ state: 'visible', timeout: 3000 });
-    const title = await page.locator('#appTopBanner .app-tb-title').textContent();
-    console.log('  Catalog page banner title:', title.trim());
-    assert(title.includes('В приложении удобней'));
-    await context.close();
-  }
-
-  await browser.close();
-  console.log('\n>>> ALL 5 APP BANNER TESTS PASSED SUCCESSFULLY! <<<');
 }
-
-runTests().catch(err => {
-  console.error('Test failed:', err);
-  process.exit(1);
-});
+runTests().catch(err => { console.error(err); process.exitCode = 1; });

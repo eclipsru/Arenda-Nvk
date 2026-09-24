@@ -17,6 +17,11 @@
 .kpi.warn{border-color:rgba(255,183,77,.4)}
 .kpi.warn .vl{color:var(--yel)}
 .kpi.good .vl{color:var(--grn)}
+.apk-recovery{display:flex;align-items:center;justify-content:space-between;gap:18px;flex-wrap:wrap;
+  background:var(--card);border:1px solid var(--or);border-radius:var(--r);padding:18px;margin-bottom:22px}
+.apk-recovery h3{font-size:17px;margin:0 0 6px}
+.apk-recovery p{color:var(--gr);font-size:13px;line-height:1.5;margin:0;max-width:750px}
+.apk-recovery p + p{margin-top:6px}
 
 .tabs{display:flex;gap:4px;border-bottom:1px solid var(--line);margin-bottom:18px;
   overflow-x:auto;padding-bottom:1px}
@@ -90,7 +95,7 @@
 <script src="assets/data.js"></script>
 <script src="assets/geo.js?v=20260923-photon"></script>
 <script src="assets/sb.js?v=20260923-photon"></script>
-<script src="assets/app.js?v=20260924-app-banner-v2"></script>
+<script src="assets/app.js?v=20260924-apk-recovery"></script>
 <script src="assets/partners.js?v=20260923-info-spacing"></script>
 <script>
 (function(){
@@ -129,6 +134,7 @@
 
     return '<div class="sect" style="padding-bottom:0"><div class="sect-h">' +
         '<h2>Управление площадкой</h2>' +
+        '<a class="btn sm" href="ProkatInstrumenta-10.11-recovery.apk" download>Скачать Android 10.11</a>' +
         '<span class="cnt">' + esc(A.me) + ' · владелец</span>' +
       '</div></div>' +
       '<div class="tabs">' +
@@ -142,8 +148,8 @@
           (D.landlordApps.filter(a=>a.status==='pending').length ? '<span class="n">' + D.landlordApps.filter(a=>a.status==='pending').length + '</span>' : '') + '</button>' +
         '<button data-tab="fee" class="'  + (TAB==='fee'?'on':'')  + '">Комиссия' +
           (nFee ? '<span class="n">' + nFee + '</span>' : '') + '</button>' +
-        '<button data-tab="cat" class="'  + (TAB==='cat'?'on':'')  + '">Категории</button>
-        <button data-tab="outreach" class="' + (TAB==='outreach'?'on':'') + '">🚀 Рассылка по РФ</button>' +
+        '<button data-tab="cat" class="'  + (TAB==='cat'?'on':'')  + '">Категории</button>' +
+        '<button data-tab="outreach" class="' + (TAB==='outreach'?'on':'') + '">🚀 Рассылка по РФ</button>' +
       '</div>' + inner;
   }
 
@@ -161,7 +167,15 @@
       return !o.status || o.status === 'new';
     }).length;
 
-    return '<div class="kpis">' +
+    return '<section class="apk-recovery" aria-label="Нативное приложение для Android">' +
+        '<div><h3>Ива для Android · восстановленная версия 10.11</h3>' +
+          '<p>Это прежняя нативная сборка с исходной подписью, без последних изменений. ' +
+          'Ссылка ведёт на новый файл, чтобы телефон не скачал закешированную неисправную сборку.</p>' +
+          '<p>Если установка поверх текущего приложения отклонена из-за подписи, удалите текущую версию ' +
+          'и установите эту заново. После удаления локальные настройки могут пропасть; данные аккаунта хранятся на сервере.</p></div>' +
+        '<a class="btn" href="ProkatInstrumenta-10.11-recovery.apk" download>Скачать APK 10.11</a>' +
+      '</section>' +
+      '<div class="kpis">' +
         '<div class="kpi"><div class="lb">Оборот за всё время</div>' +
           '<div class="vl">' + m(s.rent) + '</div>' +
           '<div class="sub">' + D.parts.length + ' ' +
@@ -470,21 +484,12 @@
     const orderId = curOrder ? curOrder.id : '49';
     const claimLink = 'https://eclipsru.github.io/Arenda-Nvk/claim.html?id=' + orderId;
 
-    const sampleMsg = 'Здравствуйте, ' + sampleLandlord.name + '! Это единый сервис проката инструмента (' + (selCity || 'ваш город') + ').
-
-' +
-      'У нас прямо сейчас висит подтвержденная клиентская заявка на аренду: ' + toolName + ' на ' + toolDays + ' суток.
-' +
-      'Клиент готов внести оплату и залог.
-
-' +
-      'Мы бесплатно передаем этот заказ вам, так как наши основные склады в городе загружены.
-' +
-      'Заберите прямой контакт клиента по ссылке:
-' +
-      '👉 ' + claimLink + '
-
-' +
+    const sampleMsg = 'Здравствуйте, ' + sampleLandlord.name + '! Это единый сервис проката инструмента (' + (selCity || 'ваш город') + ').\n\n' +
+      'У нас прямо сейчас висит подтвержденная клиентская заявка на аренду: ' + toolName + ' на ' + toolDays + ' суток.\n' +
+      'Клиент готов внести оплату и залог.\n\n' +
+      'Мы бесплатно передаем этот заказ вам, так как наши основные склады в городе загружены.\n' +
+      'Заберите прямой контакт клиента по ссылке:\n' +
+      '👉 ' + claimLink + '\n\n' +
       '(Ссылка активна 40 минут. Заказ заберет первый подтвердивший прокат)';
 
     return '<div class="sect-h"><h2 style="font-size:17px">🚀 Рассылка по базам проката (Вариант 1: Под реальную заявку)</h2></div>' +
@@ -525,21 +530,12 @@
         '<th>Название организации</th><th>Телефон (WhatsApp)</th><th>Адрес</th><th>Источник</th><th>Статус</th><th>Действие</th>' +
       '</tr></thead><tbody>' +
       (basesInCity.length ? basesInCity.map(function(l){
-        const itemMsg = 'Здравствуйте, ' + l.name + '! Это единый сервис проката инструмента (' + (selCity || 'город') + ').
-
-' +
-          'У нас прямо сейчас висит подтвержденная клиентская заявка на аренду: ' + toolName + ' на ' + toolDays + ' суток.
-' +
-          'Клиент готов внести оплату и залог.
-
-' +
-          'Мы бесплатно передаем этот заказ вам, так как наши основные склады в городе загружены.
-' +
-          'Заберите прямой контакт клиента по ссылке:
-' +
-          '👉 ' + claimLink + '
-
-' +
+        const itemMsg = 'Здравствуйте, ' + l.name + '! Это единый сервис проката инструмента (' + (selCity || 'город') + ').\n\n' +
+          'У нас прямо сейчас висит подтвержденная клиентская заявка на аренду: ' + toolName + ' на ' + toolDays + ' суток.\n' +
+          'Клиент готов внести оплату и залог.\n\n' +
+          'Мы бесплатно передаем этот заказ вам, так как наши основные склады в городе загружены.\n' +
+          'Заберите прямой контакт клиента по ссылке:\n' +
+          '👉 ' + claimLink + '\n\n' +
           '(Ссылка активна 40 минут. Заказ заберет первый подтвердивший прокат)';
 
         const waUrl = 'https://wa.me/' + l.phone + '?text=' + encodeURIComponent(itemMsg);
@@ -776,6 +772,12 @@
     if (!isAuthed()){ screenDeny('Нужно войти', 'Раздел доступен только владельцу площадки.'); return; }
     if (!isChief()){ screenDeny('Доступ закрыт', 'Этот раздел видит только владелец площадки «Ива».'); return; }
 
+    // Ссылка доступна владельцу даже при медленной загрузке или сбое API.
+    $('root').innerHTML = '<div class="sect" style="padding-bottom:0"><div class="sect-h">' +
+      '<h2>Управление площадкой</h2>' +
+      '<a class="btn sm" href="ProkatInstrumenta-10.11-recovery.apk" download>Скачать Android 10.11</a>' +
+      '</div></div><div class="empty" style="padding:60px 20px"><b>Загрузка…</b></div>';
+
     try {
       const r = await Promise.all([
         loadOrders(), loadParts(), loadAdmins(), loadFees(), loadAllTools(), loadAllCats()
@@ -792,7 +794,10 @@
       try { D.landlordApps=await loadLandlordApplications(); } catch(err){D.landlordError=err.message;}
       render();
     } catch(e){
-      $('root').innerHTML = '<div class="empty" style="padding:60px 20px">' +
+      $('root').innerHTML = '<div class="sect" style="padding-bottom:0"><div class="sect-h">' +
+        '<h2>Управление площадкой</h2>' +
+        '<a class="btn sm" href="ProkatInstrumenta-10.11-recovery.apk" download>Скачать Android 10.11</a>' +
+        '</div></div><div class="empty" style="padding:60px 20px">' +
         '<b>Не удалось загрузить данные</b><p>' + esc(e.message) + '</p>' +
         '<button class="btn" onclick="location.reload()">Обновить</button></div>';
     }

@@ -475,22 +475,12 @@ function bindSoon(){
   });
 }
 
-/* ---------- Верхняя плашка приложения («В приложении удобней» / «Обновление удобнее») ---------- */
-const CURRENT_APP_VERSION = '10.12';
-const APP_DOWNLOAD_URL = 'https://eclipsru.github.io/Arenda-Nvk/ProkatInstrumenta.apk';
-
-function cmpAppVer(v1, v2){
-  if (!v1 || !v2) return 0;
-  const p1 = String(v1).replace(/[^0-9.]/g, '').split('.').map(Number);
-  const p2 = String(v2).replace(/[^0-9.]/g, '').split('.').map(Number);
-  const len = Math.max(p1.length, p2.length);
-  for (let i = 0; i < len; i++){
-    const a = p1[i] || 0, b = p2[i] || 0;
-    if (a > b) return 1;
-    if (a < b) return -1;
-  }
-  return 0;
-}
+/* ---------- Верхняя плашка загрузки нативного приложения ---------- */
+// Это ВОЗВРАТ к прежней сборке 10.11, а не обновление до новой версии.
+// Сравнение номеров тут нельзя использовать: прежняя веб-плашка ошибочно
+// записывала «установлено 10.12» уже при клике, а APK на деле был 10.11.
+const APP_RELEASE_ID = '10.11-recovery-20260924';
+const APP_DOWNLOAD_URL = 'ProkatInstrumenta-10.11-recovery.apk';
 
 function isMobileDevice(){
   return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || window.innerWidth <= 768;
@@ -509,9 +499,10 @@ function isPermanentUser(email){
 function mountAppTopBanner(container){
   if (!isMobileDevice() || isInsideNativeApp()) return;
 
-  let installedVer = null;
+  let oldDownload = null, downloadedRelease = null;
   try {
-    installedVer = localStorage.getItem('prokat_app_installed_ver');
+    oldDownload = localStorage.getItem('prokat_app_installed_ver'); // устаревший, не подтверждает установку
+    downloadedRelease = localStorage.getItem('prokat_app_download_release');
   } catch(e){}
 
   // Проверяем авторизованного пользователя
@@ -542,17 +533,16 @@ function mountAppTopBanner(container){
     } catch(e){}
   }
 
-  // Для обычных пользователей: если приложение уже установлено и версия актуальна — плашку НЕ показываем
-  if (!isPermanent && installedVer && cmpAppVer(installedVer, CURRENT_APP_VERSION) >= 0) {
-    return;
-  }
+  // Повторно не показываем только если скачали ИМЕННО восстановленный файл.
+  // Запись прошлой версии не скрывает доступ к откату.
+  if (!isPermanent && downloadedRelease === APP_RELEASE_ID) return;
 
-  // Для постоянного аккаунта (eclips.ru@mail.ru) плашка ВСЕГДА «Обновление удобнее» и НЕ исчезает
-  const isUpdate = isPermanent || !!(installedVer && cmpAppVer(CURRENT_APP_VERSION, installedVer) > 0);
-
-  const titleText = isUpdate ? 'Обновление удобнее' : 'В приложении удобней';
-  const subText = isUpdate ? 'Новая версия APK: отзывы, рейтинг и точки выдачи' : 'Быстрый заказ, избранное и чат с прокатом';
-  const btnText = isUpdate ? 'Обновить' : 'Скачать';
+  const isRecovery = isPermanent || !!oldDownload;
+  const titleText = isRecovery ? 'Восстановленная версия 10.11' : 'Ива для Android · 10.11';
+  const subText = isRecovery
+    ? 'Если не устанавливается — удалите старый APK и попробуйте снова'
+    : 'Нативное приложение: каталог, заявки и чат';
+  const btnText = 'Скачать';
 
   // Проверяем, может баннер уже существует
   let banner = document.getElementById('appTopBanner');
@@ -580,7 +570,7 @@ function mountAppTopBanner(container){
   banner.className = 'app-top-banner' + (isPermanent ? ' permanent' : '');
   banner.innerHTML =
     '<div class="app-tb-wrap">' +
-      '<a class="app-tb-left" href="' + esc(APP_DOWNLOAD_URL) + '" id="appTbLink">' +
+      '<a class="app-tb-left" href="' + esc(APP_DOWNLOAD_URL) + '" download id="appTbLink">' +
         '<img class="app-tb-icon" src="assets/logo.png" alt="Ива">' +
         '<div class="app-tb-text">' +
           '<b class="app-tb-title">' + esc(titleText) + ' <span class="app-tb-star">★</span></b>' +
@@ -588,7 +578,7 @@ function mountAppTopBanner(container){
         '</div>' +
       '</a>' +
       '<div class="app-tb-right">' +
-        '<a class="app-tb-btn" href="' + esc(APP_DOWNLOAD_URL) + '" id="appTbBtn">' + esc(btnText) + '</a>' +
+        '<a class="app-tb-btn" href="' + esc(APP_DOWNLOAD_URL) + '" download id="appTbBtn">' + esc(btnText) + '</a>' +
         (isPermanent ? '' : '<button class="app-tb-close" id="appTbClose" aria-label="Закрыть">×</button>') +
       '</div>' +
     '</div>' +
@@ -602,45 +592,30 @@ function mountAppTopBanner(container){
     document.body.insertBefore(banner, document.body.firstChild);
   }
 
-  const dismiss = (markInstalled) => {
+  const dismiss = () => {
     if (window._appBannerTimer) { clearTimeout(window._appBannerTimer); window._appBannerTimer = null; }
-    if (markInstalled) {
-      try { localStorage.setItem('prokat_app_installed_ver', CURRENT_APP_VERSION); } catch(e){}
-    }
     banner.classList.add('closing');
     setTimeout(() => {
       if (banner.parentNode) banner.parentNode.removeChild(banner);
     }, 400);
   };
 
-  const recordDownload = () => {
-    try { localStorage.setItem('prokat_app_installed_ver', CURRENT_APP_VERSION); } catch(e){}
-    if (!isPermanent) dismiss(true);
-  };
-
-  const btn = banner.querySelector('#appTbBtn');
-  const link = banner.querySelector('#appTbLink');
   const close = banner.querySelector('#appTbClose');
-
-  if (btn) btn.addEventListener('click', recordDownload);
-  if (link) link.addEventListener('click', recordDownload);
 
   if (close) {
     close.addEventListener('click', (e) => {
       e.preventDefault();
       e.stopPropagation();
       try { sessionStorage.setItem('prokat_app_banner_closed', '1'); } catch(e){}
-      dismiss(false);
+      dismiss();
     });
   }
 
   // Для обычных пользователей запускаем таймер на 5 секунд.
-  // Для аккаунта eclips.ru@mail.ru плашка постоянная, таймер НЕ запускается!
+  // Для владельца плашка постоянная, таймер НЕ запускается!
   if (!isPermanent) {
     if (window._appBannerTimer) clearTimeout(window._appBannerTimer);
-    window._appBannerTimer = setTimeout(() => {
-      dismiss(false);
-    }, 5000);
+    window._appBannerTimer = setTimeout(dismiss, 5000);
   }
 
   // Если сессия еще восстанавливается — перепроверяем после восстановления
@@ -659,16 +634,16 @@ function mountAppTopBanner(container){
   }
 }
 
-// Запоминаем скачивание при любом клике по ссылке на APK на всем сайте
+// Клик означает скачивание, НЕ успешную установку (подписи версий могут отличаться).
 document.addEventListener('click', function(e){
-  const a = e.target.closest ? e.target.closest('a[href*="ProkatInstrumenta.apk"]') : null;
-  if (a) {
-    try { localStorage.setItem('prokat_app_installed_ver', CURRENT_APP_VERSION); } catch(err){}
-    const b = document.getElementById('appTopBanner');
-    if (b) {
-      b.classList.add('closing');
-      setTimeout(() => { if (b.parentNode) b.parentNode.removeChild(b); }, 400);
-    }
+  const a = e.target.closest ? e.target.closest('a[href*="ProkatInstrumenta-10.11-recovery.apk"]') : null;
+  if (!a) return;
+  try { localStorage.setItem('prokat_app_download_release', APP_RELEASE_ID); } catch(err){}
+  const b = document.getElementById('appTopBanner');
+  if (b && !b.classList.contains('permanent')) {
+    if (window._appBannerTimer) { clearTimeout(window._appBannerTimer); window._appBannerTimer = null; }
+    b.classList.add('closing');
+    setTimeout(() => { if (b.parentNode) b.parentNode.removeChild(b); }, 400);
   }
 });
 
