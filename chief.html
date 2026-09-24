@@ -142,7 +142,8 @@
           (D.landlordApps.filter(a=>a.status==='pending').length ? '<span class="n">' + D.landlordApps.filter(a=>a.status==='pending').length + '</span>' : '') + '</button>' +
         '<button data-tab="fee" class="'  + (TAB==='fee'?'on':'')  + '">Комиссия' +
           (nFee ? '<span class="n">' + nFee + '</span>' : '') + '</button>' +
-        '<button data-tab="cat" class="'  + (TAB==='cat'?'on':'')  + '">Категории</button>' +
+        '<button data-tab="cat" class="'  + (TAB==='cat'?'on':'')  + '">Категории</button>
+        <button data-tab="outreach" class="' + (TAB==='outreach'?'on':'') + '">🚀 Рассылка по РФ</button>' +
       '</div>' + inner;
   }
 
@@ -431,7 +432,130 @@
         '<a href="admin.html" style="color:var(--or)">управления каталогом</a>.</p>';
   }
 
-  /* ---------- Рендер ---------- */
+  
+  /* ---------- Рассылка по РФ (Вариант 1: Под реальную заявку) ---------- */
+  let OUTREACH_CACHE = { landlords: [], orders: [] };
+  let OUTREACH_STATE = { selectedCity: '', selectedOrderId: '', previewName: '', sending: false };
+
+  function viewOutreach(){
+    // Собираем уникальные города
+    const citiesMap = {};
+    (OUTREACH_CACHE.landlords || []).forEach(function(l){
+      citiesMap[l.city] = (citiesMap[l.city] || 0) + 1;
+    });
+    const cityList = Object.keys(citiesMap).sort();
+
+    const orders = (D.orders || []).filter(function(o){ return o.status !== 'cancelled'; });
+    const selCity = OUTREACH_STATE.selectedCity || cityList[0] || '';
+    const basesInCity = (OUTREACH_CACHE.landlords || []).filter(function(l){ return l.city === selCity; });
+
+    let orderOptions = '<option value="">-- Выберите реальный заказ клиента --</option>';
+    orders.forEach(function(o){
+      const sel = (String(o.id) === String(OUTREACH_STATE.selectedOrderId)) ? ' selected' : '';
+      orderOptions += '<option value="' + o.id + '"' + sel + '>№' + o.id + ' — ' + esc(o.tools || 'Инструмент') + ' (' + (o.days||1) + ' дн.)' + (o.address ? ' · ' + esc(o.address) : '') + '</option>';
+    });
+
+    let cityOptions = '';
+    cityList.forEach(function(c){
+      const sel = (c === selCity) ? ' selected' : '';
+      cityOptions += '<option value="' + esc(c) + '"' + sel + '>' + esc(c) + ' (' + citiesMap[c] + ' баз)</option>';
+    });
+
+    // Получаем текущий выбранный заказ
+    const curOrder = orders.find(function(o){ return String(o.id) === String(OUTREACH_STATE.selectedOrderId); }) || orders[0] || null;
+    const sampleLandlord = basesInCity[0] || { name: 'СтройПрокат', phone: '79XXXXXXXXX' };
+
+    const toolName = curOrder ? (curOrder.tools || 'Виброплита 80-90 кг') : 'Виброплита 80-90 кг';
+    const toolDays = curOrder ? (curOrder.days || 1) : 2;
+    const orderId = curOrder ? curOrder.id : '49';
+    const claimLink = 'https://eclipsru.github.io/Arenda-Nvk/claim.html?id=' + orderId;
+
+    const sampleMsg = 'Здравствуйте, ' + sampleLandlord.name + '! Это единый сервис проката инструмента (' + (selCity || 'ваш город') + ').
+
+' +
+      'У нас прямо сейчас висит подтвержденная клиентская заявка на аренду: ' + toolName + ' на ' + toolDays + ' суток.
+' +
+      'Клиент готов внести оплату и залог.
+
+' +
+      'Мы бесплатно передаем этот заказ вам, так как наши основные склады в городе загружены.
+' +
+      'Заберите прямой контакт клиента по ссылке:
+' +
+      '👉 ' + claimLink + '
+
+' +
+      '(Ссылка активна 40 минут. Заказ заберет первый подтвердивший прокат)';
+
+    return '<div class="sect-h"><h2 style="font-size:17px">🚀 Рассылка по базам проката (Вариант 1: Под реальную заявку)</h2></div>' +
+      '<div style="background:var(--card);border:1px solid var(--bdr);border-radius:var(--r-m);padding:18px;margin-bottom:20px;">' +
+        '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:16px;margin-bottom:16px;">' +
+          '<div>' +
+            '<label style="display:block;font-size:13px;font-weight:600;color:var(--g2);margin-bottom:6px">1. Выберите город рассылки:</label>' +
+            '<select id="outreachCitySelect" class="f-inp" style="width:100%">' + cityOptions + '</select>' +
+            '<div class="small muted" style="margin-top:4px">Найдено в базе 2ГИС/Яндекс: <b>' + basesInCity.length + ' прокатов</b></div>' +
+          '</div>' +
+          '<div>' +
+            '<label style="display:block;font-size:13px;font-weight:600;color:var(--g2);margin-bottom:6px">2. Горячая заявка клиента:</label>' +
+            '<select id="outreachOrderSelect" class="f-inp" style="width:100%">' + orderOptions + '</select>' +
+            '<div class="small muted" style="margin-top:4px">Контакты клиента откроются первому нажавшему ссылку</div>' +
+          '</div>' +
+        '</div>' +
+
+        '<div style="margin-bottom:16px;">' +
+          '<label style="display:block;font-size:13px;font-weight:600;color:var(--g2);margin-bottom:6px">Предпросмотр сообщения в WhatsApp (для первой базы):</label>' +
+          '<div style="background:#0f172a;border:1px solid #1e293b;border-radius:var(--r-s);padding:14px;font-size:13.5px;line-height:1.6;white-space:pre-wrap;color:#e2e8f0;font-family:monospace;">' +
+            esc(sampleMsg) +
+          '</div>' +
+        '</div>' +
+
+        '<div style="display:flex;gap:12px;flex-wrap:wrap;align-items:center;">' +
+          '<button id="btnLaunchOutreach" class="btn" style="background:var(--grn);font-weight:700;">' +
+            '▶ Запустить рассылку в WhatsApp (' + basesInCity.length + ' баз)' +
+          '</button>' +
+          '<a id="btnTestSingleWa" href="https://wa.me/' + esc(sampleLandlord.phone) + '?text=' + encodeURIComponent(sampleMsg) + '" target="_blank" class="btn sec">' +
+            '💬 Тест на свой номер WhatsApp' +
+          '</a>' +
+        '</div>' +
+        '<div id="outreachStatus" style="margin-top:14px;font-size:13px;"></div>' +
+      '</div>' +
+
+      '<div class="sect-h"><h2 style="font-size:15px">Базы проката в городе ' + esc(selCity) + '</h2></div>' +
+      '<div class="tbl-wrap"><table class="tbl"><thead><tr>' +
+        '<th>Название организации</th><th>Телефон (WhatsApp)</th><th>Адрес</th><th>Источник</th><th>Статус</th><th>Действие</th>' +
+      '</tr></thead><tbody>' +
+      (basesInCity.length ? basesInCity.map(function(l){
+        const itemMsg = 'Здравствуйте, ' + l.name + '! Это единый сервис проката инструмента (' + (selCity || 'город') + ').
+
+' +
+          'У нас прямо сейчас висит подтвержденная клиентская заявка на аренду: ' + toolName + ' на ' + toolDays + ' суток.
+' +
+          'Клиент готов внести оплату и залог.
+
+' +
+          'Мы бесплатно передаем этот заказ вам, так как наши основные склады в городе загружены.
+' +
+          'Заберите прямой контакт клиента по ссылке:
+' +
+          '👉 ' + claimLink + '
+
+' +
+          '(Ссылка активна 40 минут. Заказ заберет первый подтвердивший прокат)';
+
+        const waUrl = 'https://wa.me/' + l.phone + '?text=' + encodeURIComponent(itemMsg);
+        return '<tr>' +
+          '<td><b>' + esc(l.name) + '</b></td>' +
+          '<td><a href="' + waUrl + '" target="_blank" style="color:var(--grn);font-weight:600;">+' + esc(l.phone) + '</a></td>' +
+          '<td class="small muted">' + esc(l.address || '—') + '</td>' +
+          '<td class="small"><span class="badge act">' + esc(l.source || '2gis') + '</span></td>' +
+          '<td class="small">' + (l.status === 'sent' ? '<span style="color:var(--grn)">✓ Отправлено</span>' : '<span style="color:var(--yel)">Новый</span>') + '</td>' +
+          '<td><a href="' + waUrl + '" target="_blank" class="mini-btn ok">Открыть в WA</a></td>' +
+        '</tr>';
+      }).join('') : '<tr><td colspan="6" class="muted" style="text-align:center;padding:20px;">В этом городе пока нет баз. Загрузите базу через парсер.</td></tr>') +
+      '</tbody></table></div>';
+  }
+
+/* ---------- Рендер ---------- */
   function render(){
     let inner;
     if (TAB === 'ord')      inner = viewOrders();
@@ -441,6 +565,7 @@
     else if (TAB === 'landlords') inner = viewLandlordApplications(D.landlordApps,D.landlordError);
     else if (TAB === 'fee') inner = viewFee();
     else if (TAB === 'cat') inner = viewCats();
+    else if (TAB === 'outreach') inner = viewOutreach();
     else                    inner = viewDash();
 
     $('root').innerHTML = shell(inner);
@@ -459,6 +584,16 @@
   }
 
   /* ---------- Обработчики ---------- */
+  document.addEventListener('change', function(e){
+    if (e.target.id === 'outreachCitySelect'){
+      OUTREACH_STATE.selectedCity = e.target.value;
+      render();
+    } else if (e.target.id === 'outreachOrderSelect'){
+      OUTREACH_STATE.selectedOrderId = e.target.value;
+      render();
+    }
+  });
+
   document.addEventListener('click', async function(e){
     const lr=e.target.closest('[data-review-application]');
     if(lr){ const a=D.landlordApps.find(x=>x.id===lr.dataset.reviewApplication);if(a)reviewLandlordDialog(a,refreshLandlords);return; }
@@ -645,7 +780,10 @@
       const r = await Promise.all([
         loadOrders(), loadParts(), loadAdmins(), loadFees(), loadAllTools(), loadAllCats()
       ]);
-      D.orders = r[0]; D.parts = r[1]; D.admins = r[2];
+      D.orders = r[0];
+      try {
+        OUTREACH_CACHE.landlords = await api('/rest/v1/directory_landlords?select=*&order=city.asc') || [];
+      } catch(e){ console.error('Error loading landlords:', e); } D.parts = r[1]; D.admins = r[2];
       D.fees = r[3];   D.tools = r[4];
       D.cats = r[5].cats; D.subs = r[5].subs;
       if (D.cats.length) CATS = D.cats;
