@@ -418,6 +418,20 @@ async function loadOrders(limit){
 async function loadParts(){
   return await api('/rest/v1/order_parts?select=*&order=id.desc&limit=500') || [];
 }
+async function loadMyOrderParts(limit){
+  if (!A.me) return [];
+  const own = isChief() ? '' : '&owner_email=eq.' + encodeURIComponent(A.me);
+  return await api('/rest/v1/order_parts?select=id,order_id,owner_email,tools_text,status,fee,rent_sum,fee_pct,created_at,archived,orders(name,phone,user_email,tools,get_method,address,comment,days,created_at)&order=id.desc&limit=' + (limit || 150) + own) || [];
+}
+async function loadMySentOrders(limit){
+  if (!A.me) return [];
+  return await api('/rest/v1/orders?select=*&user_email=eq.' + encodeURIComponent(A.me) + '&order=id.desc&limit=' + (limit || 50)) || [];
+}
+async function loadMyFeePayments(limit){
+  if (!A.me) return [];
+  const own = isChief() ? '' : '&admin_email=eq.' + encodeURIComponent(A.me);
+  return await api('/rest/v1/fee_payments?select=id,admin_email,amount,status,note,created_at,confirmed_at&order=id.desc&limit=' + (limit || 100) + own) || [];
+}
 async function updateOrderPart(id, patch){
   const r = await api('/rest/v1/order_parts?id=eq.' + id, 'PATCH', patch,
                       { Prefer:'return=representation' });

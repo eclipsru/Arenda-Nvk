@@ -23,7 +23,7 @@
 
 <script src="assets/data.js"></script>
 <script src="assets/geo.js?v=20260923-photon"></script>
-<script src="assets/sb.js?v=20260923-photon"></script>
+<script src="assets/sb.js?v=20260924-order-fee"></script>
 <script src="assets/app.js?v=20260923-photon"></script>
 <script>
 (async function(){
@@ -158,7 +158,8 @@
         '</div>' +
 
         '<div style="display:flex;flex-direction:column;gap:9px;margin-top:16px">' +
-          '<button class="btn wide" id="writeBtn">Написать</button>' +
+          '<button class="btn wide" id="orderBtn">Оформить заявку</button>' +
+          '<button class="btn sec wide" id="writeBtn">Написать</button>' +
           '<button class="btn sec wide phone-btn" id="phoneBtn">Показать телефон</button>' +
           '<button class="btn ghost wide" id="favBtn" data-fav="' + ad.id + '">' +
             (favHas(ad.id) ? 'В избранном ♥' : 'В избранное') +
@@ -233,6 +234,218 @@
       x0 = null;
     }, {passive:true});
   }
+
+  /* ---------- Кнопка «Оформить заявку» ---------- */
+  $('orderBtn').addEventListener('click', async function(){
+    if (!isAuthed()) await restoreSess();
+    if ((ad.owner || '').toLowerCase() === A.me){
+      toast('Это ваше объявление');
+      return;
+    }
+
+    var pickupAddr = ((ad.terms||'').match(/Адрес выдачи:\s*(.+)/)||[])[1] || ad.pickup_city || ad.city || 'Уточняйте у арендодателя';
+    var hasDelivery = !!ad.delivery;
+    var defaultName = A.uname || (A.userMeta && (A.userMeta.full_name || A.userMeta.name)) || '';
+    var defaultPhone = (A.userMeta && A.userMeta.phone) || (A.admin && A.admin.phone) || '';
+
+    var days = 1;
+    var meth = 'pickup'; // 'pickup' | 'delivery'
+    var savedAddr = '';
+    var savedComment = '';
+
+    function saveCurrentInputs(){
+      var nm = $('ordName'), ph = $('ordPhone'), adInput = $('ordDeliveryAddr'), cm = $('ordComment');
+      if (nm) defaultName = nm.value;
+      if (ph) defaultPhone = ph.value;
+      if (adInput) savedAddr = adInput.value;
+      if (cm) savedComment = cm.value;
+    }
+
+    function renderOrderSheet(){
+      var rentSum = (Number(ad.price) || 0) * days;
+      var totalSum = rentSum + dep;
+      var h =
+        '<div class="order-sheet-wrap" style="display:flex;flex-direction:column;gap:13px">' +
+          '<div style="display:flex;gap:12px;background:var(--field);padding:10px 12px;border-radius:10px;align-items:center">' +
+            '<img src="' + photos[0] + '" style="width:54px;height:42px;object-fit:cover;border-radius:6px;background:#12151B" alt="">' +
+            '<div style="flex:1;min-width:0">' +
+              '<div style="font-weight:600;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + esc(ad.name) + '</div>' +
+              '<div style="font-size:12.5px;color:var(--gr)">' + rub(ad.price) + ' / сутки · залог ' + rub(dep) + '</div>' +
+            '</div>' +
+          '</div>' +
+
+          '<div class="fld"><label style="display:block;font-size:13px;font-weight:600;margin-bottom:6px">Ваше имя *</label>' +
+            '<input class="inp" id="ordName" placeholder="Иван" value="' + esc(defaultName) + '" required maxlength="100"></div>' +
+
+          '<div class="fld"><label style="display:block;font-size:13px;font-weight:600;margin-bottom:6px">Телефон для связи *</label>' +
+            '<input class="inp" id="ordPhone" type="tel" placeholder="+7 900 000-00-00" value="' + esc(defaultPhone) + '" required maxlength="50"></div>' +
+
+          '<div class="fld">' +
+            '<label style="display:block;font-size:13px;font-weight:600;margin-bottom:6px">Срок аренды (дней)</label>' +
+            '<div style="display:flex;align-items:center;gap:12px">' +
+              '<button type="button" class="btn sec sm" id="ordMinus" style="width:38px;padding:6px 0;font-size:18px;font-weight:700">−</button>' +
+              '<span id="ordDays" style="font-size:16px;font-weight:700;min-width:28px;text-align:center">' + days + '</span>' +
+              '<button type="button" class="btn sec sm" id="ordPlus" style="width:38px;padding:6px 0;font-size:18px;font-weight:700">+</button>' +
+              '<span class="small muted" id="ordDaysNote">' + days + ' ' + plural(days, 'сутки', 'суток', 'суток') + '</span>' +
+            '</div>' +
+          '</div>' +
+
+          '<div class="fld">' +
+            '<label style="display:block;font-size:13px;font-weight:600;margin-bottom:6px">Способ получения</label>' +
+            '<div class="tabs" style="margin-bottom:8px" id="ordMethodTabs">' +
+              '<button type="button" class="' + (meth==='pickup'?'on':'') + '" data-meth="pickup">Самовывоз</button>' +
+              (hasDelivery ? '<button type="button" class="' + (meth==='delivery'?'on':'') + '" data-meth="delivery">Доставка</button>' : '') +
+            '</div>' +
+            (meth === 'pickup' ?
+              '<div id="ordPickupBox" style="font-size:13.5px;color:var(--gr);padding:4px 0">' +
+                'Выдача: <b style="color:var(--tx)">' + esc(pickupAddr) + '</b>' +
+              '</div>' :
+              '<div id="ordDeliveryBox" style="margin-top:4px">' +
+                '<input class="inp" id="ordDeliveryAddr" placeholder="Адрес доставки: улица, дом, город" value="' + esc(savedAddr) + '" autocomplete="street-address">' +
+                '<p class="small muted" style="margin-top:6px">Доставка: 40 ₽/км (рассчитывается арендодателем при согласовании).</p>' +
+              '</div>') +
+          '</div>' +
+
+          '<div class="fld"><label style="display:block;font-size:13px;font-weight:600;margin-bottom:6px">Комментарий (необязательно)</label>' +
+            '<textarea class="inp" id="ordComment" rows="2" placeholder="Удобное время встречи или пожелания">' + esc(savedComment) + '</textarea></div>' +
+
+          '<div class="card" style="background:var(--field);border:1px solid var(--line);border-radius:10px;padding:12px">' +
+            '<div style="display:flex;justify-content:space-between;font-size:13.5px;margin-bottom:6px">' +
+              '<span class="muted">Аренда (' + days + ' ' + plural(days,'сут.','сут.','сут.') + '):</span>' +
+              '<b>' + rub(rentSum) + '</b>' +
+            '</div>' +
+            '<div style="display:flex;justify-content:space-between;font-size:13.5px;margin-bottom:6px">' +
+              '<span class="muted">Возвратный залог:</span>' +
+              '<b>' + rub(dep) + '</b>' +
+            '</div>' +
+            '<div style="display:flex;justify-content:space-between;font-size:15px;font-weight:700;border-top:1px solid var(--line);padding-top:8px;margin-top:6px">' +
+              '<span>Итого при получении:</span>' +
+              '<span style="color:var(--or)">' + rub(totalSum) + '</span>' +
+            '</div>' +
+            '<p class="small muted" style="margin:6px 0 0;font-size:12px;line-height:1.4">' +
+              'Залог фиксируется в договоре и возвращается полностью после возврата исправной техники.' +
+            '</p>' +
+          '</div>' +
+          '<div id="ordErr" style="color:var(--red);font-size:13px;display:none"></div>' +
+        '</div>';
+
+      var f =
+        '<button class="btn sec" id="ordCancel" style="flex:1">Отмена</button>' +
+        '<button class="btn" id="ordSend" style="flex:2">Отправить заявку</button>';
+
+      openSheet('Оформление заявки', h, f);
+
+      if (meth === 'delivery' && $('ordDeliveryAddr') && window.IvaGeo){
+        IvaGeo.attach($('ordDeliveryAddr'), { mode:'address' });
+      }
+
+      $('ordCancel').onclick = closeSheet;
+
+      $('ordMinus').onclick = function(){
+        if (days > 1){
+          saveCurrentInputs();
+          days--;
+          renderOrderSheet();
+        }
+      };
+      $('ordPlus').onclick = function(){
+        if (days < 60){
+          saveCurrentInputs();
+          days++;
+          renderOrderSheet();
+        }
+      };
+
+      $$('#ordMethodTabs button').forEach(function(b){
+        b.onclick = function(){
+          saveCurrentInputs();
+          meth = b.getAttribute('data-meth');
+          renderOrderSheet();
+        };
+      });
+
+      $('ordSend').onclick = doSubmitOrder;
+    }
+
+    async function doSubmitOrder(){
+      var errEl = $('ordErr');
+      errEl.style.display = 'none';
+
+      saveCurrentInputs();
+      var nm = defaultName.trim();
+      var ph = defaultPhone.trim();
+      var dAddr = savedAddr.trim();
+      var cmt = savedComment.trim();
+
+      if (!nm){
+        errEl.textContent = 'Укажите ваше имя';
+        errEl.style.display = 'block';
+        return;
+      }
+      if (!ph || ph.replace(/[^\d]/g,'').length < 6){
+        errEl.textContent = 'Укажите контактный номер телефона';
+        errEl.style.display = 'block';
+        return;
+      }
+      if (meth === 'delivery' && !dAddr){
+        errEl.textContent = 'Укажите адрес доставки';
+        errEl.style.display = 'block';
+        return;
+      }
+
+      var btn = $('ordSend');
+      btn.disabled = true;
+      btn.textContent = 'Отправляем…';
+
+      var getMethodText = (meth === 'delivery')
+        ? ('Доставка: ' + dAddr)
+        : ('Самовывоз, ' + pickupAddr);
+
+      var commentPayload = 'Срок аренды: ' + days + ' ' + plural(days, 'сутки', 'суток', 'суток') +
+        ' · Стоимость: ' + rub((Number(ad.price)||0) * days) + ' · Залог: ' + rub(dep);
+      if (cmt) commentPayload += '\n\n' + cmt;
+
+      try {
+        await api('/rest/v1/rpc/submit_order', 'POST', {
+          p_name: nm,
+          p_phone: ph,
+          p_tools: ad.name,
+          p_get_method: getMethodText,
+          p_address: (meth === 'delivery' ? dAddr : ''),
+          p_comment: commentPayload,
+          p_user_email: (A.me || ''),
+          p_days: days
+        });
+
+        closeSheet();
+
+        openSheet('Заявка принята!',
+          '<div style="text-align:center;padding:12px 6px">' +
+            '<div style="font-size:42px;margin-bottom:8px">🎉</div>' +
+            '<h3 style="font-size:18px;margin-bottom:8px">Заявка успешно отправлена</h3>' +
+            '<p style="color:var(--gr);font-size:14px;line-height:1.6;margin-bottom:12px">' +
+              'Арендодатель получил уведомление и свяжется с вами по телефону <b>' + esc(ph) + '</b> ' +
+              'для подтверждения бронирования и времени передачи инструмента.' +
+            '</p>' +
+          '</div>',
+          '<button class="btn sec" id="ordDoneOk" style="flex:1">Понятно</button>' +
+          (isAuthed() ? '<a class="btn" href="account.html#orders" style="flex:1">Мои заявки</a>' : '')
+        );
+
+        var okBtn = $('ordDoneOk');
+        if (okBtn) okBtn.onclick = closeSheet;
+
+        toast('Заявка отправлена арендодателю');
+      } catch(err){
+        btn.disabled = false;
+        btn.textContent = 'Отправить заявку';
+        errEl.textContent = 'Не удалось отправить заявку: ' + err.message;
+        errEl.style.display = 'block';
+      }
+    }
+
+    renderOrderSheet();
+  });
 
   /* ---------- Кнопка «Написать» ---------- */
   $('writeBtn').addEventListener('click', async function(){

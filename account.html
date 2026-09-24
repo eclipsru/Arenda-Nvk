@@ -18,6 +18,7 @@
 .tabs button.on{color:var(--or);border-bottom-color:var(--or);font-weight:600}
 .tabs button .n{margin-left:6px;font-size:12px;color:var(--g2)}
 .tabs button.on .n{color:var(--or)}
+.tabs button .n.warn{background:var(--red);color:#fff;padding:1px 6px;border-radius:8px;font-weight:700}
 
 /* Строка объявления */
 .row-ad{display:flex;gap:14px;background:var(--card);border:1px solid var(--line);
@@ -55,11 +56,52 @@
   margin-bottom:14px;display:none}
 .auth-err.show{display:block}
 
+/* KPI показатели комиссии */
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-bottom:20px}
+.kpi{background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:16px}
+.kpi .lb{font-size:12.5px;color:var(--g2);margin-bottom:7px}
+.kpi .vl{font-size:24px;font-weight:800;letter-spacing:-.5px}
+.kpi .sub{font-size:12px;color:var(--g2);margin-top:5px}
+.kpi.warn{border-color:rgba(255,138,128,.4)}
+.kpi.warn .vl{color:var(--red)}
+.kpi.good .vl{color:var(--grn)}
+
+/* Таблицы */
+.tbl-wrap{background:var(--card);border:1px solid var(--line);border-radius:var(--r);overflow-x:auto;margin-top:10px}
+.tbl{width:100%;border-collapse:collapse;font-size:13.5px}
+.tbl th{text-align:left;padding:10px 14px;color:var(--g2);font-size:12px;font-weight:600;
+  text-transform:uppercase;letter-spacing:.3px;border-bottom:1px solid var(--line);white-space:nowrap}
+.tbl td{padding:11px 14px;border-bottom:1px solid var(--line);vertical-align:middle}
+.tbl tr:last-child td{border-bottom:none}
+.tbl tbody tr:hover{background:var(--field)}
+.tbl .num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+.tbl .neg{color:var(--red);font-weight:600}
+.tbl .pos{color:var(--grn);font-weight:600}
+
+/* Карточки заявок */
+.order-card{background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:15px;margin-bottom:12px}
+.order-card .top{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;gap:8px;flex-wrap:wrap}
+.order-card .title{font-size:16px;font-weight:700;margin-bottom:6px;line-height:1.3}
+.order-card .hint{font-size:13.5px;color:var(--gr);margin-top:5px;line-height:1.4}
+.order-card .acts{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px}
+
+/* Бейджи статусов */
+.b-new{background:rgba(255,143,31,.16);color:var(--or)}
+.b-rented{background:rgba(33,150,243,.16);color:#64B5F6}
+.b-closed{background:rgba(76,175,80,.16);color:var(--grn)}
+.b-mod{background:rgba(255,183,77,.16);color:var(--yel)}
+
+.mini-btn{font-size:12px;padding:4px 9px;border-radius:7px;border:1px solid var(--line);
+  background:var(--field);color:var(--gr);transition:.14s;cursor:pointer}
+.mini-btn:hover{border-color:var(--line-2);color:var(--tx)}
+
 @media (max-width:620px){
   .row-ad{flex-wrap:wrap}
   .row-ad .rph{width:76px;height:60px}
   .prof-row{flex-direction:column;gap:3px}
   .prof-row dt{min-width:0;font-size:12.5px}
+  .kpi .vl{font-size:20px}
+  .tbl th:nth-child(n+4),.tbl td:nth-child(n+4){display:none}
 }
 </style>
 <link rel="stylesheet" href="assets/geo.css?v=20260923-photon">
@@ -79,7 +121,7 @@
 
 <script src="assets/data.js"></script>
 <script src="assets/geo.js?v=20260923-photon"></script>
-<script src="assets/sb.js?v=20260923-photon"></script>
+<script src="assets/sb.js?v=20260924-order-fee"></script>
 <script src="assets/app.js?v=20260923-photon"></script>
 <script src="assets/profile.js?v=20260923-photon"></script>
 <script>
@@ -88,7 +130,29 @@
 
   let TAB = (location.hash || '').replace('#','') || 'ads';
   let MY = [];
-  let SUB_TAB = 'all';   // фильтр по статусу
+  let ORDERS = [];
+  let FEES = [];
+  let SUB_TAB = 'all';       // фильтр по статусу объявлений
+  let SUB_TAB_ORD = 'all';   // фильтр по статусу заявок
+
+  function niceDate(d){
+    if (!d) return '—';
+    const dt = new Date(String(d).replace(' ', 'T'));
+    if (isNaN(dt.getTime())) return String(d);
+    return dt.toLocaleDateString('ru-RU', { day:'numeric', month:'short', year:'numeric', hour:'2-digit', minute:'2-digit' });
+  }
+
+  function copyToClipboard(text, msg){
+    if (navigator.clipboard && navigator.clipboard.writeText){
+      navigator.clipboard.writeText(text).then(function(){
+        toast(msg || 'Скопировано');
+      }).catch(function(){
+        prompt('Скопируйте номер:', text);
+      });
+    } else {
+      prompt('Скопируйте номер:', text);
+    }
+  }
 
   /* ---------- Экран входа ---------- */
   function screenLogin(){
@@ -128,6 +192,56 @@
     });
   }
 
+  /* ---------- Расчёт статистики по комиссии ---------- */
+  function computeFeeStats(){
+    const a = A.admin || {};
+    const feePct = a.fee_pct != null ? a.fee_pct : 3;
+    const debtLimit = Number(a.debt_limit) || 0;
+
+    const closed = ORDERS.filter(function(p){ return p.status === 'closed'; });
+    const feeAll = closed.reduce(function(acc, p){ return acc + (Number(p.fee) || 0); }, 0);
+    const rentAll = closed.reduce(function(acc, p){ return acc + (Number(p.rent_sum) || 0); }, 0);
+
+    const paidAll = FEES.filter(function(f){ return f.status === 'confirmed'; })
+                        .reduce(function(acc, f){ return acc + (Number(f.amount) || 0); }, 0);
+    const pendingPaid = FEES.filter(function(f){ return f.status === 'pending'; })
+                            .reduce(function(acc, f){ return acc + (Number(f.amount) || 0); }, 0);
+
+    const debt = Math.max(0, feeAll - paidAll);
+    const isBlocked = debtLimit > 0 && debt > debtLimit;
+
+    // Сводка по периодам
+    const now = Date.now();
+    const t0 = new Date(); t0.setHours(0,0,0,0); const d0 = t0.getTime();
+    const w0 = now - 6 * 86400000;
+    const m0 = new Date(new Date().getFullYear(), new Date().getMonth(), 1).getTime();
+
+    function pTime(str){ return new Date(String(str).replace(' ', 'T')).getTime(); }
+
+    const per = { d:[0,0,0], w:[0,0,0], mo:[0,0,0], a:[rentAll, feeAll, rentAll - feeAll] };
+    closed.forEach(function(p){
+      const t = pTime(p.created_at);
+      const r = Number(p.rent_sum) || 0;
+      const f = Number(p.fee) || 0;
+      if (t >= d0){ per.d[0] += r; per.d[1] += f; per.d[2] += (r - f); }
+      if (t >= w0){ per.w[0] += r; per.w[1] += f; per.w[2] += (r - f); }
+      if (t >= m0){ per.mo[0] += r; per.mo[1] += f; per.mo[2] += (r - f); }
+    });
+
+    return {
+      feePct: feePct,
+      debtLimit: debtLimit,
+      feeAll: feeAll,
+      rentAll: rentAll,
+      paidAll: paidAll,
+      pendingPaid: pendingPaid,
+      debt: debt,
+      isBlocked: isBlocked,
+      closedCount: closed.length,
+      per: per
+    };
+  }
+
   /* ---------- Каркас кабинета ---------- */
   function shell(inner){
     const cnt = {
@@ -137,18 +251,35 @@
       archived:   MY.filter(function(t){ return t.status === 'archived'; }).length
     };
 
+    const activeOrdersCnt = ORDERS.filter(function(o){
+      const st = o.status || 'new';
+      return !o.archived && (st === 'new' || st === 'rented');
+    }).length;
+
+    const fStat = isAdmin() ? computeFeeStats() : { debt: 0 };
+
+    const tabsHtml =
+      (isAdmin() ?
+        '<button data-tab="ads" class="' + (TAB==='ads'?'on':'') + '">' +
+          'Мои объявления<span class="n">' + cnt.all + '</span></button>' +
+        '<button data-tab="orders" class="' + (TAB==='orders'?'on':'') + '">' +
+          'Заявки' + (activeOrdersCnt ? '<span class="n">' + activeOrdersCnt + '</span>' : '') + '</button>' +
+        '<button data-tab="fee" class="' + (TAB==='fee'?'on':'') + '">' +
+          'Комиссия и оплата' + (fStat.debt > 0 ? '<span class="n warn">!</span>' : '') + '</button>'
+      :
+        '<button data-tab="orders" class="' + (TAB==='orders'?'on':'') + '">' +
+          'Мои заявки' + (ORDERS.length ? '<span class="n">' + ORDERS.length + '</span>' : '') + '</button>'
+      ) +
+      '<button data-tab="fav" class="' + (TAB==='fav'?'on':'') + '">' +
+        'Избранное<span class="n fav-n">' + favList().length + '</span></button>' +
+      '<button data-tab="msg" class="' + (TAB==='msg'?'on':'') + '">Сообщения</button>' +
+      '<button data-tab="prof" class="' + (TAB==='prof'?'on':'') + '">Профиль</button>';
+
     return '<div class="sect" style="padding-bottom:0"><div class="sect-h">' +
         '<h2>' + esc(A.uname || 'Кабинет') + '</h2>' +
         '<span class="cnt">' + esc(A.me) + (isAdmin() ? ' · арендодатель' : '') + '</span>' +
       '</div></div>' +
-      '<div class="tabs">' +
-        (isAdmin() ? '<button data-tab="ads" class="' + (TAB==='ads'?'on':'') + '">' +
-          'Мои объявления<span class="n">' + cnt.all + '</span></button>' : '') +
-        '<button data-tab="fav" class="' + (TAB==='fav'?'on':'') + '">' +
-          'Избранное<span class="n fav-n">' + favList().length + '</span></button>' +
-        '<button data-tab="msg" class="' + (TAB==='msg'?'on':'') + '">Сообщения</button>' +
-        '<button data-tab="prof" class="' + (TAB==='prof'?'on':'') + '">Профиль</button>' +
-      '</div>' + inner;
+      '<div class="tabs">' + tabsHtml + '</div>' + inner;
   }
 
   /* ---------- Мои объявления ---------- */
@@ -214,6 +345,355 @@
     return h;
   }
 
+  /* ---------- Заявки ---------- */
+  function viewOrders(){
+    if (isAdmin()){
+      return viewAdminOrders();
+    }
+    return viewTenantOrders();
+  }
+
+  function viewAdminOrders(){
+    const ordFilter = SUB_TAB_ORD || 'all';
+
+    const filtered = ordFilter === 'all' ? ORDERS : ORDERS.filter(function(p){
+      if (ordFilter === 'archived') return !!p.archived;
+      if (p.archived) return false;
+      return (p.status || 'new') === ordFilter;
+    });
+
+    const cnt = function(st){
+      if (st === 'all') return ORDERS.length;
+      if (st === 'archived') return ORDERS.filter(function(p){ return !!p.archived; }).length;
+      return ORDERS.filter(function(p){ return !p.archived && (p.status || 'new') === st; }).length;
+    };
+
+    let h = '<div class="chips" style="margin-bottom:16px">' +
+      [['all','Все'],['new','Новые'],['rented','В аренде'],['closed','Завершены'],['archived','Архив']]
+        .map(function(p){
+          return '<button class="chip" data-ost="' + p[0] + '"' +
+                 (ordFilter === p[0] ? ' style="border-color:var(--or);color:var(--or)"' : '') +
+                 '>' + p[1] + ' · ' + cnt(p[0]) + '</button>';
+        }).join('') +
+      '</div>';
+
+    if (!filtered.length){
+      return h + '<div class="empty">' +
+        '<svg viewBox="0 0 24 24"><path d="M7 4h-2l-1 2H2v13a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V6h-2l-1-2h-2l1 2H6zM5 8h14v11H5zm4 2h6v2H9z"/></svg>' +
+        '<b>' + (ORDERS.length ? 'В этой вкладке пусто' : 'Заявок пока нет') + '</b>' +
+        '<p>' + (ORDERS.length ? 'Переключитесь на другой статус.' : 'Когда клиенты оформят заявку на ваш инструмент, она появится здесь.') + '</p>' +
+      '</div>';
+    }
+
+    h += filtered.map(function(p){
+      const o = p.orders || {};
+      const st = p.status || 'new';
+      const isArc = !!p.archived;
+
+      let btns = '';
+      if (!isArc){
+        if (st === 'new'){
+          btns += '<button class="btn sm" data-ord-do="rented" data-id="' + p.id + '">Выдал инструмент</button>';
+          btns += '<button class="btn sm sec" data-ord-do="arch" data-id="' + p.id + '">В архив</button>';
+        } else if (st === 'rented'){
+          btns += '<button class="btn sm" data-ord-do="closed" data-id="' + p.id + '" style="background:var(--grn);border-color:var(--grn)">Инструмент вернули</button>';
+          btns += '<button class="btn sm sec" data-ord-do="arch" data-id="' + p.id + '">В архив</button>';
+        } else {
+          btns += '<span class="badge b-closed" style="padding:6px 12px">Завершена · комиссия учтена</span>';
+          btns += '<button class="btn sm sec" data-ord-do="arch" data-id="' + p.id + '">В архив</button>';
+        }
+      } else {
+        btns += '<button class="btn sm sec" data-ord-do="unarch" data-id="' + p.id + '">Вернуть из архива</button>';
+      }
+
+      return '<div class="order-card" data-order-id="' + p.id + '">' +
+        '<div class="top">' +
+          '<span class="badge b-' + st + '">' + (st === 'new' ? 'Новая заявка' : (st === 'rented' ? 'В аренде' : 'Завершена')) + '</span>' +
+          '<span class="small muted">' + niceDate(p.created_at) + (p.order_id ? (' · №' + p.order_id) : '') + '</span>' +
+        '</div>' +
+        '<div class="title">' + esc(p.tools_text || 'Инструмент') + '</div>' +
+        (o.name ? '<div class="hint">Клиент: <b style="color:var(--tx)">' + esc(o.name) + '</b>' +
+          (o.phone ? (' · <a href="tel:' + esc(o.phone.replace(/[^\d+]/g,'')) + '" style="color:var(--or);font-weight:600">' + esc(o.phone) + '</a>') : '') +
+          '</div>' : '') +
+        (o.get_method ? '<div class="hint">Способ получения: ' + esc(o.get_method) + '</div>' : '') +
+        (o.days ? '<div class="hint">Срок аренды: <b>' + o.days + ' ' + plural(o.days, 'сутки', 'суток', 'суток') + '</b></div>' : '') +
+        (o.comment ? '<div class="hint" style="margin-top:6px;background:var(--field);padding:8px 10px;border-radius:8px;font-size:12.5px;line-height:1.4">' + esc(o.comment) + '</div>' : '') +
+        '<div style="display:flex;gap:14px;margin-top:8px;font-size:13px;flex-wrap:wrap">' +
+          (p.rent_sum ? '<span>Аренда: <b>' + rub(p.rent_sum) + '</b></span>' : '') +
+          (p.fee ? '<span style="color:var(--or)">Комиссия: <b>' + rub(p.fee) + '</b>' + (p.fee_pct ? (' (' + p.fee_pct + '%)') : '') + '</span>' : '') +
+        '</div>' +
+        (btns ? '<div class="acts">' + btns + '</div>' : '') +
+      '</div>';
+    }).join('');
+
+    return h;
+  }
+
+  function viewTenantOrders(){
+    if (!ORDERS.length){
+      return '<div class="empty">' +
+        '<svg viewBox="0 0 24 24"><path d="M7 4h-2l-1 2H2v13a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V6h-2l-1-2h-2l1 2H6zM5 8h14v11H5zm4 2h6v2H9z"/></svg>' +
+        '<b>Заявок пока нет</b>' +
+        '<p>Выберите подходящий инструмент в каталоге и нажмите «Оформить заявку».</p>' +
+        '<a class="btn" href="catalog.html">Перейти в каталог</a>' +
+      '</div>';
+    }
+
+    return ORDERS.map(function(o){
+      const st = o.status || 'new';
+      return '<div class="order-card">' +
+        '<div class="top">' +
+          '<span class="badge b-' + st + '">' + (st === 'new' ? 'На рассмотрении' : (st === 'rented' ? 'В аренде' : 'Завершена')) + '</span>' +
+          '<span class="small muted">' + niceDate(o.created_at) + '</span>' +
+        '</div>' +
+        '<div class="title">' + esc(o.tools || 'Инструмент') + '</div>' +
+        (o.get_method ? '<div class="hint">Получение: ' + esc(o.get_method) + '</div>' : '') +
+        (o.days ? '<div class="hint">Срок: ' + o.days + ' ' + plural(o.days, 'сутки', 'суток', 'суток') + '</div>' : '') +
+        (o.comment ? '<div class="hint" style="margin-top:6px;background:var(--field);padding:8px 10px;border-radius:8px;font-size:12.5px">' + esc(o.comment) + '</div>' : '') +
+      '</div>';
+    }).join('');
+  }
+
+  /* ---------- Комиссия и оплата ---------- */
+  function viewFee(){
+    if (!isAdmin()){
+      return '<div class="empty"><b>Раздел доступен арендодателям</b><p>Здесь отображаются начисления комиссии и история оплат.</p></div>';
+    }
+
+    const s = computeFeeStats();
+    let h = '';
+
+    if (s.isBlocked){
+      h += '<div class="box" style="border-color:var(--red);background:rgba(255,138,128,.1);margin-bottom:16px">' +
+        '<b style="color:var(--red);font-size:15px">Внимание: задолженность превышает лимит!</b>' +
+        '<p class="small" style="color:var(--tx);margin-top:4px">Лимит долга: ' + rub(s.debtLimit) + ', текущий долг: ' + rub(s.debt) + '. Погасите комиссию, чтобы объявления оставались активными.</p>' +
+      '</div>';
+    }
+
+    h += '<div class="sect-h" style="margin-bottom:14px;align-items:flex-start">' +
+        '<div>' +
+          '<h2>Комиссия и оплата</h2>' +
+          '<p class="small muted" style="margin-top:2px">Взаиморасчёты с площадкой «Ива» и статистика доходов</p>' +
+        '</div>' +
+        '<button class="btn sm" id="btnPayFeeTop">Оплатить комиссию</button>' +
+      '</div>';
+
+    // Карточки KPI
+    h += '<div class="kpis">' +
+        '<div class="kpi' + (s.debt > 0 ? ' warn' : ' good') + '">' +
+          '<div class="lb">К оплате (долг)</div>' +
+          '<div class="vl">' + (s.debt > 0 ? ('−' + rub(s.debt)) : '0 ₽') + '</div>' +
+          '<div class="sub">' + (s.debt > 0 ? (s.pendingPaid > 0 ? 'На проверке ' + rub(s.pendingPaid) : 'Ожидает оплаты') : 'Задолженности нет') + '</div>' +
+        '</div>' +
+
+        '<div class="kpi">' +
+          '<div class="lb">Ставка комиссии</div>' +
+          '<div class="vl">' + s.feePct + ' %</div>' +
+          '<div class="sub">от стоимости аренды</div>' +
+        '</div>' +
+
+        '<div class="kpi">' +
+          '<div class="lb">Лимит задолженности</div>' +
+          '<div class="vl">' + (s.debtLimit > 0 ? rub(s.debtLimit) : '0 ₽') + '</div>' +
+          '<div class="sub">' + (s.debtLimit > 0 ? 'порог без ограничений' : 'без блокировки') + '</div>' +
+        '</div>' +
+
+        '<div class="kpi">' +
+          '<div class="lb">Начислено всего</div>' +
+          '<div class="vl">' + rub(s.feeAll) + '</div>' +
+          '<div class="sub">из ' + rub(s.rentAll) + ' выручки</div>' +
+        '</div>' +
+
+        '<div class="kpi good">' +
+          '<div class="lb">Оплачено комиссии</div>' +
+          '<div class="vl">' + rub(s.paidAll) + '</div>' +
+          '<div class="sub">подтверждено площадкой</div>' +
+        '</div>' +
+      '</div>';
+
+    // Сводка по периодам
+    h += '<div class="box" style="margin-bottom:20px">' +
+        '<h3 style="font-size:15px;margin-bottom:12px">Доход и начисления по периодам</h3>' +
+        '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px">' +
+          '<div class="stat-card" style="background:var(--field);padding:12px;border-radius:10px">' +
+            '<div class="small muted">Сегодня</div>' +
+            '<div style="font-size:16px;font-weight:700;margin:4px 0">' + rub(s.per.d[0]) + '</div>' +
+            '<div class="small" style="color:var(--gr)">Комиссия: ' + rub(s.per.d[1]) + '<br>Чистыми: ' + rub(s.per.d[2]) + '</div>' +
+          '</div>' +
+          '<div class="stat-card" style="background:var(--field);padding:12px;border-radius:10px">' +
+            '<div class="small muted">За 7 дней</div>' +
+            '<div style="font-size:16px;font-weight:700;margin:4px 0">' + rub(s.per.w[0]) + '</div>' +
+            '<div class="small" style="color:var(--gr)">Комиссия: ' + rub(s.per.w[1]) + '<br>Чистыми: ' + rub(s.per.w[2]) + '</div>' +
+          '</div>' +
+          '<div class="stat-card" style="background:var(--field);padding:12px;border-radius:10px">' +
+            '<div class="small muted">Этот месяц</div>' +
+            '<div style="font-size:16px;font-weight:700;margin:4px 0">' + rub(s.per.mo[0]) + '</div>' +
+            '<div class="small" style="color:var(--gr)">Комиссия: ' + rub(s.per.mo[1]) + '<br>Чистыми: ' + rub(s.per.mo[2]) + '</div>' +
+          '</div>' +
+          '<div class="stat-card" style="background:var(--field);padding:12px;border-radius:10px">' +
+            '<div class="small muted">За всё время</div>' +
+            '<div style="font-size:16px;font-weight:700;margin:4px 0">' + rub(s.per.a[0]) + '</div>' +
+            '<div class="small" style="color:var(--gr)">Комиссия: ' + rub(s.per.a[1]) + '<br>Чистыми: ' + rub(s.per.a[2]) + '</div>' +
+          '</div>' +
+        '</div>' +
+      '</div>';
+
+    // Реквизиты и оплата через СБП
+    h += '<div class="box" style="margin-bottom:20px">' +
+        '<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:12px">' +
+          '<div>' +
+            '<h3 style="font-size:15px;margin-bottom:3px">Реквизиты для оплаты комиссии</h3>' +
+            '<p class="small muted">Перевод по номеру телефона через Систему быстрых платежей (СБП) любого банка</p>' +
+          '</div>' +
+          '<button class="btn sm" id="btnPayFeeCard">Внести платёж</button>' +
+        '</div>' +
+        '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;background:var(--field);padding:14px;border-radius:10px">' +
+          '<div>' +
+            '<div class="small muted">Телефон получателя (СБП):</div>' +
+            '<div style="display:flex;align-items:center;gap:8px;margin-top:3px">' +
+              '<b style="font-size:15px;letter-spacing:.3px">+7 (908) 173-14-10</b>' +
+              '<button type="button" class="mini-btn" id="btnCopyPhone">Копировать</button>' +
+            '</div>' +
+          '</div>' +
+          '<div>' +
+            '<div class="small muted">Получатель:</div>' +
+            '<div style="font-weight:600;margin-top:3px">Илья Игоревич Г. (Т-Банк / Сбербанк)</div>' +
+          '</div>' +
+          '<div>' +
+            '<div class="small muted">Назначение перевода:</div>' +
+            '<div style="font-weight:600;margin-top:3px">Комиссия Ива (' + esc(A.me) + ')</div>' +
+          '</div>' +
+        '</div>' +
+      '</div>';
+
+    // История оплат комиссии
+    h += '<div class="sect-h" style="margin-top:24px;margin-bottom:10px">' +
+        '<h3 style="font-size:16px">История оплат комиссии</h3>' +
+      '</div>';
+
+    if (!FEES.length){
+      h += '<div class="empty" style="padding:30px 20px"><b>Платежей по комиссии пока нет</b>' +
+        '<p>После совершения перевода нажмите «Внести платёж», чтобы зафиксировать оплату.</p></div>';
+    } else {
+      h += '<div class="tbl-wrap"><table class="tbl"><thead><tr>' +
+        '<th>Дата</th><th class="num">Сумма</th><th>Статус</th><th>Примечание</th>' +
+        '</tr></thead><tbody>' +
+        FEES.map(function(f){
+          const isOk = f.status === 'confirmed';
+          return '<tr>' +
+            '<td class="small muted">' + niceDate(f.created_at) + '</td>' +
+            '<td class="num ' + (isOk ? 'pos' : '') + '" style="font-weight:700">' + rub(f.amount) + '</td>' +
+            '<td><span class="badge ' + (isOk ? 'b-closed' : 'b-mod') + '">' +
+              (isOk ? 'Подтверждено' : 'На проверке') + '</span></td>' +
+            '<td class="small">' + esc(f.note || 'Оплата комиссии') + '</td>' +
+          '</tr>';
+        }).join('') +
+        '</tbody></table></div>';
+    }
+
+    // История начислений по заказам
+    const closed = ORDERS.filter(function(p){ return p.status === 'closed'; });
+    h += '<div class="sect-h" style="margin-top:24px;margin-bottom:10px">' +
+        '<h3 style="font-size:16px">Начисления по закрытым заказам</h3>' +
+      '</div>';
+
+    if (!closed.length){
+      h += '<div class="empty" style="padding:30px 20px"><b>Начислений пока нет</b>' +
+        '<p>Комиссия начисляется автоматически при завершении аренды в разделе «Заявки».</p></div>';
+    } else {
+      h += '<div class="tbl-wrap"><table class="tbl"><thead><tr>' +
+        '<th>Дата</th><th>Инструмент</th><th>Клиент</th><th class="num">Аренда</th><th class="num">Ставка</th><th class="num">Комиссия</th>' +
+        '</tr></thead><tbody>' +
+        closed.map(function(p){
+          const o = p.orders || {};
+          return '<tr>' +
+            '<td class="small muted">' + niceDate(p.created_at) + '</td>' +
+            '<td><b>' + esc(p.tools_text || 'Инструмент') + '</b></td>' +
+            '<td class="small">' + esc(o.name || 'Клиент') + (o.phone ? (' · ' + esc(o.phone)) : '') + '</td>' +
+            '<td class="num">' + rub(p.rent_sum || 0) + '</td>' +
+            '<td class="num">' + (p.fee_pct != null ? p.fee_pct : s.feePct) + '%</td>' +
+            '<td class="num" style="color:var(--or);font-weight:700">' + rub(p.fee || 0) + '</td>' +
+          '</tr>';
+        }).join('') +
+        '</tbody></table></div>';
+    }
+
+    return h;
+  }
+
+  /* ---------- Модалка оплаты комиссии ---------- */
+  function openPayModal(){
+    const s = computeFeeStats();
+    const defaultSum = s.debt > 0 ? s.debt : 100;
+
+    const body =
+      '<div style="display:flex;flex-direction:column;gap:14px">' +
+        '<p class="small muted" style="line-height:1.5">' +
+          'Переведите сумму комиссии через Систему быстрых платежей (СБП) по номеру телефона ' +
+          'на имя <b>Илья Игоревич Г.</b> (Т-Банк / Сбербанк), затем отправьте подтверждение ниже.' +
+        '</p>' +
+        '<div style="background:var(--field);padding:12px;border-radius:10px">' +
+          '<div class="small muted">Телефон получателя:</div>' +
+          '<div style="font-size:17px;font-weight:700;margin:3px 0 6px">+7 (908) 173-14-10</div>' +
+          '<div class="small muted">Назначение перевода: <b>Комиссия Ива (' + esc(A.me) + ')</b></div>' +
+        '</div>' +
+        '<div class="fld">' +
+          '<label style="display:block;font-size:13px;font-weight:600;margin-bottom:6px">Сумма перевода, ₽ *</label>' +
+          '<input class="inp" id="payModalAmount" type="number" min="1" step="1" value="' + defaultSum + '" required>' +
+        '</div>' +
+        '<div class="fld">' +
+          '<label style="display:block;font-size:13px;font-weight:600;margin-bottom:6px">Примечание (необязательно)</label>' +
+          '<input class="inp" id="payModalNote" placeholder="Например: СБП Т-Банк, последние 4 цифры или ФИО">' +
+        '</div>' +
+        '<div id="payModalErr" style="color:var(--red);font-size:13px;display:none"></div>' +
+      '</div>';
+
+    const foot =
+      '<button class="btn sec" id="payModalCancel" style="flex:1">Отмена</button>' +
+      '<button class="btn" id="payModalSubmit" style="flex:2">Я оплатил — отправить</button>';
+
+    openSheet('Оплата комиссии', body, foot);
+
+    $('payModalCancel').onclick = closeSheet;
+
+    $('payModalSubmit').onclick = async function(){
+      const amtInput = $('payModalAmount');
+      const noteInput = $('payModalNote');
+      const errEl = $('payModalErr');
+      errEl.style.display = 'none';
+
+      const amt = Number(amtInput.value) || 0;
+      if (amt <= 0){
+        errEl.textContent = 'Укажите положительную сумму перевода';
+        errEl.style.display = 'block';
+        return;
+      }
+
+      const btn = $('payModalSubmit');
+      btn.disabled = true;
+      btn.textContent = 'Отправляем…';
+
+      try {
+        await addFee({
+          admin_email: A.me,
+          amount: amt,
+          status: 'pending',
+          note: noteInput.value.trim() || ('Оплата комиссии от ' + A.me)
+        });
+
+        closeSheet();
+        toast('Платёж зафиксирован и отправлен на подтверждение');
+        FEES = await loadMyFeePayments();
+        render();
+      } catch(err){
+        btn.disabled = false;
+        btn.textContent = 'Я оплатил — отправить';
+        errEl.textContent = 'Не удалось зафиксировать платёж: ' + err.message;
+        errEl.style.display = 'block';
+      }
+    };
+  }
+
   /* ---------- Избранное ---------- */
   function viewFav(){
     const ids = favList();
@@ -231,7 +711,7 @@
   /* ---------- Сообщения ---------- */
   function viewMsg(){
     return '<div class="empty">' +
-      '<svg viewBox="0 0 24 24"><path d="M21 11.5a8.4 8.4 0 0 1-9 8.4 8.4 8.4 0 0 1-3.8-.9L3 21l2-5.2' +
+      '<svg viewBox="0 0 24 24"><path d="M21 11.5a8.4 8.4 0 0 1-9 8.4 8.4 8.4 8.4 0 0 1-3.8-.9L3 21l2-5.2' +
         'a8.4 8.4 0 0 1-.9-3.8 8.4 8.4 0 0 1 8.4-8.4h.5a8.4 8.4 0 0 1 8 8z"/></svg>' +
       '<b>Переписка с арендаторами</b>' +
       '<p>Сообщения открываются в отдельном разделе.</p>' +
@@ -273,13 +753,21 @@
   /* ---------- Рендер ---------- */
   function render(){
     let inner;
-    if (TAB === 'fav')       inner = viewFav();
-    else if (TAB === 'msg')  inner = viewMsg();
-    else if (TAB === 'prof') inner = viewProf();
-    else                     inner = isAdmin() ? viewAds() : viewFav();
+    if (TAB === 'fee')           inner = viewFee();
+    else if (TAB === 'orders')   inner = viewOrders();
+    else if (TAB === 'fav')      inner = viewFav();
+    else if (TAB === 'msg')      inner = viewMsg();
+    else if (TAB === 'prof')     inner = viewProf();
+    else                         inner = isAdmin() ? viewAds() : viewFav();
 
     $('root').innerHTML = shell(inner);
     paintFavCount();
+
+    if ($('btnPayFeeTop')) $('btnPayFeeTop').onclick = openPayModal;
+    if ($('btnPayFeeCard')) $('btnPayFeeCard').onclick = openPayModal;
+    if ($('btnCopyPhone')) $('btnCopyPhone').onclick = function(){
+      copyToClipboard('89081731410', 'Номер телефона получателя скопирован');
+    };
 
     if($('rentalProfile'))RentalProfile.mount($('rentalProfile'));
     const jump=$('jumpRental');if(jump)jump.onclick=function(e){e.preventDefault();$('rentalProfile').scrollIntoView({behavior:'smooth'});};
@@ -314,6 +802,17 @@
 
     const st = e.target.closest('[data-st]');
     if (st){ SUB_TAB = st.getAttribute('data-st'); render(); return; }
+
+    const ost = e.target.closest('[data-ost]');
+    if (ost){ SUB_TAB_ORD = ost.getAttribute('data-ost'); render(); return; }
+
+    const ordDo = e.target.closest('[data-ord-do]');
+    if (ordDo){
+      const id = ordDo.getAttribute('data-id');
+      const act = ordDo.getAttribute('data-ord-do');
+      if (id && act) doOrderAction(id, act, ordDo);
+      return;
+    }
 
     const act = e.target.closest('[data-act]');
     if (act){
@@ -368,6 +867,43 @@
     }
   }
 
+  /* ---------- Действия над заявками ---------- */
+  async function doOrderAction(id, act, btn){
+    const part = ORDERS.find(function(p){ return String(p.id) === String(id); });
+    if (!part) return;
+
+    btn.disabled = true;
+    const oldText = btn.textContent;
+    btn.textContent = '…';
+
+    try {
+      if (act === 'arch'){
+        await updateOrderPart(id, { archived: true });
+        part.archived = true;
+        toast('Заявка перемещена в архив');
+      } else if (act === 'unarch'){
+        await updateOrderPart(id, { archived: false });
+        part.archived = false;
+        toast('Заявка восстановлена из архива');
+      } else if (act === 'rented'){
+        await updateOrderPart(id, { status: 'rented' });
+        part.status = 'rented';
+        toast('Инструмент переведён в статус «В аренде»');
+      } else if (act === 'closed'){
+        await updateOrderPart(id, { status: 'closed' });
+        part.status = 'closed';
+        toast('Заказ завершён! Комиссия учтена');
+        // Обновляем список для точного расчёта начисленной комиссии
+        ORDERS = await loadMyOrderParts();
+      }
+      render();
+    } catch(err){
+      btn.disabled = false;
+      btn.textContent = oldText;
+      toast('Ошибка: ' + err.message);
+    }
+  }
+
   window.onFavChanged = function(){ if (TAB === 'fav') render(); };
 
   window.addEventListener('hashchange', function(){
@@ -379,11 +915,26 @@
   async function boot(){
     const showcase = hydrateShowcase(); // Избранное берём из живой витрины, а не демо-данных.
     if (isAdmin()){
-      try { MY = await loadMyTools(); }
-      catch(e){ MY = []; toast('Не удалось загрузить объявления: ' + e.message); }
+      try {
+        const [myTools, myParts, myFees] = await Promise.allSettled([
+          loadMyTools(),
+          loadMyOrderParts(),
+          loadMyFeePayments()
+        ]);
+        MY = myTools.status === 'fulfilled' ? (myTools.value || []) : [];
+        ORDERS = myParts.status === 'fulfilled' ? (myParts.value || []) : [];
+        FEES = myFees.status === 'fulfilled' ? (myFees.value || []) : [];
+      } catch(e){
+        MY = []; ORDERS = []; FEES = [];
+        toast('Не удалось загрузить данные: ' + e.message);
+      }
+    } else if (isAuthed()){
+      try {
+        ORDERS = await loadMySentOrders();
+      } catch(e){ ORDERS = []; }
     }
     await showcase;
-    if (!isAdmin() && TAB === 'ads') TAB = 'fav';
+    if (!isAdmin() && TAB === 'ads') TAB = 'orders';
     render();
   }
 
