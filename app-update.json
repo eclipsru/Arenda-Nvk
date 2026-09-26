@@ -1,6 +1,7 @@
 {
   "versionCode": 88,
-  "versionName": "10.13",
-  "apk": "https://eclipsru.github.io/Arenda-Nvk/ProkatInstrumenta-10.13.apk",
-  "notes": "ДЕМО-РЕЖИМ (26.09.2026): versionCode завышен до 88, чтобы на установленной 10.13 сразу появилась кнопка «Обновить приложение автоматически» и можно было проверить обновление из приложения. После успешной проверки вернуть versionCode 87."
+  "versionName": "10.14",
+  "apk": "https://eclipsru.github.io/Arenda-Nvk/ProkatInstrumenta-10.14.apk",
+  "apkUrl": "https://eclipsru.github.io/Arenda-Nvk/ProkatInstrumenta-10.14.apk",
+  "notes": "Обновление с гидом: кнопка «Обновить до версии 10.14», диалог подскажет нажать «Установить», при пропуске окна — кнопка повтора."
 }

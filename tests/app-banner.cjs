@@ -2,8 +2,8 @@ const { chromium } = require('playwright');
 const assert = require('node:assert/strict');
 
 const BASE = process.env.SITE_BASE_URL || 'http://127.0.0.1:8000';
-const APK_NAME = 'ProkatInstrumenta-10.13.apk';
-const RELEASE = '10.13-selfupdate-20260926';
+const APK_NAME = 'ProkatInstrumenta-10.14.apk';
+const RELEASE = '10.14-selfupdate2-20260926';
 const MOBILE = {
   viewport: { width: 375, height: 667 },
   userAgent: 'Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 Mobile Safari/537.36'

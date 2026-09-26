@@ -5,7 +5,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 
 const BASE = process.env.SITE_BASE_URL || 'http://127.0.0.1:8000';
-const APK = 'ProkatInstrumenta-10.13.apk';
+const APK = 'ProkatInstrumenta-10.14.apk';
 
 (async () => {
   const browser = await chromium.launch({ headless: true });
@@ -57,7 +57,7 @@ moneyStats = () => ({ rent:0, fee:0, paid:0, owed:0, byAdmin:{} });
       assert.deepEqual(errors, []);
       const response = await page.request.get(`${BASE}/${APK}`);
       assert.equal(response.status(), 200, 'APK must be publicly downloadable');
-      assert.equal((await response.body()).length, 1103945, 'Correct APK file is served');
+      assert.equal((await response.body()).length, 1108041, 'Correct APK file is served');
       await page.close();
     }
     console.log('Chief cabinet, access control, outreach and native APK link: OK');

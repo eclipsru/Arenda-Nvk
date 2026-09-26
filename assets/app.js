@@ -476,11 +476,11 @@ function bindSoon(){
 }
 
 /* ---------- Верхняя плашка загрузки нативного приложения ---------- */
-// Версия 10.13: обновление прямо в приложении — в Профиле над строкой
-// «О приложении» сама появляется кнопка «Обновить приложение автоматически».
+// Версия 10.14: обновление прямо в приложении — в Профиле над строкой
+// «О приложении» сама появляется кнопка «Обновить до версии …».
 // Подпись та же, что у 10.12: ставится поверх, удалять ничего не нужно.
-const APP_RELEASE_ID = '10.13-selfupdate-20260926';
-const APP_DOWNLOAD_URL = 'ProkatInstrumenta-10.13.apk';
+const APP_RELEASE_ID = '10.14-selfupdate2-20260926';
+const APP_DOWNLOAD_URL = 'ProkatInstrumenta-10.14.apk';
 
 function isMobileDevice(){
   return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || window.innerWidth <= 768;
@@ -538,7 +538,7 @@ function mountAppTopBanner(container){
   if (!isPermanent && downloadedRelease === APP_RELEASE_ID) return;
 
   const hadApp = isPermanent || !!oldDownload;
-  const titleText = hadApp ? 'Обновление · версия 10.13' : 'Ива для Android · 10.13';
+  const titleText = hadApp ? 'Обновление · версия 10.14' : 'Ива для Android · 10.14';
   const subText = hadApp
     ? 'Обновление теперь прямо в приложении: Профиль → кнопка над «О приложении». Ставится поверх, удалять ничего не нужно'
     : 'Нативное приложение: каталог, заявки и чат';
@@ -636,7 +636,7 @@ function mountAppTopBanner(container){
 
 // Клик означает скачивание, НЕ успешную установку (подписи версий могут отличаться).
 document.addEventListener('click', function(e){
-  const a = e.target.closest ? e.target.closest('a[href*="ProkatInstrumenta-10.13.apk"]') : null;
+  const a = e.target.closest ? e.target.closest('a[href*="ProkatInstrumenta-10.14.apk"]') : null;
   if (!a) return;
   try { localStorage.setItem('prokat_app_download_release', APP_RELEASE_ID); } catch(err){}
   const b = document.getElementById('appTopBanner');
