@@ -476,11 +476,11 @@ function bindSoon(){
 }
 
 /* ---------- Верхняя плашка загрузки нативного приложения ---------- */
-// Версия 10.12: исправлен вход — после логина e-mail не проставлялся в память,
-// поэтому до перезапуска кабинет показывал чужие данные владельца площадки.
-// Подпись сборки новая: поверх старой APK не ставится — нужна переустановка.
-const APP_RELEASE_ID = '10.12-newkey-20260924';
-const APP_DOWNLOAD_URL = 'ProkatInstrumenta-10.12-clone.apk';
+// Версия 10.13: обновление прямо в приложении — в Профиле над строкой
+// «О приложении» сама появляется кнопка «Обновить приложение автоматически».
+// Подпись та же, что у 10.12: ставится поверх, удалять ничего не нужно.
+const APP_RELEASE_ID = '10.13-selfupdate-20260926';
+const APP_DOWNLOAD_URL = 'ProkatInstrumenta-10.13.apk';
 
 function isMobileDevice(){
   return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || window.innerWidth <= 768;
@@ -538,9 +538,9 @@ function mountAppTopBanner(container){
   if (!isPermanent && downloadedRelease === APP_RELEASE_ID) return;
 
   const hadApp = isPermanent || !!oldDownload;
-  const titleText = hadApp ? 'Обновление · версия 10.12' : 'Ива для Android · 10.12';
+  const titleText = hadApp ? 'Обновление · версия 10.13' : 'Ива для Android · 10.13';
   const subText = hadApp
-    ? 'Исправлен вход в кабинет. Перед установкой удалите старую версию'
+    ? 'Обновление теперь прямо в приложении: Профиль → кнопка над «О приложении». Ставится поверх, удалять ничего не нужно'
     : 'Нативное приложение: каталог, заявки и чат';
   const btnText = 'Скачать';
 
@@ -636,7 +636,7 @@ function mountAppTopBanner(container){
 
 // Клик означает скачивание, НЕ успешную установку (подписи версий могут отличаться).
 document.addEventListener('click', function(e){
-  const a = e.target.closest ? e.target.closest('a[href*="ProkatInstrumenta-10.12-clone.apk"]') : null;
+  const a = e.target.closest ? e.target.closest('a[href*="ProkatInstrumenta-10.13.apk"]') : null;
   if (!a) return;
   try { localStorage.setItem('prokat_app_download_release', APP_RELEASE_ID); } catch(err){}
   const b = document.getElementById('appTopBanner');

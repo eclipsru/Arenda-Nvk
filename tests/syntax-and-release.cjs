@@ -7,8 +7,8 @@ const vm = require('node:vm');
 const crypto = require('node:crypto');
 
 const root = path.resolve(__dirname, '..');
-const apkName = 'ProkatInstrumenta-10.12-clone.apk';
-const expectedHash = 'a9af23756436c49d6307324de2b494c304c1e6e8e1991de135bb94ceaf3c15b7';
+const apkName = 'ProkatInstrumenta-10.13.apk';
+const expectedHash = '1af9e0c0f06bfb83f7f2e4dd78bd2730518e8a12e80c32e47a6d1b8177da75a7';
 let scripts = 0;
 
 for (const name of fs.readdirSync(root).filter(name => name.endsWith('.html'))) {
