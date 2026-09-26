@@ -398,7 +398,7 @@
     $('lBtn').disabled = true;
     try{
       const { error } = await sb.auth.signInWithPassword({ email:$('lEmail').value.trim(), password:$('lPass').value });
-      if(error){ $('lErr').textContent = 'Неверный e-mail или пароль.'; $('lErr').style.display='block'; }
+      if(error){ const emsg = /email not confirmed/i.test(error.message || '') ? 'Почта не подтверждена — откройте письмо из ящика, перейдите по ссылке и войдите снова.' : 'Неверный e-mail или пароль.'; $('lErr').textContent = emsg; $('lErr').style.display='block'; }
     }catch(err){ $('lErr').textContent = 'Нет соединения. Проверьте интернет.'; $('lErr').style.display='block'; }
     $('lBtn').disabled = false;
   });

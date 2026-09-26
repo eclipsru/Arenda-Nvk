@@ -305,6 +305,7 @@ textarea.inp{resize:vertical;min-height:70px}
 </style>
 <link rel="stylesheet" href="assets/geo.css?v=20260923-photon">
 <script src="assets/geo.js?v=20260923-photon"></script>
+<script src="assets/email-guard.js?v=20260926-email"></script>
 </head>
 <body>
 <div class="app" id="app">
@@ -463,7 +464,19 @@ function setReg(up){regMode=up;
   var sp=document.querySelectorAll('#authTabs span');
   sp[0].classList.toggle('on',!up);sp[1].classList.toggle('on',up);
   $('authErr').style.display='none';
+  $('resendLink').classList.add('hide');
 }
+function sessDrop(){S.tok=null;S.ref=null;S.me='';S.uname='';S.uphone='';try{localStorage.removeItem('iva_auth');localStorage.removeItem('iva_sess')}catch(e){}}
+function showResend(){var l=$('resendLink');l.textContent='Отправить письмо ещё раз';l.classList.remove('hide')}
+$('resendLink').onclick=async function(){
+  var em=$('aEmail').value.trim().toLowerCase(),l=$('resendLink');
+  if(typeof IvaEmailGuard==='undefined'){toast('Модуль проверки почты не загружен');return}
+  var chk=IvaEmailGuard.check(em);if(chk){toast(chk);return}
+  l.textContent='Отправляем…';
+  try{await IvaEmailGuard.resendConfirm(SB,KEY,em);toast('Письмо отправлено — проверьте ящик и спам')}
+  catch(e){toast(e.message)}
+  l.textContent='Отправить письмо ещё раз';
+};
 $('authSwitch').onclick=function(){setReg(!regMode)};
 $('fgt').onclick=async function(){
   var em=$('aEmail').value.trim();if(!em){toast('Введите email');return}
@@ -473,6 +486,7 @@ $('authBtn').onclick=async function(){
   var b=$('authBtn'),em=$('aEmail').value.trim().toLowerCase(),pw=$('aPass').value;
   var err=$('authErr');err.style.display='none';
   if(!em||!pw){err.textContent='Введите email и пароль';err.style.display='block';return}
+  if(typeof IvaEmailGuard!=='undefined'){var emErr=IvaEmailGuard.check(em);if(emErr){err.textContent=emErr;err.style.display='block';return}}
   b.textContent='Подождите…';b.disabled=true;
   try{
     if(regMode){
@@ -480,13 +494,20 @@ $('authBtn').onclick=async function(){
       if(!nm){throw new Error('Укажите имя')}
       var full=(ls+' '+nm).trim();
       var j=await authCall('/auth/v1/signup','POST',{email:em,password:pw,data:{full_name:full,name:nm,phone:ph}});
-      if(j&&j.access_token){saveAuth(j);await enter()}
-      else{b.textContent='Создать аккаунт';b.disabled=false;toast(j&&j.user?'Аккаунт создан. Если письмо с подтверждением пришло — подтвердите email и войдите.':'Аккаунт создан, войдите');setReg(false);return}
+      var needConfirm=!j||!j.access_token||(typeof IvaEmailGuard!=='undefined'&&!IvaEmailGuard.isConfirmed(j.user));
+      if(!needConfirm){saveAuth(j);await enter()}
+      else{b.textContent='Создать аккаунт';b.disabled=false;setReg(false);err.textContent='Аккаунт создан. Мы отправили письмо на '+em+' — перейдите по ссылке из письма, затем войдите.';err.style.display='block';showResend();return}
     }else{
       var j2=await authCall('/auth/v1/token?grant_type=password','POST',{email:em,password:pw},true);
+      if(j2.user&&typeof IvaEmailGuard!=='undefined'&&!IvaEmailGuard.isConfirmed(j2.user)){throw new Error(IvaEmailGuard.NOT_CONFIRMED_MSG)}
       saveAuth(j2);await enter();
     }
-  }catch(e){err.textContent=e.message;err.style.display='block'}
+  }catch(e){
+    var msg=e.message;
+    if(/email not confirmed/i.test(msg)&&typeof IvaEmailGuard!=='undefined'){msg=IvaEmailGuard.NOT_CONFIRMED_MSG}
+    err.textContent=msg;err.style.display='block';
+    if(/not confirmed|не подтверждена/i.test(e.message)){showResend()}
+  }
   b.textContent=regMode?'Создать аккаунт':'Войти';b.disabled=false;
 };
 $('aPass').addEventListener('keydown',function(e){if(e.key==='Enter')$('authBtn').click()});
@@ -505,8 +526,14 @@ $('btnOut').onclick=doLogout;$('btnOut2').onclick=doLogout;
   try{
     var a=JSON.parse(localStorage.getItem('iva_auth')||'null');
     if(a&&a.tok){S.tok=a.tok;S.ref=a.ref;S.exp=a.exp;
-      try{var u=await authCall('/auth/v1/user','GET',null);S.me=(u.email||'').toLowerCase();var md=u.user_metadata||{};S.uname=md.full_name||md.name||'';S.uphone=md.phone||'';}
-      catch(e){await refreshTok()}
+      try{var u=await authCall('/auth/v1/user','GET',null);
+        if(typeof IvaEmailGuard!=='undefined'&&!IvaEmailGuard.isConfirmed(u)){sessDrop()}
+        else{S.me=(u.email||'').toLowerCase();var md=u.user_metadata||{};S.uname=md.full_name||md.name||'';S.uphone=md.phone||'';}
+      }
+      catch(e){try{await refreshTok();var u2=await authCall('/auth/v1/user','GET',null);
+        if(typeof IvaEmailGuard!=='undefined'&&!IvaEmailGuard.isConfirmed(u2)){sessDrop()}
+        else{S.me=(u2.email||'').toLowerCase();var md2=u2.user_metadata||{};S.uname=md2.full_name||md2.name||'';S.uphone=md2.phone||'';}
+      }catch(e2){}}
     }
   }catch(e){}
   if(S.tok){enter()}else{setTimeout(function(){$('splash').classList.add('hide');$('auth').classList.remove('hide')},400)}
@@ -1327,6 +1354,10 @@ function vCompany(){
 }
 /* ---- кабинет пользователя ---- */
 function vCabUser(){ location.href='account.html#prof'; }
+</script>
+</body>
+</html>
+rof'; }
 </script>
 </body>
 </html>

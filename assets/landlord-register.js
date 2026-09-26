@@ -5,9 +5,11 @@
   const m=e.message||'Не удалось выполнить запрос';
   if(/already registered|already been registered/i.test(m))return 'Такой аккаунт уже есть. Нажмите «Уже есть аккаунт» и войдите.';
   if(/rate limit|too many/i.test(m))return 'Слишком много попыток. Подождите и повторите позже.';
+  if(/not confirmed|не подтверждена/i.test(m))return (typeof IvaEmailGuard==='undefined')?m:IvaEmailGuard.NOT_CONFIRMED_MSG;
   return m;
  }
- function loginScreen(message,email){
+ /* resendEmail: если задан — показываем кнопку «Отправить письмо ещё раз». */
+ function loginScreen(message,email,resendEmail){
   root.innerHTML='<section class="partner-box"><h2>Аккаунт «Ива»</h2><p class="muted small">Если вы уже зарегистрированы на площадке, используйте тот же email и пароль.</p><div class="partner-switch" role="tablist" style="margin-top:18px"><button id="partnerSignup" role="tab" aria-selected="'+signup+'">Создать аккаунт</button><button id="partnerLogin" role="tab" aria-selected="'+(!signup)+'">Уже есть аккаунт</button></div>'+
   (message?'<p class="partner-notice" style="margin-top:18px">'+esc(message)+'</p>':'')+
   '<form id="partnerAuthForm" class="partner-form"><label class="partner-field">Email<input class="inp" id="partnerEmail" type="email" autocomplete="email" maxlength="254" required value="'+esc(email||'')+'"></label><label class="partner-field">Пароль<input class="inp" id="partnerPassword" type="password" autocomplete="'+(signup?'new-password':'current-password')+'" '+(signup?'minlength="8"':'')+' maxlength="128" required><small>'+(signup?'Не менее 8 символов. Используйте уникальный пароль.':'Пароль вашего аккаунта на площадке.')+'</small></label>'+
@@ -18,6 +20,7 @@
   const form=document.getElementById('partnerAuthForm');form.onsubmit=async e=>{
    e.preventDefault();const error=document.getElementById('partnerAuthError');error.textContent='';
    const em=document.getElementById('partnerEmail').value.trim().toLowerCase(),pw=document.getElementById('partnerPassword').value;
+   if(typeof IvaEmailGuard!=='undefined'){const emErr=IvaEmailGuard.check(em);if(emErr){error.textContent=emErr;return;}}
    if(signup && pw!==document.getElementById('partnerPasswordAgain').value){error.textContent='Пароли не совпадают';return;}
    const button=form.querySelector('button[type=submit]');button.disabled=true;
    try{

@@ -123,6 +123,10 @@ async function refreshToken(){
 
 /* ---------- Вход ---------- */
 async function signIn(email, pass){
+  if (typeof IvaEmailGuard !== 'undefined'){
+    const emErr = IvaEmailGuard.check(email);
+    if (emErr) throw new Error(emErr);
+  }
   const r = await fetch(SB + '/auth/v1/token?grant_type=password', {
     method:'POST',
     headers:{ apikey:KEY, 'Content-Type':'application/json' },
@@ -132,16 +136,29 @@ async function signIn(email, pass){
   if (!r.ok){
     const m = sbErr(txt);
     if (/invalid login/i.test(m)) throw new Error('Неверная почта или пароль');
-    if (/email not confirmed/i.test(m)) throw new Error('Почта не подтверждена — проверьте письмо');
+    if (/email not confirmed/i.test(m)) throw new Error(typeof IvaEmailGuard === 'undefined' ? 'Почта не подтверждена — проверьте письмо' : IvaEmailGuard.NOT_CONFIRMED_MSG);
     throw new Error(m);
   }
   const j = JSON.parse(txt);
+  /* Защита в глубину: даже если сервер пропустил, без подтверждённой
+     почты не впускаем. Пользователи, созданные до включения confirm-email
+     на сервере, уже помечены подтверждёнными — их не заденет. */
+  if (j.user && typeof IvaEmailGuard !== 'undefined' && !IvaEmailGuard.isConfirmed(j.user)){
+    clearSess();
+    throw new Error(IvaEmailGuard.NOT_CONFIRMED_MSG);
+  }
   A.tok  = j.access_token;
   A.rtok = j.refresh_token;
   applyAuthUser(j.user || {email:email});
   saveSess();
   await loadAdmin();
   return A;
+}
+
+/* ---------- Повторная отправка письма с подтверждением ---------- */
+function resendConfirmEmail(email, redirectTo){
+  if (typeof IvaEmailGuard === 'undefined') return Promise.reject(new Error('Модуль проверки почты не загружен'));
+  return IvaEmailGuard.resendConfirm(SB, KEY, email, redirectTo);
 }
 
 /* ---------- Восстановление сессии при загрузке ---------- */
@@ -166,18 +183,23 @@ async function restoreSessOnce(){
 
   A.tok = s.tok; A.rtok = s.rtok; A.me = s.me || ''; A.uname = s.uname || '';
 
-  /* Проверяем токен; если протух — обновляем */
+  /* Проверяем токен; если протух — обновляем. Без подтверждённой
+     почты сессию не восстанавливаем: пусть человек подтвердит ящик. */
   try {
-    const r = await fetch(SB + '/auth/v1/user', {
+    let r = await fetch(SB + '/auth/v1/user', {
       headers:{ apikey:KEY, Authorization:'Bearer ' + A.tok }
     });
     if (!r.ok){
       const ok = await refreshToken();
       if (!ok) return false;
-    } else {
-      const u = await r.json();
-      applyAuthUser(u);
+      r = await fetch(SB + '/auth/v1/user', {
+        headers:{ apikey:KEY, Authorization:'Bearer ' + A.tok }
+      });
+      if (!r.ok) return false;
     }
+    const u = await r.json();
+    if (typeof IvaEmailGuard !== 'undefined' && !IvaEmailGuard.isConfirmed(u)){ clearSess(); return false; }
+    applyAuthUser(u);
   } catch(e){ return false; }
 
   await loadAdmin();

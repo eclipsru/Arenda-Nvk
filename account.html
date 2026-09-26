@@ -121,7 +121,7 @@
 
 <script src="assets/data.js"></script>
 <script src="assets/geo.js?v=20260923-photon"></script>
-<script src="assets/sb.js?v=20260924-order-fee"></script>
+<script src="assets/email-guard.js?v=20260926-email"></script><script src="assets/sb.js?v=20260926-email"></script>
 <script src="assets/app.js?v=20260924-apk-1012"></script>
 <script src="assets/profile.js?v=20260923-photon"></script>
 <script>
@@ -184,6 +184,21 @@
       } catch(err){
         er.textContent = err.message;
         er.classList.add('show');
+        if (/не подтверждена|not confirmed/i.test(err.message || '') && typeof resendConfirmEmail === 'function' && !$('resendBtn')){
+          const rb = document.createElement('button');
+          rb.id = 'resendBtn'; rb.className = 'btn wide'; rb.style.marginTop = '10px';
+          rb.textContent = 'Отправить письмо ещё раз';
+          rb.addEventListener('click', async function(){
+            rb.disabled = true;
+            try {
+              await resendConfirmEmail(em.value.trim().toLowerCase());
+              er.textContent = 'Письмо отправлено — проверьте ящик и спам';
+            } catch(e2){ er.textContent = e2.message; }
+            rb.disabled = false;
+          });
+          er.appendChild(document.createElement('br'));
+          er.appendChild(rb);
+        }
         go.disabled = false; go.textContent = 'Войти';
       }
     }
