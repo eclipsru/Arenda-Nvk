@@ -2,6 +2,16 @@
 node_modules/
 .cache/
 *.log
+.venv/
+venv/
+
+# Локальные снимки состояния и скриншоты (в репозиторий не попадают)
+.snapshots/
+
+# Бэкапы базы и дампы — только локально, никогда в GitHub
+backup_*.sql
+data_*.sql
+*.dump
 
 # Never commit authentication material or an Android signing key
 .env

@@ -1,0 +1,15 @@
+{
+  "name": "iva-arenda-nvk",
+  "private": true,
+  "description": "Ива — маркетплейс аренды инструмента (сайт + приложение). Служебный файл только для инструментов разработки; на сайт не влияет.",
+  "scripts": {
+    "check": "bash tools/check.sh",
+    "snapshot": "bash tools/snapshot.sh",
+    "screens": "node tools/screenshot-baseline.js --save",
+    "screens:check": "node tools/screenshot-baseline.js --check",
+    "test": "bash tools/check.sh"
+  },
+  "devDependencies": {
+    "playwright": "^1.50.0"
+  }
+}

@@ -1,0 +1,263 @@
+{
+  "generated_at": "2026-09-29T20:51:42.922Z",
+  "note": "Хеши эталонных скриншотов: сравниваются только stable-страницы. Картинки — в .snapshots/screens/ (в репозиторий не попадают).",
+  "viewports": [
+    "390",
+    "768",
+    "1440"
+  ],
+  "pages": [
+    {
+      "page": "index.html",
+      "stable": false,
+      "viewport": "390",
+      "sha256": "00b9c2595d92990b71b2b852287de621df0fb4471145359bfda509e2a7deac38",
+      "file": "index.html__390.png"
+    },
+    {
+      "page": "catalog.html",
+      "stable": false,
+      "viewport": "390",
+      "sha256": "bf2c6ddbb4b4fe1ba0a283eb0234950739f70ef44513676e44f5419d7f39a589",
+      "file": "catalog.html__390.png"
+    },
+    {
+      "page": "tool.html?id=1",
+      "stable": false,
+      "viewport": "390",
+      "sha256": "31f42a7b266bc80c2f79862ba87479cbbf3cba9fa912ef048950e6eed479e0a0",
+      "file": "tool.html_id_1__390.png"
+    },
+    {
+      "page": "favorites.html",
+      "stable": false,
+      "viewport": "390",
+      "sha256": "13a6298bf74f473b9adb45e352d4e54166edf0db0861053486ea1d01577ab4b0",
+      "file": "favorites.html__390.png"
+    },
+    {
+      "page": "new.html",
+      "stable": false,
+      "viewport": "390",
+      "sha256": "36928fd6645055b7962cb19d2c4e4f31fb614e25044cf0aa424c122ff400b0e5",
+      "file": "new.html__390.png"
+    },
+    {
+      "page": "account.html",
+      "stable": false,
+      "viewport": "390",
+      "sha256": "49929f4b76f48b3a4bb2d6100057d63eafacc94d71b7a7da291ff8649383a221",
+      "file": "account.html__390.png"
+    },
+    {
+      "page": "app.html",
+      "stable": true,
+      "viewport": "390",
+      "sha256": "441fda5c04b71d0dbd638a8aec0147c8d683fcc6faef4cd2377a4bc509711981",
+      "file": "app.html__390.png"
+    },
+    {
+      "page": "offer.html",
+      "stable": true,
+      "viewport": "390",
+      "sha256": "a830f7fffebdf1ae076748ceb105e4b6b5b8c6df0d0cde95ec0864bf1011a197",
+      "file": "offer.html__390.png"
+    },
+    {
+      "page": "partner-terms.html",
+      "stable": true,
+      "viewport": "390",
+      "sha256": "eb440d5906fad1926cdab290353ed3cd39047d8ad38877682ce46774ee84c17e",
+      "file": "partner-terms.html__390.png"
+    },
+    {
+      "page": "partner-privacy.html",
+      "stable": true,
+      "viewport": "390",
+      "sha256": "4a60cf83dbf2bb063ce9371f021ae217943320fe28249e8fcaf68117d58d41ba",
+      "file": "partner-privacy.html__390.png"
+    },
+    {
+      "page": "landlord-register.html",
+      "stable": true,
+      "viewport": "390",
+      "sha256": "ae6c48b60fd7c59a6903665ea44c9a16b9b4e031c395a175818b604e799c7ce8",
+      "file": "landlord-register.html__390.png"
+    },
+    {
+      "page": "404.html",
+      "stable": true,
+      "viewport": "390",
+      "sha256": "81f7b617c7e0d52b7c896bdb26a04ac5f13236a94dca32c2b1a3f7efae8f6ba4",
+      "file": "404.html__390.png"
+    },
+    {
+      "page": "index.html",
+      "stable": false,
+      "viewport": "768",
+      "sha256": "81a4fd81a36c69e7465b5a7f4dc8d27b302dbd201cdd3b7180de4b858d6d7cf9",
+      "file": "index.html__768.png"
+    },
+    {
+      "page": "catalog.html",
+      "stable": false,
+      "viewport": "768",
+      "sha256": "6b3f762abd191ef3ac8cb1451afe07a28452d309c0174119018e10ea5ef7a0e1",
+      "file": "catalog.html__768.png"
+    },
+    {
+      "page": "tool.html?id=1",
+      "stable": false,
+      "viewport": "768",
+      "sha256": "da1ddee64d1086fe0d46cd80be5765a239cb86bd64fd40e0c290d31acc6fb4c8",
+      "file": "tool.html_id_1__768.png"
+    },
+    {
+      "page": "favorites.html",
+      "stable": false,
+      "viewport": "768",
+      "sha256": "025aa66ea3df72699e42ca51844713e7e8b1ac533508cdce6f5c740af64231cf",
+      "file": "favorites.html__768.png"
+    },
+    {
+      "page": "new.html",
+      "stable": false,
+      "viewport": "768",
+      "sha256": "84b6610b3659f323215d68933d8e3763944357fdddba5937be1e69e3cbb0bbc9",
+      "file": "new.html__768.png"
+    },
+    {
+      "page": "account.html",
+      "stable": false,
+      "viewport": "768",
+      "sha256": "895f9d5d4db28297fb562134247f7c5a26d1c64bce47e9ec1dad8a272ab0ed50",
+      "file": "account.html__768.png"
+    },
+    {
+      "page": "app.html",
+      "stable": true,
+      "viewport": "768",
+      "sha256": "49ca8ae39fcfcf3fb87fac89ea9885bebb11120bbd5c685bfa180054e455de41",
+      "file": "app.html__768.png"
+    },
+    {
+      "page": "offer.html",
+      "stable": true,
+      "viewport": "768",
+      "sha256": "c03d4f111caed0a422bd32088c17f80b917f7b9ef7028d46136338f061df96f3",
+      "file": "offer.html__768.png"
+    },
+    {
+      "page": "partner-terms.html",
+      "stable": true,
+      "viewport": "768",
+      "sha256": "e5d57a9b245d9efd4af565335fcf37c973b7e8e66d9da1c118b62798b6de60a8",
+      "file": "partner-terms.html__768.png"
+    },
+    {
+      "page": "partner-privacy.html",
+      "stable": true,
+      "viewport": "768",
+      "sha256": "5e2c86df70102f2f937569bed73ee85d8b70f06ec294b28c3a4c34d15572dd4b",
+      "file": "partner-privacy.html__768.png"
+    },
+    {
+      "page": "landlord-register.html",
+      "stable": true,
+      "viewport": "768",
+      "sha256": "7684886dc6bed903d20e4ebb4db87e4724c268969f9da3faf763a54452369c8e",
+      "file": "landlord-register.html__768.png"
+    },
+    {
+      "page": "404.html",
+      "stable": true,
+      "viewport": "768",
+      "sha256": "6a92232c8af0b8a3a588fc37fb8913d3c4a9f42ce3d67df4049ec00dfa0183e8",
+      "file": "404.html__768.png"
+    },
+    {
+      "page": "index.html",
+      "stable": false,
+      "viewport": "1440",
+      "sha256": "963ba985f6978c7f2f712f62079bb987b1427f226e4b44091b0e5cea98de870d",
+      "file": "index.html__1440.png"
+    },
+    {
+      "page": "catalog.html",
+      "stable": false,
+      "viewport": "1440",
+      "sha256": "9977b0f0e6a8975e7a744a682090310842e638c48bd8b026594411dcfb58e76c",
+      "file": "catalog.html__1440.png"
+    },
+    {
+      "page": "tool.html?id=1",
+      "stable": false,
+      "viewport": "1440",
+      "sha256": "a2517d5555d47127990653feadab1daf950ef946ab954a0a0179985832934a7f",
+      "file": "tool.html_id_1__1440.png"
+    },
+    {
+      "page": "favorites.html",
+      "stable": false,
+      "viewport": "1440",
+      "sha256": "7a7555f58090d360efeef86d34d60e16a8123c0689087717b189d20ab6c93b9e",
+      "file": "favorites.html__1440.png"
+    },
+    {
+      "page": "new.html",
+      "stable": false,
+      "viewport": "1440",
+      "sha256": "bb5be4c79bd6ac0450a0b5802c476d1276641ea811f86f0e9df83d380417be61",
+      "file": "new.html__1440.png"
+    },
+    {
+      "page": "account.html",
+      "stable": false,
+      "viewport": "1440",
+      "sha256": "3da3c5d0d738769b2ae35b2dd9e65137caa149256b34e335a26b64d61f463718",
+      "file": "account.html__1440.png"
+    },
+    {
+      "page": "app.html",
+      "stable": true,
+      "viewport": "1440",
+      "sha256": "6cad2398031c92f7dea469522d3d2314c79e9181058d3c0e1463d312d2a99573",
+      "file": "app.html__1440.png"
+    },
+    {
+      "page": "offer.html",
+      "stable": true,
+      "viewport": "1440",
+      "sha256": "c269b507c26668fd3095f14248b844b42528c7aaf79ea7a44a04f2cb6520f62c",
+      "file": "offer.html__1440.png"
+    },
+    {
+      "page": "partner-terms.html",
+      "stable": true,
+      "viewport": "1440",
+      "sha256": "056b14f66f110fbdb01ab094b4365fe4fd4d493965cca7b1db44fd36718b7915",
+      "file": "partner-terms.html__1440.png"
+    },
+    {
+      "page": "partner-privacy.html",
+      "stable": true,
+      "viewport": "1440",
+      "sha256": "adc2b4f4d09c7e2f5c545009be33968a229cfb6214fd77d14b1f6389f08ae9ab",
+      "file": "partner-privacy.html__1440.png"
+    },
+    {
+      "page": "landlord-register.html",
+      "stable": true,
+      "viewport": "1440",
+      "sha256": "4dc51cbeef4a9402c60bdd99a75c09109e2b387b74e602d678e4acc1c3a8f839",
+      "file": "landlord-register.html__1440.png"
+    },
+    {
+      "page": "404.html",
+      "stable": true,
+      "viewport": "1440",
+      "sha256": "a0743df83cf1dcfb5e84ddd7c3520c4eaf99408d006414e172e2658964edcf21",
+      "file": "404.html__1440.png"
+    }
+  ]
+}
