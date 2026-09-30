@@ -6,7 +6,8 @@
   Этот скрипт сохраняет СОДЕРЖИМОЕ таблиц, не скачивая и не устанавливая ничего.
 
   Что делает:
-    1) спрашивает адрес проекта и ключ service_role (ключ остаётся только в памяти, никуда не пишется);
+    1) спрашивает адрес проекта и ключ полного доступа (service_role или secret key; ключ остаётся
+       только в памяти и никуда не пишется);
     2) сам узнаёт список таблиц проекта (через описание API) — или берёт список из -Tables;
     3) постранично выгружает каждую таблицу в отдельный файл <таблица>.ndjson (одна строка = одна запись);
     4) сверяет количество выгруженных строк с количеством в базе и пишет manifest.json;
@@ -15,9 +16,11 @@
   Чего НЕ делает: не меняет базу (только чтение), не выгружает структуру таблиц,
   не выгружает файлы из хранилищ (tool-photos, voice) — их содержимое лежит не в базе.
 
-  Ключ service_role даёт полный доступ к данным. Вставляйте его только в это окно,
+  Ключ полного доступа (service_role или sb_secret_...) даёт полный доступ к данным. Вставляйте его только в это окно,
   никому не пересылайте, после работы закройте окно.
-  Где взять: Supabase → Project Settings → API → Project API keys → service_role.
+  Где взять: Supabase → Project Settings → API keys → Secret keys (новая панель, ключ sb_secret_...)
+  либо Project Settings → API → Project API keys → service_role (старая панель, ключ eyJ...).
+  Ключи publishable / anon для выгрузки не подходят.
 
   Запуск:
       powershell -ExecutionPolicy Bypass -File tools\backup-api-windows.ps1
@@ -65,9 +68,14 @@ if (-not $Key) {
     if ($env:SUPABASE_SERVICE_ROLE_KEY) { $Key = $env:SUPABASE_SERVICE_ROLE_KEY }
     elseif ($env:SUPABASE_KEY)          { $Key = $env:SUPABASE_KEY }
     else {
-        Write-Host '  Ключ: Supabase → Project Settings → API → service_role (кнопка Reveal, затем Copy).' -ForegroundColor Yellow
+        Write-Host '  Нужен ключ с полным доступом к данным. Он выглядит по-разному в старой и новой панели:' -ForegroundColor Yellow
+        Write-Host '    • новая панель: Project Settings → API keys → раздел Secret keys → строка secret → Reveal → Copy'
+        Write-Host '      (ключ начинается на sb_secret_)'
+        Write-Host '    • старая панель: Project Settings → API → Project API keys → строка service_role → Reveal → Copy'
+        Write-Host '      (ключ — длинная строка, начинается на eyJ)'
+        Write-Host '  НЕ подходят: publishable / anon (у них доступ ограничен — выгрузка упрётся в отказ).' -ForegroundColor Yellow
         Write-Host '  Ключ не отображается на экране и никуда не сохраняется.' -ForegroundColor DarkGray
-        $sec = Read-Host '  Вставьте ключ service_role (Enter без текста — отмена)' -AsSecureString
+        $sec = Read-Host '  Вставьте ключ полного доступа (Enter без текста — отмена)' -AsSecureString
         $bstr = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($sec)
         try   { $Key = [Runtime.InteropServices.Marshal]::PtrToStringAuto($bstr) }
         finally { [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($bstr) }
@@ -92,7 +100,10 @@ try {
     $code = $null
     if ($_.Exception.Response) { try { $code = [int]$_.Exception.Response.StatusCode } catch { } }
     if ($code -eq 401 -or $code -eq 403) {
-        Write-Err "Ключ не подошёл (код $code). Нужен именно service_role (не anon и не publishable)."
+        Write-Err "Ключ не подошёл (код $code). Нужен ключ с полным доступом:"
+        Write-Err "  либо sb_secret_... (Project Settings → API keys → Secret keys),"
+        Write-Err "  либо service_role из старой панели (Project Settings → API → Project API keys)."
+        Write-Err "  Ключи publishable / anon не подходят."
     } elseif ($code) {
         Write-Err "Проект ответил кодом $code. Проверьте адрес проекта."
     } else {
