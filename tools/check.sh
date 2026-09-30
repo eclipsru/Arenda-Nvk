@@ -25,7 +25,8 @@ printf '  инфо  ветка: %s, коммит: %s\n' "$(git branch --show-cur
 head_ "2. Секреты не должны попадать в репозиторий"
 scan() { # scan "<что ищем>" "<regex>"
   local label="$1" pattern="$2" out
-  out="$(git grep -n -I -E "$pattern" -- . 2>/dev/null || true)"
+  # ищем по файлам репозитория, исключая сам этот файл — иначе он находит собственные образцы поиска
+  out="$(git grep -n -I -E "$pattern" -- . ':!tools/check.sh' 2>/dev/null || true)"
   if [ -n "$out" ]; then
     bad "$label"
     printf '%s\n' "$out" | sed 's/^/      /' | head -6

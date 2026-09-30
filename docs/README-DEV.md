@@ -76,10 +76,12 @@ tools/snapshot.sh                снимок состояния + точка о
 tools/screenshot-baseline.js     эталонные скриншоты (save/check)
 tools/screens-baseline.json      манифест хешей скриншотов (в репозитории)
 tools/backup-windows.ps1         бэкап базы Supabase (Windows, PowerShell) — см. docs/BACKUP-SUPABASE.md
+tools/backup-api-windows.ps1     выгрузка данных через API без pg_dump (Windows) — см. docs/BACKUP-SUPABASE.md
+tools/schema-dump.sql            запрос для SQL-редактора Supabase: структура базы одним текстом
 tools/rotate-keystore-windows.ps1 смена пароля ключа подписи (Windows) — см. docs/KEYSTORE-PASSWORD-ROTATION.md
 tools/real_bases.csv             115 реальных прокатов (44 города)
 tools/seed_real_bases.py         заливка справочника (см. задачу П2 — объединить с корневым скриптом)
-docs/BACKUP-SUPABASE.md          бэкап базы: pg_dump и Dashboard-вариант
+docs/BACKUP-SUPABASE.md          бэкап базы: портативный pg_dump, схема через SQL-редактор, выгрузка данных через API
 docs/KEYSTORE-PASSWORD-ROTATION.md  смена пароля ключа подписи без смены сертификата
 docs/ЖУРНАЛ.md                   журнал этапов, точек отката и решений владельца
 backup-<дата>/                   локальные бэкапы (в репозиторий не попадают)
@@ -95,4 +97,9 @@ powershell -ExecutionPolicy Bypass -File tools\backup-windows.ps1 -Baseline
 # 2. Смена пароля ключа подписи приложения (спросит пароли)
 powershell -ExecutionPolicy Bypass -File tools\rotate-keystore-windows.ps1
 ```
+
+Если `pg_dump` не установлен (например, `winget` падает с ошибкой 403 — это его известный баг), установка не нужна:
+- структура базы — запрос `tools/schema-dump.sql` в SQL-редакторе Supabase;
+- данные — `powershell -ExecutionPolicy Bypass -File tools\backup-api-windows.ps1`;
+- либо портативный `pg_dump`: распаковать архив `…windows-x64-binaries.zip` и указать папку через `-PgBin`.
 
