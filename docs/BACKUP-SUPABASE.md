@@ -71,7 +71,7 @@ pg_dump "<СТРОКА>" --no-owner --no-privileges --data-only `
 |---|---|---|
 | **1. Портативный `pg_dump` из браузера** | полный бэкап (структура + данные) | скачать архив выше, распаковать, запустить `tools\backup-windows.ps1 -PgBin "<папка>\bin"` |
 | **2. Структура через SQL-редактор** | структура базы (=baseline для репозитория) | Supabase → SQL Editor → вставить `tools/schema-dump.sql` → Run → скопировать результат в `supabase\migrations\0000_baseline_schema.sql` |
-| **3. Данные через API** | содержимое всех таблиц | `powershell -ExecutionPolicy Bypass -File tools\backup-api-windows.ps1` (спросит адрес проекта и ключ `service_role`) |
+| **3. Данные через API** | содержимое всех таблиц | `powershell -ExecutionPolicy Bypass -File tools\backup-api-windows.ps1` (спросит адрес проекта и ключ полного доступа: `service_role` или `sb_secret_...`) |
 
 Способы 2 и 3 вместе дают то же, что способ 1, но **вообще без скачиваний и установок**. Способ 3 не выгружает файлы из Storage (`tool-photos`, `voice`) — они хранятся отдельно от базы.
 
@@ -104,7 +104,7 @@ pg_dump "<СТРОКА>" --no-owner --no-privileges --data-only \
 powershell -ExecutionPolicy Bypass -File tools\backup-api-windows.ps1
 ```
 
-Скрипт спросит адрес проекта и ключ `service_role` (Supabase → Project Settings → API). Дальше сам: узнаёт список таблиц, постранично выгружает каждую в файл `<таблица>.ndjson`, сверяет количество записей с базой и пишет `manifest.json`. Ключ нигде не сохраняется. Результат — папка `backup-<дата>\api`.
+Скрипт спросит адрес проекта и ключ полного доступа: в новой панели Supabase это Project Settings → **API keys → Secret keys** (ключ `sb_secret_...`), в старой — Project Settings → **API → Project API keys → `service_role`**. Ключи `publishable`/`anon` не подойдут. Дальше сам: узнаёт список таблиц, постранично выгружает каждую в файл `<таблица>.ndjson`, сверяет количество записей с базой и пишет `manifest.json`. Ключ нигде не сохраняется. Результат — папка `backup-<дата>\api`.
 
 ### 2б. Данные по таблицам вручную через Dashboard
 
