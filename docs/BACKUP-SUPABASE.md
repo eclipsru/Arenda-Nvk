@@ -75,6 +75,25 @@ pg_dump "<СТРОКА>" --no-owner --no-privileges --data-only `
 
 Способы 2 и 3 вместе дают то же, что способ 1, но **вообще без скачиваний и установок**. Способ 3 не выгружает файлы из Storage (`tool-photos`, `voice`) — они хранятся отдельно от базы.
 
+### Если при запуске `.ps1` сыпятся ошибки про кавычки и видны кракозябры (`Р’РёРґ`)
+
+Причина: Windows PowerShell 5.1 читает файл **без метки UTF-8 (BOM)** в кодировке CP1251 — русский текст превращается в мусор и рвёт кавычки. Такое бывает, если файл скачался из кеша в старой версии или сохранён другим инструментом.
+
+Лечение (добавить метку в начало файла) — одна строка:
+
+```powershell
+$f = ".\tools\backup-api-windows.ps1"   # подставьте нужный файл
+$b = [IO.File]::ReadAllBytes($f)
+if (-not ($b[0] -eq 0xEF -and $b[1] -eq 0xBB -and $b[2] -eq 0xBF)) { [IO.File]::WriteAllBytes($f, [byte[]](([byte[]](0xEF,0xBB,0xBF)) + $b)) }
+```
+
+Проверка, что файл читается правильно (должно быть 0):
+```powershell
+$e = $null; [void][System.Management.Automation.Language.Parser]::ParseFile((Resolve-Path $f),[ref]$null,[ref]$e); $e.Count
+```
+
+Чтобы это не повторялось: команда скачивания в инструкции `14-ПОШАГОВО-WINDOWS.md` теперь сама добавляет метку, а проверка `bash tools/check.sh` (раздел «2.1») следит, чтобы все `.ps1` в репозитории были с меткой UTF-8.
+
 ### macOS / Linux
 ```bash
 pg_dump "<СТРОКА>" --no-owner --no-privileges -f backup_full_2026-09-29.sql
