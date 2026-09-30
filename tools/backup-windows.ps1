@@ -1,4 +1,4 @@
-﻿#Requires -Version 5.1
+#Requires -Version 5.1
 <#
   Ива — бэкап базы данных Supabase (Windows / PowerShell).
 
@@ -15,8 +15,14 @@
   Запуск:
       powershell -ExecutionPolicy Bypass -File tools\backup-windows.ps1
       powershell -ExecutionPolicy Bypass -File tools\backup-windows.ps1 -Baseline
+      powershell -ExecutionPolicy Bypass -File tools\backup-windows.ps1 -PgBin "$env:USERPROFILE\pgsql\bin"
+
+  Если pg_dump не установлен — скрипт подскажет три пути (в том числе без установки и без прав администратора).
 #>
-param([switch]$Baseline)
+param(
+    [switch]$Baseline,
+    [string]$PgBin   # папка с pg_dump.exe (например, распакованный архив) или путь к самому pg_dump.exe
+)
 
 $ErrorActionPreference = 'Stop'
 $root   = Split-Path -Parent $PSScriptRoot
@@ -29,6 +35,17 @@ function Write-Warn2($t)   { Write-Host "  [!]  $t" -ForegroundColor Yellow }
 function Write-Err($t)     { Write-Host "  [x]  $t" -ForegroundColor Red }
 
 function Find-PgDump {
+    param([string]$Hint)
+    # 1) то, что указал пользователь в -PgBin
+    if ($Hint) {
+        if (Test-Path $Hint -PathType Leaf) { return (Resolve-Path $Hint).Path }
+        foreach ($sub in @('bin\pg_dump.exe', 'pg_dump.exe', 'pgsql\bin\pg_dump.exe')) {
+            $cand = Join-Path $Hint $sub
+            if (Test-Path $cand) { return (Resolve-Path $cand).Path }
+        }
+        Write-Warn2 "в -PgBin не нашёл pg_dump.exe: $Hint"
+    }
+    # 2) установленный PostgreSQL (в PATH, затем в Program Files)
     $cmd = Get-Command pg_dump -ErrorAction SilentlyContinue
     if ($cmd) { return $cmd.Source }
     $bases = @()
@@ -43,6 +60,25 @@ function Find-PgDump {
             }
         }
     }
+    # 3) распакованный архив (portable, установка не нужна) — типовые места
+    foreach ($base in @($env:USERPROFILE, 'C:\', 'C:\tools')) {
+        if ($base -and (Test-Path $base)) {
+            foreach ($name in @('pgsql', 'pgsql-tools', 'postgresql', 'postgres')) {
+                foreach ($sub in @('bin\pg_dump.exe', 'pgsql\bin\pg_dump.exe')) {
+                    $cand = Join-Path $base (Join-Path $name $sub)
+                    if (Test-Path $cand) { return (Resolve-Path $cand).Path }
+                }
+            }
+        }
+    }
+    # 4) «Загрузки» и «Рабочий стол» — там распаковывают чаще всего
+    foreach ($scan in @((Join-Path $env:USERPROFILE 'Downloads'), (Join-Path $env:USERPROFILE 'Desktop'))) {
+        if (Test-Path $scan) {
+            $found = Get-ChildItem -Path $scan -Recurse -Filter 'pg_dump.exe' -Depth 4 -ErrorAction SilentlyContinue |
+                     Select-Object -First 1
+            if ($found) { return $found.FullName }
+        }
+    }
     return $null
 }
 
@@ -51,19 +87,36 @@ $tables = @('tools','orders','order_parts','fee_payments','admins','limited_admi
             'reviews','app_messages','likes','order_claims','cats','subcats','directory_landlords')
 
 Write-Section '1. Поиск pg_dump'
-$pgDump = Find-PgDump
+$pgDump = Find-PgDump -Hint $PgBin
 if (-not $pgDump) {
-    Write-Err 'pg_dump не найден.'
-    Write-Host '  Установка одной командой (PowerShell от администратора):' -ForegroundColor Yellow
-    Write-Host '      winget install -e --id PostgreSQL.PostgreSQL.16'
-    Write-Host '  Затем закройте и заново откройте PowerShell и повторите запуск.'
+    Write-Err 'pg_dump не найден — но это не тупик, есть три пути.'
     Write-Host ''
-    Write-Host '  Вариант без установки (только данные, без структуры):' -ForegroundColor Yellow
-    Write-Host '      Supabase → Table Editor → выбрать таблицу → кнопка ⋮ → Export data → CSV'
-    Write-Host ('      Таблицы: ' + ($tables -join ', '))
+    Write-Host '  ПУТЬ 1 (проще всего, без установки и без прав администратора)' -ForegroundColor Yellow
+    Write-Host '    1. Откройте в браузере (именно в браузере, не через winget — у winget баг с этой ссылкой):'
+    Write-Host '       https://get.enterprisedb.com/postgresql/postgresql-17.7-1-windows-x64-binaries.zip'
+    Write-Host '    2. Распакуйте архив в C:\Users\<Вы>\pgsql  (получится ...\pgsql\pgsql\bin\pg_dump.exe)'
+    Write-Host '    3. Запустите скрипт заново. Если распаковали в другое место, укажите его так:'
+    Write-Host '       powershell -ExecutionPolicy Bypass -File tools\backup-windows.ps1 -PgBin "D:\pgsql\pgsql\bin"'
+    Write-Host '    Размер архива ~316 МБ, установщик не запускается, служба не создаётся, ничего не меняется в системе.'
+    Write-Host ''
+    Write-Host '  ПУТЬ 2 (вообще без скачиваний: структура базы через SQL-редактор Supabase)' -ForegroundColor Yellow
+    Write-Host '    1. Supabase -> SQL Editor -> New query'
+    Write-Host '    2. Вставьте содержимое файла tools\schema-dump.sql и нажмите Run'
+    Write-Host '    3. Скопируйте полученный текст в supabase\migrations\0000_baseline_schema.sql'
+    Write-Host '    Это даст структуру базы (таблицы, правила доступа, функции). Данные так не выгружаются.'
+    Write-Host ''
+    Write-Host '  ПУТЬ 3 (данные без скачиваний и без pg_dump: через REST API)' -ForegroundColor Yellow
+    Write-Host '    powershell -ExecutionPolicy Bypass -File tools\backup-api-windows.ps1'
+    Write-Host '    Скрипт выгрузит содержимое всех таблиц в отдельные файлы .ndjson.'
+    Write-Host ''
+    Write-Host '  ПУТЬ 4 (если хотите именно установку)' -ForegroundColor DarkGray
+    Write-Host '    winget install -e --id PostgreSQL.PostgreSQL.16   — у вас падает с ошибкой 403 (баг winget),'
+    Write-Host '    тогда скачайте установщик вручную: https://get.enterprisedb.com/postgresql/postgresql-17.7-1-windows-x64.exe'
+    Write-Host '    и выберите компонент «Command Line Tools».'
     exit 2
 }
 Write-Ok "pg_dump: $pgDump"
+try { Write-Ok ("версия: " + ((& $pgDump --version) -join '')) } catch { }
 
 Write-Section '2. Строка подключения'
 Write-Host '  Где взять: Supabase → Project Settings → Database → Connection string → URI.'
