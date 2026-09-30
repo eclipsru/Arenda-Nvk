@@ -96,6 +96,8 @@ Write-Section '2. Проверка доступа'
 try {
     $resp = Invoke-WebRequest -Uri "$ProjectUrl/rest/v1/" -Headers $headers -Method GET -UseBasicParsing -TimeoutSec 60
     Write-Ok ("API отвечает, код " + $resp.StatusCode)
+    $specRaw = $resp.Content
+    if ($specRaw -is [byte[]]) { $specRaw = [System.Text.Encoding]::UTF8.GetString($specRaw) }
 } catch {
     $code = $null
     if ($_.Exception.Response) { try { $code = [int]$_.Exception.Response.StatusCode } catch { } }
@@ -119,7 +121,7 @@ if ($Tables) {
     Write-Ok ('список задан вручную: ' + ($tableNames -join ', '))
 } else {
     try {
-        $spec = $resp.Content | ConvertFrom-Json
+        $spec = $specRaw | ConvertFrom-Json
         if ($spec.PSObject.Properties.Name -contains 'paths') {
             $tableNames = @($spec.paths.PSObject.Properties.Name | ForEach-Object { $_.TrimStart('/') } |
                             Where-Object { $_ -and $_ -notmatch '^rpc/' } | Sort-Object -Unique)
@@ -178,6 +180,9 @@ foreach ($table in $tableNames) {
         if ($cr -and ($cr -match '/(\d+)$')) { $total = [int]$Matches[1] }
 
         $content = $page.Content
+        # некоторые прокси/посредники отдают ответ без заголовка типа — тогда PowerShell
+        # возвращает «сырые байты». Расшифровываем их сами, чтобы выгрузка не сбилась.
+        if ($content -is [byte[]]) { $content = [System.Text.Encoding]::UTF8.GetString($content) }
         if ([string]::IsNullOrWhiteSpace($content) -or $content -eq '[]') { break }
         $rows = $content | ConvertFrom-Json
         if ($null -eq $rows) { break }
