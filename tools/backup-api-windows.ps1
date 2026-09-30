@@ -1,4 +1,4 @@
-#Requires -Version 5.1
+﻿#Requires -Version 5.1
 <#
   Ива — выгрузка данных из Supabase через REST API (Windows / PowerShell).
 

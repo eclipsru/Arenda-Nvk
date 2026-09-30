@@ -45,6 +45,19 @@ else
   ok "Файлы секретов (.env/.p12/.jks/.keystore/.pem) в репозиторий не попали"
 fi
 
+head_ "2.1. PowerShell-скрипты читаются на Windows"
+nobom=0
+for f in tools/*.ps1; do
+  bom="$(head -c 3 "$f" | od -An -tx1 | tr -d ' \n')"
+  if [ "$bom" = "efbbbf" ]; then
+    ok "$(basename "$f") — метка UTF-8 на месте"
+  else
+    bad "$(basename "$f") — НЕТ метки UTF-8: на Windows PowerShell скрипт сломается на русских словах"
+    nobom=$((nobom+1))
+  fi
+done
+[ "$nobom" -gt 0 ] && printf '%s\n' "      (лечение: добавить в начало файла 3 байта EF BB BF — метку UTF-8)" || true
+
 head_ "3. Релиз приложения (app-update.json ↔ APK ↔ эталонный хеш)"
 if node tools/check-release.js; then ok "релиз приложения согласован"; else bad "см. замечания выше"; fi
 
