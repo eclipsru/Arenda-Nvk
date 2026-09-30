@@ -9,6 +9,7 @@ venv/
 .snapshots/
 
 # Бэкапы базы и дампы — только локально, никогда в GitHub
+backup-*/
 backup_*.sql
 data_*.sql
 *.dump
