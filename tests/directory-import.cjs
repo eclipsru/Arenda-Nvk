@@ -13,6 +13,8 @@ const assert = require('node:assert/strict');
 const ROOT = path.resolve(__dirname, '..');
 const CSV = path.join(ROOT, 'tools', 'real_bases.csv');
 const SEED = path.join(ROOT, 'supabase', 'seed', '20261001_directory_landlords_import.sql');
+const BUNDLE = path.join(ROOT, 'supabase', 'seed', '20261001_directory_ALL_IN_ONE.sql');
+const MIGRATION = path.join(ROOT, 'supabase', 'migrations', '20261001_directory_landlords.sql');
 const CITIES = path.join(ROOT, 'tools', 'cities.json');
 const ALIASES = path.join(ROOT, 'tools', 'city_aliases.json');
 
@@ -93,7 +95,21 @@ function run() {
   assert.ok(!/status\s*=\s*excluded\.status/.test(seed),
     'повторный ввоз затирает статус проверки карточки (status = excluded.status) — убрать');
 
-  // 6. Города, которых нет в списке сайта, остаются без ссылки (это видно и в отчёте)
+  // 6. Комбинированный файл (одна вставка в Supabase) содержит и таблицу, и ввоз
+  assert.ok(fs.existsSync(BUNDLE),
+    'нет комбинированного файла — собрать: python3 tools/build_directory_import.py');
+  const bundle = fs.readFileSync(BUNDLE, 'utf8');
+  const migration = fs.readFileSync(MIGRATION, 'utf8').trim();
+  assert.ok(bundle.includes(migration),
+    'комбинированный файл не содержит текущий текст миграции — пересобрать: python3 tools/build_directory_import.py');
+  assert.ok(bundle.includes(seed.trim()),
+    'комбинированный файл не содержит текущий текст ввоза — пересобрать: python3 tools/build_directory_import.py');
+  assert.ok(bundle.indexOf(migration) < bundle.indexOf(seed.trim()),
+    'в комбинированном файле ввоз идёт раньше создания таблицы — пересобрать');
+  assert.match(bundle, /create table if not exists public\.directory_landlords/i,
+    'в комбинированном файле не видно создания таблицы');
+
+  // 7. Города, которых нет в списке сайта, остаются без ссылки (это видно и в отчёте)
   const nullSlugs = [...seed.matchAll(/^\s*\('[^']*', NULL, /gm)].length;
   const aliasesRaw = JSON.parse(fs.readFileSync(ALIASES, 'utf8'));
   const aliases = Object.fromEntries(
@@ -114,7 +130,7 @@ function run() {
 
   console.log(
     `Ввоз справочника согласован с источником: ${data.length} строк, телефоны в едином виде, ` +
-    `дублей нет, городов вне списка сайта — ${unknownCities.length}.`);
+    `дублей нет, городов вне списка сайта — ${unknownCities.length}; комбинированный файл собран верно.`);
 }
 
 try {
