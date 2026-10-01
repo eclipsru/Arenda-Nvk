@@ -4,7 +4,7 @@
 Страницы городов (этап П3, первый шаг): генератор статических страниц.
 
 Что делает: из справочника прокатов собирает страницы вида city/<ссылка>.html —
-«Аренда инструмента — <город>»: контакты пунктов проката, телефоны, переход в каталог
+«Аренда инструмента — <город>»: пункты проката, заявка на подбор, переход в каталог
 и предложение сдать инструмент. Дизайн — существующий (assets/theme.css), без новых
 стилей: страницы используют те же переменные и компоненты, что и остальной сайт.
 
@@ -43,6 +43,16 @@ LISTINGS_JSON = os.environ.get("IVA_LISTINGS") or os.path.join(ROOT, "tools", "l
 # Публичные значения (те же, что в коде сайта assets/sb.js). Только чтение.
 SUPABASE_URL = "https://wdxdeatphizclskfmfxi.supabase.co"
 SUPABASE_KEY = "sb_publishable_dtRaEHNNPBFbHFvg8hw9iA_FqJSz9BE"
+
+# Наш телефон (тот же, что в подвале сайта). Через него идёт заявка на подбор.
+OUR_PHONE_TEL = "+79081732475"
+OUR_PHONE_SHOW = "+7 (908) 173-24-75"
+
+# Показывать телефоны пунктов проката?
+#   False (по умолчанию) — решение владельца (вариант 5): телефоны пунктов НЕ публикуем,
+#                          вместо них кнопка «Узнать наличие и цену», которая ведёт к нам.
+#   True  — вернуть телефоны: python3 tools/build_city_pages.py --with-phones
+SHOW_PHONES = False
 SOURCE_DATE = "26.09.2026"
 LANGLE = {"new": "новая", "verified": "проверена"}
 
@@ -135,15 +145,49 @@ def directory_by_city(snapshot):
 
 
 def card_html(entry):
-    """Карточка пункта проката: данные, телефон и приглашение подключиться."""
-    phone = fmt_phone(entry["phone"])
-    tel = "+7" + re.sub(r"\D", "", entry["phone"])[-10:]
+    """Карточка пункта проката: данные, путь к заявке и приглашение подключиться.
+
+    Телефоны пунктов НЕ публикуем (решение владельца, вариант 5): клиент не уходит
+    к прокату «мимо кассы», а получает помощь в подборе. Вернуть телефоны:
+    python3 tools/build_city_pages.py --with-phones
+    """
     source = esc(entry.get("source") or "открытые справочники")
     address = esc(entry.get("address") or "")
     addr_line = (f'<div style="font-size:13px;color:var(--gr);margin-top:4px">{address}</div>'
                  if address.strip() else '')
+    invite = (
+        '<div style="flex-basis:100%;margin-top:6px">'
+          '<a href="landlord-register.html" style="font-size:12.5px;color:var(--or)">'
+            'Это ваш прокат? Подключитесь — разместим объявление бесплатно'
+          '</a>'
+        '</div>'
+    )
+    if SHOW_PHONES:
+        phone = fmt_phone(entry["phone"])
+        tel = "+7" + re.sub(r"\D", "", entry["phone"])[-10:]
+        action = (
+            '<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">'
+              f'<a href="tel:{tel}" style="font-size:14.5px;font-weight:600;color:var(--tx);white-space:nowrap">{phone}</a>'
+              f'<a class="btn hot sm" href="tel:{tel}" style="white-space:nowrap">Позвонить</a>'
+            '</div>'
+        )
+        note = ''
+    else:
+        action = (
+            '<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">'
+              f'<a class="btn hot sm" href="tel:{OUR_PHONE_TEL}" data-lead="1" '
+              'style="white-space:nowrap">Узнать наличие и цену</a>'
+            '</div>'
+        )
+        note = (
+            '<div style="flex-basis:100%;margin-top:2px">'
+              '<span style="font-size:12.5px;color:var(--g2)">'
+              'Позвоните нам — уточним наличие, цену и залог за вас.'
+              '</span>'
+            '</div>'
+        )
     return (
-        '<div style="margin-top:12px;padding:14px 16px;background:var(--card);'
+        '<div data-prokat-card="1" style="margin-top:12px;padding:14px 16px;background:var(--card);'
         'border:1px solid var(--line);border-radius:var(--r);display:flex;align-items:flex-start;'
         'justify-content:space-between;gap:14px;flex-wrap:wrap">'
           '<div style="min-width:240px">'
@@ -151,15 +195,7 @@ def card_html(entry):
             + addr_line +
             f'<div style="font-size:12px;color:var(--g2);margin-top:6px">источник: {source}</div>'
           '</div>'
-          '<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">'
-            f'<a href="tel:{tel}" style="font-size:14.5px;font-weight:600;color:var(--tx);white-space:nowrap">{phone}</a>'
-            f'<a class="btn hot sm" href="tel:{tel}" style="white-space:nowrap">Позвонить</a>'
-          '</div>'
-          '<div style="flex-basis:100%;margin-top:2px">'
-            '<a href="landlord-register.html" style="font-size:12.5px;color:var(--or)">'
-              'Это ваш прокат? Подключитесь — разместим объявление бесплатно'
-            '</a>'
-          '</div>'
+          + action + note + invite +
         '</div>'
     )
 
@@ -183,15 +219,18 @@ def neighbors_html(current_slug, cities, by_city, generated_slugs):
 def jsonld(city_name, slug, entries):
     items = []
     for i, e in enumerate(entries, 1):
+        item = {
+            "@type": "LocalBusiness",
+            "name": e["name"],
+            "address": {"@type": "PostalAddress", "addressLocality": e.get("city", "")},
+        }
+        if SHOW_PHONES:
+            # Телефон в микроразметке — это тоже публикация телефона: только в режиме --with-phones
+            item["telephone"] = fmt_phone(e["phone"])
         items.append({
             "@type": "ListItem",
             "position": i,
-            "item": {
-                "@type": "LocalBusiness",
-                "name": e["name"],
-                "telephone": fmt_phone(e["phone"]),
-                "address": {"@type": "PostalAddress", "addressLocality": e.get("city", "")},
-            },
+            "item": item,
         })
     payload = {
         "@context": "https://schema.org",
@@ -250,7 +289,7 @@ def hub_page(targets, cities_by_slug, allow_index=False):
 <base href="../">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Аренда инструмента в городах России — Ива</title>
-<meta name="description" content="Пункты проката инструмента в {len(targets)} городах России: телефоны, адреса, источники. Выберите город и позвоните напрямую.">
+<meta name="description" content="Пункты проката инструмента в {len(targets)} городах России: названия, адреса, источники. Выберите город — уточним наличие и цену и поможем взять инструмент в аренду.">
 <meta name="robots" content="{robots}">
 <meta name="theme-color" content="#101217">
 <link rel="canonical" href="{SITE}/city/">
@@ -274,8 +313,8 @@ def hub_page(targets, cities_by_slug, allow_index=False):
       <div class="sect-h"><h2>Аренда инструмента — города России</h2></div>
       <p style="color:var(--gr);font-size:14px;line-height:1.6;max-width:760px;margin:10px 0 0">
         {len(targets)} {plural(len(targets), "город", "города", "городов")}, {total_contacts}
-        {plural(total_contacts, "пункт", "пункта", "пунктов")} проката с телефонами из открытых источников.
-        Выберите город — увидите пункты проката и сможете позвонить напрямую.
+        {plural(total_contacts, "пункт", "пункта", "пунктов")} проката — данные из открытых источников.
+        Выберите город: увидите пункты рядом и сможете попросить нас уточнить наличие, цену и залог.
       </p>
     </div>
     {"".join(blocks)}
@@ -384,9 +423,12 @@ def directory_block(city, entries, collapse):
           f'<span style="font-size:13px;color:var(--g2)">{count_line}</span>'
         '</div>'
         '<p style="font-size:13px;color:var(--g2);line-height:1.6;margin:8px 0 0;max-width:820px">'
-          'Это справочник: пункты ниже пока не подключены к «Иве», поэтому заказ здесь не оформить — '
-          'наличие, цену и залог уточняйте звонком.'
-        '</p>'
+          + ('Это справочник: пункты ниже пока не подключены к «Иве», поэтому заказ здесь не оформить — '
+             'наличие, цену и залог уточняйте звонком.'
+             if SHOW_PHONES else
+             'Это справочник пунктов, которые пока не подключены к «Иве». Телефоны пунктов не публикуем: '
+             'нажмите «Узнать наличие и цену» — уточним наличие, цену и залог за вас.')
+          + '</p>'
     )
     tail = (
         f'<p style="font-size:12.5px;color:var(--g2);line-height:1.6;margin-top:16px;max-width:760px">'
@@ -422,12 +464,13 @@ def build_page(city, entries, template, generated_slugs, cities, by_city, allow_
     title = f"Аренда инструмента — {city['name']} | Ива"
     if count:
         description = (
-            f"{city['name']}: {count} {plural(count, 'пункт', 'пункта', 'пунктов')} проката инструмента "
-            "с телефонами. Возьмите инструмент в аренду или сдайте свой — Ива."
+            f"{city['name']}: {count} {plural(count, 'пункт', 'пункта', 'пунктов')} проката инструмента. "
+            "Уточним наличие и цену и поможем взять инструмент в аренду — Ива."
         )
         lead = (
-            f"Собрали пункты и базы проката инструмента в этом городе — телефоны из открытых источников. "
-            f"Позвоните напрямую, чтобы уточнить наличие, цену и залог."
+            f"Собрали пункты и базы проката инструмента в этом городе — названия и адреса "
+            f"из открытых источников. Позвоните нам: уточним наличие, цену и залог и подскажем, "
+            f"где ближе и дешевле."
         )
         count_line = f"{count} {plural(count, 'пункт', 'пункта', 'пунктов')}"
         # В поиск страницы отдаём только после приёмки владельцем (флаг --index).
@@ -469,13 +512,28 @@ def build_page(city, entries, template, generated_slugs, cities, by_city, allow_
     leftover = re.findall(r"\{\{[A-Z_]+\}\}", html)
     if leftover:
         raise SystemExit(f"в шаблоне остались незаполненные места: {leftover}")
+
+    if not SHOW_PHONES:
+        # Жёсткая проверка: ни один телефон пункта проката не должен попасть на готовую страницу
+        # (ни в текст, ни в разметку, ни в ссылку). Это решение владельца, а не оформление.
+        digits_only = re.sub(r"\D", "", html)
+        for e in entries:
+            p10 = re.sub(r"\D", "", str(e.get("phone") or ""))[-10:]
+            if len(p10) == 10 and p10 in digits_only:
+                raise SystemExit(
+                    f"city/{city['slug']}.html: на странице остался телефон пункта проката — "
+                    "публиковать телефоны нельзя (решение владельца). Проверить шаблон и тексты "
+                    "или собрать страницы в режиме --with-phones.")
     return html
 
 
 def main():
+    global SHOW_PHONES
     check_only = "--check" in sys.argv
     include_empty = "--all" in sys.argv
     allow_index = "--index" in sys.argv
+    # По умолчанию телефоны пунктов не публикуются (решение владельца, вариант 5).
+    SHOW_PHONES = "--with-phones" in sys.argv
     only = None
     for arg in sys.argv:
         if arg.startswith("--only"):
@@ -537,8 +595,9 @@ def main():
         written += 1
     with_entries = sum(1 for _, e in targets if e)
     mode = "отдаются в поиск" if allow_index else "пока не отдаются в поиск (приёмка)"
+    phones_mode = "телефоны пунктов показываются" if SHOW_PHONES else "телефоны пунктов не публикуются"
     print(f"Готово страниц городов: {written - 1} (с контактами: {with_entries}); "
-          f"плюс страница-хаб city/index.html; режим: {mode}")
+          f"плюс страница-хаб city/index.html; режим: {mode}; {phones_mode}")
     if written <= 12:
         for city, entries in targets:
             print(f"   {city['name']}: {len(entries)}")

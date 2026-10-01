@@ -3,15 +3,17 @@
 //
 // Проверяет:
 //   1. Есть объявления в городе  -> страница ведёт к ним, справочник свёрнут в блок
-//      «Показать справочник», телефоны при этом остаются в тексте страницы (для людей и поиска).
+//      «Показать справочник» (карточки пунктов при этом остаются на странице и доступны).
 //   2. Объявлений нет            -> честная надпись «Объявлений арендодателей здесь пока нет»,
 //      справочник развёрнут, и нигде не обещано объявлений, которых нет.
 //   3. На каждой странице — счётчик обращений (assets/clicks.js) и он запускается с названием города.
-//   4. У каждого телефона справочника — кнопка «Позвонить»; у площадки — «Позвонить» с пометкой
-//      data-lead="1" (это обращение к нам, а не в прокат — в статистике они различаются).
-//   5. Счётчик не собирает персональные данные: пишет только телефон (из самой страницы),
+//   4. Телефоны пунктов проката на страницах НЕ публикуются (решение владельца, вариант 5):
+//      единственный телефон на странице — наш, с пометкой data-lead="1"; у каждого пункта
+//      есть кнопка «Узнать наличие и цену», ведущая к нам.
+//   5. Флаг --with-phones возвращает телефоны пунктов обратно (это путь откатa решения).
+//   6. Счётчик не собирает персональные данные: пишет только телефон (из самой страницы),
 //      город, имя страницы и тип обращения; чужой номер через подставную страницу не уходит.
-//   6. SQL счётчика существует и не отдаёт статистику посторонним.
+//   7. SQL счётчика существует и не отдаёт статистику посторонним.
 //
 // Запуск: node tests/city-priority.cjs
 const fs = require('node:fs');
@@ -65,14 +67,20 @@ function commonChecks(html, file) {
   assert.match(html, /IvaClicks\.init\('[^']+'\)/,
     `${file}: счётчик не запускается (нет IvaClicks.init) — обращения не будут считаться`);
 
-  // Кнопка «Позвонить» у каждого пункта справочника
-  const cardCalls = (html.match(/class="btn sm" href="tel:/g) || []).length;
-  const cards = (html.match(/class="pill">Пункт проката<\/span>/g) || []).length;
-  assert.equal(cardCalls, cards, `${file}: «Позвонить» — ${cardCalls}, карточек — ${cards}`);
-
-  // Обращение к площадке помечено отдельно от звонка в прокат
-  assert.match(html, /<a class="btn hot sm" href="tel:\+79081732475" data-lead="1"/,
-    `${file}: кнопка «Позвонить нам» без пометки data-lead="1" — обращения к площадке не отличить от звонков в прокат`);
+  // Телефонов пунктов на странице быть не должно — только наш, помеченный как обращение
+  const telLinks = new Set((html.match(/href="tel:(\+?\d+)"/g) || []).map(x => x.replace(/\D/g, '').slice(-10)));
+  for (const num of telLinks) {
+    assert.equal(num, '9081732475',
+      `${file}: на странице телефон пункта проката (${num}) — телефоны пунктов не публикуются ` +
+      '(решение владельца, вариант 5). Собрать заново: python3 tools/build_city_pages.py');
+  }
+  const cards = (html.match(/data-prokat-card="1"/g) || []).length;
+  assert.ok(cards > 0, `${file}: на странице нет карточек пунктов проката`);
+  const cardLeads = (html.match(/href="tel:\+79081732475" data-lead="1"/g) || []).length;
+  assert.ok(cardLeads >= cards,
+    `${file}: у каждого пункта должен быть путь к нам: карточек ${cards}, кнопок с пометкой data-lead="1" — ${cardLeads}`);
+  assert.match(html, /Узнать наличие и цену/,
+    `${file}: нет кнопки «Узнать наличие и цену» — человеку некуда обратиться за помощью`);
   assert.match(html, /Не подобрали инструмент\?/,
     `${file}: нет блока «Не подобрали инструмент?» — человек не понимает, что можно попросить помощь`);
 }
@@ -89,13 +97,17 @@ try {
   assert.ok(rostov.includes(rostovCatalogUrl),
     `блок объявлений не ведёт в каталог этого города (ожидалась ссылка ${rostovCatalogUrl})`);
 
-  // Справочник свёрнут, но телефоны остаются на странице
+  // Справочник свёрнут, но все карточки внутри остаются (человек может раскрыть и позвонить нам)
   assert.match(rostov, /<summary[^>]*>Показать справочник \(10 пунктов, не подключены к «Иве»\)<\/summary>/,
     'когда есть объявления, справочник должен быть свёрнут в блок «Показать справочник»');
   const rostovContacts = expectedContacts('Ростов-на-Дону');
-  const rostovPhones = new Set((rostov.match(/href="tel:\+7\d{10}"/g) || []));
-  assert.ok(rostovPhones.size >= rostovContacts,
-    `в свёрнутом справочнике должны остаться все телефоны: карточек ${rostovContacts}, номеров ${rostovPhones.size}`);
+  const rostovCards = (rostov.match(/data-prokat-card="1"/g) || []).length;
+  assert.ok(rostovCards >= rostovContacts,
+    `в свёрнутом справочнике должны остаться все пункты: карточек ${rostovCards}, а в базе ${rostovContacts}`);
+  const collapsedPhones = new Set((rostov.match(/href="tel:\+7\d{10}"/g) || [])
+    .map(x => x.replace(/\D/g, '').slice(-10)).filter(n => n !== '9081732475'));
+  assert.equal(collapsedPhones.size, 0,
+    'в городе с объявлениями телефоны пунктов тем более не показываем — заявка идёт через «Иву»');
 
   // Первым на странице идёт блок объявлений, а не справочник
   const orderListings = rostov.indexOf('Инструмент от арендодателей «Ивы»');
@@ -110,14 +122,32 @@ try {
   assert.ok(!/В этом городе уже \d+ (объявление|объявления|объявлений)/.test(noListings),
     'на странице заявлено число объявлений, которых нет');
   assert.ok(!noListings.includes('<summary'), 'сворачивать нечего — в городе нет объявлений');
-  assert.match(noListings, /Это справочник: пункты ниже пока не подключены к «Иве»/,
-    'нет пояснения, что пункты справочника не подключены к «Иве»');
+  assert.match(noListings, /Это справочник пунктов, которые пока не подключены к «Иве»/,
+    'нет пояснения, что пункты справочника не подключены к «Иве» (заказ возможен только у объявлений)');
+  assert.match(noListings, /Телефоны пунктов не публикуем/,
+    'нет пояснения, почему на странице нет телефонов пунктов — это решение владельца');
   assert.match(noListings, /landlord-register\.html/,
     'нет выхода для владельца инструмента («сдать инструмент»)');
 
   // 3. Общие требования на обеих страницах
   commonChecks(withListings.city, 'city/rostov-na-donu.html (с объявлениями)');
   commonChecks(noListings, 'city/rostov-na-donu.html (без объявлений)');
+
+  // 3б. Откат решения: флаг --with-phones возвращает телефоны пунктов на страницу
+  const tmpBack = fs.mkdtempSync(path.join(os.tmpdir(), 'iva-phone-back-'));
+  const outBack = path.join(tmpBack, 'out');
+  fs.mkdirSync(outBack, { recursive: true });
+  execFileSync('python3', [GENERATOR, '--only', 'rostov-na-donu', '--with-phones'], {
+    cwd: ROOT, env: { ...process.env, IVA_OUT: outBack, IVA_LISTINGS: path.join(tmp, 'listings.json') }, stdio: 'pipe'
+  });
+  const back = fs.readFileSync(path.join(outBack, 'rostov-na-donu.html'), 'utf8');
+  const backPhones = new Set((back.match(/href="tel:(\+7\d{10})"/g) || [])
+    .map(x => x.replace(/\D/g, '').slice(-10)).filter(n => n !== '9081732475'));
+  assert.equal(backPhones.size, expectedContacts('Ростов-на-Дону'),
+    'флаг --with-phones должен возвращать телефоны всех пунктов города (это путь откатa решения)');
+  assert.match(back, /class="btn hot sm" href="tel:\+7\d{10}"[^>]*>Позвонить</,
+    'в режиме --with-phones у карточек должна быть кнопка «Позвонить»');
+  fs.rmSync(tmpBack, { recursive: true, force: true });
 
   // 4. Счётчик: только телефон со страницы, никаких персональных данных
   const clicks = fs.readFileSync(CLICKS, 'utf8');
@@ -143,8 +173,9 @@ try {
   assert.match(sql, /drop table if exists public\.directory_clicks/, 'в SQL нет блока отката');
 
   fs.rmSync(tmp, { recursive: true, force: true });
-  console.log('Порядок на страницах в порядке: объявления выше справочника, справочник не обещает лишнего, ' +
-    'счётчик считает звонки и обращения, персональные данные не собираются, статистика закрыта от посторонних.');
+  console.log('Порядок на страницах в порядке: объявления выше справочника, телефоны пунктов не публикуются ' +
+    '(путь — через заявку к нам), справочник не обещает лишнего, счётчик считает обращения и показы, ' +
+    'персональные данные не собираются, статистика закрыта от посторонних, откат флагом --with-phones работает.');
 } catch (err) {
   console.error(err && err.message ? err.message : err);
   process.exitCode = 1;
