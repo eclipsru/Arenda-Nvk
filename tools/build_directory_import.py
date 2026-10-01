@@ -1,69 +1,90 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Ввоз справочника прокатов в базу (этап П2).
+Справочник прокатов (этап П2): дополнение базы из tools/real_bases.csv.
 
-Читает tools/real_bases.csv (открытые источники), приводит данные в порядок и
-собирает готовый SQL-файл supabase/seed/. Владелец вставляет этот файл в
-SQL Editor своего проекта Supabase и нажимает Run — никаких ключей и установок.
+ВАЖНО (проверено 01.10.2026): таблица directory_landlords уже есть в боевой базе —
+259 записей от 24.09.2026, и она используется в кабинете главного («Рассылка по базам
+проката»). Поэтому этот инструмент НЕ создаёт таблицу и НЕ ввозит всё подряд, а считает
+разницу: какие контакты из CSV в базе отсутствуют. Их и добавляет готовый SQL-файл —
+одна вставка в SQL Editor, безопасная при повторном запуске.
 
-Что делает приведение в порядок:
-  * телефон -> единый вид +7XXXXXXXXXX;
-  * город -> подтягивается ссылка (slug) из tools/cities.json, чтобы не завести
-    «второй список городов»; для городов, которых нет в списке сайта, ссылка
-    остаётся пустой, а строка помечается в отчёте (решение принимает владелец);
-  * дубли по «телефон + адрес» отбрасываются (остаётся первая запись);
-  * ничего не выдумывается: пустые поля остаются пустыми.
+Снимок «что уже есть в базе» лежит в tools/directory_existing.json. Обновить его
+(только чтение из базы): python3 tools/build_directory_import.py --snapshot
 
 Запуск:
-    python3 tools/build_directory_import.py            # собрать файл ввоза
+    python3 tools/build_directory_import.py            # собрать файлы
     python3 tools/build_directory_import.py --check    # только проверить, не писать
     python3 tools/build_directory_import.py --report   # показать отчёт и выйти
+    python3 tools/build_directory_import.py --snapshot # обновить снимок из базы (чтение)
 """
 import csv
 import json
 import os
 import re
 import sys
+import urllib.request
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 CSV_PATH = os.path.join(ROOT, "tools", "real_bases.csv")
-CITIES_JSON = os.path.join(ROOT, "tools", "cities.json")
-OUT_SQL = os.path.join(ROOT, "supabase", "seed", "20261001_directory_landlords_import.sql")
+EXISTING_JSON = os.path.join(ROOT, "tools", "directory_existing.json")
+ALIASES_JSON = os.path.join(ROOT, "tools", "city_aliases.json")
 MIGRATION_SQL = os.path.join(ROOT, "supabase", "migrations", "20261001_directory_landlords.sql")
+OUT_SQL = os.path.join(ROOT, "supabase", "seed", "20261001_directory_landlords_import.sql")
 OUT_BUNDLE = os.path.join(ROOT, "supabase", "seed", "20261001_directory_ALL_IN_ONE.sql")
 
-# Написания городов, отличающиеся от списка сайта, читаем из общего файла,
-# чтобы проверка (tests/directory-import.cjs) знала те же правила.
-ALIASES_JSON = os.path.join(ROOT, "tools", "city_aliases.json")
+# Публичные значения, которые и так лежат в коде сайта (assets/sb.js). Только чтение.
+SUPABASE_URL = "https://wdxdeatphizclskfmfxi.supabase.co"
+SUPABASE_KEY = "sb_publishable_dtRaEHNNPBFbHFvg8hw9iA_FqJSz9BE"
+
 with open(ALIASES_JSON, encoding="utf-8") as f:
     CITY_ALIASES = {k: v for k, v in json.load(f).items() if not k.startswith("_")}
 
-# Дата получения контактов из открытых источников (файл подготовлен до этой даты).
-SOURCE_DATE = "2026-09-26"
+
+def digits(raw):
+    return re.sub(r"\D", "", str(raw or ""))
 
 
-def norm_phone(raw):
-    """Любой ввод -> +7XXXXXXXXXX; если не распознать — возвращаем как есть."""
-    digits = re.sub(r"\D", "", str(raw or ""))
-    if len(digits) == 11 and digits[0] in ("7", "8"):
-        return "+7" + digits[1:]
-    if len(digits) == 10:
-        return "+7" + digits
-    return (str(raw or "")).strip()
+def norm_phone_db(raw):
+    """Формат базы: 11 цифр, без плюса (79001295454)."""
+    d = digits(raw)
+    if len(d) == 11 and d[0] in ("7", "8"):
+        return "7" + d[1:]
+    if len(d) == 10:
+        return "7" + d
+    return d
+
+
+def phone10(raw):
+    return digits(raw)[-10:]
 
 
 def sql_str(value):
-    if value is None:
-        return "NULL"
     return "'" + str(value).replace("'", "''") + "'"
 
 
-def load_cities():
-    with open(CITIES_JSON, encoding="utf-8") as f:
-        data = json.load(f)
-    by_name = {c["name"]: c for c in data["cities"]}
-    return by_name, {c["slug"]: c for c in data["cities"]}
+def load_existing():
+    with open(EXISTING_JSON, encoding="utf-8") as f:
+        return json.load(f)
+
+
+def refresh_snapshot():
+    """Снимок из базы (только чтение, публичный ключ)."""
+    url = f"{SUPABASE_URL}/rest/v1/directory_landlords?select=phone,city,name&order=created_at.asc&limit=2000"
+    req = urllib.request.Request(url, headers={"apikey": SUPABASE_KEY, "Authorization": f"Bearer {SUPABASE_KEY}"})
+    with urllib.request.urlopen(req, timeout=30) as r:
+        rows = json.load(r)
+    payload = {
+        "_note": "Снимок справочника из боевой базы (только для повторяемой сборки файла дополнения). "
+                 "Обновлять командой: python3 tools/build_directory_import.py --snapshot",
+        "taken_at": __import__("datetime").date.today().isoformat(),
+        "count": len(rows),
+        "rows": [{"phone": r["phone"], "city": r["city"], "name": r["name"]} for r in rows],
+    }
+    with open(EXISTING_JSON, "w", encoding="utf-8") as f:
+        json.dump(payload, f, ensure_ascii=False, indent=1)
+    print(f"Снимок обновлён: {EXISTING_JSON} ({len(rows)} записей)")
+    return payload
 
 
 def read_rows():
@@ -72,207 +93,188 @@ def read_rows():
 
 
 def prepare():
-    by_name, by_slug = load_cities()
+    snapshot = load_existing()
+    known = {phone10(r["phone"]) for r in snapshot["rows"]}
     rows = read_rows()
 
-    prepared = []
-    skipped = []
-    unknown_cities = {}
-    flags = []
-
-    seen_phone_address = {}
+    new_rows, skipped = [], []
+    seen = {}
     for r in rows:
         raw_city = (r.get("city") or "").strip()
         city = CITY_ALIASES.get(raw_city, raw_city)
-        phone = norm_phone(r.get("phone"))
-        address = (r.get("address") or "").strip()
         name = (r.get("name") or "").strip()
+        address = (r.get("address") or "").strip()
         source = (r.get("source") or "").strip()
-        whatsapp = str(r.get("has_whatsapp") or "").strip().lower() in ("true", "1", "да", "yes")
-        status = (r.get("status") or "new").strip() or "new"
-        if status not in ("new", "verified", "hidden", "declined"):
-            flags.append(f"неизвестный статус «{status}» у «{name}» — приведён к new")
-            status = "new"
+        phone = norm_phone_db(r.get("phone"))
+        p10 = phone10(phone)
 
         if not name or not phone or not address:
             skipped.append((name or "—", "нет названия, телефона или адреса"))
             continue
-
-        key = (phone, address.lower())
-        if key in seen_phone_address:
-            skipped.append((name, f"дубль «телефон + адрес» с «{seen_phone_address[key]}»"))
+        if p10 in seen:
+            skipped.append((name, f"дубль внутри файла (телефон уже у «{seen[p10]}»)"))
             continue
-        seen_phone_address[key] = name
+        seen[p10] = name
+        if p10 in known:
+            continue
 
-        city_info = by_name.get(city)
-        city_slug = city_info["slug"] if city_info else None
-        if not city_info:
-            unknown_cities.setdefault(city, 0)
-            unknown_cities[city] += 1
-
-        prepared.append({
+        # Пометки для рассылки ставим честно, без «опта»:
+        # мобильный (79…) — WhatsApp возможен по данным источника; городской — нет.
+        is_mobile = phone.startswith("79")
+        new_rows.append({
             "city": city,
-            "city_slug": city_slug,
             "name": name,
             "phone": phone,
             "address": address,
             "source": source,
-            "has_whatsapp": whatsapp,
-            "status": status,
+            "has_whatsapp": is_mobile,
+            "has_telegram": False,
+            "has_max": False,
+            "is_mobile": is_mobile,
+            "notes": "",
         })
 
     return {
-        "rows": prepared,
+        "rows": new_rows,
         "skipped": skipped,
-        "unknown_cities": unknown_cities,
-        "flags": flags,
-        "by_slug": by_slug,
         "source_rows": len(rows),
+        "existing_count": len(snapshot["rows"]),
+        "existing_taken_at": snapshot.get("taken_at", ""),
     }
 
 
-def build_sql(payload):
-    rows = payload["rows"]
-    lines = []
-    lines.append("-- ============================================================================")
-    lines.append("-- Ива — ввоз справочника прокатов (этап П2)")
-    lines.append("--")
-    lines.append(f"-- Файл собран автоматически (tools/build_directory_import.py) из tools/real_bases.csv.")
-    lines.append(f"-- Строк к ввозу: {len(rows)}. Источники: открытые справочники (поле source у каждой строки).")
-    lines.append("--")
-    lines.append("-- Как запускать: Supabase -> SQL Editor -> New query -> вставить весь файл -> Run.")
-    lines.append("-- Повторный запуск безопасен: строки обновляются, дубли не создаются,")
-    lines.append("-- а статусы проверки (status, checked_at) НЕ затираются.")
-    lines.append("-- ============================================================================")
-    lines.append("")
-    lines.append("begin;")
-    lines.append("")
-    lines.append("insert into public.directory_landlords")
-    lines.append("  (city, city_slug, name, phone, address, source, source_date, has_whatsapp, status)")
-    lines.append("values")
+def bool_sql(v):
+    return "true" if v else "false"
 
-    defs = []
-    for r in rows:
-        defs.append(
-            "  ("
-            + ", ".join([
-                sql_str(r["city"]),
-                sql_str(r["city_slug"]) if r["city_slug"] else "NULL",
-                sql_str(r["name"]),
-                sql_str(r["phone"]),
-                sql_str(r["address"]),
-                sql_str(r["source"]),
-                "DATE " + sql_str(SOURCE_DATE),
-                "true" if r["has_whatsapp"] else "false",
-                sql_str(r["status"]),
-            ])
-            + ")"
-        )
-    lines.append(",\n".join(defs))
-    lines.append("on conflict (phone, address) do update set")
-    lines.append("  city         = excluded.city,")
-    lines.append("  city_slug    = excluded.city_slug,")
-    lines.append("  name         = excluded.name,")
-    lines.append("  source       = excluded.source,")
-    lines.append("  has_whatsapp = excluded.has_whatsapp,")
-    lines.append("  updated_at   = now();")
-    lines.append("")
-    lines.append("commit;")
-    lines.append("")
-    lines.append("-- Итог: что получилось (пришлите эту табличку обратно — по ней видно результат)")
-    lines.append("select")
-    lines.append("  count(*)                                        as \"всего строк\",")
-    lines.append("  count(*) filter (where city_slug is null)       as \"городов нет в списке сайта\",")
-    lines.append("  count(*) filter (where status = 'new')          as \"ждут проверки\",")
-    lines.append("  count(distinct city)                            as \"городов\",")
-    lines.append("  count(distinct phone)                           as \"телефонов\"")
-    lines.append("from public.directory_landlords;")
-    lines.append("")
-    return "\n".join(lines)
+
+def build_topup_sql(payload):
+    rows = payload["rows"]
+    out = []
+    out.append("-- ============================================================================")
+    out.append("-- Ива — ДОПОЛНЕНИЕ справочника прокатов (этап П2)")
+    out.append("--")
+    out.append("-- Что это: добавляет в боевой справочник те контакты из tools/real_bases.csv,")
+    out.append(f"-- которых там ещё нет. На момент сборки в базе было {payload['existing_count']} записей")
+    out.append(f"-- (снимок от {payload['existing_taken_at']}), новых в этом файле — {len(rows)}.")
+    out.append("--")
+    out.append("-- Как запускать: Supabase -> SQL Editor -> New query -> вставить весь файл -> Run.")
+    out.append("-- Безопасно при повторном запуске: уже существующие телефоны пропускаются,")
+    out.append("-- дубли не создаются. Ничего не удаляет и не изменяет.")
+    out.append("-- ============================================================================")
+    out.append("")
+    out.append("begin;")
+    out.append("")
+    if rows:
+        out.append("insert into public.directory_landlords")
+        out.append("  (city, name, phone, address, source, has_whatsapp, has_telegram, has_max, is_mobile, notes, status)")
+        out.append("select")
+        out.append("  v.city, v.name, v.phone, v.address, v.source,")
+        out.append("  v.has_whatsapp, v.has_telegram, v.has_max, v.is_mobile, v.notes, 'new'")
+        out.append("from (values")
+        defs = []
+        for r in rows:
+            defs.append("  (" + ", ".join([
+                sql_str(r["city"]), sql_str(r["name"]), sql_str(r["phone"]), sql_str(r["address"]),
+                sql_str(r["source"]), bool_sql(r["has_whatsapp"]), bool_sql(r["has_telegram"]),
+                bool_sql(r["has_max"]), bool_sql(r["is_mobile"]), sql_str(r["notes"]),
+            ]) + ")")
+        out.append(",\n".join(defs))
+        out.append(") as v(city, name, phone, address, source, has_whatsapp, has_telegram, has_max, is_mobile, notes)")
+        out.append("where not exists (")
+        out.append("  select 1 from public.directory_landlords d")
+        out.append("  where right(regexp_replace(d.phone, '[^0-9]', '', 'g'), 10) = right(v.phone, 10)")
+        out.append(");")
+    else:
+        out.append("-- Новых контактов нет: в базе уже всё, что есть в файле-источнике.")
+        out.append("select 'Новых контактов нет — справочник уже полный' as \"результат\";")
+    out.append("")
+    out.append("commit;")
+    out.append("")
+    out.append("-- Итог: пришлите эту табличку — по ней видно результат")
+    out.append("select")
+    out.append("  count(*)                                           as \"всего в справочнике\",")
+    out.append("  count(*) filter (where created_at >= now() - interval '1 hour') as \"добавлено только что\",")
+    out.append("  count(distinct city)                               as \"городов\"")
+    out.append("from public.directory_landlords;")
+    out.append("")
+    return "\n".join(out)
+
+
+def build_bundle(migration, topup):
+    return (
+        "-- ============================================================================\n"
+        "-- Ива: ВСЁ В ОДНОМ ФАЙЛЕ — справочник прокатов «под ключ» (этап П2).\n"
+        "--\n"
+        "-- ⚠️ ЭТОТ ФАЙЛ — ДЛЯ НОВОГО / ТЕСТОВОГО ПРОЕКТА. На боевом проекте он не нужен:\n"
+        "--    таблица там уже создана, а данные — в отдельном файле дополнения.\n"
+        "--\n"
+        "-- Состав: структура таблицы + ввоз отсутствующих контактов из tools/real_bases.csv.\n"
+        "-- Политики доступа — отдельным файлом (…_rls_NEW_PROJECT.sql), чтобы случайно\n"
+        "-- не изменить права на боевом проекте.\n"
+        "--\n"
+        "-- Повторный запуск безопасен: ничего не удаляется, дубли не создаются.\n"
+        "-- ============================================================================\n\n"
+        + migration.rstrip() + "\n\n"
+        + "-- ============================================================================\n"
+        + "-- ЧАСТЬ 2: данные (контакты, которых ещё нет в базе)\n"
+        + "-- ============================================================================\n\n"
+        + topup
+    )
 
 
 def print_report(payload):
-    rows = payload["rows"]
-    print(f"Строк в файле источников: {payload['source_rows']}")
-    print(f"К ввозу после чистки:     {len(rows)}")
-    print(f"Отброшено:                {len(payload['skipped'])}")
+    print(f"Строк в файле источников:   {payload['source_rows']}")
+    print(f"Уже в базе (снимок):        {payload['existing_count']} записей (снимок от {payload['existing_taken_at']})")
+    print(f"Новых к добавлению:         {len(payload['rows'])}")
+    mob = sum(1 for r in payload["rows"] if r["is_mobile"])
+    print(f"   из них мобильных:        {mob} (городских: {len(payload['rows']) - mob})")
+    print(f"Отброшено:                  {len(payload['skipped'])}")
     for name, why in payload["skipped"]:
         print(f"   - «{name}»: {why}")
-    print(f"Городов:                  {len({r['city'] for r in rows})}")
-    unknown = payload["unknown_cities"]
-    if unknown:
-        print(f"Городов нет в списке сайта ({len(unknown)}): " + ", ".join(sorted(unknown)))
-        print("   (строки ввозятся, ссылка города пустая — решение о добавлении городов за владельцем)")
-    wa = sum(1 for r in rows if r["has_whatsapp"])
-    print(f"С пометкой WhatsApp:      {wa} из {len(rows)}")
-    for f in payload["flags"]:
-        print("   ! " + f)
+    cities = {}
+    for r in payload["rows"]:
+        cities[r["city"]] = cities.get(r["city"], 0) + 1
+    if cities:
+        print("Города новых контактов:     " + ", ".join(f"{c} ({n})" for c, n in sorted(cities.items())))
 
 
 def main():
+    if "--snapshot" in sys.argv:
+        refresh_snapshot()
+        return 0
+
     payload = prepare()
-    sql = build_sql(payload)
 
     if "--report" in sys.argv:
         print_report(payload)
         return 0
 
-    if "--check" in sys.argv:
-        if not os.path.exists(OUT_SQL):
-            print("нет файла ввоза — собрать: python3 tools/build_directory_import.py")
-            return 1
-        with open(OUT_SQL, encoding="utf-8") as f:
-            current = f.read()
-        if current != sql:
-            print("РАСХОЖДЕНИЕ: файл ввоза не совпадает с tools/real_bases.csv")
-            print("Починить: python3 tools/build_directory_import.py")
-            print_report(payload)
-            return 1
-        if not os.path.exists(OUT_BUNDLE):
-            print("нет комбинированного файла — собрать: python3 tools/build_directory_import.py")
-            return 1
-        with open(OUT_BUNDLE, encoding="utf-8") as f:
-            bundle_current = f.read()
-        if bundle_current.strip().split("\n")[-1] != sql.strip().split("\n")[-1] or sql not in bundle_current:
-            print("РАСХОЖДЕНИЕ: комбинированный файл не содержит текущий ввоз")
-            print("Починить: python3 tools/build_directory_import.py")
-            return 1
-        print(f"Файл ввоза совпадает с источником: {len(payload['rows'])} строк (и комбинированный файл в порядке)")
-        return 0
-
-    os.makedirs(os.path.dirname(OUT_SQL), exist_ok=True)
-    with open(OUT_SQL, "w", encoding="utf-8") as f:
-        f.write(sql)
-
-    # Комбинированный файл: таблица + ввоз в одном тексте — владельцу достаточно
-    # одной вставки в SQL Editor вместо двух.
     with open(MIGRATION_SQL, encoding="utf-8") as f:
         migration = f.read()
-    bundle = (
-        "-- ============================================================================\n"
-        "-- Ива: ВСЁ В ОДНОМ ФАЙЛЕ — создание таблицы справочника прокатов и ввоз данных.\n"
-        "--\n"
-        "-- Этот файл собран автоматически (tools/build_directory_import.py) из двух:\n"
-        "--   supabase/migrations/20261001_directory_landlords.sql  (создание таблицы)\n"
-        "--   supabase/seed/20261001_directory_landlords_import.sql (ввоз 115 контактов)\n"
-        "--\n"
-        "-- Как запускать: Supabase -> SQL Editor -> New query -> вставить весь файл -> Run.\n"
-        "-- Повторный запуск безопасен: строки обновляются, дубли не создаются, отметки\n"
-        "-- проверки карточек не стираются.\n"
-        "--\n"
-        "-- В самом конце будет табличка с итогом — пришлите её, по ней видно результат.\n"
-        "-- ============================================================================\n\n"
-        + migration.rstrip() + "\n\n"
-        + "-- ============================================================================\n"
-        + "-- ЧАСТЬ 2: ввоз данных (115 контактов)\n"
-        + "-- ============================================================================\n\n"
-        + sql
-    )
-    with open(OUT_BUNDLE, "w", encoding="utf-8") as f:
-        f.write(bundle)
+    topup = build_topup_sql(payload)
+    bundle = build_bundle(migration, topup)
 
-    print(f"Записано: {OUT_SQL}")
-    print(f"Записано: {OUT_BUNDLE} (всё в одном файле)")
+    if "--check" in sys.argv:
+        problems = []
+        for path, expected, what in ((OUT_SQL, topup, "файл дополнения"), (OUT_BUNDLE, bundle, "комбинированный файл")):
+            if not os.path.exists(path):
+                problems.append(f"нет файла: {path}")
+                continue
+            with open(path, encoding="utf-8") as f:
+                if f.read() != expected:
+                    problems.append(f"{what} не совпадает с источником: {path}")
+        if problems:
+            for p in problems:
+                print("РАСХОЖДЕНИЕ: " + p)
+            print("Починить: python3 tools/build_directory_import.py")
+            return 1
+        print(f"Файлы совпадают с источником: новых контактов {len(payload['rows'])}, ничего лишнего")
+        return 0
+
+    for path, text in ((OUT_SQL, topup), (OUT_BUNDLE, bundle)):
+        with open(path, "w", encoding="utf-8") as f:
+            f.write(text)
+        print(f"Записано: {path}")
     print_report(payload)
     return 0
 
