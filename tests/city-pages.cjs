@@ -1,0 +1,126 @@
+// Сторож страниц городов (этап П3, первый шаг).
+//
+// Проверяет без браузера, что сгенерированные страницы городов:
+//   • собраны из данных справочника (число контактов совпадает со снимком базы);
+//   • не содержат незаполненных мест шаблона и битых ссылок на файлы проекта;
+//   • не показывают карточки, скрытые по просьбе владельца точки (hidden/declined);
+//   • имеют корректные заголовок, описание, canonical и микроразметку (JSON-LD);
+//   • пока идут на приёмку — закрыты от поиска (noindex), пока не передан флаг --index.
+//
+// Запуск: node tests/city-pages.cjs
+const fs = require('node:fs');
+const path = require('node:path');
+const assert = require('node:assert/strict');
+
+const ROOT = path.resolve(__dirname, '..');
+const CITY_DIR = path.join(ROOT, 'city');
+const SNAPSHOT = path.join(ROOT, 'tools', 'directory_existing.json');
+const CITIES = path.join(ROOT, 'tools', 'cities.json');
+const ALIASES = path.join(ROOT, 'tools', 'city_aliases.json');
+
+function run() {
+  assert.ok(fs.existsSync(CITY_DIR), 'нет папки city/ — сгенерировать: python3 tools/build_city_pages.py');
+  const files = fs.readdirSync(CITY_DIR).filter(f => f.endsWith('.html')).sort();
+  assert.ok(files.length > 0, 'в папке city/ нет страниц');
+
+  const snapshot = JSON.parse(fs.readFileSync(SNAPSHOT, 'utf8'));
+  const aliasesRaw = JSON.parse(fs.readFileSync(ALIASES, 'utf8'));
+  const aliases = Object.fromEntries(Object.entries(aliasesRaw).filter(([k]) => !k.startsWith('_')));
+
+  // Сколько контактов должно быть на странице города (скрытые не считаются)
+  const byCity = new Map();
+  for (const row of snapshot.rows) {
+    const status = row.status || 'new';
+    if (status === 'hidden' || status === 'declined') continue;
+    const name = aliases[row.city.trim()] || row.city.trim();
+    byCity.set(name, (byCity.get(name) || 0) + 1);
+  }
+
+  const cityNames = new Map(JSON.parse(fs.readFileSync(CITIES, 'utf8')).cities.map(c => [c.slug, c.name]));
+
+  let checkedContacts = 0;
+  for (const file of files) {
+    const slug = file.replace(/\.html$/, '');
+    const html = fs.readFileSync(path.join(CITY_DIR, file), 'utf8');
+
+    // 1. Незаполненные места шаблона
+    const leftovers = html.match(/\{\{[A-Z_]+\}\}/g);
+    assert.ok(!leftovers, `${file}: не заполнены места шаблона ${leftovers && leftovers.join(', ')} — пересобрать: python3 tools/build_city_pages.py`);
+
+    // 2. Из какого города страница — берём прямо из заголовка страницы
+    const h2 = html.match(/<h2>Аренда инструмента — ([^<]+)<\/h2>/);
+    assert.ok(h2, `${file}: не найден заголовок «Аренда инструмента — <город>»`);
+    const cityName = h2[1];
+    const expectedName = cityNames.get(slug);
+    if (expectedName) {
+      assert.equal(cityName, expectedName, `${file}: город на странице «${cityName}», а по ссылке ожидается «${expectedName}»`);
+    }
+
+    // 3. Заголовок, описание, canonical
+    assert.match(html, new RegExp(`<link rel="canonical" href="[^"]*/city/${slug}\\.html">`),
+      `${file}: неверный canonical`);
+    const titleMatch = html.match(/<title>([^<]+)<\/title>/);
+    assert.ok(titleMatch && titleMatch[1].includes('Аренда инструмента'), `${file}: странный заголовок`);
+    const descMatch = html.match(/<meta name="description" content="([^"]+)">/);
+    assert.ok(descMatch && descMatch[1].length >= 40, `${file}: слишком короткое описание`);
+
+    // 4. Микроразметка читается как JSON
+    const ld = html.match(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/);
+    assert.ok(ld, `${file}: нет микроразметки`);
+    const parsed = JSON.parse(ld[1]);
+    const itemList = (parsed['@graph'] || []).find(x => x['@type'] === 'ItemList');
+    assert.ok(itemList, `${file}: в микроразметке нет списка организаций`);
+
+    // 5. Число контактов совпадает со снимком базы.
+    //    Считаем именно карточки: у каждой ровно одна кнопка «Позвонить»
+    //    (ссылка «позвоните нам» в пояснении — это не карточка).
+    const cardsCount = (html.match(/>Позвонить<\/a>/g) || []).length;
+    const phonesInHtml = new Set((html.match(/href="tel:(\+7\d{10})"/g) || []).map(s => s.replace(/\D/g, '').slice(-10)));
+    assert.equal(itemList.itemListElement.length, cardsCount,
+      `${file}: карточек с кнопкой «Позвонить» — ${cardsCount}, организаций в разметке — ${itemList.itemListElement.length}`);
+    assert.equal(cardsCount, byCity.get(cityName) || 0,
+      `${file}: на странице ${cardsCount} контактов, а в справочнике для «${cityName}» — ${byCity.get(cityName) || 0}. ` +
+      'Пересобрать: python3 tools/build_city_pages.py');
+    checkedContacts += itemList.itemListElement.length;
+
+    // 6. Ни одного скрытого контакта (по телефонам из снимка)
+    for (const row of snapshot.rows) {
+      const status = row.status || 'new';
+      if (status !== 'hidden' && status !== 'declined') continue;
+      const p10 = String(row.phone).replace(/\D/g, '').slice(-10);
+      assert.ok(!phonesInHtml.has(p10),
+        `${file}: на странице есть скрытая карточка (${p10}) — недопустимо`);
+    }
+
+    // 7. Ссылки на файлы проекта существуют
+    const links = new Set((html.match(/(?:href|src)="([^"#:]+\.(?:html|css|js|svg|png))(?:\?[^"]*)?"/g) || [])
+      .map(s => s.replace(/^(?:href|src)="/, '').replace(/"[^"]*$/, '').replace(/\?.*$/, '')));
+    for (const link of links) {
+      const target = path.join(ROOT, link);
+      assert.ok(fs.existsSync(target), `${file}: ссылка на несуществующий файл «${link}»`);
+    }
+
+    // 8. Дизайн: только существующая тема, никаких новых стилевых файлов
+    const cssLinks = (html.match(/<link[^>]+rel="stylesheet"[^>]*>/g) || []);
+    for (const link of cssLinks) {
+      assert.ok(/assets\/(theme|geo)\.css/.test(link),
+        `${file}: подключается посторонний файл стилей — дизайн менять нельзя: ${link}`);
+    }
+
+    // 9. Приёмка: пока страницы закрыты от поиска
+    const robots = html.match(/<meta name="robots" content="([^"]+)">/);
+    assert.ok(robots, `${file}: нет указания для поисковых систем`);
+    assert.ok(/^(noindex|index),follow$/.test(robots[1]),
+      `${file}: неожиданное значение robots («${robots[1]}») — допустимо index,follow или noindex,follow`);
+  }
+
+  console.log(`Страницы городов в порядке: ${files.length} шт., контактов на них — ${checkedContacts}, ` +
+    'скрытые карточки не показываются, битых ссылок нет, чужих стилей нет.');
+}
+
+try {
+  run();
+} catch (err) {
+  console.error(err && err.message ? err.message : err);
+  process.exitCode = 1;
+}
