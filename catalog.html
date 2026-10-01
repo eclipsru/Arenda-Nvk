@@ -57,7 +57,8 @@
 <script src="assets/data.js"></script>
 <script src="assets/geo.js?v=20260923-photon"></script>
 <script src="assets/sb.js?v=20260923-photon"></script>
-<script src="assets/app.js?v=20261001-cities"></script>
+<script src="assets/app.js?v=20261001-p4"></script>
+<script src="assets/clicks.js?v=20261001-p4"></script>
 <script>
 (function(){
 
@@ -254,20 +255,23 @@
     $('fMobN').classList.toggle('hide', !n);
 
     if (!list.length){
-      $('grid').innerHTML =
-        '<div class="empty" style="grid-column:1/-1">' +
-          '<svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>' +
-          '<b>Ничего не нашлось</b>' +
-          '<p>' + (F.city ? 'В городе «' + esc(F.city) + '» нет объявлений по выбранным условиям. ' :
-             'По выбранным условиям объявлений нет. ') + 'Измените фильтры или выберите другой город.</p>' +
-          '<button class="btn sec" id="eReset">Сбросить фильтры</button>' +
-        '</div>';
+      // Пустое состояние: не тупик, а понятный следующий шаг (этап П4).
+      // Только тексты и ссылки — никакого сбора данных.
+      var allEmpty = (typeof ADS === 'undefined') || !ADS.length;
+      $('grid').innerHTML = ivaEmptyStateHTML({
+        city: F.city, hasFilters: n > 0, allEmpty: allEmpty, pages: _cityPagesData
+      });
       var er = $('eReset');
       if (er) er.addEventListener('click', function(){
         setCity('',true);
         F = {q:'', cat:'', sub:'', city:'', priceFrom:0, priceTo:0, conds:[], delivery:false};
         render();
       });
+      // Список городов со страницами подгружается один раз и не тормозит показ:
+      // пока его нет — ведём в общий список, после загрузки — сразу в нужный город.
+      if (!_cityPagesData && typeof loadCityPages === 'function'){
+        loadCityPages().then(function(){ render(); });
+      }
       return;
     }
     $('grid').innerHTML = list.map(adCard).join('');
@@ -321,6 +325,7 @@
 
   window.onCityChanged = function(){ F.city = getCity(); render(); };
 
+  IvaClicks.init(getCity(), {views: false});  // считаем только обращения, не показы
   bindFilters($('filters'));
   render();
   hydrateShowcase().then(render);   /* перерисовать по живым данным */

@@ -81,11 +81,20 @@ function run() {
   const migration = fs.readFileSync(MIGRATION, 'utf8');
   const rls = fs.readFileSync(RLS, 'utf8');
 
-  // 1. Ровно ожидаемое число строк данных
+  // 1. Число строк данных в файле дополнения.
+  //    Возможны два состояния, и оба нормальны:
+  //      • долив ещё не применён — в файле ровно те контакты, которых нет в базе;
+  //      • долив уже применён — в файле остаются те же 25 строк, и все они уже есть в базе.
   const valueLines = seed.split('\n').filter(l => l.trim().startsWith("('"));
-  assert.equal(valueLines.length, expected.length,
-    `в файле дополнения строк ${valueLines.length}, а новых контактов ${expected.length}. ` +
-    'Починить: python3 tools/build_directory_import.py');
+  if (expected.length > 0) {
+    assert.equal(valueLines.length, expected.length,
+      `в файле дополнения строк ${valueLines.length}, а новых контактов ${expected.length}. ` +
+      'Починить: python3 tools/build_directory_import.py');
+  } else {
+    assert.ok(valueLines.length > 0,
+      'файл дополнения пуст, а он должен содержать контакты для ввоза — пересобрать: python3 tools/build_directory_import.py');
+    console.log(`Долив уже применён: в файле ${valueLines.length} строк, все они есть в базе — это нормально.`);
+  }
 
   const seedPhones = valueLines.map(l => last10(l.split("'")[3] === undefined ? '' : l.split("'")[3]));
   const phonesInSeed = new Set((seed.match(/'(\d{11})'/g) || []).map(s => last10(s)));
@@ -95,10 +104,18 @@ function run() {
     assert.ok(phonesInSeed.has(e.p10),
       `нового контакта нет в файле дополнения: «${e.name}» (${e.p10})`);
   }
-  // …а ни одного уже существующего нет
-  for (const p of phonesInSeed) {
-    assert.ok(!known.has(p),
-      `в файл дополнения попал контакт, который уже есть в базе: ${p}. Починить: python3 tools/build_directory_import.py`);
+  // …а если долив ещё не применён — ни одного уже существующего контакта
+  if (expected.length > 0) {
+    for (const p of phonesInSeed) {
+      assert.ok(!known.has(p),
+        `в файл дополнения попал контакт, который уже есть в базе: ${p}. Починить: python3 tools/build_directory_import.py`);
+    }
+  } else {
+    // Долив применён: каждый контакт из файла должен быть виден в базе
+    for (const p of phonesInSeed) {
+      assert.ok(known.has(p),
+        `в файле дополнения есть контакт, которого нет в базе: ${p} — либо долив не применился, либо файл устарел`);
+    }
   }
 
   // 3. Повторный запуск безопасен

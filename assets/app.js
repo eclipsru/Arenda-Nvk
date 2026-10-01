@@ -737,3 +737,76 @@ function mountMetrika(){
 }
 
 if (typeof document !== 'undefined') mountMetrika();
+
+
+/* ===========================================================
+   Пустые состояния: что показать, когда объявлений нет.
+
+   Смысл: пустой каталог — это тупик, из которого человек уходит. Вместо тупика
+   показываем честное объяснение и живые действия: позвонить нам, посмотреть
+   пункты проката в городе, разместить объявление.
+
+   Персональные данные здесь не собираются: это тексты и ссылки, не форма.
+   =========================================================== */
+var _cityPagesData = null;      // уже загруженный список «город → его страница»
+var _cityPagesPromise = null;   // обещание загрузки (чтобы не запрашивать дважды)
+
+function loadCityPages(){
+  if (!_cityPagesPromise){
+    _cityPagesPromise = fetch('assets/city-pages.json')
+      .then(function(r){ return r.ok ? r.json() : null; })
+      .then(function(d){ _cityPagesData = (d && d.pages) ? d : null; return _cityPagesData; })
+      .catch(function(){ _cityPagesData = null; return null; });
+  }
+  return _cityPagesPromise;
+}
+
+// Ссылка на страницу города: своя, если есть; иначе — общий список городов.
+function ivaCityPageUrl(cityName, pages){
+  var d = pages || _cityPagesData;
+  if (d && d.pages && cityName && d.pages[cityName]) return d.pages[cityName];
+  return (d && d.hub) ? d.hub : 'city/index.html';
+}
+
+// Разметка пустого состояния. allEmpty — объявлений нет вообще (а не «не подошли фильтры»).
+function ivaEmptyStateHTML(o){
+  o = o || {};
+  var city = o.city || '';
+  var hasFilters = !!o.hasFilters;
+  var allEmpty = !!o.allEmpty;
+  var pages = o.pages || null;
+
+  var title, text;
+  if (allEmpty){
+    title = 'Объявлений пока нет';
+    text = 'Арендодатели ещё не разместили объявления — площадка только запускается. ' +
+           'Но инструмент можно найти уже сейчас:';
+  } else if (city){
+    title = 'В городе ' + city + ' ничего не нашлось';
+    text = 'По выбранным условиям объявлений нет. Ниже — что можно сделать прямо сейчас:';
+  } else {
+    title = 'Ничего не нашлось';
+    text = 'По выбранным условиям объявлений нет. Ниже — что можно сделать прямо сейчас:';
+  }
+
+  var dirLabel = (city && pages && pages.pages && pages.pages[city])
+    ? 'Пункты проката в городе ' + city
+    : 'Пункты проката по городам';
+  var dirHref = ivaCityPageUrl(city, pages);
+
+  return '<div class="empty" style="grid-column:1/-1">' +
+      '<svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>' +
+      '<b>' + title + '</b>' +
+      '<p>' + text + '</p>' +
+      '<div style="display:flex;gap:10px;flex-wrap:wrap;justify-content:center;margin-top:6px">' +
+        '<a class="btn hot" href="tel:+79081732475" data-lead="1">Позвонить — подберём инструмент</a>' +
+        '<a class="btn sec" href="' + dirHref + '">' + dirLabel + '</a>' +
+        (hasFilters ? '<button class="btn sec" id="eReset">Сбросить фильтры</button>' : '') +
+      '</div>' +
+      '<p class="small mute" style="margin-top:10px">Сдаёте инструмент? ' +
+        '<a href="landlord-register.html" style="color:var(--or)">Разместите объявление бесплатно</a> — ' +
+        'его увидят в вашем городе.</p>' +
+      '<p class="small mute" style="margin-top:6px">Звонок бесплатный: мы получаем плату только ' +
+        'от арендодателей, которые размещают объявления.</p>' +
+    '</div>';
+}
