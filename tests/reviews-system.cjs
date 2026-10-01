@@ -34,6 +34,7 @@ const assert = require('assert');
       data = {
         id: 'user-renter-id',
         email: renterEmail,
+        email_confirmed_at: '2026-01-01T00:00:00.000Z',
         user_metadata: { name: 'Сергей Тестов', city: 'Новочеркасск' }
       };
     } else if (u.pathname.endsWith('/admins')) {
