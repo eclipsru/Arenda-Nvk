@@ -390,6 +390,7 @@ function footHTML(){
         '<a href="city/index.html">Города и прокаты</a></div>' +
       '<div><b>Контакты</b>' +
         '<a href="tel:+79081732475">+7 (908) 173-24-75</a>' +
+        '<a href="privacy.html">Обработка данных</a>' +
         '<span>Новочеркасск, ул. Маресьева, 36</span>' +
         '<span>Ежедневно 8:00–20:00</span></div>' +
     '</div>' +
