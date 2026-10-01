@@ -43,36 +43,40 @@
     } catch (e) { /* молча */ }
   }
 
-  function init(cityName) {
+  // Считаем клик по номеру прямо в момент нажатия: так работает и для блоков,
+  // которые появились позже (пустые состояния, всплывающие окна, каталог).
+  function init(cityName, opts) {
+    opts = opts || {};
     var city = cityName || '';
     var page = location.pathname.split('/').pop() || 'city';
-    var links = document.querySelectorAll('a[href^="tel:"]');
 
-    // Отправляем только те номера, которые реально напечатаны на этой странице:
-    // чужой номер через подставную страницу не запишется.
-    var allowed = {};
-    for (var k = 0; k < links.length; k++) {
-      var digits = (links[k].getAttribute('href') || '').replace(/[^0-9]/g, '');
-      if (digits) allowed[digits] = true;
-    }
+    document.addEventListener('click', function (e) {
+      var el = e.target && e.target.closest ? e.target.closest('a[href^="tel:"]') : null;
+      if (!el) return;
+      var tel = (el.getAttribute('href') || '').replace(/[^0-9]/g, '');
+      if (!tel) return;
 
-    for (var i = 0; i < links.length; i++) {
-      (function (el) {
-        el.addEventListener('click', function () {
-          var tel = (el.getAttribute('href') || '').replace(/[^0-9]/g, '');
-          if (!tel || !allowed[tel]) return;
-          send({
-            phone: tel,
-            city: city,
-            page: page,
-            kind: el.getAttribute('data-lead') === '1' ? 'lead' : 'call'
-          });
-        });
-      })(links[i]);
-    }
+      // Отправляем только те номера, которые напечатаны на этой странице:
+      // чужой номер через подставную страницу не запишется.
+      var printed = document.querySelectorAll('a[href^="tel:"]');
+      var allowed = false;
+      for (var i = 0; i < printed.length; i++) {
+        if ((printed[i].getAttribute('href') || '').replace(/[^0-9]/g, '') === tel) { allowed = true; break; }
+      }
+      if (!allowed) return;
+
+      send({
+        phone: tel,
+        city: city,
+        page: page,
+        kind: el.getAttribute('data-lead') === '1' ? 'lead' : 'call'
+      });
+    });
 
     // Показ страницы — чтобы видеть долю обращений от посетителей.
-    send({ phone: '', city: city, page: page, kind: 'view' });
+    // На каталоге и главной показы не считаем: там важны только обращения
+    // (и чтобы цифры «показов» не смешивались со страницами городов).
+    if (opts.views !== false) send({ phone: '', city: city, page: page, kind: 'view' });
   }
 
   window.IvaClicks = { init: init };

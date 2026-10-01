@@ -99,10 +99,18 @@ try {
   assert.ok(rostov.includes(rostovCatalogUrl),
     `блок объявлений не ведёт в каталог этого города (ожидалась ссылка ${rostovCatalogUrl})`);
 
-  // Справочник свёрнут, но все карточки внутри остаются (человек может раскрыть и позвонить нам)
-  assert.match(rostov, /<summary[^>]*>Показать справочник \(10 пунктов, не подключены к «Иве»\)<\/summary>/,
-    'когда есть объявления, справочник должен быть свёрнут в блок «Показать справочник»');
+  // Справочник свёрнут, но все карточки внутри остаются (человек может раскрыть и позвонить нам).
+  // Число пунктов берём из снимка базы — справочник пополняется, и жёсткая цифра тут ломается.
   const rostovContacts = expectedContacts('Ростов-на-Дону');
+  const plural = (n, one, few, many) => {
+    const m10 = n % 10, m100 = n % 100;
+    if (m10 === 1 && m100 !== 11) return one;
+    if (m10 >= 2 && m10 <= 4 && (m100 < 12 || m100 > 14)) return few;
+    return many;
+  };
+  const summary = `Показать справочник (${rostovContacts} ${plural(rostovContacts, 'пункт', 'пункта', 'пунктов')}, не подключены к «Иве»)`;
+  assert.ok(rostov.includes(summary),
+    `когда есть объявления, справочник должен быть свёрнут в блок «${summary}»`);
   const rostovCards = (rostov.match(/data-prokat-card="1"/g) || []).length;
   assert.ok(rostovCards >= rostovContacts,
     `в свёрнутом справочнике должны остаться все пункты: карточек ${rostovCards}, а в базе ${rostovContacts}`);
@@ -157,9 +165,11 @@ try {
     .map(s => s.trim().replace(':', '')))];
   const forbidden = payloadKeys.filter(k => !['phone', 'city', 'page', 'kind'].includes(k));
   assert.equal(forbidden.length, 0, `счётчик отправляет лишние данные: ${forbidden.join(', ')} — это персональные данные`);
-  assert.match(clicks, /var allowed = \{\};/,
+  assert.match(clicks, /var printed = document\.querySelectorAll\('a\[href\^="tel:"\]'\);/,
     'счётчик должен отправлять только те номера, которые напечатаны на странице (защита от подлога)');
-  assert.match(clicks, /!allowed\[tel\]/, 'счётчик не проверяет номер по списку страницы — подставной номер запишется');
+  assert.match(clicks, /if \(!allowed\) return;/, 'счётчик не проверяет номер по списку страницы — подставной номер запишется');
+  assert.match(clicks, /document\.addEventListener\('click'/,
+    'счётчик должен ловить клик в момент нажатия — иначе блоки, появившиеся позже, не считаются');
   assert.match(clicks, /keepalive: true/, 'без keepalive обращение может потеряться при переходе на звонок');
   assert.match(clicks, /directory_clicks/, 'счётчик пишет не в таблицу directory_clicks');
   assert.ok(!/https?:\/\/(?!wdxdeatphizclskfmfxi)/.test(clicks),

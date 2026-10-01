@@ -62,7 +62,7 @@ head_ "3. Релиз приложения (app-update.json ↔ APK ↔ этал�
 if node tools/check-release.js; then ok "релиз приложения согласован"; else bad "см. замечания выше"; fi
 
 head_ "4. Статические тесты (без браузера)"
-for t in syntax-and-release email-guard cities-sync directory-import city-pages city-priority; do
+for t in syntax-and-release email-guard cities-sync directory-import city-pages city-priority empty-states; do
   if node "tests/$t.cjs" >"/tmp/iva-test-$t.log" 2>&1; then ok "tests/$t.cjs"
   else bad "tests/$t.cjs"; tail -6 "/tmp/iva-test-$t.log" | sed 's/^/      /'; fi
 done
@@ -81,7 +81,7 @@ if node -e "require.resolve('playwright')" >/dev/null 2>&1; then
     done
     if [ "$READY" = "1" ]; then
       ok "локальный сервер поднят: http://127.0.0.1:$PORT"
-      for t in photon rental-profile new-tool-prefill order-and-fee reviews-system app-banner chief-and-apk; do
+      for t in photon rental-profile new-tool-prefill order-and-fee reviews-system app-banner chief-and-apk empty-states-browser; do
         if SITE_BASE_URL="http://127.0.0.1:$PORT" node "tests/$t.cjs" >"/tmp/iva-test-$t.log" 2>&1; then ok "tests/$t.cjs"
         else bad "tests/$t.cjs"; tail -6 "/tmp/iva-test-$t.log" | sed 's/^/      /'; fi
       done

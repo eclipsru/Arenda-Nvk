@@ -42,6 +42,9 @@ OUT_DIR = os.environ.get("IVA_OUT") or os.path.join(ROOT, "city")
 SITE = "https://eclipsru.github.io/Arenda-Nvk"
 LISTINGS_JSON = os.environ.get("IVA_LISTINGS") or os.path.join(ROOT, "tools", "listings_by_city.json")
 SITEMAP = os.environ.get("IVA_SITEMAP") or os.path.join(ROOT, "sitemap.xml")
+# Кто из городов имеет свою страницу — нужно страницам каталога и главной,
+# чтобы из «пустого» состояния вести человека в правильное место, а не наугад.
+CITY_PAGES_JSON = os.environ.get("IVA_CITY_PAGES") or os.path.join(ROOT, "assets", "city-pages.json")
 # Публичные значения (те же, что в коде сайта assets/sb.js). Только чтение.
 SUPABASE_URL = "https://wdxdeatphizclskfmfxi.supabase.co"
 SUPABASE_KEY = "sb_publishable_dtRaEHNNPBFbHFvg8hw9iA_FqJSz9BE"
@@ -529,6 +532,21 @@ def build_page(city, entries, template, generated_slugs, cities, by_city, allow_
     return html
 
 
+def write_city_pages(targets):
+    """Список «город → ссылка на страницу города» для браузера (assets/city-pages.json)."""
+    pages = {city["name"]: f'city/{city["slug"]}.html' for city, entries in targets if entries}
+    payload = {
+        "_note": "Города, у которых есть страница со справочником. Обновляется автоматически "
+                 "при сборке: python3 tools/build_city_pages.py",
+        "hub": "city/index.html",
+        "pages": pages,
+    }
+    os.makedirs(os.path.dirname(CITY_PAGES_JSON), exist_ok=True)
+    with open(CITY_PAGES_JSON, "w", encoding="utf-8") as f:
+        json.dump(payload, f, ensure_ascii=False, indent=1, sort_keys=True)
+    print(f"Список страниц городов для сайта: {len(pages)} городов → assets/city-pages.json")
+
+
 def write_sitemap(targets):
     """Обновляет sitemap.xml: статические страницы + список городов + каждая страница города.
 
@@ -614,6 +632,13 @@ def main():
             with open(path, encoding="utf-8") as f:
                 if f.read() != html:
                     problems.append(f"страница устарела: city/{slug}.html")
+        # Список страниц городов для сайта должен совпадать с собранным
+        if os.path.exists(CITY_PAGES_JSON):
+            site_pages = json.load(open(CITY_PAGES_JSON, encoding="utf-8")).get("pages", {})
+            expected = {c["name"]: f'city/{c["slug"]}.html' for c, e in targets if e}
+            if site_pages != expected:
+                problems.append("assets/city-pages.json устарел (состав городов не совпадает)")
+
         # Карта сайта должна содержать все страницы городов и хаб
         if os.path.exists(SITEMAP):
             sitemap = open(SITEMAP, encoding="utf-8").read()
@@ -630,8 +655,11 @@ def main():
         return 0
 
     if not only:
-        # Карта сайта — только при полной сборке: при --only она потеряла бы остальные города.
-        write_sitemap([(c, e) for c, e in targets if e] if not include_empty else targets)
+        # Карта сайта и список страниц — только при полной сборке: при --only они потеряли бы
+        # остальные города.
+        with_entries = [(c, e) for c, e in targets if e]
+        write_sitemap(with_entries if not include_empty else targets)
+        write_city_pages(with_entries)
 
     os.makedirs(OUT_DIR, exist_ok=True)
     written = 0
