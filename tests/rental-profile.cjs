@@ -1,7 +1,7 @@
 const {chromium}=require('playwright');const assert=require('assert');
 (async()=>{const b=await chromium.launch();const c=await b.newContext({viewport:{width:1440,height:1000}});let profile=null,fail=false,conflict=false,failLoad=false,admin=true,saves=0;const email='qa-rental@example.invalid';let meta={name:'Тестовый владелец',city:'Ростов-на-Дону',phone:'+79001112233'};
 await c.route('https://*.supabase.co/**',async route=>{const r=route.request(),u=new URL(r.url());let data=[];
-if(u.pathname==='/auth/v1/user'){if(r.method()==='PUT')meta={...meta,...JSON.parse(r.postData()).data};data={id:'30000000-0000-4000-8000-000000000001',email,user_metadata:meta};}
+if(u.pathname==='/auth/v1/user'){if(r.method()==='PUT')meta={...meta,...JSON.parse(r.postData()).data};data={id:'30000000-0000-4000-8000-000000000001',email,email_confirmed_at:'2026-01-01T00:00:00.000Z',user_metadata:meta};}
 else if(u.pathname.endsWith('/admins'))data=admin?[{email,role:'admin',active:true,fee_pct:7,debt_limit:5000,company:'Прокат у дома',full_name:'Контакт из анкеты',phone:'+79001112233',address:'Ростов-на-Дону, ул. Старая, 1',work_hours:'Пн–Пт 09:00–18:00'}]:[];
 else if(u.pathname.endsWith('/landlord_applications'))data=[{city:'Ростов-на-Дону',status:'approved',business_type:'sole_trader',company:'ИП Тестов'}];
 else if(u.pathname.endsWith('/landlord_profiles')){if(failLoad){await route.fulfill({status:500,json:{message:'Ошибка чтения'}});return;}data=profile?[profile]:[];}

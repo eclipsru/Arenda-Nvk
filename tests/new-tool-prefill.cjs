@@ -43,6 +43,7 @@ const assert = require('assert');
       data = {
         id: '40000000-0000-4000-8000-000000000001',
         email,
+        email_confirmed_at: '2026-01-01T00:00:00.000Z',
         user_metadata: { name: 'Иван', city: 'Новочеркасск', phone: '+79991112233' }
       };
     } else if (u.pathname.endsWith('/admins')) {

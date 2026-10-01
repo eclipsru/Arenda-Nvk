@@ -48,7 +48,7 @@ moneyStats = () => ({ rent:0, fee:0, paid:0, owed:0, byAdmin:{} });
       }));
       await page.goto(`${BASE}/chief.html`);
       await page.locator('.apk-recovery').waitFor({ timeout: 10000 });
-      assert.match(await page.locator('.apk-recovery').innerText(), /обновлённая версия 10\.13/);
+      assert.match(await page.locator('.apk-recovery').innerText(), /обновлённая версия 10\.14/);
       assert.match(await page.locator('.apk-recovery').innerText(), /удалите текущую версию/);
       assert.equal(await page.locator('#root a[href$=".apk"]').count(), 2);
       assert.equal(new URL(await page.locator('.apk-recovery a').getAttribute('href'), `${BASE}/chief.html`).pathname.split('/').pop(), APK);
