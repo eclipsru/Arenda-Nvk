@@ -85,6 +85,18 @@ function run() {
       'Пересобрать: python3 tools/build_city_pages.py');
     checkedContacts += itemList.itemListElement.length;
 
+    // 5б. Бизнес-логика страницы: справочник не заменяет заказ,
+    //     у каждого пункта есть приглашение подключиться, а сверху — путь в каталог.
+    const orderLinks = (html.match(/Это ваш прокат\? Подключитесь/g) || []).length;
+    assert.equal(orderLinks, cardsCount,
+      `${file}: приглашений «Это ваш прокат? Подключитесь» — ${orderLinks}, а пунктов — ${cardsCount}`);
+    assert.match(html, /href="landlord-register\.html"/,
+      `${file}: нет ссылки «Подключитесь» на форму арендодателя`);
+    assert.match(html, /href="catalog\.html\?city=/,
+      `${file}: нет ссылки в каталог с выбранным городом (человек должен попадать к объявлениям, а не только к телефонам)`);
+    assert.match(html, /пока не подключены к «Иве»/,
+      `${file}: нет пояснения, что пункты справочника не подключены (заказ возможен только у объявлений)`);
+
     // 6. Ни одного скрытого контакта (по телефонам из снимка)
     for (const row of snapshot.rows) {
       const status = row.status || 'new';
