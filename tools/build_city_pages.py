@@ -42,6 +42,8 @@ OUT_DIR = os.environ.get("IVA_OUT") or os.path.join(ROOT, "city")
 SITE = "https://eclipsru.github.io/Arenda-Nvk"
 LISTINGS_JSON = os.environ.get("IVA_LISTINGS") or os.path.join(ROOT, "tools", "listings_by_city.json")
 SITEMAP = os.environ.get("IVA_SITEMAP") or os.path.join(ROOT, "sitemap.xml")
+# Карта «город → страница пунктов» для живых страниц сайта (этап П4).
+CITY_PAGES_JS = os.environ.get("IVA_CITY_PAGES_JS") or os.path.join(ROOT, "assets", "city-pages.js")
 # Публичные значения (те же, что в коде сайта assets/sb.js). Только чтение.
 SUPABASE_URL = "https://wdxdeatphizclskfmfxi.supabase.co"
 SUPABASE_KEY = "sb_publishable_dtRaEHNNPBFbHFvg8hw9iA_FqJSz9BE"
@@ -347,7 +349,7 @@ def hub_page(targets, cities_by_slug, allow_index=False):
 <script src="assets/data.js"></script>
 <script src="assets/geo.js?v=20260923-photon"></script>
 <script src="assets/email-guard.js?v=20260926-email"></script><script src="assets/sb.js?v=20260926-email"></script>
-<script src="assets/app.js?v=20260924-apk-1012"></script>
+<script src="assets/app.js?v=20261001-empty"></script>
 <script>
 (function(){{ mountChrome('catalog', ''); }})();
 </script>
@@ -419,9 +421,12 @@ def directory_block(city, entries, collapse):
 
     count_line = (f'{count} {plural(count, "пункт", "пункта", "пунктов")}'
                   if count else "данных пока нет")
+    # Отдельная переменная, а не выражение внутри f-строки: до Python 3.12 в
+    # выражении f-строки запрещён обратный слэш, иначе файл не читается на 3.10–3.11.
+    h2_style = ' style="font-size:17px"' if collapse else ""
     head = (
         '<div class="sect-h">'
-          f'<h2{" style=\"font-size:17px\"" if collapse else ""}>Пункты проката в городе</h2>'
+          f'<h2{h2_style}>Пункты проката в городе</h2>'
           f'<span style="font-size:13px;color:var(--g2)">{count_line}</span>'
         '</div>'
         '<p style="font-size:13px;color:var(--g2);line-height:1.6;margin:8px 0 0;max-width:820px">'
@@ -529,6 +534,37 @@ def build_page(city, entries, template, generated_slugs, cities, by_city, allow_
     return html
 
 
+def city_pages_js(targets):
+    """Карта «город → страница пунктов проката» для живых страниц сайта.
+
+    Зачем (этап П4): каталог и главная должны знать, у каких городов есть
+    страница пунктов и сколько там адресов, иначе «ничего не нашлось» упирается
+    в тупик. Карта генерируется вместе со страницами городов, поэтому второго
+    списка городов не появляется — единственный источник правды тот же
+    (assets/data.js + снимок справочника), а расхождение ловит сторож.
+
+    Числа не выдумываем: points — это реальные адреса пунктов из справочника.
+    """
+    cities = {
+        city["name"]: {"slug": city["slug"], "points": len(entries)}
+        for city, entries in sorted(targets, key=lambda t: t[0]["name"])
+    }
+    payload = json.dumps({"cities": cities}, ensure_ascii=False, indent=2, sort_keys=True)
+    return (
+        "/* ===========================================================\n"
+        "   Ива — у каких городов есть страница пунктов проката.\n"
+        "\n"
+        "   Сгенерировано tools/build_city_pages.py — править руками нельзя.\n"
+        "   Пересобрать: python3 tools/build_city_pages.py\n"
+        "   Расхождение с папкой city/ ловит tests/empty-states.cjs.\n"
+        "\n"
+        "   points — число адресов пунктов проката из справочника\n"
+        "   (это не объявления арендодателей «Ивы»).\n"
+        "   =========================================================== */\n"
+        "window.IvaCityPages = " + payload + ";\n"
+    )
+
+
 def write_sitemap(targets):
     """Обновляет sitemap.xml: статические страницы + список городов + каждая страница города.
 
@@ -621,6 +657,15 @@ def main():
                 url = f"{SITE}/city/" if slug == "index" else f"{SITE}/city/{slug}.html"
                 if url not in sitemap:
                     problems.append(f"нет в карте сайта: {url}")
+        # Карта городов для живых страниц — только при полной сборке:
+        # при --only в targets нет остальных городов, сверка была бы ложной.
+        if not only:
+            if not os.path.exists(CITY_PAGES_JS):
+                problems.append("нет карты городов: assets/city-pages.js")
+            else:
+                with open(CITY_PAGES_JS, encoding="utf-8") as f:
+                    if f.read() != city_pages_js(targets):
+                        problems.append("карта городов устарела: assets/city-pages.js")
         if problems:
             for p in problems:
                 print("РАСХОЖДЕНИЕ: " + p)
@@ -632,6 +677,9 @@ def main():
     if not only:
         # Карта сайта — только при полной сборке: при --only она потеряла бы остальные города.
         write_sitemap([(c, e) for c, e in targets if e] if not include_empty else targets)
+        # Карта городов — по тому же правилу: только при полной сборке.
+        with open(CITY_PAGES_JS, "w", encoding="utf-8") as f:
+            f.write(city_pages_js(targets))
 
     os.makedirs(OUT_DIR, exist_ok=True)
     written = 0

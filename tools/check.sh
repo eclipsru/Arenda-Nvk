@@ -62,38 +62,42 @@ head_ "3. Релиз приложения (app-update.json ↔ APK ↔ этал�
 if node tools/check-release.js; then ok "релиз приложения согласован"; else bad "см. замечания выше"; fi
 
 head_ "4. Статические тесты (без браузера)"
-for t in syntax-and-release email-guard cities-sync directory-import city-pages city-priority; do
+for t in syntax-and-release email-guard cities-sync directory-import city-pages city-priority py-compat empty-states; do
   if node "tests/$t.cjs" >"/tmp/iva-test-$t.log" 2>&1; then ok "tests/$t.cjs"
   else bad "tests/$t.cjs"; tail -6 "/tmp/iva-test-$t.log" | sed 's/^/      /'; fi
 done
 
 head_ "5. Браузерные тесты (Playwright + локальный сервер)"
-if node -e "require.resolve('playwright')" >/dev/null 2>&1; then
-  if command -v python3 >/dev/null 2>&1; then
-    PORT=8000
-    python3 -m http.server "$PORT" --bind 127.0.0.1 >/dev/null 2>&1 &
-    SERVER_PID=$!
-    trap 'kill "$SERVER_PID" 2>/dev/null || true' EXIT
-    READY=0
-    for _ in $(seq 1 30); do
-      if curl -sf "http://127.0.0.1:$PORT/" >/dev/null 2>&1; then READY=1; break; fi
-      sleep 0.3
-    done
-    if [ "$READY" = "1" ]; then
-      ok "локальный сервер поднят: http://127.0.0.1:$PORT"
-      for t in photon rental-profile new-tool-prefill order-and-fee reviews-system app-banner chief-and-apk; do
-        if SITE_BASE_URL="http://127.0.0.1:$PORT" node "tests/$t.cjs" >"/tmp/iva-test-$t.log" 2>&1; then ok "tests/$t.cjs"
-        else bad "tests/$t.cjs"; tail -6 "/tmp/iva-test-$t.log" | sed 's/^/      /'; fi
-      done
-    else
-      bad "не удалось поднять локальный сервер на :$PORT"
-      kill "$SERVER_PID" 2>/dev/null || true
-    fi
-  else
-    skip "python3 не найден — браузерные тесты пропущены"
-  fi
-else
+# Три разных «нет»: нет модуля, модуль есть без браузера, нет python3 для сервера.
+# Во всех трёх случаях тесты честно пропускаются — окружение не должно
+# превращаться в «ошибки сайта» в итоговой строке.
+BROWSER_PROBE="const fs=require('fs');const {chromium}=require('playwright');if(!fs.existsSync(chromium.executablePath()))process.exit(1)"
+if ! node -e "require.resolve('playwright')" >/dev/null 2>&1; then
   skip "Playwright не установлен. Установить: npm install && npx playwright install chromium"
+elif ! node -e "$BROWSER_PROBE" >/dev/null 2>&1; then
+  skip "Playwright есть, но Chromium не скачан — браузерные тесты пропущены. Установить: npx playwright install chromium"
+elif ! command -v python3 >/dev/null 2>&1; then
+  skip "python3 не найден — браузерные тесты пропущены"
+else
+  PORT=8000
+  python3 -m http.server "$PORT" --bind 127.0.0.1 >/dev/null 2>&1 &
+  SERVER_PID=$!
+  trap 'kill "$SERVER_PID" 2>/dev/null || true' EXIT
+  READY=0
+  for _ in $(seq 1 30); do
+    if curl -sf "http://127.0.0.1:$PORT/" >/dev/null 2>&1; then READY=1; break; fi
+    sleep 0.3
+  done
+  if [ "$READY" = "1" ]; then
+    ok "локальный сервер поднят: http://127.0.0.1:$PORT"
+    for t in photon rental-profile new-tool-prefill order-and-fee reviews-system app-banner chief-and-apk; do
+      if SITE_BASE_URL="http://127.0.0.1:$PORT" node "tests/$t.cjs" >"/tmp/iva-test-$t.log" 2>&1; then ok "tests/$t.cjs"
+      else bad "tests/$t.cjs"; tail -6 "/tmp/iva-test-$t.log" | sed 's/^/      /'; fi
+    done
+  else
+    bad "не удалось поднять локальный сервер на :$PORT"
+    kill "$SERVER_PID" 2>/dev/null || true
+  fi
 fi
 
 head_ "Итог"
