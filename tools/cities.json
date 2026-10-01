@@ -1,0 +1,1258 @@
+{
+  "version": 1,
+  "source": "assets/data.js:CITIES",
+  "note": "Сгенерировано tools/export_cities.py — править руками нельзя. Единственный источник правды по городам — assets/data.js.",
+  "cities": [
+    {
+      "name": "Новочеркасск",
+      "slug": "novocherkassk",
+      "region": "Ростовская область",
+      "population": null,
+      "lat": null,
+      "lon": null,
+      "has_snt": null
+    },
+    {
+      "name": "Ростов-на-Дону",
+      "slug": "rostov-na-donu",
+      "region": "Ростовская область",
+      "population": null,
+      "lat": null,
+      "lon": null,
+      "has_snt": null
+    },
+    {
+      "name": "Аксай",
+      "slug": "aksay",
+      "region": "Ростовская область",
+      "population": null,
+      "lat": null,
+      "lon": null,
+      "has_snt": null
+    },
+    {
+      "name": "Шахты",
+      "slug": "shahty",
+      "region": "Ростовская область",
+      "population": null,
+      "lat": null,
+      "lon": null,
+      "has_snt": null
+    },
+    {
+      "name": "Персиановский",
+      "slug": "persianovskiy",
+      "region": "Ростовская область",
+      "population": null,
+      "lat": null,
+      "lon": null,
+      "has_snt": null
+    },
+    {
+      "name": "Батайск",
+      "slug": "bataysk",
+      "region": "Ростовская область",
+      "population": null,
+      "lat": null,
+      "lon": null,
+      "has_snt": null
+    },
+    {
+      "name": "Таганрог",
+      "slug": "taganrog",
+      "region": "Ростовская область",
+      "population": null,
+      "lat": null,
+      "lon": null,
+      "has_snt": null
+    },
+    {
+      "name": "Новошахтинск",
+      "slug": "novoshahtinsk",
+      "region": "Ростовская область",
+      "population": null,
+      "lat": null,
+      "lon": null,
+      "has_snt": null
+    },
+    {
+      "name": "Волгодонск",
+      "slug": "volgodonsk",
+      "region": "Ростовская область",
+      "population": null,
+      "lat": null,
+      "lon": null,
+      "has_snt": null
+    },
+    {
+      "name": "Азов",
+      "slug": "azov",
+      "region": "Ростовская область",
+      "population": null,
+      "lat": null,
+      "lon": null,
+      "has_snt": null
+    },
+    {
+      "name": "Каменск-Шахтинский",
+      "slug": "kamensk-shahtinskiy",
+      "region": "Ростовская область",
+      "population": null,
+      "lat": null,
+      "lon": null,
+      "has_snt": null
+    },
+    {
+      "name": "Гуково",
+      "slug": "gukovo",
+      "region": "Ростовская область",
+      "population": null,
+      "lat": null,
+      "lon": null,
+      "has_snt": null
+    },
+    {
+      "name": "Сальск",
+      "slug": "salsk",
+      "region": "Ростовская область",
+      "population": null,
+      "lat": null,
+      "lon": null,
+      "has_snt": null
+    },
+    {
+      "name": "Донецк",
+      "slug": "doneck",
+      "region": "Ростовская область",
+      "population": null,
+      "lat": null,
+      "lon": null,
+      "has_snt": null
+    },
+    {
+      "name": "Белая Калитва",
+      "slug": "belaya-kalitva",
+      "region": "Ростовская область",
+      "population": null,
+      "lat": null,
+      "lon": null,
+      "has_snt": null
+    },
+    {
+      "name": "Красный Сулин",
+      "slug": "krasnyy-sulin",
+      "region": "Ростовская область",
+      "population": null,
+      "lat": null,
+      "lon": null,
+      "has_snt": null
+    },
+    {
+      "name": "Миллерово",
+      "slug": "millerovo",
+      "region": "Ростовская область",
+      "population": null,
+      "lat": null,
+      "lon": null,
+      "has_snt": null
+    },
+    {
+      "name": "Зерноград",
+      "slug": "zernograd",
+      "region": "Ростовская область",
+      "population": null,
+      "lat": null,
+      "lon": null,
+      "has_snt": null
+    },
+    {
+      "name": "Морозовск",
+      "slug": "morozovsk",
+      "region": "Ростовская область",
+      "population": null,
+      "lat": null,
+      "lon": null,
+      "has_snt": null
+    },
+    {
+      "name": "Зверево",
+      "slug": "zverevo",
+      "region": "Ростовская область",
+      "population": null,
+      "lat": null,
+      "lon": null,
+      "has_snt": null
+    },
+    {
+      "name": "Пролетарск",
+      "slug": "proletarsk",
+      "region": "Ростовская область",
+      "population": null,
+      "lat": null,
+      "lon": null,
+      "has_snt": null
+    },
+    {
+      "name": "Цимлянск",
+      "slug": "cimlyansk",
+      "region": "Ростовская область",
+      "population": null,
+      "lat": null,
+      "lon": null,
+      "has_snt": null
+    },
+    {
+      "name": "Семикаракорск",
+      "slug": "semikarakorsk",
+      "region": "Ростовская область",
+      "population": null,
+      "lat": null,
+      "lon": null,
+      "has_snt": null
+    },
+    {
+      "name": "Константиновск",
+      "slug": "konstantinovsk",
+      "region": "Ростовская область",
+      "population": null,
+      "lat": null,
+      "lon": null,
+      "has_snt": null
+    },
+    {
+      "name": "Матвеев Курган",
+      "slug": "matveev-kurgan",
+      "region": "Ростовская область",
+      "population": null,
+      "lat": null,
+      "lon": null,
+      "has_snt": null
+    },
+    {
+      "name": "Чалтырь",
+      "slug": "chaltyr",
+      "region": "Ростовская область",
+      "population": null,
+      "lat": null,
+      "lon": null,
+      "has_snt": null
+    },
+    {
+      "name": "Орловский",
+      "slug": "orlovskiy",
+      "region": "Ростовская область",
+      "population": null,
+      "lat": null,
+      "lon": null,
+      "has_snt": null
+    },
+    {
+      "name": "Зимовники",
+      "slug": "zimovniki",
+      "region": "Ростовская область",
+      "population": null,
+      "lat": null,
+      "lon": null,
+      "has_snt": null
+    },
+    {
+      "name": "Кагальницкая",
+      "slug": "kagalnickaya",
+      "region": "Ростовская область",
+      "population": null,
+      "lat": null,
+      "lon": null,
+      "has_snt": null
+    },
+    {
+      "name": "Тацинская",
+      "slug": "tacinskaya",
+      "region": "Ростовская область",
+      "population": null,
+      "lat": null,
+      "lon": null,
+      "has_snt": null
+    },
+    {
+      "name": "Обливская",
+      "slug": "oblivskaya",
+      "region": "Ростовская область",
+      "population": null,
+      "lat": null,
+      "lon": null,
+      "has_snt": null
+    },
+    {
+      "name": "Вешенская",
+      "slug": "veshenskaya",
+      "region": "Ростовская область",
+      "population": null,
+      "lat": null,
+      "lon": null,
+      "has_snt": null
+    },
+    {
+      "name": "Багаевская",
+      "slug": "bagaevskaya",
+      "region": "Ростовская область",
+      "population": null,
+      "lat": null,
+      "lon": null,
+      "has_snt": null
+    },
+    {
+      "name": "Егорлыкская",
+      "slug": "egorlykskaya",
+      "region": "Ростовская область",
+      "population": null,
+      "lat": null,
+      "lon": null,
+      "has_snt": null
+    },
+    {
+      "name": "Целина",
+      "slug": "celina",
+      "region": "Ростовская область",
+      "population": null,
+      "lat": null,
+      "lon": null,
+      "has_snt": null
+    },
+    {
+      "name": "Краснодар",
+      "slug": "krasnodar",
+      "region": "Юг России",
+      "population": null,
+      "lat": null,
+      "lon": null,
+      "has_snt": null
+    },
+    {
+      "name": "Сочи",
+      "slug": "sochi",
+      "region": "Юг России",
+      "population": null,
+      "lat": null,
+      "lon": null,
+      "has_snt": null
+    },
+    {
+      "name": "Новороссийск",
+      "slug": "novorossiysk",
+      "region": "Юг России",
+      "population": null,
+      "lat": null,
+      "lon": null,
+      "has_snt": null
+    },
+    {
+      "name": "Анапа",
+      "slug": "anapa",
+      "region": "Юг России",
+      "population": null,
+      "lat": null,
+      "lon": null,
+      "has_snt": null
+    },
+    {
+      "name": "Геленджик",
+      "slug": "gelendzhik",
+      "region": "Юг России",
+      "population": null,
+      "lat": null,
+      "lon": null,
+      "has_snt": null
+    },
+    {
+      "name": "Туапсе",
+      "slug": "tuapse",
+      "region": "Юг России",
+      "population": null,
+      "lat": null,
+      "lon": null,
+      "has_snt": null
+    },
+    {
+      "name": "Армавир",
+      "slug": "armavir",
+      "region": "Юг России",
+      "population": null,
+      "lat": null,
+      "lon": null,
+      "has_snt": null
+    },
+    {
+      "name": "Кропоткин",
+      "slug": "kropotkin",
+      "region": "Юг России",
+      "population": null,
+      "lat": null,
+      "lon": null,
+      "has_snt": null
+    },
+    {
+      "name": "Тихорецк",
+      "slug": "tihoreck",
+      "region": "Юг России",
+      "population": null,
+      "lat": null,
+      "lon": null,
+      "has_snt": null
+    },
+    {
+      "name": "Ейск",
+      "slug": "eysk",
+      "region": "Юг России",
+      "population": null,
+      "lat": null,
+      "lon": null,
+      "has_snt": null
+    },
+    {
+      "name": "Крымск",
+      "slug": "krymsk",
+      "region": "Юг России",
+      "population": null,
+      "lat": null,
+      "lon": null,
+      "has_snt": null
+    },
+    {
+      "name": "Славянск-на-Кубани",
+      "slug": "slavyansk-na-kubani",
+      "region": "Юг России",
+      "population": null,
+      "lat": null,
+      "lon": null,
+      "has_snt": null
+    },
+    {
+      "name": "Лабинск",
+      "slug": "labinsk",
+      "region": "Юг России",
+      "population": null,
+      "lat": null,
+      "lon": null,
+      "has_snt": null
+    },
+    {
+      "name": "Белореченск",
+      "slug": "belorechensk",
+      "region": "Юг России",
+      "population": null,
+      "lat": null,
+      "lon": null,
+      "has_snt": null
+    },
+    {
+      "name": "Майкоп",
+      "slug": "maykop",
+      "region": "Юг России",
+      "population": null,
+      "lat": null,
+      "lon": null,
+      "has_snt": null
+    },
+    {
+      "name": "Ставрополь",
+      "slug": "stavropol",
+      "region": "Юг России",
+      "population": null,
+      "lat": null,
+      "lon": null,
+      "has_snt": null
+    },
+    {
+      "name": "Пятигорск",
+      "slug": "pyatigorsk",
+      "region": "Юг России",
+      "population": null,
+      "lat": null,
+      "lon": null,
+      "has_snt": null
+    },
+    {
+      "name": "Кисловодск",
+      "slug": "kislovodsk",
+      "region": "Юг России",
+      "population": null,
+      "lat": null,
+      "lon": null,
+      "has_snt": null
+    },
+    {
+      "name": "Ессентуки",
+      "slug": "essentuki",
+      "region": "Юг России",
+      "population": null,
+      "lat": null,
+      "lon": null,
+      "has_snt": null
+    },
+    {
+      "name": "Минеральные Воды",
+      "slug": "mineralnye-vody",
+      "region": "Юг России",
+      "population": null,
+      "lat": null,
+      "lon": null,
+      "has_snt": null
+    },
+    {
+      "name": "Москва",
+      "slug": "moskva",
+      "region": "Миллионники и крупные города РФ",
+      "population": null,
+      "lat": null,
+      "lon": null,
+      "has_snt": null
+    },
+    {
+      "name": "Санкт-Петербург",
+      "slug": "sankt-peterburg",
+      "region": "Миллионники и крупные города РФ",
+      "population": null,
+      "lat": null,
+      "lon": null,
+      "has_snt": null
+    },
+    {
+      "name": "Новосибирск",
+      "slug": "novosibirsk",
+      "region": "Миллионники и крупные города РФ",
+      "population": null,
+      "lat": null,
+      "lon": null,
+      "has_snt": null
+    },
+    {
+      "name": "Екатеринбург",
+      "slug": "ekaterinburg",
+      "region": "Миллионники и крупные города РФ",
+      "population": null,
+      "lat": null,
+      "lon": null,
+      "has_snt": null
+    },
+    {
+      "name": "Казань",
+      "slug": "kazan",
+      "region": "Миллионники и крупные города РФ",
+      "population": null,
+      "lat": null,
+      "lon": null,
+      "has_snt": null
+    },
+    {
+      "name": "Нижний Новгород",
+      "slug": "nizhniy-novgorod",
+      "region": "Миллионники и крупные города РФ",
+      "population": null,
+      "lat": null,
+      "lon": null,
+      "has_snt": null
+    },
+    {
+      "name": "Челябинск",
+      "slug": "chelyabinsk",
+      "region": "Миллионники и крупные города РФ",
+      "population": null,
+      "lat": null,
+      "lon": null,
+      "has_snt": null
+    },
+    {
+      "name": "Самара",
+      "slug": "samara",
+      "region": "Миллионники и крупные города РФ",
+      "population": null,
+      "lat": null,
+      "lon": null,
+      "has_snt": null
+    },
+    {
+      "name": "Омск",
+      "slug": "omsk",
+      "region": "Миллионники и крупные города РФ",
+      "population": null,
+      "lat": null,
+      "lon": null,
+      "has_snt": null
+    },
+    {
+      "name": "Уфа",
+      "slug": "ufa",
+      "region": "Миллионники и крупные города РФ",
+      "population": null,
+      "lat": null,
+      "lon": null,
+      "has_snt": null
+    },
+    {
+      "name": "Красноярск",
+      "slug": "krasnoyarsk",
+      "region": "Миллионники и крупные города РФ",
+      "population": null,
+      "lat": null,
+      "lon": null,
+      "has_snt": null
+    },
+    {
+      "name": "Воронеж",
+      "slug": "voronezh",
+      "region": "Миллионники и крупные города РФ",
+      "population": null,
+      "lat": null,
+      "lon": null,
+      "has_snt": null
+    },
+    {
+      "name": "Пермь",
+      "slug": "perm",
+      "region": "Миллионники и крупные города РФ",
+      "population": null,
+      "lat": null,
+      "lon": null,
+      "has_snt": null
+    },
+    {
+      "name": "Волгоград",
+      "slug": "volgograd",
+      "region": "Миллионники и крупные города РФ",
+      "population": null,
+      "lat": null,
+      "lon": null,
+      "has_snt": null
+    },
+    {
+      "name": "Саратов",
+      "slug": "saratov",
+      "region": "Миллионники и крупные города РФ",
+      "population": null,
+      "lat": null,
+      "lon": null,
+      "has_snt": null
+    },
+    {
+      "name": "Тюмень",
+      "slug": "tyumen",
+      "region": "Миллионники и крупные города РФ",
+      "population": null,
+      "lat": null,
+      "lon": null,
+      "has_snt": null
+    },
+    {
+      "name": "Тольятти",
+      "slug": "tolyatti",
+      "region": "Миллионники и крупные города РФ",
+      "population": null,
+      "lat": null,
+      "lon": null,
+      "has_snt": null
+    },
+    {
+      "name": "Ижевск",
+      "slug": "izhevsk",
+      "region": "Миллионники и крупные города РФ",
+      "population": null,
+      "lat": null,
+      "lon": null,
+      "has_snt": null
+    },
+    {
+      "name": "Барнаул",
+      "slug": "barnaul",
+      "region": "Миллионники и крупные города РФ",
+      "population": null,
+      "lat": null,
+      "lon": null,
+      "has_snt": null
+    },
+    {
+      "name": "Ульяновск",
+      "slug": "ulyanovsk",
+      "region": "Миллионники и крупные города РФ",
+      "population": null,
+      "lat": null,
+      "lon": null,
+      "has_snt": null
+    },
+    {
+      "name": "Иркутск",
+      "slug": "irkutsk",
+      "region": "Миллионники и крупные города РФ",
+      "population": null,
+      "lat": null,
+      "lon": null,
+      "has_snt": null
+    },
+    {
+      "name": "Хабаровск",
+      "slug": "habarovsk",
+      "region": "Миллионники и крупные города РФ",
+      "population": null,
+      "lat": null,
+      "lon": null,
+      "has_snt": null
+    },
+    {
+      "name": "Ярославль",
+      "slug": "yaroslavl",
+      "region": "Миллионники и крупные города РФ",
+      "population": null,
+      "lat": null,
+      "lon": null,
+      "has_snt": null
+    },
+    {
+      "name": "Владивосток",
+      "slug": "vladivostok",
+      "region": "Миллионники и крупные города РФ",
+      "population": null,
+      "lat": null,
+      "lon": null,
+      "has_snt": null
+    },
+    {
+      "name": "Махачкала",
+      "slug": "mahachkala",
+      "region": "Миллионники и крупные города РФ",
+      "population": null,
+      "lat": null,
+      "lon": null,
+      "has_snt": null
+    },
+    {
+      "name": "Томск",
+      "slug": "tomsk",
+      "region": "Миллионники и крупные города РФ",
+      "population": null,
+      "lat": null,
+      "lon": null,
+      "has_snt": null
+    },
+    {
+      "name": "Оренбург",
+      "slug": "orenburg",
+      "region": "Миллионники и крупные города РФ",
+      "population": null,
+      "lat": null,
+      "lon": null,
+      "has_snt": null
+    },
+    {
+      "name": "Кемерово",
+      "slug": "kemerovo",
+      "region": "Миллионники и крупные города РФ",
+      "population": null,
+      "lat": null,
+      "lon": null,
+      "has_snt": null
+    },
+    {
+      "name": "Рязань",
+      "slug": "ryazan",
+      "region": "Миллионники и крупные города РФ",
+      "population": null,
+      "lat": null,
+      "lon": null,
+      "has_snt": null
+    },
+    {
+      "name": "Астрахань",
+      "slug": "astrahan",
+      "region": "Миллионники и крупные города РФ",
+      "population": null,
+      "lat": null,
+      "lon": null,
+      "has_snt": null
+    },
+    {
+      "name": "Пенза",
+      "slug": "penza",
+      "region": "Миллионники и крупные города РФ",
+      "population": null,
+      "lat": null,
+      "lon": null,
+      "has_snt": null
+    },
+    {
+      "name": "Липецк",
+      "slug": "lipeck",
+      "region": "Миллионники и крупные города РФ",
+      "population": null,
+      "lat": null,
+      "lon": null,
+      "has_snt": null
+    },
+    {
+      "name": "Калининград",
+      "slug": "kaliningrad",
+      "region": "Миллионники и крупные города РФ",
+      "population": null,
+      "lat": null,
+      "lon": null,
+      "has_snt": null
+    },
+    {
+      "name": "Тула",
+      "slug": "tula",
+      "region": "Миллионники и крупные города РФ",
+      "population": null,
+      "lat": null,
+      "lon": null,
+      "has_snt": null
+    },
+    {
+      "name": "Курск",
+      "slug": "kursk",
+      "region": "Миллионники и крупные города РФ",
+      "population": null,
+      "lat": null,
+      "lon": null,
+      "has_snt": null
+    },
+    {
+      "name": "Севастополь",
+      "slug": "sevastopol",
+      "region": "Миллионники и крупные города РФ",
+      "population": null,
+      "lat": null,
+      "lon": null,
+      "has_snt": null
+    },
+    {
+      "name": "Тверь",
+      "slug": "tver",
+      "region": "Миллионники и крупные города РФ",
+      "population": null,
+      "lat": null,
+      "lon": null,
+      "has_snt": null
+    },
+    {
+      "name": "Магнитогорск",
+      "slug": "magnitogorsk",
+      "region": "Миллионники и крупные города РФ",
+      "population": null,
+      "lat": null,
+      "lon": null,
+      "has_snt": null
+    },
+    {
+      "name": "Иваново",
+      "slug": "ivanovo",
+      "region": "Миллионники и крупные города РФ",
+      "population": null,
+      "lat": null,
+      "lon": null,
+      "has_snt": null
+    },
+    {
+      "name": "Брянск",
+      "slug": "bryansk",
+      "region": "Миллионники и крупные города РФ",
+      "population": null,
+      "lat": null,
+      "lon": null,
+      "has_snt": null
+    },
+    {
+      "name": "Белгород",
+      "slug": "belgorod",
+      "region": "Миллионники и крупные города РФ",
+      "population": null,
+      "lat": null,
+      "lon": null,
+      "has_snt": null
+    },
+    {
+      "name": "Владимир",
+      "slug": "vladimir",
+      "region": "Миллионники и крупные города РФ",
+      "population": null,
+      "lat": null,
+      "lon": null,
+      "has_snt": null
+    },
+    {
+      "name": "Архангельск",
+      "slug": "arhangelsk",
+      "region": "Миллионники и крупные города РФ",
+      "population": null,
+      "lat": null,
+      "lon": null,
+      "has_snt": null
+    },
+    {
+      "name": "Чита",
+      "slug": "chita",
+      "region": "Миллионники и крупные города РФ",
+      "population": null,
+      "lat": null,
+      "lon": null,
+      "has_snt": null
+    },
+    {
+      "name": "Калуга",
+      "slug": "kaluga",
+      "region": "Миллионники и крупные города РФ",
+      "population": null,
+      "lat": null,
+      "lon": null,
+      "has_snt": null
+    },
+    {
+      "name": "Смоленск",
+      "slug": "smolensk",
+      "region": "Миллионники и крупные города РФ",
+      "population": null,
+      "lat": null,
+      "lon": null,
+      "has_snt": null
+    },
+    {
+      "name": "Волжский",
+      "slug": "volzhskiy",
+      "region": "Миллионники и крупные города РФ",
+      "population": null,
+      "lat": null,
+      "lon": null,
+      "has_snt": null
+    },
+    {
+      "name": "Курган",
+      "slug": "kurgan",
+      "region": "Миллионники и крупные города РФ",
+      "population": null,
+      "lat": null,
+      "lon": null,
+      "has_snt": null
+    },
+    {
+      "name": "Орёл",
+      "slug": "orel",
+      "region": "Миллионники и крупные города РФ",
+      "population": null,
+      "lat": null,
+      "lon": null,
+      "has_snt": null
+    },
+    {
+      "name": "Череповец",
+      "slug": "cherepovec",
+      "region": "Миллионники и крупные города РФ",
+      "population": null,
+      "lat": null,
+      "lon": null,
+      "has_snt": null
+    },
+    {
+      "name": "Вологда",
+      "slug": "vologda",
+      "region": "Миллионники и крупные города РФ",
+      "population": null,
+      "lat": null,
+      "lon": null,
+      "has_snt": null
+    },
+    {
+      "name": "Владикавказ",
+      "slug": "vladikavkaz",
+      "region": "Миллионники и крупные города РФ",
+      "population": null,
+      "lat": null,
+      "lon": null,
+      "has_snt": null
+    },
+    {
+      "name": "Мурманск",
+      "slug": "murmansk",
+      "region": "Миллионники и крупные города РФ",
+      "population": null,
+      "lat": null,
+      "lon": null,
+      "has_snt": null
+    },
+    {
+      "name": "Тамбов",
+      "slug": "tambov",
+      "region": "Миллионники и крупные города РФ",
+      "population": null,
+      "lat": null,
+      "lon": null,
+      "has_snt": null
+    },
+    {
+      "name": "Грозный",
+      "slug": "groznyy",
+      "region": "Миллионники и крупные города РФ",
+      "population": null,
+      "lat": null,
+      "lon": null,
+      "has_snt": null
+    },
+    {
+      "name": "Кострома",
+      "slug": "kostroma",
+      "region": "Миллионники и крупные города РФ",
+      "population": null,
+      "lat": null,
+      "lon": null,
+      "has_snt": null
+    },
+    {
+      "name": "Петрозаводск",
+      "slug": "petrozavodsk",
+      "region": "Миллионники и крупные города РФ",
+      "population": null,
+      "lat": null,
+      "lon": null,
+      "has_snt": null
+    },
+    {
+      "name": "Йошкар-Ола",
+      "slug": "yoshkar-ola",
+      "region": "Миллионники и крупные города РФ",
+      "population": null,
+      "lat": null,
+      "lon": null,
+      "has_snt": null
+    },
+    {
+      "name": "Сыктывкар",
+      "slug": "syktyvkar",
+      "region": "Миллионники и крупные города РФ",
+      "population": null,
+      "lat": null,
+      "lon": null,
+      "has_snt": null
+    },
+    {
+      "name": "Дзержинск",
+      "slug": "dzerzhinsk",
+      "region": "Миллионники и крупные города РФ",
+      "population": null,
+      "lat": null,
+      "lon": null,
+      "has_snt": null
+    },
+    {
+      "name": "Орск",
+      "slug": "orsk",
+      "region": "Миллионники и крупные города РФ",
+      "population": null,
+      "lat": null,
+      "lon": null,
+      "has_snt": null
+    },
+    {
+      "name": "Нижнекамск",
+      "slug": "nizhnekamsk",
+      "region": "Миллионники и крупные города РФ",
+      "population": null,
+      "lat": null,
+      "lon": null,
+      "has_snt": null
+    },
+    {
+      "name": "Братск",
+      "slug": "bratsk",
+      "region": "Миллионники и крупные города РФ",
+      "population": null,
+      "lat": null,
+      "lon": null,
+      "has_snt": null
+    },
+    {
+      "name": "Благовещенск",
+      "slug": "blagoveschensk",
+      "region": "Миллионники и крупные города РФ",
+      "population": null,
+      "lat": null,
+      "lon": null,
+      "has_snt": null
+    },
+    {
+      "name": "Энгельс",
+      "slug": "engels",
+      "region": "Миллионники и крупные города РФ",
+      "population": null,
+      "lat": null,
+      "lon": null,
+      "has_snt": null
+    },
+    {
+      "name": "Ангарск",
+      "slug": "angarsk",
+      "region": "Миллионники и крупные города РФ",
+      "population": null,
+      "lat": null,
+      "lon": null,
+      "has_snt": null
+    },
+    {
+      "name": "Королёв",
+      "slug": "korolev",
+      "region": "Миллионники и крупные города РФ",
+      "population": null,
+      "lat": null,
+      "lon": null,
+      "has_snt": null
+    },
+    {
+      "name": "Великий Новгород",
+      "slug": "velikiy-novgorod",
+      "region": "Миллионники и крупные города РФ",
+      "population": null,
+      "lat": null,
+      "lon": null,
+      "has_snt": null
+    },
+    {
+      "name": "Мытищи",
+      "slug": "mytischi",
+      "region": "Миллионники и крупные города РФ",
+      "population": null,
+      "lat": null,
+      "lon": null,
+      "has_snt": null
+    },
+    {
+      "name": "Старый Оскол",
+      "slug": "staryy-oskol",
+      "region": "Миллионники и крупные города РФ",
+      "population": null,
+      "lat": null,
+      "lon": null,
+      "has_snt": null
+    },
+    {
+      "name": "Люберцы",
+      "slug": "lyubercy",
+      "region": "Миллионники и крупные города РФ",
+      "population": null,
+      "lat": null,
+      "lon": null,
+      "has_snt": null
+    },
+    {
+      "name": "Псков",
+      "slug": "pskov",
+      "region": "Миллионники и крупные города РФ",
+      "population": null,
+      "lat": null,
+      "lon": null,
+      "has_snt": null
+    },
+    {
+      "name": "Бийск",
+      "slug": "biysk",
+      "region": "Миллионники и крупные города РФ",
+      "population": null,
+      "lat": null,
+      "lon": null,
+      "has_snt": null
+    },
+    {
+      "name": "Южно-Сахалинск",
+      "slug": "yuzhno-sahalinsk",
+      "region": "Миллионники и крупные города РФ",
+      "population": null,
+      "lat": null,
+      "lon": null,
+      "has_snt": null
+    },
+    {
+      "name": "Прокопьевск",
+      "slug": "prokopevsk",
+      "region": "Миллионники и крупные города РФ",
+      "population": null,
+      "lat": null,
+      "lon": null,
+      "has_snt": null
+    },
+    {
+      "name": "Подольск",
+      "slug": "podolsk",
+      "region": "Миллионники и крупные города РФ",
+      "population": null,
+      "lat": null,
+      "lon": null,
+      "has_snt": null
+    },
+    {
+      "name": "Северодвинск",
+      "slug": "severodvinsk",
+      "region": "Миллионники и крупные города РФ",
+      "population": null,
+      "lat": null,
+      "lon": null,
+      "has_snt": null
+    },
+    {
+      "name": "Абакан",
+      "slug": "abakan",
+      "region": "Миллионники и крупные города РФ",
+      "population": null,
+      "lat": null,
+      "lon": null,
+      "has_snt": null
+    },
+    {
+      "name": "Норильск",
+      "slug": "norilsk",
+      "region": "Миллионники и крупные города РФ",
+      "population": null,
+      "lat": null,
+      "lon": null,
+      "has_snt": null
+    },
+    {
+      "name": "Сызрань",
+      "slug": "syzran",
+      "region": "Миллионники и крупные города РФ",
+      "population": null,
+      "lat": null,
+      "lon": null,
+      "has_snt": null
+    },
+    {
+      "name": "Симферополь",
+      "slug": "simferopol",
+      "region": "Миллионники и крупные города РФ",
+      "population": null,
+      "lat": null,
+      "lon": null,
+      "has_snt": null
+    },
+    {
+      "name": "Ялта",
+      "slug": "yalta",
+      "region": "Миллионники и крупные города РФ",
+      "population": null,
+      "lat": null,
+      "lon": null,
+      "has_snt": null
+    },
+    {
+      "name": "Евпатория",
+      "slug": "evpatoriya",
+      "region": "Миллионники и крупные города РФ",
+      "population": null,
+      "lat": null,
+      "lon": null,
+      "has_snt": null
+    },
+    {
+      "name": "Керчь",
+      "slug": "kerch",
+      "region": "Миллионники и крупные города РФ",
+      "population": null,
+      "lat": null,
+      "lon": null,
+      "has_snt": null
+    }
+  ]
+}
