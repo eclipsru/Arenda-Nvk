@@ -24,6 +24,7 @@ import json
 import os
 import re
 import sys
+import urllib.parse
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -92,6 +93,7 @@ def directory_by_city(snapshot):
 
 
 def card_html(entry):
+    """Карточка пункта проката: данные, телефон и приглашение подключиться."""
     phone = fmt_phone(entry["phone"])
     tel = "+7" + re.sub(r"\D", "", entry["phone"])[-10:]
     source = esc(entry.get("source") or "открытые справочники")
@@ -102,15 +104,20 @@ def card_html(entry):
         '<div style="margin-top:12px;padding:14px 16px;background:var(--card);'
         'border:1px solid var(--line);border-radius:var(--r);display:flex;align-items:flex-start;'
         'justify-content:space-between;gap:14px;flex-wrap:wrap">'
-        '<div style="min-width:240px">'
-        f'<b style="font-size:15px">{esc(entry["name"])}</b>'
-        + addr_line +
-        f'<div style="font-size:12px;color:var(--g2);margin-top:6px">источник: {source}</div>'
-        '</div>'
-        '<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">'
-        f'<a href="tel:{tel}" style="font-size:14.5px;font-weight:600;color:var(--tx);white-space:nowrap">{phone}</a>'
-        f'<a class="btn hot sm" href="tel:{tel}" style="white-space:nowrap">Позвонить</a>'
-        '</div>'
+          '<div style="min-width:240px">'
+            f'<b style="font-size:15px">{esc(entry["name"])}</b>'
+            + addr_line +
+            f'<div style="font-size:12px;color:var(--g2);margin-top:6px">источник: {source}</div>'
+          '</div>'
+          '<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">'
+            f'<a href="tel:{tel}" style="font-size:14.5px;font-weight:600;color:var(--tx);white-space:nowrap">{phone}</a>'
+            f'<a class="btn hot sm" href="tel:{tel}" style="white-space:nowrap">Позвонить</a>'
+          '</div>'
+          '<div style="flex-basis:100%;margin-top:2px">'
+            '<a href="landlord-register.html" style="font-size:12.5px;color:var(--or)">'
+              'Это ваш прокат? Подключитесь — разместим объявление бесплатно'
+            '</a>'
+          '</div>'
         '</div>'
     )
 
@@ -307,6 +314,7 @@ def build_page(city, entries, template, generated_slugs, cities, by_city, allow_
         "{{COUNT_LINE}}": count_line,
         "{{CARDS}}": cards,
         "{{NEIGHBORS}}": neighbors_html(city["slug"], cities, by_city, generated_slugs),
+        "{{CITY_CATALOG_URL}}": "catalog.html?city=" + urllib.parse.quote(city["name"]),
         "{{SOURCE_DATE}}": SOURCE_DATE,
     }
     for key, value in repl.items():
