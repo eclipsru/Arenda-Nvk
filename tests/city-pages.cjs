@@ -20,8 +20,10 @@ const ALIASES = path.join(ROOT, 'tools', 'city_aliases.json');
 
 function run() {
   assert.ok(fs.existsSync(CITY_DIR), 'нет папки city/ — сгенерировать: python3 tools/build_city_pages.py');
-  const files = fs.readdirSync(CITY_DIR).filter(f => f.endsWith('.html')).sort();
-  assert.ok(files.length > 0, 'в папке city/ нет страниц');
+  const allFiles = fs.readdirSync(CITY_DIR).filter(f => f.endsWith('.html')).sort();
+  assert.ok(allFiles.length > 0, 'в папке city/ нет страниц');
+  assert.ok(allFiles.includes('index.html'), 'нет страницы-хаба city/index.html — пересобрать: python3 tools/build_city_pages.py');
+  const files = allFiles.filter(f => f !== 'index.html');
 
   const snapshot = JSON.parse(fs.readFileSync(SNAPSHOT, 'utf8'));
   const aliasesRaw = JSON.parse(fs.readFileSync(ALIASES, 'utf8'));
@@ -114,8 +116,23 @@ function run() {
       `${file}: неожиданное значение robots («${robots[1]}») — допустимо index,follow или noindex,follow`);
   }
 
+  // --- страница-хаб: список городов со ссылками ---
+  const hub = fs.readFileSync(path.join(CITY_DIR, 'index.html'), 'utf8');
+  assert.match(hub, /Аренда инструмента — города России/, 'хаб: нет заголовка');
+  const hubLinks = new Set((hub.match(/href="city\/([a-z0-9-]+\.html)"/g) || [])
+    .map(s => s.replace('href="city/', '').replace('.html"', '')));
+  const missing = files.map(f => f.replace(/\.html$/, '')).filter(slug => !hubLinks.has(slug));
+  assert.equal(missing.length, 0,
+    `хаб: нет ссылок на города — ${missing.slice(0, 5).join(', ')}${missing.length > 5 ? ' и другие' : ''}. Пересобрать: python3 tools/build_city_pages.py`);
+  const hubRobots = hub.match(/<meta name="robots" content="([^"]+)">/);
+  assert.ok(hubRobots && /^(noindex|index),follow$/.test(hubRobots[1]), 'хаб: неожиданное значение robots');
+  for (const link of (hub.match(/(?:href|src)="([^"#:]+)\.(?:html|css|js|svg|png)(?:\?[^"]*)?"/g) || [])) {
+    const target = link.replace(/^(?:href|src)="/, '').replace(/"[^"]*$/, '').replace(/\?.*$/, '');
+    assert.ok(fs.existsSync(path.join(ROOT, target)), `хаб: ссылка на несуществующий файл «${target}»`);
+  }
+
   console.log(`Страницы городов в порядке: ${files.length} шт., контактов на них — ${checkedContacts}, ` +
-    'скрытые карточки не показываются, битых ссылок нет, чужих стилей нет.');
+    `хаб со ссылками на все ${files.length} городов, скрытые карточки не показываются, битых ссылок и чужих стилей нет.`);
 }
 
 try {
