@@ -161,6 +161,111 @@ def jsonld(city_name, slug, entries):
     return '<script type="application/ld+json">' + json.dumps(payload, ensure_ascii=False) + "</script>"
 
 
+def hub_page(targets, cities_by_slug, allow_index=False):
+    """Страница «Аренда инструмента в городах России» — список городов с данными."""
+    total_contacts = sum(len(e) for _, e in targets)
+    groups = {}
+    for city, entries in targets:
+        groups.setdefault(city["region"], []).append((city, entries))
+    order = ["Ростовская область", "Юг России", "Миллионники и крупные города РФ", "Другие города"]
+    names = sorted(groups, key=lambda r: (order.index(r) if r in order else len(order), r))
+
+    blocks = []
+    for region in names:
+        items = sorted(groups[region], key=lambda c: c[0]["name"])
+        links = "".join(
+            f'<a class="btn sec sm" href="city/{c["slug"]}.html">{esc(c["name"])}'
+            f'<span style="color:var(--g2);font-weight:400"> · {len(e)}</span></a>'
+            for c, e in items
+        )
+        blocks.append(
+            '<div class="sect" style="padding-top:10px">'
+            f'<div class="sect-h"><h2 style="font-size:17px">{esc(region)}</h2>'
+            f'<span style="font-size:13px;color:var(--g2)">{len(items)} '
+            f'{plural(len(items), "город", "города", "городов")}</span></div>'
+            f'<div style="display:flex;flex-wrap:wrap;gap:8px">{links}</div>'
+            "</div>"
+        )
+
+    robots = "index,follow" if allow_index else "noindex,follow"
+    jsonld_payload = {
+        "@context": "https://schema.org",
+        "@type": "CollectionPage",
+        "name": "Аренда инструмента в городах России",
+        "url": f"{SITE}/city/",
+    }
+    return f"""<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<base href="../">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Аренда инструмента в городах России — Ива</title>
+<meta name="description" content="Пункты проката инструмента в {len(targets)} городах России: телефоны, адреса, источники. Выберите город и позвоните напрямую.">
+<meta name="robots" content="{robots}">
+<meta name="theme-color" content="#101217">
+<link rel="canonical" href="{SITE}/city/">
+<link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="assets/theme.css?v=20260924-app-banner-v2">
+<link rel="stylesheet" href="assets/geo.css?v=20260923-photon">
+<script type="application/ld+json">{json.dumps(jsonld_payload, ensure_ascii=False)}</script>
+</head>
+<body>
+
+<div id="hdr"></div>
+
+<main class="page">
+  <div class="wrap">
+    <div class="sect" style="padding-bottom:0">
+      <nav aria-label="Хлебные крошки" style="font-size:12.5px;color:var(--g2);margin-bottom:10px">
+        <a href="index.html" style="color:var(--g2)">Главная</a> ·
+        <a href="catalog.html" style="color:var(--g2)">Каталог</a> ·
+        <span style="color:var(--gr)">Города</span>
+      </nav>
+      <div class="sect-h"><h2>Аренда инструмента — города России</h2></div>
+      <p style="color:var(--gr);font-size:14px;line-height:1.6;max-width:760px;margin:10px 0 0">
+        {len(targets)} {plural(len(targets), "город", "города", "городов")}, {total_contacts}
+        {plural(total_contacts, "пункт", "пункта", "пунктов")} проката с телефонами из открытых источников.
+        Выберите город — увидите пункты проката и сможете позвонить напрямую.
+      </p>
+    </div>
+    {"".join(blocks)}
+    <div class="sect">
+      <div style="display:grid;gap:12px;grid-template-columns:repeat(auto-fit,minmax(260px,1fr))">
+        <div style="padding:16px;background:var(--card);border:1px solid var(--line);border-radius:var(--r)">
+          <b style="font-size:15px">Вашего города нет в списке?</b>
+          <div style="font-size:13px;color:var(--gr);margin-top:6px;line-height:1.6">
+            Позвоните нам — добавим прокаты из вашего города.
+          </div>
+          <a class="btn sec sm" href="tel:+79081732475" style="margin-top:12px;display:inline-block">+7 (908) 173-24-75</a>
+        </div>
+        <div style="padding:16px;background:var(--card);border:1px solid var(--line);border-radius:var(--r)">
+          <b style="font-size:15px">Сдаёте инструмент?</b>
+          <div style="font-size:13px;color:var(--gr);margin-top:6px;line-height:1.6">
+            Разместите объявление бесплатно — его увидят в вашем городе.
+          </div>
+          <a class="btn hot sm" href="landlord-register.html" style="margin-top:12px;display:inline-block">Разместить объявление</a>
+        </div>
+      </div>
+    </div>
+  </div>
+</main>
+
+<div id="ftr"></div>
+<div id="bnav"></div>
+
+<script src="assets/data.js"></script>
+<script src="assets/geo.js?v=20260923-photon"></script>
+<script src="assets/email-guard.js?v=20260926-email"></script><script src="assets/sb.js?v=20260926-email"></script>
+<script src="assets/app.js?v=20260924-apk-1012"></script>
+<script>
+(function(){{ mountChrome('catalog', ''); }})();
+</script>
+</body>
+</html>
+"""
+
+
 def build_page(city, entries, template, generated_slugs, cities, by_city, allow_index=False):
     count = len(entries)
     title = f"Аренда инструмента — {city['name']} | Ива"
@@ -246,6 +351,7 @@ def main():
     pages = {}
     for city, entries in targets:
         pages[city["slug"]] = build_page(city, entries, template, generated_slugs, cities, by_city, allow_index)
+    pages["index"] = hub_page([(c, e) for c, e in targets if e], {c["slug"]: c for c, _ in targets}, allow_index)
 
     if check_only:
         problems = []
@@ -273,7 +379,8 @@ def main():
         written += 1
     with_entries = sum(1 for _, e in targets if e)
     mode = "отдаются в поиск" if allow_index else "пока не отдаются в поиск (приёмка)"
-    print(f"Готово страниц: {written} (с контактами: {with_entries}, пустых с noindex: {written - with_entries}); режим: {mode}")
+    print(f"Готово страниц городов: {written - 1} (с контактами: {with_entries}); "
+          f"плюс страница-хаб city/index.html; режим: {mode}")
     if written <= 12:
         for city, entries in targets:
             print(f"   {city['name']}: {len(entries)}")
