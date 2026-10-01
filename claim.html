@@ -145,7 +145,7 @@
       return;
     }
 
-    h += '<div class="timer-box">⚡ <b>0% комиссии на этот заказ!</b> Заберите прямой контакт клиента и закройте сделку самостоятельно. Заказ доступен первому подтвердившему.</div>';
+    h += '<div class="timer-box">⚡ <b>Комиссия площадки — 1% от суммы аренды.</b> Заберите прямой контакт клиента и закройте сделку самостоятельно. Заказ доступен первому подтвердившему.</div>';
     
     h += '<form id="claimForm" style="margin-top:20px">' +
       '<div class="f-grp" style="margin-bottom:12px">' +
@@ -156,7 +156,7 @@
         '<label style="display:block;font-size:13px;color:var(--g2);margin-bottom:5px">Контактный телефон (для связи диспетчера):</label>' +
         '<input type="tel" id="renterPhone" class="f-inp" placeholder="+7 9XX XXX-XX-XX" required style="width:100%">' +
       '</div>' +
-      '<button type="submit" class="claim-btn">👉 Забрать контакт клиента бесплатно</button>' +
+      '<button type="submit" class="claim-btn">👉 Забрать контакт клиента</button>' +
       '</form>';
 
     root.innerHTML = h;
@@ -203,7 +203,7 @@
       } catch(err) {
         alert('Ошибка закрепления заказа: ' + err.message);
         btn.disabled = false;
-        btn.textContent = '👉 Забрать контакт клиента бесплатно';
+        btn.textContent = '👉 Забрать контакт клиента';
       }
     });
 

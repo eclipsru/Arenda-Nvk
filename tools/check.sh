@@ -62,7 +62,7 @@ head_ "3. Релиз приложения (app-update.json ↔ APK ↔ этал�
 if node tools/check-release.js; then ok "релиз приложения согласован"; else bad "см. замечания выше"; fi
 
 head_ "4. Статические тесты (без браузера)"
-for t in syntax-and-release email-guard cities-sync directory-import city-pages city-priority py-compat empty-states p4-personal-data; do
+for t in syntax-and-release email-guard cities-sync directory-import city-pages city-priority py-compat empty-states p4-personal-data p6-commission; do
   if node "tests/$t.cjs" >"/tmp/iva-test-$t.log" 2>&1; then ok "tests/$t.cjs"
   else bad "tests/$t.cjs"; tail -6 "/tmp/iva-test-$t.log" | sed 's/^/      /'; fi
 done
