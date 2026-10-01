@@ -70,7 +70,8 @@ def load_existing():
 
 def refresh_snapshot():
     """Снимок из базы (только чтение, публичный ключ)."""
-    url = f"{SUPABASE_URL}/rest/v1/directory_landlords?select=phone,city,name&order=created_at.asc&limit=2000"
+    url = (f"{SUPABASE_URL}/rest/v1/directory_landlords"
+           "?select=phone,city,name,status,source,address&order=created_at.asc&limit=2000")
     req = urllib.request.Request(url, headers={"apikey": SUPABASE_KEY, "Authorization": f"Bearer {SUPABASE_KEY}"})
     with urllib.request.urlopen(req, timeout=30) as r:
         rows = json.load(r)
@@ -79,7 +80,9 @@ def refresh_snapshot():
                  "Обновлять командой: python3 tools/build_directory_import.py --snapshot",
         "taken_at": __import__("datetime").date.today().isoformat(),
         "count": len(rows),
-        "rows": [{"phone": r["phone"], "city": r["city"], "name": r["name"]} for r in rows],
+        "rows": [{"phone": r["phone"], "city": r["city"], "name": r["name"],
+                  "status": r.get("status", "new"), "source": r.get("source", ""),
+                  "address": r.get("address", "")} for r in rows],
     }
     with open(EXISTING_JSON, "w", encoding="utf-8") as f:
         json.dump(payload, f, ensure_ascii=False, indent=1)
