@@ -389,13 +389,80 @@ function footHTML(){
         '<a href="account.html">Личный кабинет</a>' +
         '<a href="city/index.html">Города и прокаты</a></div>' +
       '<div><b>Контакты</b>' +
-        '<a href="tel:+79081732475">+7 (908) 173-24-75</a>' +
+        '<a href="tel:' + IVA_PHONE_TEL + '">' + IVA_PHONE_SHOW + '</a>' +
         '<span>Новочеркасск, ул. Маресьева, 36</span>' +
         '<span>Ежедневно 8:00–20:00</span></div>' +
     '</div>' +
     '<div class="small">© ' + new Date().getFullYear() + ' Ива — Инструмент в аренду. ' +
       'Витрина работает на демонстрационных данных.</div>' +
   '</div></footer>';
+}
+
+/* ===========================================================
+   «Ничего не нашлось» — куда идти дальше (этап П4: пустые состояния).
+
+   Раньше пустой результат поиска был тупиком: «измените фильтры» — и всё.
+   Человек, которому инструмент нужен сегодня, закрывал страницу. Теперь рядом
+   с просьбой поменять фильтры есть три честных пути:
+     • пункты проката в его городе (справочник, страница города);
+     • звонок нам — уточним наличие, цену и залог;
+     • размещение своего инструмента (для арендодателя).
+
+   Карта городов берётся из assets/city-pages.js, который генерирует
+   tools/build_city_pages.py вместе со страницами городов. Второго списка
+   городов не появляется — это главный источник расхождений, за ним следит
+   tests/cities-sync.cjs.
+
+   Никаких выдуманных обещаний: говорим только про адреса пунктов из
+   справочника и про помощь с подбором. Наличие и цену не обещаем.
+   =========================================================== */
+const IVA_PHONE_TEL = '+79081732475';
+const IVA_PHONE_SHOW = '+7 (908) 173-24-75';
+
+/* Что известно про город: ссылка на страницу пунктов и число пунктов. */
+function cityPageInfo(city){
+  var map = (typeof window !== 'undefined' && window.IvaCityPages && window.IvaCityPages.cities) || {};
+  var name = String(city == null ? '' : city).trim();
+  return (name && map[name]) || null;
+}
+
+/* Страница города, если она есть; иначе общий список городов. */
+function cityPageHref(city){
+  var info = cityPageInfo(city);
+  return info && info.slug ? 'city/' + info.slug + '.html' : 'city/index.html';
+}
+
+function cityPageLabel(city){
+  var info = cityPageInfo(city);
+  if (!info) return 'Пункты проката в городах России';
+  if (!info.points) return 'Пункты проката в городе «' + esc(city) + '»';
+  return 'Пункты проката в городе «' + esc(city) + '» — ' + info.points + ' ' +
+    plural(info.points, 'адрес', 'адреса', 'адресов');
+}
+
+/* Разметка пустого результата поиска/фильтра. opts: { city, resetId } */
+function noResultsHTML(opts){
+  var o = opts || {};
+  var resetId = o.resetId || 'eReset';
+  var text = o.city
+    ? 'В городе «' + esc(o.city) + '» нет объявлений по выбранным условиям. ' +
+      'Измените фильтры или выберите другой город.'
+    : 'По выбранным условиям объявлений нет. Измените фильтры или выберите другой город.';
+  return '<div class="empty" style="grid-column:1/-1">' +
+    '<svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>' +
+    '<b>Ничего не нашлось</b>' +
+    '<p>' + text + '</p>' +
+    '<button class="btn sec" id="' + resetId + '">Сбросить фильтры</button>' +
+    '<div style="margin:22px auto 0;padding-top:16px;border-top:1px solid var(--line);max-width:340px">' +
+      '<b style="font-size:14px;margin-bottom:10px">Не нашли нужный инструмент?</b>' +
+      '<a href="' + cityPageHref(o.city) + '" style="display:block;font-size:13.5px;margin-bottom:7px">' +
+        cityPageLabel(o.city) + '</a>' +
+      '<a href="tel:' + IVA_PHONE_TEL + '" style="display:block;font-size:13.5px;margin-bottom:7px">' +
+        'Позвоните — уточним наличие и цену: ' + IVA_PHONE_SHOW + '</a>' +
+      '<a href="landlord-register.html" style="display:block;font-size:13.5px;color:var(--or)">' +
+        'У вас есть инструмент? Сдайте в аренду — бесплатно</a>' +
+    '</div>' +
+  '</div>';
 }
 
 /* ---------- Шторка выбора города ---------- */

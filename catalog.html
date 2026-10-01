@@ -57,7 +57,8 @@
 <script src="assets/data.js"></script>
 <script src="assets/geo.js?v=20260923-photon"></script>
 <script src="assets/sb.js?v=20260923-photon"></script>
-<script src="assets/app.js?v=20261001-cities"></script>
+<script src="assets/city-pages.js?v=20261001-empty"></script>
+<script src="assets/app.js?v=20261001-empty"></script>
 <script>
 (function(){
 
@@ -254,14 +255,8 @@
     $('fMobN').classList.toggle('hide', !n);
 
     if (!list.length){
-      $('grid').innerHTML =
-        '<div class="empty" style="grid-column:1/-1">' +
-          '<svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>' +
-          '<b>Ничего не нашлось</b>' +
-          '<p>' + (F.city ? 'В городе «' + esc(F.city) + '» нет объявлений по выбранным условиям. ' :
-             'По выбранным условиям объявлений нет. ') + 'Измените фильтры или выберите другой город.</p>' +
-          '<button class="btn sec" id="eReset">Сбросить фильтры</button>' +
-        '</div>';
+      /* Разметка — общая (assets/app.js): пустое состояние не тупик, а развилка. */
+      $('grid').innerHTML = noResultsHTML({ city: F.city });
       var er = $('eReset');
       if (er) er.addEventListener('click', function(){
         setCity('',true);

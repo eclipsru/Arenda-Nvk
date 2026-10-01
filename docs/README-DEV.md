@@ -22,6 +22,9 @@ bash tools/check.sh          # или: npm run check
 npm install
 npx playwright install chromium
 ```
+Без браузера проверка не врёт: браузерные тесты показываются как **пропущенные**, а не как ошибки.
+Часть проверок (`tests/empty-states.cjs`) работает в DOM без браузера — для неё нужен только
+`npm install` (ставится `jsdom`); если `jsdom` не установлен, эта часть честно пропускается.
 
 ## 2. Снимок состояния (перед этапом и после)
 
@@ -79,11 +82,15 @@ tools/backup-windows.ps1         бэкап базы Supabase (Windows, PowerShe
 tools/backup-api-windows.ps1     выгрузка данных через API без pg_dump (Windows) — см. docs/BACKUP-SUPABASE.md
 tools/schema-dump.sql            запрос для SQL-редактора Supabase: структура базы одним текстом
 tools/rotate-keystore-windows.ps1 смена пароля ключа подписи (Windows) — см. docs/KEYSTORE-PASSWORD-ROTATION.md
+tools/build_city_pages.py        генератор страниц городов + карты assets/city-pages.js
 tools/real_bases.csv             115 реальных прокатов (44 города)
 tools/seed_real_bases.py         заливка справочника (см. задачу П2 — объединить с корневым скриптом)
 docs/BACKUP-SUPABASE.md          бэкап базы: портативный pg_dump, схема через SQL-редактор, выгрузка данных через API
 docs/KEYSTORE-PASSWORD-ROTATION.md  смена пароля ключа подписи без смены сертификата
 docs/ЖУРНАЛ.md                   журнал этапов, точек отката и решений владельца
+assets/city-pages.js             карта «город → страница пунктов» (генерируется, руками не править)
+tests/py-compat.cjs              сторож: Python-скрипты читаются на любой версии (f-строки)
+tests/empty-states.cjs           сторож: карта городов и пустые состояния поиска (нужен jsdom)
 backup-<дата>/                   локальные бэкапы (в репозиторий не попадают)
 .snapshots/                      локальные снимки и скриншоты (в репозиторий не попадают)
 ```
