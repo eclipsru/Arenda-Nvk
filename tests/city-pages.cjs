@@ -5,7 +5,10 @@
 //   • не содержат незаполненных мест шаблона и битых ссылок на файлы проекта;
 //   • не показывают карточки, скрытые по просьбе владельца точки (hidden/declined);
 //   • имеют корректные заголовок, описание, canonical и микроразметку (JSON-LD);
-//   • пока идут на приёмку — закрыты от поиска (noindex), пока не передан флаг --index.
+//   • открыты для поиска (решение владельца 01.10.2026) и присутствуют в карте сайта;
+//     закрыть обратно можно только осознанно — флагом --noindex и правкой этого сторожа;
+//   • телефоны пунктов проката НЕ публикуются (решение владельца, вариант 5): на странице
+//     допустим только наш телефон, через который идёт заявка на подбор.
 //
 // Запуск: node tests/city-pages.cjs
 const fs = require('node:fs');
@@ -74,10 +77,27 @@ function run() {
     assert.ok(itemList, `${file}: в микроразметке нет списка организаций`);
 
     // 5. Число контактов совпадает со снимком базы.
-    //    Считаем именно карточки: у каждой ровно одна кнопка «Позвонить»
-    //    (ссылка «позвоните нам» в пояснении — это не карточка).
-    const cardsCount = (html.match(/>Позвонить<\/a>/g) || []).length;
-    const phonesInHtml = new Set((html.match(/href="tel:(\+7\d{10})"/g) || []).map(s => s.replace(/\D/g, '').slice(-10)));
+    //    Считаем именно карточки — по метке data-prokat-card (одна карточка = один пункт).
+    const cardsCount = (html.match(/data-prokat-card="1"/g) || []).length;
+    const phonesInHtml = new Set((html.match(/href="tel:(\+?\d+)"/g) || []).map(s => s.replace(/\D/g, '').slice(-10)));
+    // 5а. Телефоны пунктов не публикуются: любой tel:-номер на странице — только наш.
+    const OUR = '9081732475';
+    for (const num of phonesInHtml) {
+      assert.equal(num, OUR,
+        `${file}: на странице телефон пункта проката (${num}) — по решению владельца телефоны пунктов ` +
+        'не публикуются, вместо них кнопка «Узнать наличие и цену». Собрать заново: python3 tools/build_city_pages.py');
+    }
+    const leadButtons = (html.match(/href="tel:\+79081732475" data-lead="1"/g) || []).length;
+    assert.ok(leadButtons >= cardsCount,
+      `${file}: у пунктов нет пути к заявке: карточек ${cardsCount}, кнопок «Узнать наличие и цену» — ${leadButtons}`);
+    // Цифры телефонов пунктов не должны встречаться и в тексте страницы
+    const digitsOnly = html.replace(/\D/g, '');
+    for (const row of snapshot.rows) {
+      const p10 = String(row.phone).replace(/\D/g, '').slice(-10);
+      assert.ok(!digitsOnly.includes(p10),
+        `${file}: в тексте страницы остался телефон пункта проката (${p10}) — публиковать нельзя`);
+    }
+
     assert.equal(itemList.itemListElement.length, cardsCount,
       `${file}: карточек с кнопкой «Позвонить» — ${cardsCount}, организаций в разметке — ${itemList.itemListElement.length}`);
     assert.equal(cardsCount, byCity.get(cityName) || 0,
@@ -97,13 +117,13 @@ function run() {
     assert.match(html, /пока не подключены к «Иве»/,
       `${file}: нет пояснения, что пункты справочника не подключены (заказ возможен только у объявлений)`);
 
-    // 6. Ни одного скрытого контакта (по телефонам из снимка)
+    // 6. Ни одного скрытого контакта: ни названия, ни телефона скрытой карточки на странице нет
     for (const row of snapshot.rows) {
       const status = row.status || 'new';
       if (status !== 'hidden' && status !== 'declined') continue;
-      const p10 = String(row.phone).replace(/\D/g, '').slice(-10);
-      assert.ok(!phonesInHtml.has(p10),
-        `${file}: на странице есть скрытая карточка (${p10}) — недопустимо`);
+      const name = String(row.name || '').trim();
+      assert.ok(!name || !html.includes(name),
+        `${file}: на странице есть скрытая карточка «${name}» — недопустимо`);
     }
 
     // 7. Ссылки на файлы проекта существуют
@@ -121,11 +141,13 @@ function run() {
         `${file}: подключается посторонний файл стилей — дизайн менять нельзя: ${link}`);
     }
 
-    // 9. Приёмка: пока страницы закрыты от поиска
+    // 9. Открыто для поиска (решение владельца). Закрыть обратно — флаг --noindex,
+    //    но тогда этот сторож должен упасть: значит, решение отменяется осознанно.
     const robots = html.match(/<meta name="robots" content="([^"]+)">/);
     assert.ok(robots, `${file}: нет указания для поисковых систем`);
-    assert.ok(/^(noindex|index),follow$/.test(robots[1]),
-      `${file}: неожиданное значение robots («${robots[1]}») — допустимо index,follow или noindex,follow`);
+    assert.equal(robots[1], 'index,follow',
+      `${file}: страницы городов должны быть открыты для поиска (сейчас «${robots[1]}»). ` +
+      'Пересобрать: python3 tools/build_city_pages.py (закрыть обратно можно только осознанно: --noindex)');
   }
 
   // --- страница-хаб: список городов со ссылками ---
@@ -137,7 +159,25 @@ function run() {
   assert.equal(missing.length, 0,
     `хаб: нет ссылок на города — ${missing.slice(0, 5).join(', ')}${missing.length > 5 ? ' и другие' : ''}. Пересобрать: python3 tools/build_city_pages.py`);
   const hubRobots = hub.match(/<meta name="robots" content="([^"]+)">/);
-  assert.ok(hubRobots && /^(noindex|index),follow$/.test(hubRobots[1]), 'хаб: неожиданное значение robots');
+  assert.equal(hubRobots && hubRobots[1], 'index,follow', 'хаб: должен быть открыт для поиска');
+
+  // --- карта сайта: все страницы городов и хаб должны быть в sitemap.xml ---
+  const sitemapPath = path.join(ROOT, 'sitemap.xml');
+  assert.ok(fs.existsSync(sitemapPath), 'нет sitemap.xml — пересобрать: python3 tools/build_city_pages.py');
+  const sitemap = fs.readFileSync(sitemapPath, 'utf8');
+  assert.ok(sitemap.includes('https://eclipsru.github.io/Arenda-Nvk/city/'),
+    'sitemap.xml: нет страницы-хаба городов');
+  const missingInMap = files.map(f => f).filter(f => !sitemap.includes('/city/' + f));
+  assert.equal(missingInMap.length, 0,
+    `sitemap.xml: нет ${missingInMap.length} страниц городов (например, ${missingInMap.slice(0, 3).join(', ')}). ` +
+    'Пересобрать: python3 tools/build_city_pages.py');
+  const dupes = (sitemap.match(/<loc>[^<]+<\/loc>/g) || []);
+  assert.equal(new Set(dupes).size, dupes.length, 'sitemap.xml: есть повторяющиеся адреса');
+
+  // --- подвал сайта ведёт на список городов (чтобы поисковики и люди его находили) ---
+  const appJs = fs.readFileSync(path.join(ROOT, 'assets', 'app.js'), 'utf8');
+  assert.match(appJs, /href="city\/index\.html"/,
+    'в подвале сайта нет ссылки на список городов — страницы городов будут плохо находиться');
   for (const link of (hub.match(/(?:href|src)="([^"#:]+)\.(?:html|css|js|svg|png)(?:\?[^"]*)?"/g) || [])) {
     const target = link.replace(/^(?:href|src)="/, '').replace(/"[^"]*$/, '').replace(/\?.*$/, '');
     assert.ok(fs.existsSync(path.join(ROOT, target)), `хаб: ссылка на несуществующий файл «${target}»`);

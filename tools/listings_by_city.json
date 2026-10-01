@@ -1,0 +1,6 @@
+{
+ "_note": "Сколько активных объявлений арендодателей по городам. Обновлять: python3 tools/build_city_pages.py --refresh-listings",
+ "taken_at": "2026-10-01",
+ "total": 0,
+ "by_city": {}
+}

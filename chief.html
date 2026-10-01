@@ -95,7 +95,7 @@
 <script src="assets/data.js"></script>
 <script src="assets/geo.js?v=20260923-photon"></script>
 <script src="assets/email-guard.js?v=20260926-email"></script><script src="assets/sb.js?v=20260926-email"></script>
-<script src="assets/app.js?v=20260924-apk-1012"></script>
+<script src="assets/app.js?v=20261001-cities"></script>
 <script src="assets/partners.js?v=20260923-info-spacing"></script>
 <script>
 (function(){
@@ -208,8 +208,67 @@
           '<div class="sub">всего ' + D.admins.length + '</div></div>' +
       '</div>' +
 
+      clicksPanel() +
+
       '<div class="sect-h" style="margin-top:10px"><h2 style="font-size:17px">По арендодателям</h2></div>' +
       admTable(true);
+  }
+
+  /* ---------- Обращения со страниц городов (счётчик звонков) ---------- */
+  // 79081732475 -> +7 (908) 173-24-75 (для отчёта; сами цифры в базе не меняются)
+  function fmtPhone(digits){
+    const d = String(digits || '').replace(/\D/g, '');
+    if (d.length === 11 && d[0] === '7') return '+7 (' + d.slice(1,4) + ') ' + d.slice(4,7) + '-' + d.slice(7,9) + '-' + d.slice(9,11);
+    if (d.length === 10) return '+7 (' + d.slice(0,3) + ') ' + d.slice(3,6) + '-' + d.slice(6,8) + '-' + d.slice(8,10);
+    return '+7 ' + d;
+  }
+
+  function clicksPanel(){
+    const rows = D.clicks || [];
+    if (D.clicksError){
+      return '<div class="sect-h" style="margin-top:10px"><h2 style="font-size:17px">Обращения со страниц городов</h2></div>' +
+        '<div class="empty" style="padding:18px">Счётчик ещё не включён: в базе нет таблицы обращений. ' +
+        'Выполните файл <b>supabase/migrations/20261001_directory_clicks.sql</b> в разделе SQL Editor — ' +
+        'и здесь появятся цифры: сколько раз звонили в пункты проката и сколько человек позвали нас.</div>';
+    }
+    const from = Date.now() - 30 * 24 * 60 * 60 * 1000;
+    const recent = rows.filter(function(r){ return new Date(r.day + 'T00:00:00').getTime() >= from; });
+    const sum = function(kind){ return recent.reduce(function(a,r){ return a + (r.kind === kind ? Number(r.cnt) || 0 : 0); }, 0); };
+    const calls = sum('call'), leads = sum('lead'), views = sum('view');
+
+    // Топ пунктов по звонкам за 30 дней
+    const byPhone = {};
+    recent.forEach(function(r){
+      if (r.kind !== 'call' || !r.phone) return;
+      const key = r.phone;
+      byPhone[key] = byPhone[key] || { phone: key, city: r.city, n: 0 };
+      byPhone[key].n += Number(r.cnt) || 0;
+    });
+    const top = Object.keys(byPhone).map(function(k){ return byPhone[k]; })
+      .sort(function(a,b){ return b.n - a.n; }).slice(0, 8);
+    const topHtml = top.length
+      ? '<table><thead><tr><th>Телефон</th><th>Город</th><th class="num">Звонков</th></tr></thead><tbody>' +
+        top.map(function(t){
+          return '<tr><td><b>' + esc(fmtPhone(t.phone)) + '</b></td><td>' + esc(t.city || '—') +
+            '</td><td class="num">' + t.n + '</td></tr>';
+        }).join('') + '</tbody></table>'
+      : '<div class="empty" style="padding:14px">За 30 дней звонков ещё не было. Как только пойдут — ' +
+        'здесь появится список пунктов, по которым звонят чаще всего. Это готовый аргумент в разговоре с прокатом: ' +
+        '«по вам звонили N раз».</div>';
+
+    return '<div class="sect-h" style="margin-top:10px">' +
+        '<h2 style="font-size:17px">Обращения со страниц городов</h2>' +
+        '<span class="cnt">за 30 дней · без персональных данных</span></div>' +
+      '<div class="kpis">' +
+        '<div class="kpi"><div class="lb">Звонки в пункты проката</div><div class="vl">' + calls + '</div>' +
+          '<div class="sub">со страниц городов</div></div>' +
+        '<div class="kpi good"><div class="lb">Обращения к нам</div><div class="vl">' + leads + '</div>' +
+          '<div class="sub">«Не подобрали инструмент?»</div></div>' +
+        '<div class="kpi"><div class="lb">Показы страниц</div><div class="vl">' + views + '</div>' +
+          '<div class="sub">откуда были звонки</div></div>' +
+      '</div>' + topHtml +
+      '<p class="small muted" style="margin-top:8px">Считаем без Метрики и без сбора данных о людях: ' +
+        'сохраняются только номер пункта, город, страница и время. Данные видны только вам.</p>';
   }
 
   /* ---------- Таблица арендодателей ---------- */
@@ -1096,6 +1155,12 @@
       if (D.cats.length) CATS = D.cats;
       D.stats = moneyStats(D.parts, D.fees);
       try { D.unread = await unreadCount(); } catch(e){ D.unread = 0; }
+      // Обращения со страниц городов (счётчик звонков). Если таблица ещё не создана —
+      // кабинет работает как обычно, в сводке будет прочерк.
+      try {
+        D.clicks = await api('/rest/v1/directory_click_stats?select=*&order=day.desc&limit=3000') || [];
+        D.clicksError = '';
+      } catch(e){ D.clicks = []; D.clicksError = e.message; }
       try { D.landlordApps=await loadLandlordApplications(); } catch(err){D.landlordError=err.message;}
       render();
     } catch(e){

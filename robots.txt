@@ -3,5 +3,12 @@ Allow: /
 Disallow: /admin.html
 Disallow: /cabinet.html
 Disallow: /kabinet.html
+Disallow: /chief.html
+
+# Служебные папки проекта — не для поиска
+Disallow: /tools/
+Disallow: /tests/
+Disallow: /supabase/
+Disallow: /docs/
 
 Sitemap: https://eclipsru.github.io/Arenda-Nvk/sitemap.xml
