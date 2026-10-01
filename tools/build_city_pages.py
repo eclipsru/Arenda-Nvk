@@ -25,6 +25,7 @@ import os
 import re
 import sys
 import urllib.parse
+import urllib.request
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -35,8 +36,13 @@ with open(os.path.join(ROOT, "tools", "city_aliases.json"), encoding="utf-8") as
 CITIES_JSON = os.path.join(ROOT, "tools", "cities.json")
 EXISTING_JSON = os.path.join(ROOT, "tools", "directory_existing.json")
 TEMPLATE = os.path.join(ROOT, "tools", "city_template.html")
-OUT_DIR = os.path.join(ROOT, "city")
+# Куда писать страницы (переопределяется для проверок: IVA_OUT=/tmp/...)
+OUT_DIR = os.environ.get("IVA_OUT") or os.path.join(ROOT, "city")
 SITE = "https://eclipsru.github.io/Arenda-Nvk"
+LISTINGS_JSON = os.environ.get("IVA_LISTINGS") or os.path.join(ROOT, "tools", "listings_by_city.json")
+# Публичные значения (те же, что в коде сайта assets/sb.js). Только чтение.
+SUPABASE_URL = "https://wdxdeatphizclskfmfxi.supabase.co"
+SUPABASE_KEY = "sb_publishable_dtRaEHNNPBFbHFvg8hw9iA_FqJSz9BE"
 SOURCE_DATE = "26.09.2026"
 LANGLE = {"new": "новая", "verified": "проверена"}
 
@@ -78,6 +84,42 @@ def load():
     with open(EXISTING_JSON, encoding="utf-8") as f:
         snapshot = json.load(f)
     return cities, snapshot
+
+
+def refresh_listings():
+    """Сколько активных объявлений арендодателей по городам (только чтение).
+
+    Город объявления — поле pickup_city (так же считает и сайт в assets/sb.js)."""
+    url = (f"{SUPABASE_URL}/rest/v1/tools"
+           "?select=id,name,pickup_city,delivery&status=eq.active&active=eq.true&limit=1000")
+    req = urllib.request.Request(url, headers={"apikey": SUPABASE_KEY,
+                                               "Authorization": f"Bearer {SUPABASE_KEY}"})
+    with urllib.request.urlopen(req, timeout=30) as r:
+        rows = json.load(r)
+    by_city = {}
+    for row in rows:
+        city = (row.get("pickup_city") or "").strip()
+        if not city:
+            continue
+        by_city[city] = by_city.get(city, 0) + 1
+    payload = {
+        "_note": "Сколько активных объявлений арендодателей по городам. Обновлять: "
+                 "python3 tools/build_city_pages.py --refresh-listings",
+        "taken_at": __import__("datetime").date.today().isoformat(),
+        "total": len(rows),
+        "by_city": by_city,
+    }
+    with open(LISTINGS_JSON, "w", encoding="utf-8") as f:
+        json.dump(payload, f, ensure_ascii=False, indent=1)
+    print(f"Объявления арендодателей: всего {len(rows)}, городов с объявлениями — {len(by_city)}")
+    return payload
+
+
+def load_listings():
+    if not os.path.exists(LISTINGS_JSON):
+        return {"total": 0, "by_city": {}, "taken_at": ""}
+    with open(LISTINGS_JSON, encoding="utf-8") as f:
+        return json.load(f)
 
 
 def directory_by_city(snapshot):
@@ -273,7 +315,109 @@ def hub_page(targets, cities_by_slug, allow_index=False):
 """
 
 
-def build_page(city, entries, template, generated_slugs, cities, by_city, allow_index=False):
+def partners_block(city, listings_count, catalog_url):
+    """Блок про объявления арендодателей — вверху страницы, выше справочника.**
+
+    Логика приоритета: если в городе уже есть объявления «Ивы», человек сначала
+    попадает к ним. Если их нет — честно говорим об этом и предлагаем два пути:
+    сдать инструмент (для владельцев) или попросить помощь (для искателей).
+    """
+    if listings_count > 0:
+        return (
+            '<div style="margin-top:16px;padding:16px;background:var(--card);border:1px solid var(--or);'
+            'border-radius:var(--r);display:flex;align-items:center;justify-content:space-between;'
+            'gap:14px;flex-wrap:wrap">'
+              '<div style="min-width:260px">'
+                '<b style="font-size:15px">Инструмент от арендодателей «Ивы»</b>'
+                f'<div style="font-size:13px;color:var(--gr);margin-top:6px;line-height:1.6">'
+                  f'В этом городе уже {listings_count} '
+                  f'{plural(listings_count, "объявление", "объявления", "объявлений")} — с фото, '
+                  'ценой за сутки, залогом и доставкой. Смотрите их первыми.'
+                '</div>'
+              '</div>'
+              f'<a class="btn hot sm" href="{catalog_url}" style="white-space:nowrap">Смотреть объявления</a>'
+            '</div>'
+        )
+    return (
+        '<div style="margin-top:16px;padding:16px;background:var(--card);border:1px solid var(--line);'
+        'border-radius:var(--r);display:flex;align-items:center;justify-content:space-between;'
+        'gap:14px;flex-wrap:wrap">'
+          '<div style="min-width:260px">'
+            '<b style="font-size:15px">Объявлений арендодателей здесь пока нет</b>'
+            '<div style="font-size:13px;color:var(--gr);margin-top:6px;line-height:1.6">'
+              'Ниже — справочник пунктов проката (они не подключены к «Иве»). '
+              'Если сдаёте инструмент — разместите объявление, это бесплатно.'
+            '</div>'
+          '</div>'
+          '<div style="display:flex;gap:8px;flex-wrap:wrap">'
+            f'<a class="btn sec sm" href="{catalog_url}" style="white-space:nowrap">Каталог</a>'
+            '<a class="btn hot sm" href="landlord-register.html" style="white-space:nowrap">Сдать инструмент</a>'
+          '</div>'
+        '</div>'
+    )
+
+
+def directory_block(city, entries, collapse):
+    """Справочник пунктов проката.
+
+    Когда у города есть объявления «Ивы», справочник свёрнут в раскрывающийся
+    блок (приоритет объявлениям), но остаётся в тексте страницы — и для людей,
+    которые хотят позвонить, и для поисковых систем.
+    """
+    count = len(entries)
+    if not entries:
+        cards = (
+            '<div style="margin-top:12px;padding:16px;background:var(--card);border:1px solid var(--line);'
+            'border-radius:var(--r);font-size:13.5px;color:var(--gr)">'
+            'Знаете прокат в этом городе? Позвоните нам — добавим: '
+            '<a href="tel:+79081732475" data-lead="1" style="color:var(--or)">+7 (908) 173-24-75</a>.'
+            '</div>'
+        )
+    else:
+        cards = "".join(card_html(e) for e in entries)
+
+    count_line = (f'{count} {plural(count, "пункт", "пункта", "пунктов")}'
+                  if count else "данных пока нет")
+    head = (
+        '<div class="sect-h">'
+          f'<h2{" style=\"font-size:17px\"" if collapse else ""}>Пункты проката в городе</h2>'
+          f'<span style="font-size:13px;color:var(--g2)">{count_line}</span>'
+        '</div>'
+        '<p style="font-size:13px;color:var(--g2);line-height:1.6;margin:8px 0 0;max-width:820px">'
+          'Это справочник: пункты ниже пока не подключены к «Иве», поэтому заказ здесь не оформить — '
+          'наличие, цену и залог уточняйте звонком.'
+        '</p>'
+    )
+    tail = (
+        f'<p style="font-size:12.5px;color:var(--g2);line-height:1.6;margin-top:16px;max-width:760px">'
+        f'Данные — из открытых источников (сайты прокатов и справочники), собраны {SOURCE_DATE} '
+        'и постепенно проверяются. Наличие и цену уточняйте по телефону. Если вы владелец точки '
+        'и хотите исправить или убрать данные — позвоните нам: '
+        '<a href="tel:+79081732475" data-lead="1" style="color:var(--or)">+7 (908) 173-24-75</a>.'
+        '</p>'
+        '<div style="margin-top:10px">'
+        '<a href="landlord-register.html" style="font-size:12.5px;color:var(--or)">'
+        'Добавить свой инструмент в объявления — бесплатно</a>'
+        '</div>'
+    )
+
+    if collapse and entries:
+        return (
+            '<div class="sect">'
+            + head +
+            '<details style="margin-top:10px">'
+              '<summary style="cursor:pointer;font-size:14px;color:var(--or);padding:6px 0">'
+                f'Показать справочник ({count} {plural(count, "пункт", "пункта", "пунктов")}, не подключены к «Иве»)'
+              '</summary>'
+            + cards + tail +
+            '</details>'
+            '</div>'
+        )
+    return '<div class="sect">' + head + cards + tail + '</div>'
+
+
+def build_page(city, entries, template, generated_slugs, cities, by_city, allow_index=False,
+               listings=None):
     count = len(entries)
     title = f"Аренда инструмента — {city['name']} | Ива"
     if count:
@@ -302,20 +446,23 @@ def build_page(city, entries, template, generated_slugs, cities, by_city, allow_
             '</div>'
         )
 
+    listings = listings or {}
+    listings_count = int(listings.get(city["name"], 0))
+    catalog_url = "catalog.html?city=" + urllib.parse.quote(city["name"])
+
     html = template
     repl = {
         "{{TITLE}}": esc(title),
+        "{{PARTNERS_BLOCK}}": partners_block(city, listings_count, catalog_url),
+        "{{DIRECTORY}}": directory_block(city, entries, collapse=listings_count > 0),
+        "{{CITY_JS}}": city["name"].replace("\\", "\\\\").replace("'", "\\'"),
         "{{DESCRIPTION}}": esc(description),
         "{{ROBOTS}}": robots,
         "{{CANONICAL}}": f"{SITE}/city/{city['slug']}.html",
         "{{JSONLD}}": jsonld(city["name"], city["slug"], entries),
         "{{CITY}}": esc(city["name"]),
         "{{LEAD}}": lead,
-        "{{COUNT_LINE}}": count_line,
-        "{{CARDS}}": cards,
         "{{NEIGHBORS}}": neighbors_html(city["slug"], cities, by_city, generated_slugs),
-        "{{CITY_CATALOG_URL}}": "catalog.html?city=" + urllib.parse.quote(city["name"]),
-        "{{SOURCE_DATE}}": SOURCE_DATE,
     }
     for key, value in repl.items():
         html = html.replace(key, value)
@@ -336,6 +483,8 @@ def main():
             only = {s.strip() for s in value.split(",") if s.strip()}
 
     cities, snapshot = load()
+    listings_data = refresh_listings() if "--refresh-listings" in sys.argv else load_listings()
+    by_city_listings = listings_data.get("by_city", {})
     by_city = directory_by_city(snapshot)
     # В справочнике есть города, которых нет в списке сайта (например, Киров).
     # Для них тоже делаем страницы — под своим адресом, помечая как «другие города».
@@ -358,7 +507,8 @@ def main():
     generated_slugs = {c["slug"] for c, _ in targets}
     pages = {}
     for city, entries in targets:
-        pages[city["slug"]] = build_page(city, entries, template, generated_slugs, cities, by_city, allow_index)
+        pages[city["slug"]] = build_page(city, entries, template, generated_slugs, cities, by_city,
+                                          allow_index, listings=by_city_listings)
     pages["index"] = hub_page([(c, e) for c, e in targets if e], {c["slug"]: c for c, _ in targets}, allow_index)
 
     if check_only:

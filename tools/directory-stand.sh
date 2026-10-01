@@ -27,6 +27,7 @@ cp "$ROOT/supabase/migrations/20261001_directory_landlords.sql" "$STAGE/migratio
 cp "$ROOT/supabase/migrations/20261001_directory_landlords_rls_NEW_PROJECT.sql" "$STAGE/rls.sql"
 cp "$ROOT/supabase/seed/20261001_directory_landlords_import.sql" "$STAGE/seed.sql"
 cp "$ROOT/supabase/seed/20261001_directory_ALL_IN_ONE.sql" "$STAGE/bundle.sql"
+cp "$ROOT/supabase/migrations/20261001_directory_clicks.sql" "$STAGE/clicks.sql"
 cp "$ROOT/tools/directory_existing.json" "$STAGE/existing.json"
 chmod 644 "$STAGE"/*.sql "$STAGE"/*.json
 trap 'rm -rf "$STAGE"' EXIT
@@ -146,6 +147,43 @@ say "== 6. Откат =="
 $PSQL -q -d "$DB_FRESH" -c "drop table if exists public.directory_landlords" >/dev/null
 LEFT=$($PSQL -tA -d "$DB_FRESH" -c "select count(*) from information_schema.tables where table_schema='public' and table_name='directory_landlords'")
 [ "$LEFT" = "0" ] && good "таблица удаляется без следов" || bad "таблица осталась"
+
+say
+say "== 7. Счётчик обращений (directory_clicks) =="
+$PSQL -q -d "$DB_FRESH" -v ON_ERROR_STOP=1 -f "$STAGE/clicks.sql" >/dev/null 2>/tmp/iva-clicks.log \
+  && good "таблица и сводка созданы" \
+  || { bad "SQL счётчика дал ошибку:"; sed 's/^/      /' /tmp/iva-clicks.log; }
+$PSQL -q -d "$DB_FRESH" -v ON_ERROR_STOP=1 -f "$STAGE/clicks.sql" >/dev/null 2>/tmp/iva-clicks2.log \
+  && good "повторный запуск безопасен" \
+  || { bad "повторный запуск сломался:"; sed 's/^/      /' /tmp/iva-clicks2.log; }
+
+# страница сайта (роль anon) может добавлять обращения
+$PSQL -q -d "$DB_FRESH" >/dev/null <<'SQL4'
+grant insert on public.directory_clicks to anon, authenticated;
+grant usage on schema public to anon, authenticated;
+SQL4
+INS=$($PSQL -tA -d "$DB_FRESH" -c "set role anon" \
+  -c "insert into public.directory_clicks (phone, city, page, kind) values ('79001295454','Ростов-на-Дону','rostov-na-donu.html','call')" 2>&1 | grep -ci "error" || true)
+[ "$INS" = "0" ] && good "обращение со страницы записывается (роль anon)" || bad "запись не прошла: $INS"
+
+# мусор отсекается ограничениями
+BADKIND=$($PSQL -tA -d "$DB_FRESH" -c "set role anon" \
+  -c "insert into public.directory_clicks (phone, city, page, kind) values ('79001295454','Ростов','x','spam')" 2>&1 | grep -ci "check" || true)
+[ "$BADKIND" != "0" ] && good "неизвестный тип обращения отклонён" || bad "тип обращения не проверяется"
+
+# прямые строки посторонним не видны (правило доступа отдаёт ноль строк или ошибку)
+ROWS=$($PSQL -tA -d "$DB_FRESH" -c "set role anon" -c "select count(*) from public.directory_clicks" 2>&1 | tail -1 || true)
+case "$ROWS" in 0|*ERROR*|*denied*) good "строки таблицы посторонним недоступны";; *) bad "посторонний видит строки: $ROWS";; esac
+
+# сводка: постороннему — пусто, администратору — видно
+STATS_ANON=$($PSQL -tA -d "$DB_FRESH" -c "set role anon" -c "select count(*) from public.directory_click_stats" 2>&1 | tail -1 || true)
+case "$STATS_ANON" in 0|*ERROR*|*denied*) good "сводка посторонним закрыта";; *) bad "посторонний видит сводку: $STATS_ANON";; esac
+
+STATS_ADM=$($PSQL -tA -d "$DB_FRESH" \
+  -c "set role authenticated" \
+  -c "select set_config('request.jwt.claims', '{\"email\":\"owner@example.test\",\"sub\":\"11111111-1111-1111-1111-111111111111\"}', false)" \
+  -c "select count(*) from public.directory_click_stats" 2>&1 | tail -1 || true)
+case "$STATS_ADM" in ''|0|*ERROR*) bad "администратор не видит сводку: $STATS_ADM";; *) good "администратор видит сводку (строк: $STATS_ADM)";; esac
 
 say
 if [ "$FAILED" = "0" ]; then
