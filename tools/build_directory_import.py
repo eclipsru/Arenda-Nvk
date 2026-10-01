@@ -30,6 +30,8 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 CSV_PATH = os.path.join(ROOT, "tools", "real_bases.csv")
 CITIES_JSON = os.path.join(ROOT, "tools", "cities.json")
 OUT_SQL = os.path.join(ROOT, "supabase", "seed", "20261001_directory_landlords_import.sql")
+MIGRATION_SQL = os.path.join(ROOT, "supabase", "migrations", "20261001_directory_landlords.sql")
+OUT_BUNDLE = os.path.join(ROOT, "supabase", "seed", "20261001_directory_ALL_IN_ONE.sql")
 
 # Написания городов, отличающиеся от списка сайта, читаем из общего файла,
 # чтобы проверка (tests/directory-import.cjs) знала те же правила.
@@ -226,13 +228,51 @@ def main():
             print("Починить: python3 tools/build_directory_import.py")
             print_report(payload)
             return 1
-        print(f"Файл ввоза совпадает с источником: {len(payload['rows'])} строк")
+        if not os.path.exists(OUT_BUNDLE):
+            print("нет комбинированного файла — собрать: python3 tools/build_directory_import.py")
+            return 1
+        with open(OUT_BUNDLE, encoding="utf-8") as f:
+            bundle_current = f.read()
+        if bundle_current.strip().split("\n")[-1] != sql.strip().split("\n")[-1] or sql not in bundle_current:
+            print("РАСХОЖДЕНИЕ: комбинированный файл не содержит текущий ввоз")
+            print("Починить: python3 tools/build_directory_import.py")
+            return 1
+        print(f"Файл ввоза совпадает с источником: {len(payload['rows'])} строк (и комбинированный файл в порядке)")
         return 0
 
     os.makedirs(os.path.dirname(OUT_SQL), exist_ok=True)
     with open(OUT_SQL, "w", encoding="utf-8") as f:
         f.write(sql)
+
+    # Комбинированный файл: таблица + ввоз в одном тексте — владельцу достаточно
+    # одной вставки в SQL Editor вместо двух.
+    with open(MIGRATION_SQL, encoding="utf-8") as f:
+        migration = f.read()
+    bundle = (
+        "-- ============================================================================\n"
+        "-- Ива: ВСЁ В ОДНОМ ФАЙЛЕ — создание таблицы справочника прокатов и ввоз данных.\n"
+        "--\n"
+        "-- Этот файл собран автоматически (tools/build_directory_import.py) из двух:\n"
+        "--   supabase/migrations/20261001_directory_landlords.sql  (создание таблицы)\n"
+        "--   supabase/seed/20261001_directory_landlords_import.sql (ввоз 115 контактов)\n"
+        "--\n"
+        "-- Как запускать: Supabase -> SQL Editor -> New query -> вставить весь файл -> Run.\n"
+        "-- Повторный запуск безопасен: строки обновляются, дубли не создаются, отметки\n"
+        "-- проверки карточек не стираются.\n"
+        "--\n"
+        "-- В самом конце будет табличка с итогом — пришлите её, по ней видно результат.\n"
+        "-- ============================================================================\n\n"
+        + migration.rstrip() + "\n\n"
+        + "-- ============================================================================\n"
+        + "-- ЧАСТЬ 2: ввоз данных (115 контактов)\n"
+        + "-- ============================================================================\n\n"
+        + sql
+    )
+    with open(OUT_BUNDLE, "w", encoding="utf-8") as f:
+        f.write(bundle)
+
     print(f"Записано: {OUT_SQL}")
+    print(f"Записано: {OUT_BUNDLE} (всё в одном файле)")
     print_report(payload)
     return 0
 

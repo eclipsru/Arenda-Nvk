@@ -145,6 +145,40 @@ LEFT=$($PSQL -tA -d "$DB" -c "select count(*) from information_schema.tables whe
 [ "$LEFT" = "0" ] && good "откат удаляет таблицу" || bad "после отката таблица осталась"
 
 say
+say "== 6. Комбинированный файл (одна вставка вместо двух) =="
+DB2=${DB}_bundle
+cp "$ROOT/supabase/seed/20261001_directory_ALL_IN_ONE.sql" "$STAGE/bundle.sql"
+chmod 644 "$STAGE/bundle.sql"
+$PSQL -q -c "drop database if exists $DB2" postgres >/dev/null
+$PSQL -q -c "create database $DB2" postgres >/dev/null
+$PSQL -q -d "$DB2" >/dev/null <<'SQL3'
+create schema if not exists auth;
+create or replace function auth.jwt() returns jsonb language sql stable as $$ select '{}'::jsonb $$;
+create or replace function auth.uid() returns uuid language sql stable as $$ select null::uuid $$;
+create table if not exists public.admins (id uuid primary key default gen_random_uuid(), email text not null, role text not null default 'admin', active boolean not null default true);
+do $$ begin
+  if not exists (select 1 from pg_roles where rolname = 'anon') then create role anon nologin; end if;
+  if not exists (select 1 from pg_roles where rolname = 'authenticated') then create role authenticated nologin; end if;
+end $$;
+grant usage on schema auth to anon, authenticated;
+grant execute on function auth.jwt(), auth.uid() to anon, authenticated;
+grant usage on schema public to anon, authenticated;
+alter default privileges in schema public grant select on tables to anon, authenticated;
+SQL3
+# повторяемость: запускаем один и тот же файл ДВА раза
+$PSQL -q -d "$DB2" -v ON_ERROR_STOP=1 -f "$STAGE/bundle.sql" >/dev/null 2>/tmp/iva-dir-bundle.log \
+  && good "комбинированный файл выполнился с первого раза" \
+  || { bad "комбинированный файл не выполнился:"; sed 's/^/      /' /tmp/iva-dir-bundle.log; }
+$PSQL -q -d "$DB2" -v ON_ERROR_STOP=1 -f "$STAGE/bundle.sql" >/dev/null 2>/tmp/iva-dir-bundle2.log \
+  && good "повторный запуск комбинированного файла безопасен" \
+  || { bad "повторный запуск сломался:"; sed 's/^/      /' /tmp/iva-dir-bundle2.log; }
+B_CNT=$($PSQL -tA -d "$DB2" -c "select count(*) from public.directory_landlords")
+[ "$B_CNT" = "115" ] && good "строк после двух запусков: $B_CNT (дублей нет)" || bad "строк: $B_CNT (ожидалось 115)"
+B_POL=$($PSQL -tA -d "$DB2" -c "select count(*) from pg_policies where tablename='directory_landlords'")
+[ "$B_POL" = "2" ] && good "правила доступа на месте: $B_POL" || bad "правил доступа: $B_POL (ожидалось 2)"
+$PSQL -q -c "drop database if exists $DB2" postgres >/dev/null
+
+say
 if [ "$FAILED" = "0" ]; then
   say "ИТОГ: проверки пройдены — миграцию и ввоз можно запускать в Supabase."
 else
