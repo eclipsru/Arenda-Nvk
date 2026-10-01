@@ -809,7 +809,9 @@ function orderSheet(){
    +'<div class="tabs" style="margin-top:16px"><span class="on" data-m="0">Самовывоз</span><span data-m="1">Доставка</span></div>'
    +'<div id="dbox" class="hide"><input class="inp" id="oAddr" placeholder="Адрес доставки: улица, дом, город" autocomplete="off"><div id="sugg" class="sugg hide"></div><div class="hint" id="dtxt">40 \u20BD/км за каждый инструмент — рассчитаем по адресу</div></div>'
    +'<span class="lbl">Комментарий (необязательно)</span><textarea class="inp" id="oCmt" placeholder="Ваши пожелания"></textarea>'
+   +'<label style="display:flex;gap:8px;align-items:flex-start;margin-top:14px;font-size:13px;color:var(--g2);line-height:1.5"><input type="checkbox" id="oAgree" style="margin-top:3px"><span>Я согласен на обработку персональных данных: имя, телефон, адрес доставки и состав заявки — чтобы связаться и подготовить аренду. Храним 12 месяцев, затем удаляем. <a href="privacy.html" style="color:var(--or)">Политика обработки данных</a></span></label>'
    +'<div class="card" id="receipt" style="margin-top:14px"></div>'
+   +'<div class="hint" style="margin-top:10px">Заявку увидят пункты проката вашего города. Если в течение 24 часов никто не подтвердил — позвоним сами, подберём вариант или закроем заявку по вашему желанию.</div>'
    +'<button class="big" id="oSend">Отправить заявку</button></div>';
   openLayer(h);
   var meth=0;
@@ -844,6 +846,7 @@ function orderSheet(){
     var last=$('oLast').value.trim(),nm=$('oName').value.trim(),patr=$('oPatr').value.trim();
     var phone=$('oPhone').value.trim(),cmt=$('oCmt').value.trim();
     if(!nm||!phone){toast('Укажите имя и телефон');return}
+    if(!$('oAgree').checked){toast('Требуется согласие на обработку данных');return}
     if(meth&&!S.daddr){toast('Укажите адрес доставки');return}
     var full=(last+' '+nm+' '+patr).trim().replace(/ +/g,' ');
     var tshort=[],receipt='— — — ЧЕК (предварительно) — — —\n';var rent=0,dep=0;
@@ -902,7 +905,8 @@ function vOrders(){
       return '<div class="card"><div class="top">'+badge(x.status)+'<span class="dt">'+nice(x.created_at)+'</span></div>'
       +'<div class="body">'+esc(x.tools||'')+'</div>'
       +'<div class="hint">'+esc(x.get_method||'')+(x.days?' · '+x.days+' дн.':'')+'</div></div>';
-    }).join('');
+    }).join('')
+    +'<div class="hint" style="margin-top:12px;text-align:center">Статус «Новая» — заявку ещё не подтвердили. Не дождались ответа? Позвоните нам — подберём вариант или закроем заявку. Телефон и адрес храним 12 месяцев, затем удаляем. <a href="privacy.html" style="color:var(--or)">Политика обработки данных</a></div>';
   }).catch(function(e){$('lst').innerHTML='<div class="empt">Ошибка: '+esc(e.message)+'</div>'});
 }
 async function vAdminOrders(cont){
