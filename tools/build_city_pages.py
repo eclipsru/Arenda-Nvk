@@ -422,9 +422,12 @@ def directory_block(city, entries, collapse):
 
     count_line = (f'{count} {plural(count, "пункт", "пункта", "пунктов")}'
                   if count else "данных пока нет")
+    # Отдельная переменная, а не выражение внутри f-строки: до Python 3.12 в
+    # выражении f-строки запрещён обратный слэш, иначе файл не читается на 3.10–3.11.
+    h2_style = ' style="font-size:17px"' if collapse else ""
     head = (
         '<div class="sect-h">'
-          f'<h2{" style=\"font-size:17px\"" if collapse else ""}>Пункты проката в городе</h2>'
+          f'<h2{h2_style}>Пункты проката в городе</h2>'
           f'<span style="font-size:13px;color:var(--g2)">{count_line}</span>'
         '</div>'
         '<p style="font-size:13px;color:var(--g2);line-height:1.6;margin:8px 0 0;max-width:820px">'
