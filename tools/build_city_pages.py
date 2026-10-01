@@ -20,6 +20,7 @@
     python3 tools/build_city_pages.py --check               # проверить, ничего не писать
     python3 tools/build_city_pages.py --all                 # включая города без данных (noindex)
 """
+import datetime
 import json
 import os
 import re
@@ -40,6 +41,7 @@ TEMPLATE = os.path.join(ROOT, "tools", "city_template.html")
 OUT_DIR = os.environ.get("IVA_OUT") or os.path.join(ROOT, "city")
 SITE = "https://eclipsru.github.io/Arenda-Nvk"
 LISTINGS_JSON = os.environ.get("IVA_LISTINGS") or os.path.join(ROOT, "tools", "listings_by_city.json")
+SITEMAP = os.environ.get("IVA_SITEMAP") or os.path.join(ROOT, "sitemap.xml")
 # Публичные значения (те же, что в коде сайта assets/sb.js). Только чтение.
 SUPABASE_URL = "https://wdxdeatphizclskfmfxi.supabase.co"
 SUPABASE_KEY = "sb_publishable_dtRaEHNNPBFbHFvg8hw9iA_FqJSz9BE"
@@ -458,7 +460,7 @@ def directory_block(city, entries, collapse):
     return '<div class="sect">' + head + cards + tail + '</div>'
 
 
-def build_page(city, entries, template, generated_slugs, cities, by_city, allow_index=False,
+def build_page(city, entries, template, generated_slugs, cities, by_city, allow_index=True,
                listings=None):
     count = len(entries)
     title = f"Аренда инструмента — {city['name']} | Ива"
@@ -473,7 +475,7 @@ def build_page(city, entries, template, generated_slugs, cities, by_city, allow_
             f"где ближе и дешевле."
         )
         count_line = f"{count} {plural(count, 'пункт', 'пункта', 'пунктов')}"
-        # В поиск страницы отдаём только после приёмки владельцем (флаг --index).
+        # Открыто для поиска по решению владельца; закрыть обратно — флаг --noindex.
         robots = "index,follow" if allow_index else "noindex,follow"
         cards = "".join(card_html(e) for e in entries)
     else:
@@ -527,11 +529,44 @@ def build_page(city, entries, template, generated_slugs, cities, by_city, allow_
     return html
 
 
+def write_sitemap(targets):
+    """Обновляет sitemap.xml: статические страницы + список городов + каждая страница города.
+
+    Без карты сайта поисковики находят новые страницы неделями; с ней — за дни.
+    Файл пересобирается целиком, поэтому расхождений не будет.
+    """
+    today = datetime.date.today().isoformat()
+    rows = [
+        ("", "1.0", "daily"),
+        ("catalog.html", "0.9", "daily"),
+        ("city/", "0.8", "weekly"),
+        ("app.html", "0.6", "monthly"),
+        ("offer.html", "0.3", "yearly"),
+    ]
+    urls = [f'{SITE}/{path}' for path, _, _ in rows]
+    for city, entries in targets:
+        urls.append(f'{SITE}/city/{city["slug"]}.html')
+        rows.append((f'city/{city["slug"]}.html', "0.7" if entries else "0.4", "weekly"))
+
+    parts = ['<?xml version="1.0" encoding="UTF-8"?>',
+             '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">']
+    for path, priority, freq in rows:
+        loc = f'{SITE}/{path}'
+        parts.append(f'  <url><loc>{loc}</loc><lastmod>{today}</lastmod>'
+                     f'<changefreq>{freq}</changefreq><priority>{priority}</priority></url>')
+    parts.append('</urlset>')
+    with open(SITEMAP, "w", encoding="utf-8") as f:
+        f.write("\n".join(parts) + "\n")
+    print(f"Карта сайта обновлена: {len(rows)} адресов (включая {len(targets)} страниц городов)")
+
+
 def main():
     global SHOW_PHONES
     check_only = "--check" in sys.argv
     include_empty = "--all" in sys.argv
-    allow_index = "--index" in sys.argv
+    # Решение владельца 01.10.2026: страницы городов открыты для поиска.
+    # Закрыть обратно (например, на время правок) — флаг --noindex.
+    allow_index = "--noindex" not in sys.argv
     # По умолчанию телефоны пунктов не публикуются (решение владельца, вариант 5).
     SHOW_PHONES = "--with-phones" in sys.argv
     only = None
@@ -579,13 +614,24 @@ def main():
             with open(path, encoding="utf-8") as f:
                 if f.read() != html:
                     problems.append(f"страница устарела: city/{slug}.html")
+        # Карта сайта должна содержать все страницы городов и хаб
+        if os.path.exists(SITEMAP):
+            sitemap = open(SITEMAP, encoding="utf-8").read()
+            for slug in list(pages):
+                url = f"{SITE}/city/" if slug == "index" else f"{SITE}/city/{slug}.html"
+                if url not in sitemap:
+                    problems.append(f"нет в карте сайта: {url}")
         if problems:
             for p in problems:
                 print("РАСХОЖДЕНИЕ: " + p)
             print("Починить: python3 tools/build_city_pages.py")
             return 1
-        print(f"Страницы городов совпадают с данными: {len(pages)}")
+        print(f"Страницы городов совпадают с данными: {len(pages)}; карта сайта полная")
         return 0
+
+    if not only:
+        # Карта сайта — только при полной сборке: при --only она потеряла бы остальные города.
+        write_sitemap([(c, e) for c, e in targets if e] if not include_empty else targets)
 
     os.makedirs(OUT_DIR, exist_ok=True)
     written = 0
@@ -594,7 +640,7 @@ def main():
             f.write(html)
         written += 1
     with_entries = sum(1 for _, e in targets if e)
-    mode = "отдаются в поиск" if allow_index else "пока не отдаются в поиск (приёмка)"
+    mode = "отдаются в поиск" if allow_index else "закрыты от поиска (--noindex)"
     phones_mode = "телефоны пунктов показываются" if SHOW_PHONES else "телефоны пунктов не публикуются"
     print(f"Готово страниц городов: {written - 1} (с контактами: {with_entries}); "
           f"плюс страница-хаб city/index.html; режим: {mode}; {phones_mode}")

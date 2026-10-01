@@ -14,6 +14,8 @@
 //   6. Счётчик не собирает персональные данные: пишет только телефон (из самой страницы),
 //      город, имя страницы и тип обращения; чужой номер через подставную страницу не уходит.
 //   7. SQL счётчика существует и не отдаёт статистику посторонним.
+//   8. Метрика не подключена, пока не вписан номер счётчика (иначе начнёт собирать
+//      данные раньше, чем появится политика обработки данных).
 //
 // Запуск: node tests/city-priority.cjs
 const fs = require('node:fs');
@@ -171,6 +173,26 @@ try {
   assert.match(sql, /security_invoker = true/, 'сводка должна считаться от имени спрашивающего (иначе видна всем)');
   assert.match(sql, /revoke all on public\.directory_click_stats from anon/, 'сводка не закрыта от посторонних');
   assert.match(sql, /drop table if exists public\.directory_clicks/, 'в SQL нет блока отката');
+
+  // 8. Яндекс.Метрика: пока номер не вписан — на сайт ничего не грузится
+  const appJs = fs.readFileSync(path.join(ROOT, 'assets', 'app.js'), 'utf8');
+  const metrikaId = (appJs.match(/var METRIKA_ID = '([^']*)'/) || [])[1];
+  assert.notEqual(metrikaId, undefined, 'в app.js нет настройки номера счётчика Метрики');
+  if (metrikaId === '') {
+    assert.match(appJs, /if \(!METRIKA_ID\) return;/,
+      'при пустом номере счётчика Метрика должна молча выключаться');
+  } else {
+    assert.match(metrikaId, /^[0-9]{6,10}$/, `номер счётчика Метрики выглядит неверно: «${metrikaId}»`);
+    assert.match(appJs, /mc\.yandex\.ru\/metrika\/tag\.js/, 'нет адреса загрузки счётчика Метрики');
+    console.log(`Метрика включена, номер счётчика: ${metrikaId}`);
+  }
+  // Ни на одной странице не должно быть посторонних счётчиков (мы обещали их не ставить)
+  for (const f of ['index.html', 'catalog.html', 'offer.html']) {
+    const page = fs.readFileSync(path.join(ROOT, f), 'utf8');
+    for (const foreign of ['google-analytics', 'googletagmanager', 'mc.yandex.ru', 'top-fwz1.mail.ru', 'vk.com/rtrg']) {
+      assert.ok(!page.includes(foreign), `${f}: найден посторонний счётчик «${foreign}» — их быть не должно`);
+    }
+  }
 
   fs.rmSync(tmp, { recursive: true, force: true });
   console.log('Порядок на страницах в порядке: объявления выше справочника, телефоны пунктов не публикуются ' +

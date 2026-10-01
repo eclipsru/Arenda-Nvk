@@ -386,7 +386,8 @@ function footHTML(){
       '<div><b>Аренда</b>' +
         '<a href="offer.html">Публичная оферта</a>' +
         '<a href="catalog.html?delivery=1">С доставкой</a>' +
-        '<a href="account.html">Личный кабинет</a></div>' +
+        '<a href="account.html">Личный кабинет</a>' +
+        '<a href="city/index.html">Города и прокаты</a></div>' +
       '<div><b>Контакты</b>' +
         '<a href="tel:+79081732475">+7 (908) 173-24-75</a>' +
         '<span>Новочеркасск, ул. Маресьева, 36</span>' +
@@ -707,3 +708,32 @@ async function paintChatBadge(){
     });
   } catch(e){}
 }
+
+
+/* ===========================================================
+   Яндекс.Метрика — подключение по одному номеру счётчика.
+
+   Пока номер не задан (пустая строка) — ничего не грузится и ничего не собирается.
+   Номер вписывается здесь одной строкой, и счётчик включается на всех страницах.
+
+   Включать только после того, как на сайте появится политика обработки данных
+   (этап П4): Метрика ставит cookie и собирает статистику посещений, о чём людей
+   нужно предупредить.
+   =========================================================== */
+var METRIKA_ID = '';  // например '12345678' — 8 цифр из кабинета Метрики
+
+function mountMetrika(){
+  if (!METRIKA_ID) return;                       // выключено — ничего не делаем
+  if (!/^[0-9]{6,10}$/.test(String(METRIKA_ID))){ // защита от опечатки
+    console.warn('Метрика: номер счётчика выглядит неверно — счётчик не подключён');
+    return;
+  }
+  if (window.__ivaMetrikaLoaded) return;
+  window.__ivaMetrikaLoaded = true;
+  (function(m,e,t,r,i,k,a){m[i]=m[i]||function(){(m[i].a=m[i].a||[]).push(arguments)};
+    m[i].l=1*new Date(); k=e.createElement(t),a=e.getElementsByTagName(t)[0],k.async=1,k.src=r;
+    a.parentNode.insertBefore(k,a)})(window,document,'script','https://mc.yandex.ru/metrika/tag.js','ym');
+  window.ym(Number(METRIKA_ID), 'init', {clickmap:true, trackLinks:true, accurateTrackBounce:true});
+}
+
+if (typeof document !== 'undefined') mountMetrika();
