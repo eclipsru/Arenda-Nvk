@@ -96,7 +96,7 @@
 <script src="assets/geo.js?v=20260923-photon"></script>
 <script src="assets/email-guard.js?v=20260926-email"></script><script src="assets/sb.js?v=20260926-email"></script>
 <script src="assets/app.js?v=20261001-p4-pd"></script>
-<script src="assets/partners.js?v=20261001-p6-commission"></script>
+<script src="assets/partners.js?v=20261001-p6-1year"></script>
 <script>
 (function(){
   mountChrome('chief', '');
@@ -1056,7 +1056,8 @@
       '<div class="fld" style="margin-bottom:14px"><label style="display:block;font-size:13px;' +
         'font-weight:600;margin-bottom:6px">Комиссия площадки, %</label>' +
         '<input class="inp" id="eFee" type="number" min="0" max="100" value="' +
-          (a.fee_pct != null ? a.fee_pct : 1) + '"></div>' +
+          (a.fee_pct != null ? a.fee_pct : 1) + '">' +
+        '<div class="muted" style="font-size:12px;margin-top:4px">1% — стандарт на первый год с даты одобрения; по истечении года пересмотреть ставку.</div></div>' +
       '<div class="fld" style="margin-bottom:14px"><label style="display:block;font-size:13px;' +
         'font-weight:600;margin-bottom:6px">Лимит долга, ₽ <span class="muted" style="font-weight:400">' +
         '— 0 без ограничения</span></label>' +
