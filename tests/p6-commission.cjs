@@ -104,9 +104,9 @@ try {
   }
 
   // 5. Автоматика «первый год заканчивается»: колонка в таблице арендодателей
-  assert.match(chief, /<th class="num" title="Год с даты одобрения заявки — когда пересматривать ставку">Год до<\/th>/,
+  assert.match(chief, /<th class="num" title="Год с даты одобрения заявки \(у подключённых вручную — с даты добавления\) — когда пересматривать ставку">Год до<\/th>/,
     'chief.html: в таблице арендодателей нет колонки «Год до» — владелец не увидит, у кого подходит срок пересмотра');
-  assert.match(chief, /function feeYearCell\(em\)\{/,
+  assert.match(chief, /function feeYearCell\(em, a\)\{/,
     'chief.html: нет функции расчёта даты окончания первого года');
   assert.match(chief, /x\.reviewed_at/,
     'chief.html: дата пересмотра не считается от reviewed_at заявки');
@@ -120,8 +120,39 @@ try {
     'chief.html: за 30 дней до конца года нет напоминания «уведомить» (оферта обещает уведомление за 30 дней)');
   assert.match(chief, /год прошёл — пересмотреть/,
     'chief.html: после окончания года нет напоминания «пересмотреть»');
-  assert.match(chief, /feeYearCell\(em\) \+/,
+  assert.match(chief, /feeYearCell\(em, a\) \+/,
     'chief.html: ячейка «Год до» не выводится в строках таблицы');
+
+  // 6. Поведение «Год до» (запускаем сам расчёт из chief.html на пяти случаях).
+  //    Решение владельца 03.10.2026: подключённым вручную — год с даты добавления в базу (admins.created_at).
+  {
+    const vm = require('node:vm');
+    const i0 = chief.indexOf('const FEE_NOTICE_DAYS');
+    const i1 = chief.indexOf('/* ---------- Таблица арендодателей');
+    assert.ok(i0 > 0 && i1 > i0, 'chief.html: не найден блок расчёта «Год до»');
+    const ctx = { D: { landlordApps: [] }, dt: s => s.slice(0, 10), Date, Math, isNaN };
+    vm.runInNewContext(chief.slice(i0, i1) + '; this.feeYearCell = feeYearCell;', ctx);
+    const iso = d => new Date(Date.now() + d * 86400000).toISOString();
+    const cell = (em, a) => ctx.feeYearCell(em, a);
+    // а) по одобренной заявке — как раньше, без пометки
+    ctx.D.landlordApps = [{ email: 'app@x.ru', status: 'approved', reviewed_at: iso(-100) }];
+    let c = cell('app@x.ru', { email: 'app@x.ru', role: 'admin', created_at: iso(-300) });
+    assert.ok(/дн\./.test(c) && !/с даты добавления/.test(c) && c.includes(iso(265).slice(0, 10)),
+      'chief.html: при одобренной заявке год должен считаться от даты одобрения, а не от даты добавления');
+    // б) вручную подключённый — от created_at, с пометкой
+    c = cell('hand@x.ru', { email: 'hand@x.ru', role: 'admin', created_at: iso(-340) });
+    assert.ok(/с даты добавления/.test(c) && /уведомить/.test(c),
+      'chief.html: у подключённого вручную год не считается от даты добавления (решение владельца 03.10.2026)');
+    // в) год прошёл
+    c = cell('old@x.ru', { email: 'old@x.ru', role: 'admin', created_at: iso(-400) });
+    assert.ok(/год прошёл — пересмотреть/.test(c), 'chief.html: после года нет «пересмотреть» у подключённого вручную');
+    // г) сам владелец (chief) и запись без даты — прочерк
+    assert.ok(/—/.test(cell('me@x.ru', { email: 'me@x.ru', role: 'chief', created_at: iso(-10) })) &&
+              !/дн\./.test(cell('me@x.ru', { email: 'me@x.ru', role: 'chief', created_at: iso(-10) })),
+      'chief.html: у владельца площадки «Год до» должен быть прочерк');
+    assert.ok(!/дн\./.test(cell('nodate@x.ru', { email: 'nodate@x.ru', role: 'admin' })),
+      'chief.html: без даты должен быть прочерк, а не выдуманный срок');
+  }
 
   console.log('Комиссия в порядке: стандарт 1% на первый год назван во всех текстах для арендодателей, ' +
     'обещания «навсегда» и запускных 0% нигде не осталось, форма владельца по умолчанию 1% с подсказкой, ' +
