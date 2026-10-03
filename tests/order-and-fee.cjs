@@ -254,6 +254,9 @@ const assert = require('assert');
   await page.locator('#ordName').fill('Сергей Петров');
   await page.locator('#ordPhone').fill('+7 918 000-11-22');
 
+  // Согласие на обработку ПД (этап П4, шаг 2) — без него заявка не уходит
+  await page.locator('#ordAgree').check();
+
   // Submit order
   await page.locator('#ordSend').click();
   await page.waitForFunction(() => {

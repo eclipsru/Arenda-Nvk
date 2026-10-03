@@ -96,7 +96,7 @@
 <script src="assets/geo.js?v=20260923-photon"></script>
 <script src="assets/email-guard.js?v=20260926-email"></script><script src="assets/sb.js?v=20260926-email"></script>
 <script src="assets/app.js?v=20261001-p4-pd"></script>
-<script src="assets/partners.js?v=20261001-p6-1year"></script>
+<script src="assets/partners.js?v=20261003-p6-texts"></script>
 <script>
 (function(){
   mountChrome('chief', '');
@@ -273,22 +273,29 @@
 
   /* ---------- Первый год ставки: когда пересматривать ---------- */
   // Ставка 1% действует первый год с даты одобрения заявки (решение владельца).
-  // Оферта обещает изменить ставку не ранее года с уведомлением за 30 дней —
-  // поэтому за 30 дней до даты и после неё ячейка подсвечивается.
-  function feeYearCell(em){
+  // Оферта обещает изменить ставку не ранее года с уведомлением за 30 дней.
+  // Решение владельца 03.10.2026 (№16): подсвечивать за 45 дней — 15 дней запаса,
+  // чтобы уведомление точно успело уйти раньше, чем за 30 дней до даты.
+  const FEE_NOTICE_DAYS = 45; // за сколько дней до конца первого года напоминать «уведомить»
+  // Решение владельца 03.10.2026: у арендодателей, подключённых вручную (без заявки),
+  // первый год считается с даты, когда их внесли в базу (admins.created_at); помечается «с даты добавления».
+  function feeYearCell(em, a){
     let app = null;
     (D.landlordApps || []).forEach(function(x){
       if (!app && x.status === 'approved' && x.reviewed_at && (x.email || '').toLowerCase() === em) app = x;
     });
-    if (!app) return '<td class="num small muted">—</td>';
-    const end = new Date(app.reviewed_at);
+    let start = app ? app.reviewed_at : null, note = '';
+    if (!start && a && a.role !== 'chief' && a.created_at) { start = a.created_at; note = 'с даты добавления'; }
+    if (!start || isNaN(new Date(start).getTime())) return '<td class="num small muted">—</td>';
+    const end = new Date(start);
     end.setFullYear(end.getFullYear() + 1);
     const days = Math.ceil((end.getTime() - Date.now()) / 86400000);
-    const label = dt(end.toISOString());
+    const label = dt(end.toISOString()) +
+      (note ? '<div class="small muted" title="Подключён вручную, без заявки: год считается с даты добавления в базу">' + note + '</div>' : '');
     if (days < 0)
       return '<td class="num"><b style="color:var(--red)">' + label + '</b>' +
         '<div class="small" style="color:var(--red)">год прошёл — пересмотреть</div></td>';
-    if (days <= 30)
+    if (days <= FEE_NOTICE_DAYS)
       return '<td class="num"><b style="color:var(--yel)">' + label + '</b>' +
         '<div class="small" style="color:var(--yel)">' + days + ' дн. — уведомить</div></td>';
     return '<td class="num">' + label + '<div class="small muted">' + days + ' дн.</div></td>';
@@ -307,7 +314,7 @@
           (a.active === false ? ' <span class="badge off">выкл</span>' : '') +
           '<div class="small muted">' + esc(em) + '</div></td>' +
         '<td class="num">' + (a.fee_pct != null ? a.fee_pct + ' %' : '—') + '</td>' +
-        feeYearCell(em) +
+        feeYearCell(em, a) +
         '<td class="num">' + st.orders + '</td>' +
         '<td class="num">' + m(st.rent) + '</td>' +
         '<td class="num">' + m(st.fee) + '</td>' +
@@ -328,7 +335,7 @@
 
     return '<div class="tbl-wrap"><table class="tbl"><thead><tr>' +
       '<th>Арендодатель</th><th class="num">Комиссия</th>' +
-      '<th class="num" title="Год с даты одобрения заявки — когда пересматривать ставку">Год до</th>' +
+      '<th class="num" title="Год с даты одобрения заявки (у подключённых вручную — с даты добавления) — когда пересматривать ставку">Год до</th>' +
       '<th class="num">Заявок</th>' +
       '<th class="num">Оборот</th><th class="num">Начислено</th>' +
       '<th class="num">Выплачено</th><th class="num">Долг</th>' +

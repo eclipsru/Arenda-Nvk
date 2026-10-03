@@ -282,6 +282,7 @@
     var isRoundTrip = false; // toggle switch for round trip
     var savedAddr = '';
     var savedComment = '';
+    var agreeOn = false; // согласие на обработку ПД — не сбрасываем при перерисовке листа
     var destCoords = null;
     var deliveryKm = 0;
 
@@ -415,6 +416,11 @@
 
           '<div class="fld"><label style="display:block;font-size:13px;font-weight:600;margin-bottom:6px">Комментарий (необязательно)</label>' +
             '<textarea class="inp" id="ordComment" rows="2" placeholder="Удобное время встречи или пожелания">' + esc(savedComment) + '</textarea></div>' +
+          /* Согласие на обработку ПД (этап П4, шаг 2): без него заявка не уходит. */
+          '<label style="display:flex;gap:8px;align-items:flex-start;font-size:13px;color:var(--gr);line-height:1.5">' +
+            '<input type="checkbox" id="ordAgree" style="margin-top:3px"' + (agreeOn ? ' checked' : '') + '>' +
+            '<span>Я согласен на обработку персональных данных: имя, телефон, адрес доставки и состав заявки — чтобы связаться и подготовить аренду. Храним 12 месяцев, затем удаляем. <a href="privacy.html" style="color:var(--or)">Политика обработки данных</a></span>' +
+          '</label>' +
 
           /* Чек заказа */
           '<div class="card" style="background:var(--field);border:1px solid var(--line);border-radius:10px;padding:12px">' +
@@ -511,6 +517,8 @@
         };
       }
 
+      if ($('ordAgree')) $('ordAgree').onchange = function(){ agreeOn = this.checked; };
+
       $('ordSend').onclick = doSubmitOrder;
     }
 
@@ -536,6 +544,11 @@
       }
       if (isDelivery && !dAddr){
         errEl.textContent = 'Укажите адрес доставки';
+        errEl.style.display = 'block';
+        return;
+      }
+      if (!$('ordAgree') || !$('ordAgree').checked){
+        errEl.textContent = 'Требуется согласие на обработку данных';
         errEl.style.display = 'block';
         return;
       }
