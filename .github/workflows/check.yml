@@ -31,4 +31,12 @@ jobs:
           npm ci --no-audit --no-fund
           npx playwright install --with-deps chromium
       - name: bash tools/check.sh
-        run: bash tools/check.sh
+        run: |
+          set -o pipefail
+          bash tools/check.sh 2>&1 | tee /tmp/check.log
+      - name: Итог одной строкой (видно в списке проверок PR)
+        if: always()
+        run: |
+          total=$(grep -E 'пройдено: [0-9]+' /tmp/check.log | tail -1 | sed 's/^ *//')
+          browser=$(grep -E '^\s+(✔|✘|•) tests/.*(photon|rental|prefill|order|reviews|banner|chief|browser)' /tmp/check.log | sed -E 's/^ +//; s/tests\///; s/\.cjs//' | tr '\n' ' ')
+          echo "::notice title=Итог check.sh::${total:-итог не найден} · браузерные: ${browser:-не запускались}"
