@@ -67,6 +67,17 @@ for t in syntax-and-release email-guard cities-sync directory-import city-pages 
   else bad "tests/$t.cjs"; tail -6 "/tmp/iva-test-$t.log" | sed 's/^/      /'; fi
 done
 
+head_ "4.2. Стенд миграций бота (локальный PostgreSQL)"
+bash tools/tg-migrations-stand.sh >/tmp/iva-test-tg-stand.log 2>&1
+rc=$?
+if [ "$rc" = "0" ]; then
+  ok "стенд бота: миграции проверены на живом PostgreSQL"
+elif [ "$rc" = "2" ]; then
+  skip "$(tail -1 /tmp/iva-test-tg-stand.log)"
+else
+  bad "стенд бота"; tail -20 /tmp/iva-test-tg-stand.log | sed 's/^/      /'
+fi
+
 head_ "5. Браузерные тесты (Playwright + локальный сервер)"
 # Три разных «нет»: нет модуля, модуль есть без браузера, нет python3 для сервера.
 # Во всех трёх случаях тесты честно пропускаются — окружение не должно
