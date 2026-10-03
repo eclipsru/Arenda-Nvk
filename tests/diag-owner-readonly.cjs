@@ -55,8 +55,34 @@ try {
       `diag-owner.sql: упоминается колонка ${col} — отчёт не должен показывать персональные данные`);
   }
 
+  // 4. Диагностика №2 — устройство бота (tools/diag-bot.sql): те же правила «только чтение»,
+  //    а раз она выводит ТЕКСТЫ функций — токен и ключи обязаны маскироваться.
+  {
+    const raw2 = fs.readFileSync(path.join(ROOT, 'tools/diag-bot.sql'), 'utf8');
+    const sql2 = raw2.replace(/--[^\n]*/g, '');
+    const low2 = sql2.toLowerCase().replace(/'(insert|update|delete)'/g, "''");
+    for (const w of ['insert', 'update', 'delete', 'drop', 'truncate', 'alter', 'create', 'grant',
+                     'revoke', 'copy', 'perform', 'execute', 'call', 'nextval', 'setval', 'dblink']) {
+      // «execute» допустим только как право в has_function_privilege(…, 'execute')
+      const scrubbed = low2.replace(/'execute'/g, "''");
+      assert.ok(!new RegExp('\\b' + w + '\\b').test(scrubbed), `diag-bot.sql: найдено «${w}» — запрос должен только читать`);
+    }
+    const bare2 = sql2.replace(/'(?:[^']|'')*'/g, "''");
+    assert.equal((bare2.match(/;/g) || []).length, 1, 'diag-bot.sql: должна быть ровно одна команда');
+    assert.match(sql2, /'\(bot\)\?\[0-9\]\{6,12\}:\[A-Za-z0-9_-\]\{25,\}', '<скрыто>'/,
+      'diag-bot.sql: токен бота в текстах функций не маскируется (в т. ч. без приставки bot)');
+    assert.match(sql2, /'eyJ\[A-Za-z0-9_-\]/, 'diag-bot.sql: ключи Supabase (eyJ…) в текстах функций не маскируются');
+    assert.match(sql2, /sb_secret_\[A-Za-z0-9_-\]\+', '<скрыто>'/, 'diag-bot.sql: ключи sb_secret_ не маскируются');
+    assert.ok(/regexp_replace\([\s\S]*pg_get_functiondef\(p\.oid\)/.test(sql2) &&
+              (sql2.match(/pg_get_functiondef/g) || []).length === 1,
+      'diag-bot.sql: текст функции выводится в обход маскировки');
+    assert.ok(!/select\s+\*/i.test(sql2), 'diag-bot.sql: «select *» может вывести содержимое таблиц');
+    assert.ok(!/\bfrom\s+public\.(iva_tg|orders)/i.test(sql2), 'diag-bot.sql: читается содержимое таблиц бота/заявок — можно только колонки');
+    assert.ok(!/decrypted_secret/i.test(sql2), 'diag-bot.sql: читаются значения секретов Vault');
+  }
+
   console.log('Диагностика владельца в порядке: одна команда, только чтение, токены маскируются, ' +
-    'из Vault — только названия, персональные данные заявок не выводятся.');
+    'из Vault — только названия, персональные данные заявок не выводятся; diag-bot.sql — только чтение, токен и ключи в текстах функций скрываются.');
 } catch (err) {
   console.error(err && err.message ? err.message : err);
   process.exitCode = 1;
