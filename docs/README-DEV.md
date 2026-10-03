@@ -80,6 +80,8 @@ tools/backup-api-windows.ps1     выгрузка данных через API б
 tools/schema-dump.sql            запрос для SQL-редактора Supabase: структура базы одним текстом
 tools/diag-owner.sql             запрос для SQL-редактора Supabase: срок хранения, следы Telegram-бота, «Год до» (только чтение)
 tools/diag-bot.sql               запрос для SQL-редактора Supabase: устройство Telegram-бота в базе (только чтение, секреты скрыты)
+supabase/bot/iva_tg_snapshot_20261003.sql  Telegram-бот в базе: полный текст функций + блоки отката (секреты скрыты)
+docs/TELEGRAM-БОТ.md             как устроен бот и как им управлять (проверить, выключить, сменить токен)
 .github/workflows/check.yml      автопроверка на GitHub: check.sh с настоящим браузером на каждый PR
 tools/rotate-keystore-windows.ps1 смена пароля ключа подписи (Windows) — см. docs/KEYSTORE-PASSWORD-ROTATION.md
 tools/real_bases.csv             115 реальных прокатов (44 города)
