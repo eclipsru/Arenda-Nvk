@@ -78,6 +78,7 @@ tools/screens-baseline.json      манифест хешей скриншото�
 tools/backup-windows.ps1         бэкап базы Supabase (Windows, PowerShell) — см. docs/BACKUP-SUPABASE.md
 tools/backup-api-windows.ps1     выгрузка данных через API без pg_dump (Windows) — см. docs/BACKUP-SUPABASE.md
 tools/schema-dump.sql            запрос для SQL-редактора Supabase: структура базы одним текстом
+tools/diag-owner.sql             запрос для SQL-редактора Supabase: срок хранения, следы Telegram-бота, «Год до» (только чтение)
 tools/rotate-keystore-windows.ps1 смена пароля ключа подписи (Windows) — см. docs/KEYSTORE-PASSWORD-ROTATION.md
 tools/real_bases.csv             115 реальных прокатов (44 города)
 tools/seed_real_bases.py         заливка справочника (см. задачу П2 — объединить с корневым скриптом)
