@@ -1,0 +1,34 @@
+# Ива — автопроверка на серверах GitHub (решение владельца №18 от 03.10.2026).
+# Запускает ту же проверку, что и `bash tools/check.sh`, но с настоящим браузером:
+# браузерные тесты здесь не пропускаются, а выполняются.
+# Ничего не публикует и не меняет: сайт по-прежнему собирается GitHub Pages из main.
+# Откат: удалить этот файл через Pull Request (или `git revert` коммита, который его добавил).
+name: Проверка Ивы
+on:
+  pull_request:
+  push:
+    branches: ['arena/**', 'work/**']
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: check-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Установка Playwright и браузера
+        run: |
+          npm ci --no-audit --no-fund
+          npx playwright install --with-deps chromium
+      - name: bash tools/check.sh
+        run: bash tools/check.sh
