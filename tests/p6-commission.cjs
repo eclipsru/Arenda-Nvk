@@ -112,6 +112,10 @@ try {
     'chief.html: дата пересмотра не считается от reviewed_at заявки');
   assert.match(chief, /setFullYear\(end\.getFullYear\(\) \+ 1\)/,
     'chief.html: первый год не считается как reviewed_at + 1 год');
+  assert.match(chief, /const FEE_NOTICE_DAYS = 45;/,
+    'chief.html: напоминание «уведомить» должно включаться за 45 дней (решение владельца №16 от 03.10.2026)');
+  assert.match(chief, /if \(days <= FEE_NOTICE_DAYS\)/,
+    'chief.html: порог напоминания задан числом в обход FEE_NOTICE_DAYS');
   assert.match(chief, /дн\. — уведомить/,
     'chief.html: за 30 дней до конца года нет напоминания «уведомить» (оферта обещает уведомление за 30 дней)');
   assert.match(chief, /год прошёл — пересмотреть/,
