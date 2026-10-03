@@ -96,7 +96,7 @@
 <script src="assets/geo.js?v=20260923-photon"></script>
 <script src="assets/email-guard.js?v=20260926-email"></script><script src="assets/sb.js?v=20260926-email"></script>
 <script src="assets/app.js?v=20261001-p4-pd"></script>
-<script src="assets/partners.js?v=20261001-p6-1year"></script>
+<script src="assets/partners.js?v=20261003-p6-texts"></script>
 <script>
 (function(){
   mountChrome('chief', '');
@@ -273,8 +273,10 @@
 
   /* ---------- Первый год ставки: когда пересматривать ---------- */
   // Ставка 1% действует первый год с даты одобрения заявки (решение владельца).
-  // Оферта обещает изменить ставку не ранее года с уведомлением за 30 дней —
-  // поэтому за 30 дней до даты и после неё ячейка подсвечивается.
+  // Оферта обещает изменить ставку не ранее года с уведомлением за 30 дней.
+  // Решение владельца 03.10.2026 (№16): подсвечивать за 45 дней — 15 дней запаса,
+  // чтобы уведомление точно успело уйти раньше, чем за 30 дней до даты.
+  const FEE_NOTICE_DAYS = 45; // за сколько дней до конца первого года напоминать «уведомить»
   function feeYearCell(em){
     let app = null;
     (D.landlordApps || []).forEach(function(x){
@@ -288,7 +290,7 @@
     if (days < 0)
       return '<td class="num"><b style="color:var(--red)">' + label + '</b>' +
         '<div class="small" style="color:var(--red)">год прошёл — пересмотреть</div></td>';
-    if (days <= 30)
+    if (days <= FEE_NOTICE_DAYS)
       return '<td class="num"><b style="color:var(--yel)">' + label + '</b>' +
         '<div class="small" style="color:var(--yel)">' + days + ' дн. — уведомить</div></td>';
     return '<td class="num">' + label + '<div class="small muted">' + days + ' дн.</div></td>';
