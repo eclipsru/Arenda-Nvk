@@ -32,6 +32,27 @@ SECRETS = [
 ]
 
 
+# Тот же фильтр, что в tools/pack_bundle.py (держим в синхроне): `postgres://postgres:<пароль>@…`
+# и `[YOUR-PASSWORD]` — это примеры из инструкций. Без фильтра раскладчик отклонял бы полезные
+# документы (проверено круговым тестом 03.10.2026: 03-ЗАЩИТА и 14-ПОШАГОВО не доезжали).
+PLACEHOLDER_MARKERS = ('<', '>', '[', ']', '…', '***', '••', 'your-', 'your_', 'yourpassword',
+                       'password', 'пароль', 'xxx', 'example', 'пример', 'sample', 'changeme',
+                       'замени', 'скрыт')
+
+
+def looks_like_placeholder(text):
+    low = text.lower()
+    return any(m in low for m in PLACEHOLDER_MARKERS)
+
+
+def secret_hits(body):
+    hits = []
+    for label, rx in SECRETS:
+        if any(not looks_like_placeholder(m.group(0)) for m in rx.finditer(body)):
+            hits.append(label)
+    return hits
+
+
 def parse(text):
     files, cur, buf = [], None, []
     for line in text.splitlines(keepends=True):
@@ -66,7 +87,7 @@ def main(argv):
             if p.is_absolute() or '..' in p.parts or not rel:
                 skipped.append((rel, 'опасный путь'))
                 continue
-            hits = [label for label, rx in SECRETS if rx.search(body)]
+            hits = secret_hits(body)
             if hits:
                 skipped.append((rel, 'похоже на секрет: ' + ', '.join(hits)))
                 continue
