@@ -83,6 +83,8 @@ tools/diag-bot.sql               запрос для SQL-редактора Supa
 supabase/bot/iva_tg_snapshot_20261003.sql  Telegram-бот в базе: полный текст функций + блоки отката (секреты скрыты)
 docs/TELEGRAM-БОТ.md             как устроен бот и как им управлять (проверить, выключить, сменить токен)
 supabase/bot/max_rollback_20261003.sql  откат уведомления в MAX к исходному (с контактами) — для 20261003_max_no_contacts.sql
+supabase/functions/order_email/index.ts  функция Supabase: письма клиенту о заявке (SMTP mail.ru, без библиотек) — см. docs/ПИСЬМА.md
+supabase/migrations/20261003_order_email.sql  очередь писем + триггер + выдача по одноразовому пропуску
 .github/workflows/check.yml      автопроверка на GitHub: check.sh с настоящим браузером на каждый PR
 tools/rotate-keystore-windows.ps1 смена пароля ключа подписи (Windows) — см. docs/KEYSTORE-PASSWORD-ROTATION.md
 tools/real_bases.csv             115 реальных прокатов (44 города)
