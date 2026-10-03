@@ -811,7 +811,7 @@ function orderSheet(){
    +'<span class="lbl">Комментарий (необязательно)</span><textarea class="inp" id="oCmt" placeholder="Ваши пожелания"></textarea>'
    +'<label style="display:flex;gap:8px;align-items:flex-start;margin-top:14px;font-size:13px;color:var(--g2);line-height:1.5"><input type="checkbox" id="oAgree" style="margin-top:3px"><span>Я согласен на обработку персональных данных: имя, телефон, адрес доставки и состав заявки — чтобы связаться и подготовить аренду. Храним 12 месяцев, затем удаляем. <a href="privacy.html" style="color:var(--or)">Политика обработки данных</a></span></label>'
    +'<div class="card" id="receipt" style="margin-top:14px"></div>'
-   +'<div class="hint" style="margin-top:10px">Заявку увидят пункты проката вашего города. Если в течение 24 часов никто не подтвердил — позвоним сами, подберём вариант или закроем заявку по вашему желанию.</div>'
+   +'<div class="hint" style="margin-top:10px">Мы получим заявку и свяжемся, чтобы подтвердить наличие, цену и время передачи инструмента. Если подтвердить не получится — вернёмся с вариантами или честно скажем, что не нашли.</div>'
    +'<button class="big" id="oSend">Отправить заявку</button></div>';
   openLayer(h);
   var meth=0;
@@ -906,7 +906,7 @@ function vOrders(){
       +'<div class="body">'+esc(x.tools||'')+'</div>'
       +'<div class="hint">'+esc(x.get_method||'')+(x.days?' · '+x.days+' дн.':'')+'</div></div>';
     }).join('')
-    +'<div class="hint" style="margin-top:12px;text-align:center">Статус «Новая» — заявку ещё не подтвердили. Не дождались ответа? Позвоните нам — подберём вариант или закроем заявку. Телефон и адрес храним 12 месяцев, затем удаляем. <a href="privacy.html" style="color:var(--or)">Политика обработки данных</a></div>';
+    +'<div class="hint" style="margin-top:12px;text-align:center">Статус «Новая» — заявку ещё не подтвердили. Не дождались ответа? Позвоните нам — подберём вариант или честно скажем, что не нашли. Телефон и адрес храним 12 месяцев, затем удаляем. <a href="privacy.html" style="color:var(--or)">Политика обработки данных</a></div>';
   }).catch(function(e){$('lst').innerHTML='<div class="empt">Ошибка: '+esc(e.message)+'</div>'});
 }
 async function vAdminOrders(cont){
