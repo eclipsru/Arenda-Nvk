@@ -25,8 +25,10 @@ printf '  инфо  ветка: %s, коммит: %s\n' "$(git branch --show-cur
 head_ "2. Секреты не должны попадать в репозиторий"
 scan() { # scan "<что ищем>" "<regex>"
   local label="$1" pattern="$2" out
-  # ищем по файлам репозитория, исключая сам этот файл — иначе он находит собственные образцы поиска
-  out="$(git grep -n -I -E "$pattern" -- . ':!tools/check.sh' 2>/dev/null || true)"
+  # ищем по файлам репозитория, исключая сам этот файл — иначе он находит собственные образцы поиска.
+  # --untracked — чтобы ловить и новые файлы, которые ещё не добавлены в git (иначе секрет
+  # проскочит ровно в тот момент, когда его готовят к коммиту).
+  out="$(git grep -n -I --untracked -E "$pattern" -- . ':!tools/check.sh' 2>/dev/null || true)"
   if [ -n "$out" ]; then
     bad "$label"
     printf '%s\n' "$out" | sed 's/^/      /' | head -6
@@ -37,6 +39,7 @@ scan() { # scan "<что ищем>" "<regex>"
 scan "GitHub-токены"                          'github_pat_[A-Za-z0-9_]{10,}|ghp_[A-Za-z0-9]{20,}'
 scan "JWT и service-ключи Supabase"           'eyJ[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{20,}|sb_secret_[A-Za-z0-9_-]{5,}'
 scan "Приватные ключи"                        'BEGIN [A-Z ]*PRIVATE KEY'
+scan "Токен Telegram-бота"                    '[0-9]{8,12}:[A-Za-z0-9_-]{30,}'
 scan "Утёкший пароль keystore (prokat2026)"   'prokat2026'
 if git ls-files | grep -Eq '(^|/)\.env$|(^|/)\.env\.|\.p12$|\.jks$|\.keystore$|\.pem$'; then
   bad "В репозитории есть файлы секретов:"
@@ -66,6 +69,19 @@ for t in syntax-and-release email-guard cities-sync directory-import city-pages 
   if node "tests/$t.cjs" >"/tmp/iva-test-$t.log" 2>&1; then ok "tests/$t.cjs"
   else bad "tests/$t.cjs"; tail -6 "/tmp/iva-test-$t.log" | sed 's/^/      /'; fi
 done
+
+head_ "4.1. Функция уведомлений в Telegram (Deno)"
+DENO_BIN="$(command -v deno 2>/dev/null || true)"
+[ -z "$DENO_BIN" ] && [ -x "$HOME/.deno/bin/deno" ] && DENO_BIN="$HOME/.deno/bin/deno"
+if [ -z "$DENO_BIN" ]; then
+  skip "Deno не установлен — тесты функции уведомлений пропущены. Установить: curl -fsSL https://deno.land/install.sh | sh"
+else
+  if "$DENO_BIN" test --quiet tests/edge/ >/tmp/iva-test-deno.log 2>&1; then
+    ok "tests/edge (Deno): функция уведомлений о заявках"
+  else
+    bad "tests/edge (Deno)"; tail -12 /tmp/iva-test-deno.log | sed 's/^/      /'
+  fi
+fi
 
 head_ "5. Браузерные тесты (Playwright + локальный сервер)"
 # Три разных «нет»: нет модуля, модуль есть без браузера, нет python3 для сервера.
