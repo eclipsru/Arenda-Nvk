@@ -37,7 +37,8 @@ scan() { # scan "<что ищем>" "<regex>"
 scan "GitHub-токены"                          'github_pat_[A-Za-z0-9_]{10,}|ghp_[A-Za-z0-9]{20,}'
 scan "JWT и service-ключи Supabase"           'eyJ[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{20,}|sb_secret_[A-Za-z0-9_-]{5,}'
 scan "Приватные ключи"                        'BEGIN [A-Z ]*PRIVATE KEY'
-scan "Утёкший пароль keystore (prokat2026)"   'prokat2026'
+# образец записан так, чтобы сам пароль не лежал в публичном репозитории одной строкой (см. docs/KEYSTORE-PASSWORD-ROTATION.md)
+scan "Утёкший пароль keystore (старый, скомпрометирован)"   'prokat20[2]6'
 if git ls-files | grep -Eq '(^|/)\.env$|(^|/)\.env\.|\.p12$|\.jks$|\.keystore$|\.pem$'; then
   bad "В репозитории есть файлы секретов:"
   git ls-files | grep -E '(^|/)\.env$|(^|/)\.env\.|\.p12$|\.jks$|\.keystore$|\.pem$' | sed 's/^/      /'

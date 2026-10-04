@@ -21,6 +21,7 @@ from pathlib import Path
 
 START = re.compile(r'^===== ФАЙЛ: (.+?) =====\s*$')
 END = re.compile(r'^===== КОНЕЦ ФАЙЛА =====\s*$')
+# Образцы в документах (postgres://postgres:<пароль>@…, [YOUR-PASSWORD]) секретом не считаются.
 SECRETS = [
     ('токен Telegram-бота', re.compile(r'\b[0-9]{6,12}:[A-Za-z0-9_-]{30,}\b')),
     ('токен GitHub', re.compile(r'github_pat_[A-Za-z0-9_]{10,}|ghp_[A-Za-z0-9]{20,}')),
@@ -28,7 +29,7 @@ SECRETS = [
     ('приватный ключ', re.compile(r'BEGIN [A-Z ]*PRIVATE KEY')),
     ('пароль keystore', re.compile('prokat' + '20' + '26')),  # по частям: целиком строку держать в репозитории нельзя
     ('ключ vk_wall_post', re.compile(r'vkwp_[0-9a-f]{6,}', re.I)),
-    ('строка подключения к базе с паролем', re.compile(r'postgres(?:ql)?://[^:\s]+:[^@\s]{6,}@')),
+    ('строка подключения к базе с паролем', re.compile(r'postgres(?:ql)?://[^:\s]+:(?![<\[{]|\$\{|YOUR|your|пароль|PASSWORD|password)[^@\s]{6,}@')),
 ]
 
 
