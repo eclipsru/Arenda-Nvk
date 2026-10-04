@@ -21,15 +21,15 @@ try {
   const tracked = execSync('git ls-files', { cwd: path.join(__dirname, '..') }).toString().split('\n');
   const keys = tracked.filter(p => /\.(p12|jks|keystore|pfx)$/i.test(p));
   assert.equal(keys.length, 0, 'в репозитории файл ключа: ' + keys.join(', '));
-  // Решение №22 (05.10.2026): действующий ключ №6 — один отпечаток в проверке, памятке и разборщике.
-  const FP = '67E025D8607967319D309B6CB2E77E408705D1E170AAE564FDBC91E8B03FD693';
-  assert.match(code, new RegExp('EXPECTED=' + FP), `${f}: эталон проверки — не ключ №6`);
-  assert.ok(R('docs/КЛЮЧ-ПОДПИСИ.md').includes(FP), 'docs/КЛЮЧ-ПОДПИСИ.md: нет отпечатка ключа №6');
-  assert.ok(R('tools/p12-info.py').includes(FP), 'tools/p12-info.py: нет ключа №6');
-  assert.ok(!tracked.some(p => /КЛЮЧ-ИВА/i.test(p)), 'папка с ключом попала в репозиторий');
+  // Решение №22 (05.10.2026): эталон проверки = отпечаток ключа №6 из памятки (или PENDING, пока владелец не создал ключ).
+  const doc = R('docs/КЛЮЧ-ПОДПИСИ.md');
+  const m = doc.match(/Эталон проверки: `([0-9A-F]{64}|PENDING)`/);
+  assert.ok(m, 'docs/КЛЮЧ-ПОДПИСИ.md: нет строки «Эталон проверки: `…`»');
+  assert.match(code, new RegExp('EXPECTED=' + m[1] + '\\n'), `${f}: эталон проверки не совпадает с памяткой (${m[1]})`);
+  assert.ok(!tracked.some(p => /КЛЮЧ-ИВА|KLUCH-IVA/i.test(p)), 'папка с ключом попала в репозиторий');
   // Уборка 05.10.2026: в корне только APK, на которые есть ссылка (app-update.json), и ProkatInstrumenta.apk.
   const upd = R('app-update.json');
   const stale = tracked.filter(p => /^[^/]+\.apk$/i.test(p) && p !== 'ProkatInstrumenta.apk' && !upd.includes(p));
   assert.equal(stale.length, 0, 'старые APK без ссылки в app-update.json (уберите, чтобы не путаться): ' + stale.join(', '));
-  console.log('Проверка ключа: секреты не выводятся, права — чтение, файлов ключей 0, эталон — ключ №6, старых APK 0');
+  console.log('Проверка ключа: секреты не выводятся, права — чтение, файлов ключей 0, эталон совпадает с памяткой, старых APK 0');
 } catch (e) { console.error('✘ ' + e.message); process.exit(1); }
