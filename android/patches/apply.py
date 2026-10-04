@@ -13,6 +13,7 @@
   5. lambda$setupAddTool$…(Button, Exception) : после humanError → IvaPatch.publishError(текст)
 Плюс versionCode/versionName в apktool.yml.
 """
+import os
 import re
 import sys
 from pathlib import Path
@@ -28,6 +29,8 @@ def esc(s):
 
 def die(msg):
     print('ОШИБКА ПАТЧА: ' + msg, file=sys.stderr)
+    if os.environ.get('GITHUB_ACTIONS'):
+        print('::error title=Патч::' + msg)
     sys.exit(1)
 
 

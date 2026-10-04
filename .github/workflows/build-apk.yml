@@ -4,7 +4,8 @@
 # добавляет класс IvaPatch (android/patches/IvaPatch.java → classes3.dex), выравнивает и подписывает.
 # Проверки перед выдачей: тесты логики IvaPatch; пакет ru.prokatnvsk.app, версия 89 / 10.15;
 # подпись проходит apksigner verify; сертификат = эталон ключа №6 (как в keystore-check.yml).
-# Результат — артефакт ProkatInstrumenta-10.15 (APK + SHA-256). В репозиторий APK кладёт агент.
+# Результат — артефакт ProkatInstrumenta-10.15 (APK + SHA-256) и, для ветки агента, коммит APK в эту же ветку
+# (логи и артефакты из песочницы агента недоступны — выяснено 05.10.2026; сайт и app-update.json правит агент).
 # Секреты: ANDROID_KEYSTORE_B64, ANDROID_KEYSTORE_PASS — только через переменные окружения, не выводятся;
 # файл ключа во временной папке, удаляется в конце. Из Pull Request (чужих веток) не запускается.
 # Запуск: при изменении этого файла или android/patches/**; кнопка Run workflow — после слияния в main.
@@ -17,6 +18,9 @@ on:
   workflow_dispatch:
 permissions:
   contents: read
+concurrency:
+  group: build-apk-${{ github.ref }}
+  cancel-in-progress: false
 env:
   SRC_APK: ProkatInstrumenta-10.14.apk
   OLD_NAME: '10.14'
@@ -29,6 +33,8 @@ jobs:
   build:
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    permissions:
+      contents: write   # только чтобы положить проверенный APK коммитом в ветку агента (шаг ниже)
     steps:
       - uses: actions/checkout@v4
         with:
@@ -64,7 +70,11 @@ jobs:
           set -euo pipefail
           W="$RUNNER_TEMP/w"
           java -jar "$RUNNER_TEMP/apktool.jar" d -r -f -o "$W" "$SRC_APK"
-          python3 android/patches/apply.py "$W" "$NEW_CODE" "$NEW_NAME" || { echo "::error title=Сборка::патч не применился (см. лог)"; exit 1; }
+          if ! python3 android/patches/apply.py "$W" "$NEW_CODE" "$NEW_NAME"; then
+            M="$W/smali/ru/prokatnvsk/app/MainActivity.smali"
+            echo "::notice title=Подсказка::$(grep -cE '^\.method' "$M" 2>/dev/null) методов; $(grep -E '^\.method.*(calcDelivery|updateSummary|paintDelToggle|showAdmHub)' "$M" | cut -c1-90 | tr '\n' '|')"
+            exit 1
+          fi
           python3 android/patches/axml_version.py "$W/AndroidManifest.xml" "$OLD_NAME" "$NEW_NAME" "$NEW_CODE"
           N=$(ls -d "$W"/smali_classes* 2>/dev/null | wc -l); echo "дополнительных dex: $N"
           java -jar "$RUNNER_TEMP/apktool.jar" b -o "$RUNNER_TEMP/unsigned.apk" "$W"
@@ -115,3 +125,19 @@ jobs:
           name: ProkatInstrumenta-${{ env.NEW_NAME }}
           path: out/
           retention-days: 30
+
+      - name: Положить APK в ветку агента
+        if: github.ref == 'refs/heads/arena/01a101d5-arenda-nvk'
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898283+github-actions[bot]@users.noreply.github.com"
+          cp "out/ProkatInstrumenta-$NEW_NAME.apk" .
+          git add -f "ProkatInstrumenta-$NEW_NAME.apk"
+          git commit -m "Сборка $NEW_NAME ($NEW_CODE): APK из Actions, подпись ключом №6 = эталон; $(cut -c1-16 out/SHA256.txt)…" \
+            || { echo "::notice title=Сборка::APK не изменился"; exit 0; }
+          for i in 1 2 3; do
+            git pull --rebase -q origin "${GITHUB_REF#refs/heads/}" && git push -q origin "HEAD:${GITHUB_REF#refs/heads/}" && break
+            sleep 5
+          done
+          echo "::notice title=Сборка::APK положен в ветку: ProkatInstrumenta-$NEW_NAME.apk ($(git rev-parse --short HEAD))"

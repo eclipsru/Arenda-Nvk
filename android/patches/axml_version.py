@@ -5,6 +5,7 @@
 Строго: versionName меняется только при той же длине (10.14 → 10.15), строка должна встречаться
 в таблице строк ровно один раз; versionCode — атрибут android:versionCode (0x0101021b) тега <manifest>.
 """
+import os
 import struct
 import sys
 
@@ -14,6 +15,8 @@ VERSION_NAME = 0x0101021c
 
 def die(m):
     print('ОШИБКА ВЕРСИИ: ' + m, file=sys.stderr)
+    if os.environ.get('GITHUB_ACTIONS'):
+        print('::error title=Версия::' + m)
     sys.exit(1)
 
 
