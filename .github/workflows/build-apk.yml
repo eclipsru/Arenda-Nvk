@@ -132,12 +132,17 @@ jobs:
           set -euo pipefail
           git config user.name "github-actions[bot]"
           git config user.email "41898283+github-actions[bot]@users.noreply.github.com"
-          cp "out/ProkatInstrumenta-$NEW_NAME.apk" .
-          git add -f "ProkatInstrumenta-$NEW_NAME.apk"
-          git commit -m "Сборка $NEW_NAME ($NEW_CODE): APK из Actions, подпись ключом №6 = эталон; $(cut -c1-16 out/SHA256.txt)…" \
+          B="${GITHUB_REF#refs/heads/}"; F="ProkatInstrumenta-$NEW_NAME.apk"
+          git sparse-checkout add "$F" >/dev/null 2>&1 || git sparse-checkout disable
+          cp "out/$F" .
+          git add -f "$F" 2>add.err || { echo "::error title=Сборка::git add: $(head -c 300 add.err | tr '\n' ' ')"; exit 1; }
+          git commit -q -m "Сборка $NEW_NAME ($NEW_CODE): APK из Actions, подпись ключом №6 = эталон; $(cut -c1-16 out/SHA256.txt)…" \
             || { echo "::notice title=Сборка::APK не изменился"; exit 0; }
+          ok=""
           for i in 1 2 3; do
-            git pull --rebase -q origin "${GITHUB_REF#refs/heads/}" && git push -q origin "HEAD:${GITHUB_REF#refs/heads/}" && break
+            if git push -q origin "HEAD:$B" 2>push.err; then ok=1; break; fi
+            git fetch -q --depth=50 origin "$B" && git rebase -q "origin/$B" 2>>push.err || true
             sleep 5
           done
-          echo "::notice title=Сборка::APK положен в ветку: ProkatInstrumenta-$NEW_NAME.apk ($(git rev-parse --short HEAD))"
+          [ -n "$ok" ] || { echo "::error title=Сборка::push: $(head -c 300 push.err | tr '\n' ' ')"; exit 1; }
+          echo "::notice title=Сборка::APK положен в ветку $B: $F ($(git rev-parse --short HEAD))"
