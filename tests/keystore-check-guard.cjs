@@ -11,7 +11,7 @@ try {
   assert.match(code, /permissions:\s*\n\s*contents: read/, `${f}: права только на чтение`);
   assert.ok(!/pull_request/.test(code), `${f}: запуск из Pull Request запрещён`);
   assert.ok(!/set\s+-[a-z]*x/.test(code), `${f}: set -x покажет секреты`);
-  for (const s of ['KS_PASS', 'KS_B64'])
+  for (const s of ['KS_PASS', 'KS_B64', 'KS_LIST'])
     assert.ok(!new RegExp(`(echo|say|bad)[^\\n]*\\$\\{?${s}`).test(code), `${f}: ${s} выводится в журнал`);
   assert.ok(!/-storepass\s+["$]/.test(code) && !/--ks-pass\s+pass:/.test(code), `${f}: пароль в командной строке`);
   assert.match(code, /-storepass:env KS_PASS/); assert.match(code, /--ks-pass env:KS_PASS/);
