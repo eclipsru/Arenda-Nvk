@@ -28,8 +28,11 @@ try {
   assert.match(code, new RegExp('EXPECTED=' + m[1] + '\\n'), `${f}: эталон проверки не совпадает с памяткой (${m[1]})`);
   assert.ok(!tracked.some(p => /КЛЮЧ-ИВА|KLUCH-IVA/i.test(p)), 'папка с ключом попала в репозиторий');
   // Уборка 05.10.2026: в корне только APK, на которые есть ссылка (app-update.json), и ProkatInstrumenta.apk.
+  // С 05.10.2026 ещё «кандидат» — версия, которую собирает build-apk.yml (NEW_NAME), пока владелец её проверяет.
   const upd = R('app-update.json');
-  const stale = tracked.filter(p => /^[^/]+\.apk$/i.test(p) && p !== 'ProkatInstrumenta.apk' && !upd.includes(p));
+  const cand = (R('.github/workflows/build-apk.yml').match(/NEW_NAME: '([\d.]+)'/) || [])[1];
+  const stale = tracked.filter(p => /^[^/]+\.apk$/i.test(p) && p !== 'ProkatInstrumenta.apk' && !upd.includes(p)
+    && p !== `ProkatInstrumenta-${cand}.apk`);
   assert.equal(stale.length, 0, 'старые APK без ссылки в app-update.json (уберите, чтобы не путаться): ' + stale.join(', '));
   console.log('Проверка ключа: секреты не выводятся, права — чтение, файлов ключей 0, эталон совпадает с памяткой, старых APK 0');
 } catch (e) { console.error('✘ ' + e.message); process.exit(1); }
