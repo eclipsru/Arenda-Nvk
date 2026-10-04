@@ -119,7 +119,9 @@ def bump(yml: Path, code: str, name: str):
     t2, n1 = re.subn(r"(versionCode:\s*)'?\d+'?", rf"\g<1>'{code}'", t)
     t2, n2 = re.subn(r"(versionName:\s*)'?[\w.]+'?", rf"\g<1>'{name}'", t2)
     if n1 != 1 or n2 != 1:
-        die('apktool.yml: не найдены versionCode/versionName')
+        # apktool 2.10 с -r пишет versionCode: null — версия в двоичном манифесте (axml_version.py),
+        # итог всё равно сверяет aapt2 в build-apk.yml
+        return 'версия — в манифесте (axml_version.py)'
     yml.write_text(t2, encoding='utf-8')
     return f'версия {name} ({code}) в apktool.yml'
 
