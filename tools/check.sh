@@ -29,7 +29,7 @@ scan() { # scan "<что ищем>" "<regex>"
   out="$(git grep -n -I -E "$pattern" -- . ':!tools/check.sh' 2>/dev/null || true)"
   if [ -n "$out" ]; then
     bad "$label"
-    printf '%s\n' "$out" | sed 's/^/      /' | head -6
+    printf '%s\n' "$out" | cut -d: -f1,2 | sed 's/^/      /' | head -6   # только файл:строка — сам секрет в журнал не печатаем
   else
     ok "$label — чисто"
   fi
@@ -37,8 +37,10 @@ scan() { # scan "<что ищем>" "<regex>"
 scan "GitHub-токены"                          'github_pat_[A-Za-z0-9_]{10,}|ghp_[A-Za-z0-9]{20,}'
 scan "JWT и service-ключи Supabase"           'eyJ[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{20,}|sb_secret_[A-Za-z0-9_-]{5,}'
 scan "Приватные ключи"                        'BEGIN [A-Z ]*PRIVATE KEY'
-# образец записан так, чтобы сам пароль не лежал в публичном репозитории одной строкой (см. docs/KEYSTORE-PASSWORD-ROTATION.md)
+# образец записан так, чтобы сам пароль не лежал в публичном репозитории одной строкой (старый ключ №5 заменён новым 05.10.2026 — см. docs/КЛЮЧ-ПОДПИСИ.md)
 scan "Утёкший пароль keystore (старый, скомпрометирован)"   'prokat20[2]6'
+# ключ подписи, записанный текстом (base64 файла .p12 начинается с MII…) — не должен попасть в репозиторий
+scan "Ключ подписи текстом (base64 .p12)"     'MII[A-Za-z0-9+/]{250}'
 if git ls-files | grep -Eq '(^|/)\.env$|(^|/)\.env\.|\.p12$|\.jks$|\.keystore$|\.pem$'; then
   bad "В репозитории есть файлы секретов:"
   git ls-files | grep -E '(^|/)\.env$|(^|/)\.env\.|\.p12$|\.jks$|\.keystore$|\.pem$' | sed 's/^/      /'

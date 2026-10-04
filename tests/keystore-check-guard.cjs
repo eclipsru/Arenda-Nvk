@@ -5,6 +5,7 @@
 // Запуск: node tests/keystore-check-guard.cjs
 const fs = require('node:fs'), path = require('node:path'), assert = require('node:assert/strict');
 const { execSync } = require('node:child_process');
+const R = p => fs.readFileSync(path.join(__dirname, '..', p), 'utf8');
 try {
   const f = '.github/workflows/keystore-check.yml';
   const code = fs.readFileSync(path.join(__dirname, '..', f), 'utf8').replace(/^\s*#.*$/gm, '');
@@ -20,5 +21,15 @@ try {
   const tracked = execSync('git ls-files', { cwd: path.join(__dirname, '..') }).toString().split('\n');
   const keys = tracked.filter(p => /\.(p12|jks|keystore|pfx)$/i.test(p));
   assert.equal(keys.length, 0, 'в репозитории файл ключа: ' + keys.join(', '));
-  console.log('Проверка ключа: секреты не выводятся, права — чтение, файлов ключей в репозитории 0');
+  // Решение №22 (05.10.2026): действующий ключ №6 — один отпечаток в проверке, памятке и разборщике.
+  const FP = '67E025D8607967319D309B6CB2E77E408705D1E170AAE564FDBC91E8B03FD693';
+  assert.match(code, new RegExp('EXPECTED=' + FP), `${f}: эталон проверки — не ключ №6`);
+  assert.ok(R('docs/КЛЮЧ-ПОДПИСИ.md').includes(FP), 'docs/КЛЮЧ-ПОДПИСИ.md: нет отпечатка ключа №6');
+  assert.ok(R('tools/p12-info.py').includes(FP), 'tools/p12-info.py: нет ключа №6');
+  assert.ok(!tracked.some(p => /КЛЮЧ-ИВА/i.test(p)), 'папка с ключом попала в репозиторий');
+  // Уборка 05.10.2026: в корне только APK, на которые есть ссылка (app-update.json), и ProkatInstrumenta.apk.
+  const upd = R('app-update.json');
+  const stale = tracked.filter(p => /^[^/]+\.apk$/i.test(p) && p !== 'ProkatInstrumenta.apk' && !upd.includes(p));
+  assert.equal(stale.length, 0, 'старые APK без ссылки в app-update.json (уберите, чтобы не путаться): ' + stale.join(', '));
+  console.log('Проверка ключа: секреты не выводятся, права — чтение, файлов ключей 0, эталон — ключ №6, старых APK 0');
 } catch (e) { console.error('✘ ' + e.message); process.exit(1); }
