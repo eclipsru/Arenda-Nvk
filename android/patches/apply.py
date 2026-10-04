@@ -113,11 +113,15 @@ def patch(lines):
 
 def bump(yml: Path, code: str, name: str):
     t = yml.read_text(encoding='utf-8')
+    if 'versionCode' not in t:
+        # разбор с -r (без ресурсов): версия хранится в двоичном манифесте — её меняет axml_version.py
+        return 'версия — в манифесте (axml_version.py)'
     t2, n1 = re.subn(r"(versionCode:\s*)'?\d+'?", rf"\g<1>'{code}'", t)
     t2, n2 = re.subn(r"(versionName:\s*)'?[\w.]+'?", rf"\g<1>'{name}'", t2)
     if n1 != 1 or n2 != 1:
         die('apktool.yml: не найдены versionCode/versionName')
     yml.write_text(t2, encoding='utf-8')
+    return f'версия {name} ({code}) в apktool.yml'
 
 
 def main():
@@ -133,8 +137,10 @@ def main():
     lines = text.split('\n')
     done = patch(lines)
     f.write_text('\n'.join(lines), encoding='utf-8')
-    bump(root / 'apktool.yml', code, name)
-    print('патч применён: ' + '; '.join(done) + f'; версия {name} ({code})')
+    done.append(bump(root / 'apktool.yml', code, name))
+    print('патч применён: ' + '; '.join(done))
+    if os.environ.get('GITHUB_ACTIONS'):
+        print('::notice title=Патч::' + '; '.join(done))
 
 
 if __name__ == '__main__':
