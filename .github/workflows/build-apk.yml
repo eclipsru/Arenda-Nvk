@@ -1,0 +1,117 @@
+# Ива — сборка приложения 10.15 из 10.14 + доработки (android/patches). Подпись — ключом №6 из секретов.
+# Почему так: исходников 10.14 нет, есть только APK. Сборка разбирает APK (apktool, без пересборки ресурсов),
+# вставляет 5 вызовов (android/patches/apply.py), меняет версию в манифесте (axml_version.py),
+# добавляет класс IvaPatch (android/patches/IvaPatch.java → classes3.dex), выравнивает и подписывает.
+# Проверки перед выдачей: тесты логики IvaPatch; пакет ru.prokatnvsk.app, версия 89 / 10.15;
+# подпись проходит apksigner verify; сертификат = эталон ключа №6 (как в keystore-check.yml).
+# Результат — артефакт ProkatInstrumenta-10.15 (APK + SHA-256). В репозиторий APK кладёт агент.
+# Секреты: ANDROID_KEYSTORE_B64, ANDROID_KEYSTORE_PASS — только через переменные окружения, не выводятся;
+# файл ключа во временной папке, удаляется в конце. Из Pull Request (чужих веток) не запускается.
+# Запуск: при изменении этого файла или android/patches/**; кнопка Run workflow — после слияния в main.
+# Откат: `git revert` коммита с этим файлом; APK 10.14 остаётся в репозитории.
+name: Сборка приложения
+on:
+  push:
+    branches: ['main', 'arena/01a101d5-arenda-nvk']
+    paths: ['.github/workflows/build-apk.yml', 'android/patches/**']
+  workflow_dispatch:
+permissions:
+  contents: read
+env:
+  SRC_APK: ProkatInstrumenta-10.14.apk
+  OLD_NAME: '10.14'
+  NEW_NAME: '10.15'
+  NEW_CODE: '89'
+  APKTOOL_VER: '2.10.0'
+  # Эталон ключа №6 (решение №22, 05.10.2026) — тот же, что в keystore-check.yml и docs/КЛЮЧ-ПОДПИСИ.md
+  EXPECTED: 5D2B9F8BB54AD0B816A779B5991746957EBD6FA056D8A63D1D1635077BED5DDE
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: |
+            ProkatInstrumenta-10.14.apk
+            android/patches
+          sparse-checkout-cone-mode: false
+
+      - name: Инструменты
+        run: |
+          set -euo pipefail
+          BT="$ANDROID_HOME/build-tools/$(ls "$ANDROID_HOME/build-tools" | sort -V | tail -1)"
+          PLAT="$ANDROID_HOME/platforms/$(ls "$ANDROID_HOME/platforms" | grep -E '^android-[0-9]+$' | sort -t- -k2 -n | tail -1)"
+          echo "BT=$BT" >> "$GITHUB_ENV"; echo "ANDROID_JAR=$PLAT/android.jar" >> "$GITHUB_ENV"
+          curl -fsSL -o "$RUNNER_TEMP/apktool.jar" \
+            "https://github.com/iBotPeaches/Apktool/releases/download/v${APKTOOL_VER}/apktool_${APKTOOL_VER}.jar"
+          echo "apktool ${APKTOOL_VER}: $(sha256sum "$RUNNER_TEMP/apktool.jar" | cut -c1-16)…; build-tools: $(basename "$BT"); $(basename "$PLAT"); $(javac -version 2>&1)"
+
+      - name: Компиляция и тесты IvaPatch
+        run: |
+          set -euo pipefail
+          C="$RUNNER_TEMP/cls"; mkdir -p "$C"
+          javac -encoding UTF-8 -source 8 -target 8 -nowarn -bootclasspath "$ANDROID_JAR" -d "$C" android/patches/IvaPatch.java
+          T="$RUNNER_TEMP/tcls"; mkdir -p "$T"
+          javac -encoding UTF-8 -cp "$C:$ANDROID_JAR" -d "$T" android/patches/test/IvaPatchTest.java
+          java -Dfile.encoding=UTF-8 -cp "$T:$C:$ANDROID_JAR" ru.prokatnvsk.app.IvaPatchTest
+          mkdir -p "$RUNNER_TEMP/dex"
+          "$BT/d8" --release --min-api 21 --lib "$ANDROID_JAR" --output "$RUNNER_TEMP/dex" $(find "$C" -name '*.class')
+          ls -la "$RUNNER_TEMP/dex"
+
+      - name: Разбор, патч, версия
+        run: |
+          set -euo pipefail
+          W="$RUNNER_TEMP/w"
+          java -jar "$RUNNER_TEMP/apktool.jar" d -r -f -o "$W" "$SRC_APK"
+          python3 android/patches/apply.py "$W" "$NEW_CODE" "$NEW_NAME" || { echo "::error title=Сборка::патч не применился (см. лог)"; exit 1; }
+          python3 android/patches/axml_version.py "$W/AndroidManifest.xml" "$OLD_NAME" "$NEW_NAME" "$NEW_CODE"
+          N=$(ls -d "$W"/smali_classes* 2>/dev/null | wc -l); echo "дополнительных dex: $N"
+          java -jar "$RUNNER_TEMP/apktool.jar" b -o "$RUNNER_TEMP/unsigned.apk" "$W"
+          # IvaPatch — следующим dex-файлом (classes3.dex при двух исходных)
+          NEXT=$(( $(unzip -Z1 "$RUNNER_TEMP/unsigned.apk" | grep -cE '^classes[0-9]*\.dex$') + 1 ))
+          mkdir -p "$RUNNER_TEMP/add" && cp "$RUNNER_TEMP/dex/classes.dex" "$RUNNER_TEMP/add/classes$NEXT.dex"
+          (cd "$RUNNER_TEMP/add" && zip -q -X "$RUNNER_TEMP/unsigned.apk" "classes$NEXT.dex")
+          unzip -Z1 "$RUNNER_TEMP/unsigned.apk" | grep dex
+
+      - name: Выравнивание и подпись
+        env:
+          KS_B64: ${{ secrets.ANDROID_KEYSTORE_B64 }}
+          KS_PASS: ${{ secrets.ANDROID_KEYSTORE_PASS }}
+        run: |
+          set -euo pipefail
+          bad() { echo "::error title=Сборка::$1"; exit 1; }
+          [ -n "$KS_B64" ] && [ -n "$KS_PASS" ] || bad "нет секретов ANDROID_KEYSTORE_B64 / ANDROID_KEYSTORE_PASS"
+          export KS="$RUNNER_TEMP/ks.p12"; trap 'rm -f "$KS"' EXIT
+          printf '%s' "$KS_B64" | tr -d ' \r\n' | base64 -d > "$KS"
+          ALIAS=$(keytool -J-Duser.language=en -list -keystore "$KS" -storepass:env KS_PASS | grep -i 'PrivateKeyEntry' | head -1 | cut -d, -f1)
+          [ -n "$ALIAS" ] || bad "в ключе нет закрытого ключа"
+          "$BT/zipalign" -f -p 4 "$RUNNER_TEMP/unsigned.apk" "$RUNNER_TEMP/aligned.apk"
+          mkdir -p out
+          "$BT/apksigner" sign --ks "$KS" --ks-pass env:KS_PASS --key-pass env:KS_PASS --ks-key-alias "$ALIAS" \
+            --out "out/ProkatInstrumenta-$NEW_NAME.apk" "$RUNNER_TEMP/aligned.apk" >/dev/null 2>&1 || bad "подпись не прошла"
+          rm -f out/*.idsig
+
+      - name: Проверка результата
+        run: |
+          set -euo pipefail
+          bad() { echo "::error title=Сборка::$1"; exit 1; }
+          A="out/ProkatInstrumenta-$NEW_NAME.apk"
+          "$BT/apksigner" verify "$A" || bad "apksigner verify не прошёл"
+          CERT=$("$BT/apksigner" verify --print-certs "$A" | grep -m1 'SHA-256 digest' | awk '{print $NF}')
+          [ "${CERT^^}" = "$EXPECTED" ] || bad "сертификат ${CERT:0:8}… не равен эталону ключа №6"
+          B=$("$BT/aapt2" dump badging "$A" | head -1); echo "$B"
+          echo "$B" | grep -q "name='ru.prokatnvsk.app'" || bad "не тот пакет"
+          echo "$B" | grep -q "versionCode='$NEW_CODE'" || bad "versionCode не $NEW_CODE"
+          echo "$B" | grep -q "versionName='$NEW_NAME'" || bad "versionName не $NEW_NAME"
+          # вызовы IvaPatch есть в коде, класс есть в APK
+          unzip -p "$A" 'classes*.dex' | grep -c -a 'Lru/prokatnvsk/app/IvaPatch;' >/dev/null || bad "в APK нет IvaPatch"
+          SUM=$(sha256sum "$A" | cut -d' ' -f1); SIZE=$(stat -c %s "$A")
+          echo "$SUM  ProkatInstrumenta-$NEW_NAME.apk" > out/SHA256.txt
+          echo "::notice title=Сборка::✔ ProkatInstrumenta-$NEW_NAME.apk ($NEW_CODE), $SIZE байт, SHA-256 ${SUM:0:16}…, подпись ключом №6 = эталон"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ProkatInstrumenta-${{ env.NEW_NAME }}
+          path: out/
+          retention-days: 30
