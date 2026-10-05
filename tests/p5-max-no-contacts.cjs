@@ -36,7 +36,22 @@ try {
   assert.ok(!/\b(drop|truncate|delete)\b/i.test(rb.replace(/--[^\n]*/g, '')), 'в откате опасная команда');
   assert.ok(!/sb_secret_|service_role|eyJ[A-Za-z0-9_-]{20,}\./.test(rb), 'секретный ключ в откате');
 
-  console.log('MAX без контактов: в уведомление уходят только номер, состав, срок и дата; откат на месте');
+  // 05.10.2026, вливание второго чата: ни одна применяемая миграция не возвращает в MAX всю заявку,
+  // а устаревшие SQL в supabase/obsolete начинаются с «замка» (RAISE EXCEPTION).
+  const fsx = require('node:fs'), px = require('node:path');
+  const dir = d => px.join(__dirname, '..', d);
+  for (const m of fsx.readdirSync(dir('supabase/migrations')).filter(n => n.endsWith('.sql'))) {
+    const t = read('supabase/migrations/' + m);
+    if (/fn_order_to_max_hook\(\)\s*\n?\s*RETURNS/i.test(t))
+      assert.ok(!/'record'\s*,\s*to_jsonb\(\s*new\s*\)/i.test(t), `${m}: в MAX снова уходит вся заявка с контактами (решение №17)`);
+  }
+  let locked = 0;
+  if (fsx.existsSync(dir('supabase/obsolete'))) for (const m of fsx.readdirSync(dir('supabase/obsolete')).filter(n => n.endsWith('.sql'))) {
+    const code = read('supabase/obsolete/' + m).replace(/^\s*--[^\n]*\n/gm, '').trimStart();
+    assert.match(code, /^DO \$\w*\$ BEGIN RAISE EXCEPTION 'НЕ ПРИМЕНЯТЬ/, `supabase/obsolete/${m}: нет замка в начале`);
+    locked++;
+  }
+  console.log(`MAX без контактов: в уведомление уходят только номер, состав, срок и дата; откат на месте; устаревших SQL под замком: ${locked}`);
 } catch (e) {
   console.error('✘ ' + e.message);
   process.exit(1);
