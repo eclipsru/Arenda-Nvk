@@ -73,7 +73,7 @@ moneyStats = () => ({ rent:0, fee:0, paid:0, owed:0, byAdmin:{} });
       assert.equal(await page.locator('.apk-test').count(), 0, 'жёлтая карточка — только у создателя');
       assert.equal(await page.locator('#root a[href$=".apk"]').count(), 2);
       for (const h of await page.locator('#root a[href$=".apk"]').evaluateAll(a => a.map(x => x.getAttribute('href')))) assert.equal(h, APK);
-      assert.match(await page.locator('.sect-h .cnt').innerText(), /владелец/);
+      assert.match(await page.locator('.sect-h .cnt').first().innerText(), /владелец/);
       // Сводка: цифры обращений со страниц городов
       const dash = await page.locator('#root').innerText();
       assert.match(dash, /Обращения со страниц городов/, 'в сводке нет блока обращений');
@@ -145,7 +145,7 @@ moneyStats = () => ({ rent:0, fee:0, paid:0, owed:0, byAdmin:{} });
       await mockRelease(page);
       await page.goto(`${BASE}/chief.html`);
       await page.locator('#apkConfirm').waitFor({ timeout: 10000 });
-      assert.match(await page.locator('.sect-h .cnt').innerText(), /создатель/, 'у создателя статус «создатель»');
+      assert.match(await page.locator('.sect-h .cnt').first().innerText(), /создатель/, 'у создателя статус «создатель»');
       const order = await page.evaluate(() => {
         const y = document.querySelector('.apk-test'), g = document.querySelector('.apk-public');
         return !!(y && g && (y.compareDocumentPosition(g) & Node.DOCUMENT_POSITION_FOLLOWING));
