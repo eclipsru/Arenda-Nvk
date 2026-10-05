@@ -29,7 +29,7 @@ scan() { # scan "<что ищем>" "<regex>"
   out="$(git grep -n -I -E "$pattern" -- . ':!tools/check.sh' 2>/dev/null || true)"
   if [ -n "$out" ]; then
     bad "$label"
-    printf '%s\n' "$out" | sed 's/^/      /' | head -6
+    printf '%s\n' "$out" | cut -d: -f1,2 | sed 's/^/      /' | head -6   # только файл:строка — сам секрет в журнал не печатаем
   else
     ok "$label — чисто"
   fi
@@ -37,7 +37,10 @@ scan() { # scan "<что ищем>" "<regex>"
 scan "GitHub-токены"                          'github_pat_[A-Za-z0-9_]{10,}|ghp_[A-Za-z0-9]{20,}'
 scan "JWT и service-ключи Supabase"           'eyJ[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{20,}|sb_secret_[A-Za-z0-9_-]{5,}'
 scan "Приватные ключи"                        'BEGIN [A-Z ]*PRIVATE KEY'
-scan "Утёкший пароль keystore (prokat2026)"   'prokat2026'
+# образец записан так, чтобы сам пароль не лежал в публичном репозитории одной строкой (старый ключ №5 заменён новым 05.10.2026 — см. docs/КЛЮЧ-ПОДПИСИ.md)
+scan "Утёкший пароль keystore (старый, скомпрометирован)"   'prokat20[2]6'
+# ключ подписи, записанный текстом (base64 файла .p12 начинается с MII…) — не должен попасть в репозиторий
+scan "Ключ подписи текстом (base64 .p12)"     'MII[A-Za-z0-9+/]{250}'
 if git ls-files | grep -Eq '(^|/)\.env$|(^|/)\.env\.|\.p12$|\.jks$|\.keystore$|\.pem$'; then
   bad "В репозитории есть файлы секретов:"
   git ls-files | grep -E '(^|/)\.env$|(^|/)\.env\.|\.p12$|\.jks$|\.keystore$|\.pem$' | sed 's/^/      /'
@@ -62,10 +65,38 @@ head_ "3. Релиз приложения (app-update.json ↔ APK ↔ этал�
 if node tools/check-release.js; then ok "релиз приложения согласован"; else bad "см. замечания выше"; fi
 
 head_ "4. Статические тесты (без браузера)"
-for t in syntax-and-release email-guard cities-sync directory-import city-pages city-priority py-compat empty-states p4-personal-data p6-commission; do
+for t in syntax-and-release email-guard cities-sync directory-import city-pages city-priority py-compat empty-states p4-personal-data p6-commission diag-owner-readonly p5-bot-no-contacts p5-max-no-contacts p5-order-email deploy-functions-guard reset-password keystore-check-guard apk-build-guard app-test-channel; do
   if node "tests/$t.cjs" >"/tmp/iva-test-$t.log" 2>&1; then ok "tests/$t.cjs"
   else bad "tests/$t.cjs"; tail -6 "/tmp/iva-test-$t.log" | sed 's/^/      /'; fi
 done
+
+head_ "4.1. Стенд таблицы релизов app_releases (локальный PostgreSQL)"
+PG_PY="${PG_PY:-python3}"
+if "$PG_PY" -c "import pgserver" >/dev/null 2>&1; then
+  if "$PG_PY" tools/app-releases-stand.py >/tmp/iva-test-rel-stand.log 2>&1; then ok "app_releases: подтверждает только eclips.ru@mail.ru (11 случаев на PostgreSQL)"
+  else bad "стенд app_releases"; tail -8 /tmp/iva-test-rel-stand.log | sed 's/^/      /'; fi
+else
+  skip "стенд app_releases: нет pgserver (PG_PY=<python с pgserver> bash tools/check.sh)"
+fi
+
+head_ "4.2. Стенд миграций бота (локальный PostgreSQL)"
+bash tools/tg-migrations-stand.sh >/tmp/iva-test-tg-stand.log 2>&1
+rc=$?
+if [ "$rc" = "0" ]; then
+  ok "стенд бота: миграции проверены на живом PostgreSQL"
+elif [ "$rc" = "2" ]; then
+  skip "$(tail -1 /tmp/iva-test-tg-stand.log)"
+else
+  bad "стенд бота"; tail -20 /tmp/iva-test-tg-stand.log | sed 's/^/      /'
+fi
+
+head_ "4.3. Передача пакета одним файлом (круговой тест)"
+bash tools/bundle-roundtrip.sh >/tmp/iva-test-bundle.log 2>&1
+if [ "$?" = "0" ]; then
+  ok "$(tail -1 /tmp/iva-test-bundle.log)"
+else
+  bad "канал «пакет одним файлом»"; tail -20 /tmp/iva-test-bundle.log | sed 's/^/      /'
+fi
 
 head_ "5. Браузерные тесты (Playwright + локальный сервер)"
 # Три разных «нет»: нет модуля, модуль есть без браузера, нет python3 для сервера.
@@ -90,7 +121,7 @@ else
   done
   if [ "$READY" = "1" ]; then
     ok "локальный сервер поднят: http://127.0.0.1:$PORT"
-    for t in photon rental-profile new-tool-prefill order-and-fee reviews-system app-banner chief-and-apk empty-states-browser; do
+    for t in photon rental-profile new-tool-prefill order-and-fee order-consent-browser reviews-system app-banner chief-and-apk empty-states-browser; do
       if SITE_BASE_URL="http://127.0.0.1:$PORT" node "tests/$t.cjs" >"/tmp/iva-test-$t.log" 2>&1; then ok "tests/$t.cjs"
       else bad "tests/$t.cjs"; tail -6 "/tmp/iva-test-$t.log" | sed 's/^/      /'; fi
     done

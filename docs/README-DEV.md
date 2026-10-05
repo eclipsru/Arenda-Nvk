@@ -78,12 +78,23 @@ tools/screens-baseline.json      манифест хешей скриншото�
 tools/backup-windows.ps1         бэкап базы Supabase (Windows, PowerShell) — см. docs/BACKUP-SUPABASE.md
 tools/backup-api-windows.ps1     выгрузка данных через API без pg_dump (Windows) — см. docs/BACKUP-SUPABASE.md
 tools/schema-dump.sql            запрос для SQL-редактора Supabase: структура базы одним текстом
-tools/rotate-keystore-windows.ps1 смена пароля ключа подписи (Windows) — см. docs/KEYSTORE-PASSWORD-ROTATION.md
+tools/diag-owner.sql             запрос для SQL-редактора Supabase: срок хранения, следы Telegram-бота, «Год до» (только чтение)
+tools/diag-bot.sql               запрос для SQL-редактора Supabase: устройство Telegram-бота в базе (только чтение, секреты скрыты)
+supabase/bot/iva_tg_snapshot_20261003.sql  Telegram-бот в базе: полный текст функций + блоки отката (секреты скрыты)
+docs/TELEGRAM-БОТ.md             как устроен бот и как им управлять (проверить, выключить, сменить токен)
+supabase/bot/max_rollback_20261003.sql  откат уведомления в MAX к исходному (с контактами) — для 20261003_max_no_contacts.sql
+supabase/functions/order_email/index.ts  функция Supabase: письма клиенту о заявке (SMTP mail.ru, без библиотек) — см. docs/ПИСЬМА.md
+supabase/migrations/20261003_order_email.sql  очередь писем + триггер + выдача по одноразовому пропуску
+.github/workflows/check.yml      автопроверка на GitHub: check.sh с настоящим браузером на каждый PR
+tools/p12-info.py                что видно в файле ключа подписи без пароля (какой из ключей истории)
+.github/workflows/keystore-check.yml  проверка ключа подписи из секретов GitHub (без сборки)
 tools/real_bases.csv             115 реальных прокатов (44 города)
 tools/seed_real_bases.py         заливка справочника (см. задачу П2 — объединить с корневым скриптом)
 docs/BACKUP-SUPABASE.md          бэкап базы: портативный pg_dump, схема через SQL-редактор, выгрузка данных через API
-docs/KEYSTORE-PASSWORD-ROTATION.md  смена пароля ключа подписи без смены сертификата
+docs/КЛЮЧ-ПОДПИСИ.md             ключ подписи приложения: где хранить, как обращаться, что делать при потере (с 05.10.2026)
+docs/32-ПЕРЕДАЧА-ПАКЕТА-ОДНИМ-ФАЙЛОМ.md  документ №32 второго чата: передача пакета одним .md
 docs/ЖУРНАЛ.md                   журнал этапов, точек отката и решений владельца
+docs/ПРОМТ-АГЕНТУ.md             готовый промт для запуска новой сессии агента (полный и короткий)
 backup-<дата>/                   локальные бэкапы (в репозиторий не попадают)
 .snapshots/                      локальные снимки и скриншоты (в репозиторий не попадают)
 ```
@@ -94,8 +105,7 @@ backup-<дата>/                   локальные бэкапы (в реп�
 # 1. Бэкап базы (спросит строку подключения)
 powershell -ExecutionPolicy Bypass -File tools\backup-windows.ps1 -Baseline
 
-# 2. Смена пароля ключа подписи приложения (спросит пароли)
-powershell -ExecutionPolicy Bypass -File tools\rotate-keystore-windows.ps1
+# 2. Ключ подписи приложения — ничего запускать не нужно: он в секретах GitHub (см. docs/КЛЮЧ-ПОДПИСИ.md)
 ```
 
 Если `pg_dump` не установлен (например, `winget` падает с ошибкой 403 — это его известный баг), установка не нужна:

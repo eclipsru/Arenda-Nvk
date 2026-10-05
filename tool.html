@@ -6,7 +6,7 @@
 <title>Объявление — Ива, аренда инструмента</title>
 <meta name="theme-color" content="#101217">
 <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
-<link rel="stylesheet" href="assets/theme.css?v=20260924-app-banner-v2">
+<link rel="stylesheet" href="assets/theme.css?v=20261005-rel">
 <link rel="stylesheet" href="assets/profile.css?v=20260923-rental-profile">
 <link rel="stylesheet" href="assets/geo.css?v=20260923-photon">
 <style>
@@ -41,7 +41,8 @@
 <script src="assets/data.js"></script>
 <script src="assets/geo.js?v=20260923-photon"></script>
 <script src="assets/sb.js?v=20260924-order-fee"></script>
-<script src="assets/app.js?v=20261001-p4-pd"></script>
+<script src="assets/app-release.js?v=20261005-rel"></script>
+<script src="assets/app.js?v=20261005-rel"></script>
 <script>
 (async function(){
   mountChrome('', '');
@@ -282,6 +283,7 @@
     var isRoundTrip = false; // toggle switch for round trip
     var savedAddr = '';
     var savedComment = '';
+    var agreeOn = false; // согласие на обработку ПД — не сбрасываем при перерисовке листа
     var destCoords = null;
     var deliveryKm = 0;
 
@@ -415,6 +417,11 @@
 
           '<div class="fld"><label style="display:block;font-size:13px;font-weight:600;margin-bottom:6px">Комментарий (необязательно)</label>' +
             '<textarea class="inp" id="ordComment" rows="2" placeholder="Удобное время встречи или пожелания">' + esc(savedComment) + '</textarea></div>' +
+          /* Согласие на обработку ПД (этап П4, шаг 2): без него заявка не уходит. */
+          '<label style="display:flex;gap:8px;align-items:flex-start;font-size:13px;color:var(--gr);line-height:1.5">' +
+            '<input type="checkbox" id="ordAgree" style="margin-top:3px"' + (agreeOn ? ' checked' : '') + '>' +
+            '<span>Я согласен на обработку персональных данных: имя, телефон, адрес доставки и состав заявки — чтобы связаться и подготовить аренду. Храним 12 месяцев, затем удаляем. <a href="privacy.html" style="color:var(--or)">Политика обработки данных</a></span>' +
+          '</label>' +
 
           /* Чек заказа */
           '<div class="card" style="background:var(--field);border:1px solid var(--line);border-radius:10px;padding:12px">' +
@@ -511,6 +518,8 @@
         };
       }
 
+      if ($('ordAgree')) $('ordAgree').onchange = function(){ agreeOn = this.checked; };
+
       $('ordSend').onclick = doSubmitOrder;
     }
 
@@ -536,6 +545,11 @@
       }
       if (isDelivery && !dAddr){
         errEl.textContent = 'Укажите адрес доставки';
+        errEl.style.display = 'block';
+        return;
+      }
+      if (!$('ordAgree') || !$('ordAgree').checked){
+        errEl.textContent = 'Требуется согласие на обработку данных';
         errEl.style.display = 'block';
         return;
       }
@@ -578,8 +592,9 @@
             '<div style="font-size:42px;margin-bottom:8px">🎉</div>' +
             '<h3 style="font-size:18px;margin-bottom:8px">Заявка успешно отправлена</h3>' +
             '<p style="color:var(--gr);font-size:14px;line-height:1.6;margin-bottom:12px">' +
-              'Арендодатель получил уведомление и свяжется с вами по телефону <b>' + esc(ph) + '</b> ' +
-              'для подтверждения бронирования и времени передачи инструмента.' +
+              'Заявка отправлена. Мы получили её и свяжемся с вами по телефону <b>' + esc(ph) + '</b>, ' +
+              'чтобы подтвердить бронь и время передачи инструмента. Если подтвердить не получится — ' +
+              'вернёмся с вариантами или честно скажем, что не нашли.' +
             '</p>' +
           '</div>',
           '<button class="btn sec" id="ordDoneOk" style="flex:1">Понятно</button>' +

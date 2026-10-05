@@ -759,3 +759,25 @@ select.inp{cursor:pointer;appearance:none;
 }
 
 
+
+/* ---------- Карточки скачивания приложения (решение владельца 05.10.2026) ----------
+   Зелёная — выпущенная версия (её видят все); жёлтая — новая версия, видна только создателю на телефоне
+   (assets/app.js → mountAppCards). */
+.apk-cards{margin-top:24px}
+.apk-card,.apk-test{display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;
+  background:var(--card);border-radius:var(--r);padding:16px;margin:0 0 14px}
+.apk-card b,.apk-test b{font-size:15px}
+.apk-card p,.apk-test p{color:var(--gr);font-size:12.5px;line-height:1.5;margin:4px 0 0}
+.apk-card .btn,.apk-test .btn{white-space:nowrap}
+.apk-public{border:2px solid #39FF14 !important;box-shadow:0 0 0 1px rgba(57,255,20,.5),0 0 22px rgba(57,255,20,.35)}
+.apk-public b{color:#39FF14}
+.apk-public .btn{background:#39FF14;color:#111;border-color:#39FF14}
+.apk-test{border:2px solid #FFEA00;box-shadow:0 0 0 1px rgba(255,234,0,.5),0 0 22px rgba(255,234,0,.35)}
+.apk-test b{color:#FFEA00}
+.apk-test .btn{background:#FFEA00;color:#111;border-color:#FFEA00}
+.apk-test-btns{display:flex;gap:10px;flex-wrap:wrap}
+.apk-test .btn.apk-confirm{background:transparent;color:#FFEA00}
+.apk-test .btn.apk-confirm:disabled{opacity:.5}
+.apk-test-msg{flex-basis:100%;margin:0 !important}
+.apk-test-msg:empty{display:none}
+.apk-test-msg.bad{color:#ff6b6b !important}

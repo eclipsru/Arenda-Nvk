@@ -7,7 +7,7 @@
 <meta name="robots" content="noindex, nofollow">
 <meta name="theme-color" content="#101217">
 <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
-<link rel="stylesheet" href="assets/theme.css?v=20260924-app-banner-v2">
+<link rel="stylesheet" href="assets/theme.css?v=20261005-rel">
 <style>
 .kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:12px;margin-bottom:22px}
 .kpi{background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:16px}
@@ -95,8 +95,9 @@
 <script src="assets/data.js"></script>
 <script src="assets/geo.js?v=20260923-photon"></script>
 <script src="assets/email-guard.js?v=20260926-email"></script><script src="assets/sb.js?v=20260926-email"></script>
-<script src="assets/app.js?v=20261001-p4-pd"></script>
-<script src="assets/partners.js?v=20261001-p6-1year"></script>
+<script src="assets/app-release.js?v=20261005-rel"></script>
+<script src="assets/app.js?v=20261005-rel"></script>
+<script src="assets/partners.js?v=20261003-p6-texts"></script>
 <script>
 (function(){
   mountChrome('chief', '');
@@ -134,8 +135,8 @@
 
     return '<div class="sect" style="padding-bottom:0"><div class="sect-h">' +
         '<h2>Управление площадкой</h2>' +
-        '<a class="btn sm" href="ProkatInstrumenta-10.14.apk" download>Скачать Android 10.14</a>' +
-        '<span class="cnt">' + esc(A.me) + ' · владелец</span>' +
+        '<a class="btn sm" href="ProkatInstrumenta-10.14.apk" data-app-dl="Скачать Android {v}" download>Скачать Android 10.14</a>' +
+        '<span class="cnt">' + esc(A.me) + (isCreator() ? ' · создатель' : ' · владелец') + '</span>' +
       '</div></div>' +
       '<div class="tabs">' +
         '<button data-tab="dash" class="' + (TAB==='dash'?'on':'') + '">Сводка</button>' +
@@ -167,15 +168,7 @@
       return !o.status || o.status === 'new';
     }).length;
 
-    return '<section class="apk-recovery" aria-label="Нативное приложение для Android">' +
-        '<div><h3>Ива для Android · обновлённая версия 10.14</h3>' +
-          '<p>Новое: обновление прямо в приложении — в Профиле над строкой «О приложении» сама ' +
-          'появляется кнопка «Обновить до версии …». Обновление ведёт за руку: диалог подскажет нажать «Установить», при пропуске системного окна есть кнопка повтора.</p>' +
-          '<p>Сборка подписана тем же ключом, что 10.12, поэтому ставится поверх без удаления. ' +
-          'Если установка поверх текущего приложения отклонена из-за подписи (переход с очень старых сборок), удалите текущую версию ' +
-          'и установите эту заново. После удаления локальные настройки могут пропасть; данные аккаунта хранятся на сервере.</p></div>' +
-        '<a class="btn" href="ProkatInstrumenta-10.14.apk" download>Скачать APK 10.14</a>' +
-      '</section>' +
+    return '<div class="apk-cards" id="apkCards"></div>' +
       '<div class="kpis">' +
         '<div class="kpi"><div class="lb">Оборот за всё время</div>' +
           '<div class="vl">' + m(s.rent) + '</div>' +
@@ -273,22 +266,29 @@
 
   /* ---------- Первый год ставки: когда пересматривать ---------- */
   // Ставка 1% действует первый год с даты одобрения заявки (решение владельца).
-  // Оферта обещает изменить ставку не ранее года с уведомлением за 30 дней —
-  // поэтому за 30 дней до даты и после неё ячейка подсвечивается.
-  function feeYearCell(em){
+  // Оферта обещает изменить ставку не ранее года с уведомлением за 30 дней.
+  // Решение владельца 03.10.2026 (№16): подсвечивать за 45 дней — 15 дней запаса,
+  // чтобы уведомление точно успело уйти раньше, чем за 30 дней до даты.
+  const FEE_NOTICE_DAYS = 45; // за сколько дней до конца первого года напоминать «уведомить»
+  // Решение владельца 03.10.2026: у арендодателей, подключённых вручную (без заявки),
+  // первый год считается с даты, когда их внесли в базу (admins.created_at); помечается «с даты добавления».
+  function feeYearCell(em, a){
     let app = null;
     (D.landlordApps || []).forEach(function(x){
       if (!app && x.status === 'approved' && x.reviewed_at && (x.email || '').toLowerCase() === em) app = x;
     });
-    if (!app) return '<td class="num small muted">—</td>';
-    const end = new Date(app.reviewed_at);
+    let start = app ? app.reviewed_at : null, note = '';
+    if (!start && a && a.role !== 'chief' && a.created_at) { start = a.created_at; note = 'с даты добавления'; }
+    if (!start || isNaN(new Date(start).getTime())) return '<td class="num small muted">—</td>';
+    const end = new Date(start);
     end.setFullYear(end.getFullYear() + 1);
     const days = Math.ceil((end.getTime() - Date.now()) / 86400000);
-    const label = dt(end.toISOString());
+    const label = dt(end.toISOString()) +
+      (note ? '<div class="small muted" title="Подключён вручную, без заявки: год считается с даты добавления в базу">' + note + '</div>' : '');
     if (days < 0)
       return '<td class="num"><b style="color:var(--red)">' + label + '</b>' +
         '<div class="small" style="color:var(--red)">год прошёл — пересмотреть</div></td>';
-    if (days <= 30)
+    if (days <= FEE_NOTICE_DAYS)
       return '<td class="num"><b style="color:var(--yel)">' + label + '</b>' +
         '<div class="small" style="color:var(--yel)">' + days + ' дн. — уведомить</div></td>';
     return '<td class="num">' + label + '<div class="small muted">' + days + ' дн.</div></td>';
@@ -307,7 +307,7 @@
           (a.active === false ? ' <span class="badge off">выкл</span>' : '') +
           '<div class="small muted">' + esc(em) + '</div></td>' +
         '<td class="num">' + (a.fee_pct != null ? a.fee_pct + ' %' : '—') + '</td>' +
-        feeYearCell(em) +
+        feeYearCell(em, a) +
         '<td class="num">' + st.orders + '</td>' +
         '<td class="num">' + m(st.rent) + '</td>' +
         '<td class="num">' + m(st.fee) + '</td>' +
@@ -328,7 +328,7 @@
 
     return '<div class="tbl-wrap"><table class="tbl"><thead><tr>' +
       '<th>Арендодатель</th><th class="num">Комиссия</th>' +
-      '<th class="num" title="Год с даты одобрения заявки — когда пересматривать ставку">Год до</th>' +
+      '<th class="num" title="Год с даты одобрения заявки (у подключённых вручную — с даты добавления) — когда пересматривать ставку">Год до</th>' +
       '<th class="num">Заявок</th>' +
       '<th class="num">Оборот</th><th class="num">Начислено</th>' +
       '<th class="num">Выплачено</th><th class="num">Долг</th>' +
@@ -792,6 +792,8 @@
 
     $('root').innerHTML = shell(inner);
     if (TAB === 'mod') paintFlags();
+    if ($('apkCards')) mountAppCards($('apkCards'));
+    ivaPaintReleaseLinks($('root'));
 
     const af = $('addFeeBtn'); if (af) af.addEventListener('click', feeForm);
     const ac = $('addCatBtn'); if (ac) ac.addEventListener('click', function(){
@@ -1166,8 +1168,9 @@
     // Ссылка доступна владельцу даже при медленной загрузке или сбое API.
     $('root').innerHTML = '<div class="sect" style="padding-bottom:0"><div class="sect-h">' +
       '<h2>Управление площадкой</h2>' +
-      '<a class="btn sm" href="ProkatInstrumenta-10.14.apk" download>Скачать Android 10.14</a>' +
+      '<a class="btn sm" href="ProkatInstrumenta-10.14.apk" data-app-dl="Скачать Android {v}" download>Скачать Android 10.14</a>' +
       '</div></div><div class="empty" style="padding:60px 20px"><b>Загрузка…</b></div>';
+    ivaPaintReleaseLinks($('root'));
 
     try {
       const r = await Promise.all([
@@ -1193,10 +1196,11 @@
     } catch(e){
       $('root').innerHTML = '<div class="sect" style="padding-bottom:0"><div class="sect-h">' +
         '<h2>Управление площадкой</h2>' +
-        '<a class="btn sm" href="ProkatInstrumenta-10.14.apk" download>Скачать Android 10.14</a>' +
+        '<a class="btn sm" href="ProkatInstrumenta-10.14.apk" data-app-dl="Скачать Android {v}" download>Скачать Android 10.14</a>' +
         '</div></div><div class="empty" style="padding:60px 20px">' +
         '<b>Не удалось загрузить данные</b><p>' + esc(e.message) + '</p>' +
         '<button class="btn" onclick="location.reload()">Обновить</button></div>';
+      ivaPaintReleaseLinks($('root'));
     }
   })();
 })();

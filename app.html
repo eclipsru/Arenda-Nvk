@@ -1,6 +1,8 @@
 <!doctype html>
 <html lang="ru">
 <head>
+<script src="assets/recovery.js?v=20261004-reset"></script>
+<script src="assets/app-release.js?v=20261005-rel"></script>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="theme-color" content="#101217">
@@ -82,7 +84,7 @@ a{color:var(--or);text-decoration:none}
     <a href="#katalog">Каталог и цены</a>
     <a href="offer.html">Оферта</a>
     <a href="cabinet.html">Кабинет</a>
-    <a class="hot" href="ProkatInstrumenta-10.14.apk" download>Скачать Android 10.14</a>
+    <a class="hot" href="ProkatInstrumenta-10.14.apk" data-app-dl="Скачать Android {v}" download>Скачать Android 10.14</a>
   </nav>
 </header>
 
@@ -93,7 +95,7 @@ a{color:var(--or);text-decoration:none}
     <a class="main" href="#katalog">Смотреть каталог и цены</a>
     <a class="sec" href="cabinet.html">Заказать онлайн</a>
   </div>
-  <p style="font-size:13px;color:var(--gr)">Для Android доступна обновлённая нативная версия 10.14: обновление теперь прямо в приложении (Профиль → «Обновить до версии …», кнопка появляется сама при выходе новой версии; диалог подскажет нажать «Установить», при пропуске окна есть кнопка повтора). Ставится поверх прежней версии, удалять ничего не нужно. Данные учётной записи хранятся на сервере.</p>
+  <p style="font-size:13px;color:var(--gr)">Для Android есть приложение, версия <span data-app-ver>10.14</span>: каталог, заявки и чат. Если Android не даёт установить поверх прежней версии — удалите прежнее приложение и установите заново: данные учётной записи хранятся на сервере.</p>
 </section>
 
 <h2 class="sect" id="katalog">Каталог и цены <span style="font-size:13px;color:#6B7080;font-weight:500">цена указана за сутки аренды</span></h2>
@@ -118,7 +120,7 @@ a{color:var(--or);text-decoration:none}
   <b>Ива — Инструмент в аренду</b><br>
   Индивидуальный предприниматель без образования юр. лица (самозанятый): Галиновский Илья Игоревич · ИНН 615015092863<br>
   Новочеркасск, ул. Маресьева, 36 · 8 (908) 173-24-75 · ежедневно 8:00–20:00<br>
-  <a href="offer.html">Публичная оферта</a> · <a href="cabinet.html">Личный кабинет</a> · <a href="ProkatInstrumenta-10.14.apk" download>Android APK 10.14</a>
+  <a href="offer.html">Публичная оферта</a> · <a href="cabinet.html">Личный кабинет</a> · <a href="ProkatInstrumenta-10.14.apk" data-app-dl="Android APK {v}" download>Android APK 10.14</a>
 </footer>
 
 <script>
