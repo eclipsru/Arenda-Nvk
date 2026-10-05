@@ -2,8 +2,8 @@ const { chromium } = require('playwright');
 const assert = require('node:assert/strict');
 
 const BASE = process.env.SITE_BASE_URL || 'http://127.0.0.1:8000';
-const APK_NAME = 'ProkatInstrumenta-10.14.apk';
-const RELEASE = '10.14-selfupdate2-20260926';
+const APK_NAME = 'ProkatInstrumenta-10.15.apk';
+const RELEASE = '10.15-newkey-20261005';
 const MOBILE = {
   viewport: { width: 375, height: 667 },
   userAgent: 'Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 Mobile Safari/537.36'
@@ -19,7 +19,7 @@ async function runTests() {
       await page.goto(`${BASE}/index.html`);
       const banner = page.locator('#appTopBanner');
       await banner.waitFor({ state: 'visible', timeout: 5000 });
-      assert.match(await banner.innerText(), /Ива для Android · 10\.14/);
+      assert.match(await banner.innerText(), /Ива для Android · 10\.15/);
       assert.equal((await page.locator('#appTbBtn').innerText()).trim(), 'Скачать');
       assert.ok((await page.locator('#appTbBtn').getAttribute('href')).endsWith(APK_NAME));
       assert.equal(await banner.locator('.app-tb-bar').count(), 1);
@@ -36,8 +36,8 @@ async function runTests() {
       await page.goto(`${BASE}/index.html`);
       const banner = page.locator('#appTopBanner');
       await banner.waitFor({ state: 'visible', timeout: 5000 });
-      assert.match(await banner.innerText(), /Обновление · версия 10\.14/);
-      assert.match(await banner.innerText(), /прямо в приложении/);
+      assert.match(await banner.innerText(), /Обновление · версия 10\.15/);
+      assert.match(await banner.innerText(), /удалите старое приложение/);
       const [download] = await Promise.all([
         page.waitForEvent('download'),
         page.locator('#appTbBtn').click()
@@ -69,7 +69,7 @@ async function runTests() {
       await page.goto(`${BASE}/index.html`);
       const banner = page.locator('#appTopBanner');
       await banner.waitFor({ state: 'visible', timeout: 5000 });
-      assert.match(await banner.innerText(), /Обновление · версия 10\.14/);
+      assert.match(await banner.innerText(), /Обновление · версия 10\.15/);
       assert.equal(await banner.locator('#appTbClose').count(), 0);
       await page.waitForTimeout(5600);
       assert.equal(await banner.count(), 1);

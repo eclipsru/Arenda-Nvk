@@ -9,6 +9,9 @@ const crypto = require('node:crypto');
 const root = path.resolve(__dirname, '..');
 const apkName = 'ProkatInstrumenta-10.14.apk';
 const expectedHash = '29cbc61bb4275faa010f759ca9f40bea1efaf1dc20470b9a9da215ef30316a5f';
+// 05.10.2026: «Скачать» на сайте — 10.15 (новый ключ №6); apkName выше — файл самообновления (app-update.json), пока 10.14.
+const downloadName = 'ProkatInstrumenta-10.15.apk';
+const downloadHash = '48c8b922989c8f7fb436688edf02ef1cdc5a1ac41d54b3644e3210edd9b0d7df';
 let scripts = 0;
 
 for (const name of fs.readdirSync(root).filter(name => name.endsWith('.html'))) {
@@ -32,12 +35,15 @@ assert.equal(crypto.createHash('sha256').update(apk).digest('hex'), expectedHash
 assert.equal(crypto.createHash('sha256').update(legacy).digest('hex'), expectedHash, 'Legacy APK must serve the same restored build');
 assert.ok(!fs.existsSync(path.join(root, 'ProkatInstrumenta.apk.idsig')), 'Do not ship an .idsig belonging to another APK');
 
+assert.equal(crypto.createHash('sha256').update(fs.readFileSync(path.join(root, downloadName))).digest('hex'), downloadHash, `${downloadName} changed unexpectedly`);
 for (const name of ['chief.html', 'admin.html', 'account.html', 'app.html', 'assets/app.js']) {
   const content = fs.readFileSync(path.join(root, name), 'utf8');
-  assert.ok(content.includes(apkName), `${name} must link to the cache-safe restored APK`);
+  assert.ok(content.includes(downloadName), `${name} must link to ${downloadName}`);
+  if (name !== 'assets/app.js') assert.ok(content.includes(apkName), `${name}: нужна запасная ссылка на ${apkName} (10.15 не проверена на телефоне)`);
+  assert.match(content, /удалите (старое|текущ|прежнее)/, `${name}: нет предупреждения «удалите старое приложение» (новый ключ)`);
   assert.ok(!content.includes('href="https://eclipsru.github.io/Arenda-Nvk/ProkatInstrumenta.apk"'), `${name} advertises the old cached APK`);
 }
 const chief = fs.readFileSync(path.join(root, 'chief.html'), 'utf8');
 assert.match(chief, /apk-recovery/, 'Owner dashboard needs recovery instructions');
 assert.match(chief, /Если установка поверх текущего приложения отклонена/, 'Explain signature mismatch to owner');
-console.log(`Syntax OK: ${scripts} scripts; APK SHA-256 and ${apkName} links OK`);
+console.log(`Syntax OK: ${scripts} scripts; APK SHA-256, ${downloadName} links (fallback ${apkName}) OK`);
