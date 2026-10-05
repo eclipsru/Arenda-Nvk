@@ -39,11 +39,12 @@ assert.equal(crypto.createHash('sha256').update(fs.readFileSync(path.join(root, 
 for (const name of ['chief.html', 'admin.html', 'account.html', 'app.html', 'assets/app.js']) {
   const content = fs.readFileSync(path.join(root, name), 'utf8');
   assert.ok(content.includes(downloadName), `${name} must link to ${downloadName}`);
-  if (name !== 'assets/app.js') assert.ok(content.includes(apkName), `${name}: нужна запасная ссылка на ${apkName} (10.15 не проверена на телефоне)`);
+  // 05.10.2026: запасную ссылку на 10.14 владелец велел убрать — ссылок на файл самообновления на страницах быть не должно
+  assert.ok(!content.includes(apkName), `${name}: запасная ссылка на ${apkName} убрана по решению владельца`);
   assert.match(content, /удалите (старое|текущ|прежнее)/, `${name}: нет предупреждения «удалите старое приложение» (новый ключ)`);
   assert.ok(!content.includes('href="https://eclipsru.github.io/Arenda-Nvk/ProkatInstrumenta.apk"'), `${name} advertises the old cached APK`);
 }
 const chief = fs.readFileSync(path.join(root, 'chief.html'), 'utf8');
 assert.match(chief, /apk-recovery/, 'Owner dashboard needs recovery instructions');
 assert.match(chief, /Если установка поверх текущего приложения отклонена/, 'Explain signature mismatch to owner');
-console.log(`Syntax OK: ${scripts} scripts; APK SHA-256, ${downloadName} links (fallback ${apkName}) OK`);
+console.log(`Syntax OK: ${scripts} scripts; APK SHA-256, ${downloadName} links OK, без запасной ссылки на ${apkName}`);

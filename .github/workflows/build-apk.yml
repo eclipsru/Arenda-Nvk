@@ -4,7 +4,8 @@
 # добавляет класс IvaPatch (android/patches/IvaPatch.java → classes3.dex), выравнивает и подписывает.
 # Проверки перед выдачей: тесты логики IvaPatch; пакет ru.prokatnvsk.app, версия 89 / 10.15;
 # подпись проходит apksigner verify; сертификат = эталон ключа №6 (как в keystore-check.yml).
-# Результат — артефакт ProkatInstrumenta-10.15 (APK + SHA-256) и, для ветки агента, коммит APK в эту же ветку
+# Результат — артефакт ProkatInstrumenta-10.15 (APK + SHA-256) и, для ветки агента, коммит APK + app-test.json в эту же ветку
+# (app-test.json читает жёлтая карточка «тестовая версия» владельца на сайте; выпущенный APK не перезаписывается)
 # (логи и артефакты из песочницы агента недоступны — выяснено 05.10.2026; сайт и app-update.json правит агент).
 # Секреты: ANDROID_KEYSTORE_B64, ANDROID_KEYSTORE_PASS — только через переменные окружения, не выводятся;
 # файл ключа во временной папке, удаляется в конце. Из Pull Request (чужих веток) не запускается.
@@ -27,6 +28,9 @@ env:
   NEW_NAME: '10.15'
   NEW_CODE: '89'
   APKTOOL_VER: '2.10.0'
+  # Тестовый канал (жёлтая карточка владельца на сайте): описание сборки для app-test.json
+  TEST_NOTES: 'Туда и обратно в доставке, цена за км сразу, верный итог доставки от 1 000 ₽, понятные ошибки публикации.'
+  TEST_REINSTALL: 'true'   # true — подпись сменилась (10.15, ключ №6), нужна переустановка; дальше false
   # Эталон ключа №6 (решение №22, 05.10.2026) — тот же, что в keystore-check.yml и docs/КЛЮЧ-ПОДПИСИ.md
   EXPECTED: 5D2B9F8BB54AD0B816A779B5991746957EBD6FA056D8A63D1D1635077BED5DDE
 jobs:
@@ -133,10 +137,23 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898283+github-actions[bot]@users.noreply.github.com"
           B="${GITHUB_REF#refs/heads/}"; F="ProkatInstrumenta-$NEW_NAME.apk"
-          git sparse-checkout add "$F" >/dev/null 2>&1 || git sparse-checkout disable
+          # Выпущенный файл версии не перезаписывается (его уже проверяют/скачивают; хеш записан в тестах).
+          if git cat-file -e "HEAD:$F" 2>/dev/null; then
+            echo "::notice title=Сборка::$F уже есть в ветке — не перезаписываю (для изменений поднимите NEW_NAME/NEW_CODE)"; exit 0
+          fi
+          git sparse-checkout add "$F" app-test.json >/dev/null 2>&1 || git sparse-checkout disable
           cp "out/$F" .
-          git add -f "$F" 2>add.err || { echo "::error title=Сборка::git add: $(head -c 300 add.err | tr '\n' ' ')"; exit 1; }
-          git commit -q -m "Сборка $NEW_NAME ($NEW_CODE): APK из Actions, подпись ключом №6 = эталон; $(cut -c1-16 out/SHA256.txt)…" \
+          python3 - <<'PY'
+          import json, os, datetime
+          b = os.environ['GITHUB_REF'].split('refs/heads/', 1)[1]
+          d = {"versionCode": int(os.environ['NEW_CODE']), "versionName": os.environ['NEW_NAME'],
+               "apk": f"https://github.com/{os.environ['GITHUB_REPOSITORY']}/raw/{b}/ProkatInstrumenta-{os.environ['NEW_NAME']}.apk",
+               "built": datetime.datetime.utcnow().strftime('%d.%m.%Y'),
+               "reinstall": os.environ.get('TEST_REINSTALL') == 'true', "notes": os.environ.get('TEST_NOTES', '')}
+          open('app-test.json', 'w', encoding='utf-8').write(json.dumps(d, ensure_ascii=False, indent=2) + '\n')
+          PY
+          git add -f "$F" app-test.json 2>add.err || { echo "::error title=Сборка::git add: $(head -c 300 add.err | tr '\n' ' ')"; exit 1; }
+          git commit -q -m "Сборка $NEW_NAME ($NEW_CODE): APK из Actions, подпись ключом №6 = эталон; $(cut -c1-16 out/SHA256.txt)…; app-test.json" \
             || { echo "::notice title=Сборка::APK не изменился"; exit 0; }
           ok=""
           for i in 1 2 3; do

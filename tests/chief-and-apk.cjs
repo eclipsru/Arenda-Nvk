@@ -61,10 +61,10 @@ moneyStats = () => ({ rent:0, fee:0, paid:0, owed:0, byAdmin:{} });
       await page.locator('.apk-recovery').waitFor({ timeout: 10000 });
       assert.match(await page.locator('.apk-recovery').innerText(), /версия 10\.15/);
       assert.match(await page.locator('.apk-recovery').innerText(), /удалите текущую версию/);
-      // 05.10.2026: кнопка 10.15 в шапке и в карточке + запасная ссылка на 10.14 в карточке
-      assert.equal(await page.locator('#root a[href$=".apk"]').count(), 3);
+      // 05.10.2026: кнопка 10.15 в шапке и в карточке (запасную ссылку на 10.14 владелец велел убрать)
+      assert.equal(await page.locator('#root a[href$=".apk"]').count(), 2);
       assert.equal(new URL(await page.locator('.apk-recovery a.btn').getAttribute('href'), `${BASE}/chief.html`).pathname.split('/').pop(), APK);
-      assert.equal(await page.locator('.apk-recovery a[href$="ProkatInstrumenta-10.14.apk"]').count(), 1, 'нет запасной ссылки на 10.14');
+      assert.equal(await page.locator('.apk-recovery a[href$="ProkatInstrumenta-10.14.apk"]').count(), 0, 'запасная ссылка на 10.14 убрана');
       // Сводка: цифры обращений со страниц городов
       const dash = await page.locator('#root').innerText();
       assert.match(dash, /Обращения со страниц городов/, 'в сводке нет блока обращений');

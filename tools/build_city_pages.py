@@ -299,7 +299,7 @@ def hub_page(targets, cities_by_slug, allow_index=False):
 <meta name="theme-color" content="#101217">
 <link rel="canonical" href="{SITE}/city/">
 <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
-<link rel="stylesheet" href="assets/theme.css?v=20260924-app-banner-v2">
+<link rel="stylesheet" href="assets/theme.css?v=20261005-testch">
 <link rel="stylesheet" href="assets/geo.css?v=20260923-photon">
 <script type="application/ld+json">{json.dumps(jsonld_payload, ensure_ascii=False)}</script>
 </head>

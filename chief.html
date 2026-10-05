@@ -7,7 +7,7 @@
 <meta name="robots" content="noindex, nofollow">
 <meta name="theme-color" content="#101217">
 <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
-<link rel="stylesheet" href="assets/theme.css?v=20260924-app-banner-v2">
+<link rel="stylesheet" href="assets/theme.css?v=20261005-testch">
 <style>
 .kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:12px;margin-bottom:22px}
 .kpi{background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:16px}
@@ -95,7 +95,7 @@
 <script src="assets/data.js"></script>
 <script src="assets/geo.js?v=20260923-photon"></script>
 <script src="assets/email-guard.js?v=20260926-email"></script><script src="assets/sb.js?v=20260926-email"></script>
-<script src="assets/app.js?v=20261005-apk1015"></script>
+<script src="assets/app.js?v=20261005-testch"></script>
 <script src="assets/partners.js?v=20261003-p6-texts"></script>
 <script>
 (function(){
@@ -167,14 +167,14 @@
       return !o.status || o.status === 'new';
     }).length;
 
-    return '<section class="apk-recovery" aria-label="Нативное приложение для Android">' +
+    return '<div class="apk-test-slot" id="apkTestSlot"></div>' +
+      '<section class="apk-recovery apk-public" aria-label="Нативное приложение для Android">' +
         '<div><h3>Ива для Android · версия 10.15</h3>' +
           '<p>Новое: «туда и обратно» в доставке, цена за км видна сразу, итог с доставкой от 1 000 ₽ считается верно, ' +
           'понятные сообщения, если публикация инструмента не прошла. Самообновление в Профиле сохранено.</p>' +
           '<p>10.15 подписана новым ключом (№6), поэтому поверх 10.14 не встанет. ' +
           'Если установка поверх текущего приложения отклонена — так и должно быть: удалите текущую версию ' +
-          'и установите эту заново. После удаления локальные настройки могут пропасть; данные аккаунта хранятся на сервере. ' +
-          'Запасной вариант: <a href="ProkatInstrumenta-10.14.apk" download>предыдущая версия 10.14</a>.</p></div>' +
+          'и установите эту заново. После удаления локальные настройки могут пропасть; данные аккаунта хранятся на сервере.</p></div>' +
         '<a class="btn" href="ProkatInstrumenta-10.15.apk" download>Скачать APK 10.15</a>' +
       '</section>' +
       '<div class="kpis">' +
@@ -800,6 +800,7 @@
 
     $('root').innerHTML = shell(inner);
     if (TAB === 'mod') paintFlags();
+    if ($('apkTestSlot')) mountTestApkCard($('apkTestSlot'));
 
     const af = $('addFeeBtn'); if (af) af.addEventListener('click', feeForm);
     const ac = $('addCatBtn'); if (ac) ac.addEventListener('click', function(){

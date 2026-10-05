@@ -759,3 +759,14 @@ select.inp{cursor:pointer;appearance:none;
 }
 
 
+
+/* ---------- Карточки скачивания приложения (решение владельца 05.10.2026) ----------
+   Зелёная — версия для всех; жёлтая — тестовая, видна только владельцу на телефоне (assets/app.js → mountTestApkCard). */
+.apk-public{border:2px solid #39FF14 !important;box-shadow:0 0 0 1px rgba(57,255,20,.5),0 0 22px rgba(57,255,20,.35)}
+.apk-test-slot:empty{display:none}
+.apk-test{display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;
+  background:var(--card);border:2px solid #FFEA00;border-radius:var(--r);padding:16px;margin:24px 0 14px;
+  box-shadow:0 0 0 1px rgba(255,234,0,.5),0 0 22px rgba(255,234,0,.35)}
+.apk-test b{color:#FFEA00;font-size:15px}
+.apk-test p{color:var(--gr);font-size:12.5px;line-height:1.5;margin:4px 0 0}
+.apk-test .btn{background:#FFEA00;color:#111;border-color:#FFEA00;white-space:nowrap}

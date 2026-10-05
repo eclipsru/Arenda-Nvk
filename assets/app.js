@@ -484,6 +484,55 @@ function bindSoon(){
 const APP_RELEASE_ID = '10.15-newkey-20261005';
 const APP_DOWNLOAD_URL = 'ProkatInstrumenta-10.15.apk';
 
+/* ---------- Тестовый канал приложения (решение владельца 05.10.2026) ----------
+   Только eclips.ru@mail.ru и только на телефоне: в кабинете НАД зелёной карточкой «для всех»
+   показывается жёлтая карточка с тестовой сборкой, которую остальные ещё не видят.
+   Сведения о сборке — app-test.json в ветке агента (обновляет «Сборка приложения» после каждой сборки).
+   Это скрытие, а не защита: репозиторий публичный, ссылку на тестовый файл технически можно найти.
+   При смене ветки агента — поменять APP_TEST_FEED (см. docs/README-DEV.md). */
+const APP_PUBLIC_VERSION = { name: '10.15', code: 89 };
+const APP_TEST_FEED = 'https://raw.githubusercontent.com/eclipsru/Arenda-Nvk/arena/01a101d5-arenda-nvk/app-test.json';
+const APP_TEST_EMAIL = 'eclips.ru@mail.ru';
+
+function currentUserEmail(){
+  // A объявлен в assets/sb.js через const — в window.A его нет, обращаемся напрямую
+  try { if (typeof A !== 'undefined' && A && A.me) return String(A.me).trim().toLowerCase(); } catch(e){}
+  try { const s = JSON.parse(localStorage.getItem('iva_sess') || 'null'); if (s && s.me) return String(s.me).trim().toLowerCase(); } catch(e){}
+  try {
+    if (typeof getUser === 'function') { const u = getUser(); if (u && u.email) return String(u.email).trim().toLowerCase(); }
+  } catch(e){}
+  return '';
+}
+
+function isAppTester(){ return isMobileDevice() && currentUserEmail() === APP_TEST_EMAIL; }
+
+// slot — пустой <div class="apk-test-slot"> над карточкой «для всех». Для остальных остаётся пустым.
+function mountTestApkCard(slot){
+  if (!slot || !isAppTester()) return;
+  slot.innerHTML = '<div class="apk-test"><b>🧪 Тестовая версия — видна только вам</b><p>Проверяем, есть ли новая сборка…</p></div>';
+  fetch(APP_TEST_FEED + '?t=' + Date.now(), { cache: 'no-store' })
+    .then(function(r){ if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+    .then(function(j){
+      const code = Number(j && j.versionCode) || 0;
+      if (code > APP_PUBLIC_VERSION.code && j.apk) {
+        slot.innerHTML = '<div class="apk-test">' +
+          '<div><b>🧪 Тестовая версия ' + esc(j.versionName || '') + ' — видна только вам</b>' +
+          '<p>Остальные пока видят ' + esc(APP_PUBLIC_VERSION.name) + ' (зелёная карточка ниже).' +
+          (j.built ? ' Собрана ' + esc(j.built) + '.' : '') +
+          (j.notes ? '<br>' + esc(j.notes) : '') +
+          (j.reinstall ? '<br><b>Сначала удалите установленное приложение</b> — новая сборка подписана другим ключом.' : '') +
+          '</p></div>' +
+          '<a class="btn" href="' + esc(j.apk) + '" download>Скачать тест ' + esc(j.versionName || '') + '</a></div>';
+      } else {
+        slot.innerHTML = '<div class="apk-test"><b>🧪 Тестовых версий новее ' + esc(APP_PUBLIC_VERSION.name) + ' нет</b>' +
+          '<p>У всех сейчас та же версия, что в зелёной карточке ниже. Новая тестовая сборка появится здесь сама.</p></div>';
+      }
+    })
+    .catch(function(){
+      slot.innerHTML = '<div class="apk-test"><b>🧪 Тестовая версия</b><p>Не удалось проверить тестовую сборку (нет связи с GitHub). Обновите страницу позже.</p></div>';
+    });
+}
+
 function isMobileDevice(){
   return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || window.innerWidth <= 768;
 }
