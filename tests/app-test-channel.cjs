@@ -123,7 +123,7 @@ const ROOT = path.join(__dirname, '..'); const R = p => fs.readFileSync(path.joi
   assert.match(wf, /git cat-file -e "HEAD:\$F"[\s\S]*exit 0/, 'build-apk.yml: выпущенный APK может быть перезаписан');
   assert.match(wf, /git add -f "\$F" app-test\.json/, 'build-apk.yml: app-test.json не обновляется');
   assert.match(wf, /branches: \['main', 'arena\/\*\*'\]/, 'build-apk.yml: сборка должна запускаться на любой ветке агента (arena/**), без имени конкретной ветки');
-  assert.match(wf, /if: github\.ref != 'refs\/heads\/main'/, 'build-apk.yml: шаг «Положить APK в ветку агента» не должен быть привязан к имени ветки');
+  assert.match(wf, /if: startsWith\(github\.ref, 'refs\/heads\/arena\/'\)/, 'build-apk.yml: шаг «Положить APK в ветку агента» должен срабатывать на ветках агента без имени конкретной ветки');
   assert.ok(!/arena\/01a101d5/.test(wf), 'build-apk.yml: осталось имя старой ветки агента');
   // Ветка из IVA_TEST_FEED обязана существовать на сервере: иначе жёлтая карточка молча останется без новой сборки.
   // Без сети проверка честно пропускается (git не отвечает) — но не «зеленеет».

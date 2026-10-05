@@ -82,6 +82,11 @@ fi
 head_ "4.2. Стенд миграций бота (локальный PostgreSQL)"
 bash tools/tg-migrations-stand.sh >/tmp/iva-test-tg-stand.log 2>&1
 rc=$?
+if [ "$rc" = "2" ] && "$PG_PY" -c "import pgserver" >/dev/null 2>&1; then
+  # системной базы нет — поднимаем одноразовый PostgreSQL из pgserver (PyPI) и гоняем стенд на нём
+  "$PG_PY" tools/tg-migrations-stand-pgserver.py >/tmp/iva-test-tg-stand.log 2>&1
+  rc=$?
+fi
 if [ "$rc" = "0" ]; then
   ok "стенд бота: миграции проверены на живом PostgreSQL"
 elif [ "$rc" = "2" ]; then

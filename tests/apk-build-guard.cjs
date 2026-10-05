@@ -21,7 +21,8 @@ try {
   assert.match(code, /\[ "\$\{CERT\^\^\}" = "\$EXPECTED" \] \|\| bad/, `${f}: нет сверки сертификата с эталоном`);
   assert.match(code, /apksigner" verify "\$A" \|\| bad/, `${f}: нет apksigner verify`);
   assert.match(code, /versionCode='\$NEW_CODE'/); assert.match(code, /versionName='\$NEW_NAME'/);
-  assert.match(code, /if: github\.ref == 'refs\/heads\/arena\/01a101d5-arenda-nvk'/, `${f}: APK коммитится только в ветку агента`);
+  assert.match(code, /if: startsWith\(github\.ref, 'refs\/heads\/arena\/'\)/, `${f}: APK коммитится только в ветку агента (arena/…)`);
+  assert.ok(!/arena\/01a101d5/.test(code), `${f}: осталось имя старой ветки агента — при смене сессии его не поменяли бы`);
   assert.ok(!/git add[^\n]*(out\/|\*|\.p12|\$KS)/.test(code), `${f}: в коммит попадает лишнее`);
   // эталон = памятка = проверка ключа
   const exp = (code.match(/EXPECTED: ([0-9A-F]{64})/) || [])[1];

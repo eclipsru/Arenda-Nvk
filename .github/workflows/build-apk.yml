@@ -10,7 +10,7 @@
 # Секреты: ANDROID_KEYSTORE_B64, ANDROID_KEYSTORE_PASS — только через переменные окружения, не выводятся;
 # файл ключа во временной папке, удаляется в конце. Из Pull Request (чужих веток) не запускается.
 # Запуск: при изменении этого файла или android/patches/**; кнопка Run workflow — после слияния в main.
-# Ветка агента в этом файле НЕ прописана (шаблон `arena/**`, шаг коммита срабатывает на любой ветке, кроме main):
+# Ветка агента в этом файле НЕ прописана (запуск на `arena/**`, шаг коммита — только на ветках `arena/…`):
 # при смене сессии править нужно только IVA_TEST_FEED в assets/app-release.js (и ссылку в app-test.json).
 # Откат: `git revert` коммита с этим файлом; APK 10.14 остаётся в репозитории.
 name: Сборка приложения
@@ -133,7 +133,7 @@ jobs:
           retention-days: 30
 
       - name: Положить APK в ветку агента
-        if: github.ref != 'refs/heads/main'
+        if: startsWith(github.ref, 'refs/heads/arena/')
         run: |
           set -euo pipefail
           git config user.name "github-actions[bot]"
