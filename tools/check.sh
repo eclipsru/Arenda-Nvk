@@ -98,6 +98,25 @@ else
   bad "канал «пакет одним файлом»"; tail -20 /tmp/iva-test-bundle.log | sed 's/^/      /'
 fi
 
+head_ "4.4. Проверка APK без Java (подпись, дайджесты записей)"
+# В песочнице агента нет ни Java, ни apksigner, поэтому файл приложения проверяется
+# инструментом tools/apk-verify.py: сертификат = ключ №6, подпись v2 подтверждается
+# открытым ключом сертификата, дайджесты всех записей из MANIFEST.MF сверяются с файлом.
+if "$PG_PY" -c "import androguard, cryptography" >/dev/null 2>&1; then
+  APK_TEST="$("$PG_PY" -c "import json;print(json.load(open('app-test.json'))['apk'].split('/')[-1])" 2>/dev/null)"
+  if [ -n "$APK_TEST" ] && [ -f "$APK_TEST" ]; then
+    if "$PG_PY" tools/apk-verify.py "$APK_TEST" >/tmp/iva-apk-verify.log 2>&1; then
+      ok "$APK_TEST: подпись ключом №6 подтверждена, дайджесты записей сошлись"
+    else
+      bad "$APK_TEST: проверка не прошла"; grep -E '✘|Итог' /tmp/iva-apk-verify.log | head -6 | sed 's/^/      /'
+    fi
+  else
+    skip "APK из app-test.json ($APK_TEST) не найден в корне — проверка APK пропущена"
+  fi
+else
+  skip "нет androguard/cryptography — проверка APK пропущена (pip install androguard cryptography)"
+fi
+
 head_ "5. Браузерные тесты (Playwright + локальный сервер)"
 # Три разных «нет»: нет модуля, модуль есть без браузера, нет python3 для сервера.
 # Во всех трёх случаях тесты честно пропускаются — окружение не должно

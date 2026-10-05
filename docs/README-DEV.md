@@ -72,6 +72,7 @@ npm run screens:check   # сравнить со эталоном (расхожд
 ```
 tools/check.sh                   предполётная проверка (тесты + секреты + релиз)
 tools/check-release.js           сверка app-update.json ↔ APK ↔ тест
+tools/apk-verify.py              проверка APK без Java: сертификат, подпись v2 ключом, дайджесты записей, выравнивание (нужны androguard + cryptography; раздел 4.4 в check.sh)
 tools/snapshot.sh                снимок состояния + точка отката
 tools/screenshot-baseline.js     эталонные скриншоты (save/check)
 tools/screens-baseline.json      манифест хешей скриншотов (в репозитории)
