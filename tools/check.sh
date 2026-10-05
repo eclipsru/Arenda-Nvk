@@ -70,6 +70,15 @@ for t in syntax-and-release email-guard cities-sync directory-import city-pages 
   else bad "tests/$t.cjs"; tail -6 "/tmp/iva-test-$t.log" | sed 's/^/      /'; fi
 done
 
+head_ "4.1. Стенд таблицы релизов app_releases (локальный PostgreSQL)"
+PG_PY="${PG_PY:-python3}"
+if "$PG_PY" -c "import pgserver" >/dev/null 2>&1; then
+  if "$PG_PY" tools/app-releases-stand.py >/tmp/iva-test-rel-stand.log 2>&1; then ok "app_releases: подтверждает только eclips.ru@mail.ru (11 случаев на PostgreSQL)"
+  else bad "стенд app_releases"; tail -8 /tmp/iva-test-rel-stand.log | sed 's/^/      /'; fi
+else
+  skip "стенд app_releases: нет pgserver (PG_PY=<python с pgserver> bash tools/check.sh)"
+fi
+
 head_ "4.2. Стенд миграций бота (локальный PostgreSQL)"
 bash tools/tg-migrations-stand.sh >/tmp/iva-test-tg-stand.log 2>&1
 rc=$?

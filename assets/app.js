@@ -477,22 +477,13 @@ function bindSoon(){
   });
 }
 
-/* ---------- Верхняя плашка загрузки нативного приложения ---------- */
-// Версия 10.15 (05.10.2026): туда-обратно, цена за км сразу. Подписана НОВЫМ ключом №6 —
-// поверх 10.14 не встанет: нужно удалить старое приложение и поставить заново.
-// Самообновление (app-update.json) пока остаётся на 10.14 — кнопка в 10.14 не смогла бы поставить 10.15.
-const APP_RELEASE_ID = '10.15-newkey-20261005';
-const APP_DOWNLOAD_URL = 'ProkatInstrumenta-10.15.apk';
-
-/* ---------- Тестовый канал приложения (решение владельца 05.10.2026) ----------
-   Только eclips.ru@mail.ru и только на телефоне: в кабинете НАД зелёной карточкой «для всех»
-   показывается жёлтая карточка с тестовой сборкой, которую остальные ещё не видят.
-   Сведения о сборке — app-test.json в ветке агента (обновляет «Сборка приложения» после каждой сборки).
-   Это скрытие, а не защита: репозиторий публичный, ссылку на тестовый файл технически можно найти.
-   При смене ветки агента — поменять APP_TEST_FEED (см. docs/README-DEV.md). */
-const APP_PUBLIC_VERSION = { name: '10.15', code: 89 };
-const APP_TEST_FEED = 'https://raw.githubusercontent.com/eclipsru/Arenda-Nvk/arena/01a101d5-arenda-nvk/app-test.json';
-const APP_TEST_EMAIL = 'eclips.ru@mail.ru';
+/* ---------- Приложение для Android: баннер и карточки кабинета (решение владельца 05.10.2026) ----------
+   Какая версия выпущена для всех — assets/app-release.js (таблица app_releases; пока пусто — старая 10.14).
+   - Все пользователи: сверху на 10 секунд баннер со ссылкой на ВЫПУЩЕННУЮ версию + та же ссылка в кабинете (зелёная карточка).
+   - Создатель (eclips.ru@mail.ru) на телефоне: в кабинете ДВЕ карточки — жёлтая «новая версия» с кнопками
+     «Скачать» и «Подтвердить релиз» (сверху) и зелёная «сейчас у всех» (ниже). Больше ни у кого двух ссылок нет.
+   - «Подтвердить релиз» добавляет запись в app_releases → с этого момента у всех новая версия.
+   Скрытие, а не защита: репозиторий публичный, тестовый файл можно найти по прямой ссылке. */
 
 function currentUserEmail(){
   // A объявлен в assets/sb.js через const — в window.A его нет, обращаемся напрямую
@@ -504,34 +495,8 @@ function currentUserEmail(){
   return '';
 }
 
-function isAppTester(){ return isMobileDevice() && currentUserEmail() === APP_TEST_EMAIL; }
-
-// slot — пустой <div class="apk-test-slot"> над карточкой «для всех». Для остальных остаётся пустым.
-function mountTestApkCard(slot){
-  if (!slot || !isAppTester()) return;
-  slot.innerHTML = '<div class="apk-test"><b>🧪 Тестовая версия — видна только вам</b><p>Проверяем, есть ли новая сборка…</p></div>';
-  fetch(APP_TEST_FEED + '?t=' + Date.now(), { cache: 'no-store' })
-    .then(function(r){ if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
-    .then(function(j){
-      const code = Number(j && j.versionCode) || 0;
-      if (code > APP_PUBLIC_VERSION.code && j.apk) {
-        slot.innerHTML = '<div class="apk-test">' +
-          '<div><b>🧪 Тестовая версия ' + esc(j.versionName || '') + ' — видна только вам</b>' +
-          '<p>Остальные пока видят ' + esc(APP_PUBLIC_VERSION.name) + ' (зелёная карточка ниже).' +
-          (j.built ? ' Собрана ' + esc(j.built) + '.' : '') +
-          (j.notes ? '<br>' + esc(j.notes) : '') +
-          (j.reinstall ? '<br><b>Сначала удалите установленное приложение</b> — новая сборка подписана другим ключом.' : '') +
-          '</p></div>' +
-          '<a class="btn" href="' + esc(j.apk) + '" download>Скачать тест ' + esc(j.versionName || '') + '</a></div>';
-      } else {
-        slot.innerHTML = '<div class="apk-test"><b>🧪 Тестовых версий новее ' + esc(APP_PUBLIC_VERSION.name) + ' нет</b>' +
-          '<p>У всех сейчас та же версия, что в зелёной карточке ниже. Новая тестовая сборка появится здесь сама.</p></div>';
-      }
-    })
-    .catch(function(){
-      slot.innerHTML = '<div class="apk-test"><b>🧪 Тестовая версия</b><p>Не удалось проверить тестовую сборку (нет связи с GitHub). Обновите страницу позже.</p></div>';
-    });
-}
+function isCreator(){ return currentUserEmail() === IVA_CREATOR_EMAIL; }
+function isAppTester(){ return isMobileDevice() && isCreator(); }
 
 function isMobileDevice(){
   return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || window.innerWidth <= 768;
@@ -541,87 +506,120 @@ function isInsideNativeApp(){
   return !!(window.IS_PROKAT_APP || window.isNativeApp || /ProkatApp|ProkatInstrumenta/i.test(navigator.userAgent) || location.search.indexOf('from_app=1') !== -1);
 }
 
-function isPermanentUser(email){
-  if (!email) return false;
-  email = String(email).trim().toLowerCase();
-  return email === 'eclips.ru@mail.ru' || email === 'eclipsik.ru@mail.ru';
+/* Зелёная карточка — выпущенная версия (её видят все). forCreator — подпись «сейчас у всех». */
+function apkPublicCardHTML(rel, forCreator){
+  return '<div class="apk-card apk-public">' +
+    '<div><b>📱 Ива для Android · версия ' + esc(rel.versionName) + '</b>' +
+      (forCreator ? '<p><b>Сейчас у всех пользователей.</b> Эту ссылку видят все — в баннере и в кабинете.</p>' : '') +
+      (rel.notes ? '<p>' + esc(rel.notes) + '</p>' : '<p>Каталог, заявки и чат в приложении.</p>') +
+      (rel.reinstall ? '<p>Версия подписана новым ключом: <b>сначала удалите старое приложение</b>, затем установите эту и войдите заново — данные хранятся на сервере.</p>' : '') +
+    '</div>' +
+    '<a class="btn" href="' + esc(rel.apk) + '" download>Скачать APK ' + esc(rel.versionName) + '</a></div>';
 }
 
+/* Карточки скачивания в кабинете. slot — пустой <div id="apkCards">. */
+function mountAppCards(slot){
+  if (!slot) return;
+  const draw = function(rel){
+    const tester = isAppTester();
+    slot.innerHTML = (tester ? '<div class="apk-test-slot"><div class="apk-test"><b>🧪 Новая версия — видна только вам</b><p>Проверяем, есть ли новая сборка…</p></div></div>' : '') +
+      apkPublicCardHTML(rel, tester);
+    if (tester) mountTestApkCard(slot.querySelector('.apk-test-slot'), rel, function(){ ivaReleased(true).then(draw); });
+  };
+  draw(ivaReleasedNow());
+  ivaReleased().then(draw);
+}
+
+/* Жёлтая карточка создателя: новая сборка из app-test.json + «Подтвердить релиз». */
+function mountTestApkCard(slot, rel, onReleased){
+  if (!slot || !isAppTester()) return;
+  rel = rel || IVA_RELEASE_FALLBACK;
+  fetch(IVA_TEST_FEED + '?t=' + Date.now(), { cache: 'no-store' })
+    .then(function(r){ if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+    .then(function(j){
+      const code = Number(j && j.versionCode) || 0;
+      if (code > rel.versionCode && j.apk) {
+        slot.innerHTML = '<div class="apk-test">' +
+          '<div><b>🧪 Новая версия ' + esc(j.versionName || '') + ' — видна только вам</b>' +
+          '<p>Остальные пока получают ' + esc(rel.versionName) + ' (зелёная карточка ниже).' +
+          (j.built ? ' Собрана ' + esc(j.built) + '.' : '') +
+          (j.notes ? '<br>' + esc(j.notes) : '') +
+          (j.reinstall ? '<br><b>Сначала удалите установленное приложение</b> — новая сборка подписана другим ключом.' : '') +
+          '<br>Проверьте на телефоне, потом нажмите «Подтвердить релиз» — и новую версию увидят все.</p></div>' +
+          '<div class="apk-test-btns"><a class="btn" href="' + esc(j.apk) + '" download>Скачать ' + esc(j.versionName || '') + '</a>' +
+          '<button class="btn apk-confirm" type="button" id="apkConfirm">✅ Подтвердить релиз</button></div>' +
+          '<p class="apk-test-msg" id="apkConfirmMsg"></p></div>';
+        const btn = slot.querySelector('#apkConfirm');
+        if (btn) btn.addEventListener('click', function(){ confirmAppRelease(j, btn, slot.querySelector('#apkConfirmMsg'), onReleased); });
+      } else {
+        slot.innerHTML = '<div class="apk-test"><b>🧪 Новых версий нет</b>' +
+          '<p>У всех сейчас ' + esc(rel.versionName) + ' (зелёная карточка ниже). Новая сборка появится здесь сама.</p></div>';
+      }
+    })
+    .catch(function(){
+      slot.innerHTML = '<div class="apk-test"><b>🧪 Новая версия</b><p>Не удалось проверить новую сборку (нет связи с GitHub). Обновите страницу позже.</p></div>';
+    });
+}
+
+/* «Подтвердить релиз»: запись в app_releases. Права проверяет база — запись примет только у eclips.ru@mail.ru. */
+async function confirmAppRelease(feed, btn, msg, onReleased){
+  const say = function(t, bad){ if (msg) { msg.textContent = t; msg.className = 'apk-test-msg' + (bad ? ' bad' : ''); } };
+  if (typeof api !== 'function' || typeof A === 'undefined' || !A.tok) { say('Войдите в кабинет заново и повторите.', true); return; }
+  if (!window.confirm('Выпустить версию ' + feed.versionName + ' для всех пользователей?\n\nСсылка на неё появится у всех в баннере и в кабинете.')) return;
+  btn.disabled = true; say('Подтверждаю…');
+  try {
+    // Если файл уже лежит на сайте (после слияния) — ссылаемся на него, иначе на GitHub
+    let apkUrl = feed.apk;
+    const file = ivaApkFile(feed.apk);
+    try { const h = await fetch(file, { method: 'HEAD', cache: 'no-store' }); if (h.ok) apkUrl = file; } catch(e){}
+    await api('/rest/v1/app_releases', 'POST', {
+      version_code: Number(feed.versionCode), version_name: String(feed.versionName),
+      apk_url: apkUrl, reinstall: !!feed.reinstall, notes: String(feed.notes || '').slice(0, 500)
+    }, { Prefer: 'return=minimal' });
+    say('Готово: версия ' + feed.versionName + ' выпущена для всех.');
+    if (typeof toast === 'function') toast('Релиз ' + feed.versionName + ' подтверждён — теперь его видят все');
+    if (onReleased) setTimeout(onReleased, 800);
+  } catch(e){
+    btn.disabled = false;
+    const t = String(e && e.message || e);
+    if (/app_releases/.test(t) && /(does not exist|schema cache|not find)/i.test(t)) say('В базе ещё нет таблицы релизов: примените SQL 20261005_app_releases.sql (текст — в чате у агента).', true);
+    else if (/row-level security|permission|42501/i.test(t)) say('База не приняла: подтверждать релиз может только eclips.ru@mail.ru.', true);
+    else if (/duplicate|23505/i.test(t)) { say('Эта версия уже подтверждена.'); if (onReleased) onReleased(); }
+    else say('Не получилось: ' + t, true);
+  }
+}
+
+/* Баннер сверху: у ВСЕХ на телефоне, 10 секунд, ссылка на выпущенную версию. */
 function mountAppTopBanner(container){
   if (!isMobileDevice() || isInsideNativeApp()) return;
+  if (document.getElementById('appTopBanner')) return;
+  try { if (sessionStorage.getItem('prokat_app_banner_closed')) return; } catch(e){}
+  ivaReleased().then(function(rel){ showAppTopBanner(container, rel); });
+}
 
+function showAppTopBanner(container, rel){
+  if (document.getElementById('appTopBanner')) return;
   let oldDownload = null, downloadedRelease = null;
   try {
     oldDownload = localStorage.getItem('prokat_app_installed_ver'); // устаревший, не подтверждает установку
     downloadedRelease = localStorage.getItem('prokat_app_download_release');
   } catch(e){}
+  const file = ivaApkFile(rel.apk);
+  // Повторно не показываем, только если скачали ИМЕННО выпущенный файл.
+  if (downloadedRelease === file) return;
 
-  // Проверяем авторизованного пользователя
-  let userEmail = '';
-  try {
-    const s = JSON.parse(localStorage.getItem('iva_sess') || 'null');
-    if (s && s.me) userEmail = String(s.me).toLowerCase();
-  } catch(e){}
-  if (!userEmail) {
-    try {
-      if (typeof getUser === 'function') {
-        const u = getUser();
-        if (u && u.email) userEmail = String(u.email).toLowerCase();
-      }
-      if (!userEmail && typeof isAuthed === 'function' && isAuthed()) {
-        const sess = typeof getSess === 'function' ? getSess() : null;
-        if (sess && sess.user && sess.user.email) userEmail = String(sess.user.email).toLowerCase();
-      }
-    } catch(e){}
-  }
-
-  const isPermanent = isPermanentUser(userEmail);
-
-  // Для обычных пользователей: если закрывали в этой сессии — не показываем
-  if (!isPermanent) {
-    try {
-      if (sessionStorage.getItem('prokat_app_banner_closed')) return;
-    } catch(e){}
-  }
-
-  // Повторно не показываем только если скачали ИМЕННО актуальный файл.
-  // Запись прошлой версии не скрывает доступ к обновлению.
-  if (!isPermanent && downloadedRelease === APP_RELEASE_ID) return;
-
-  const hadApp = isPermanent || !!oldDownload;
-  const titleText = hadApp ? 'Обновление · версия 10.15' : 'Ива для Android · 10.15';
-  const subText = hadApp
+  const hadApp = !!oldDownload || !!downloadedRelease;
+  const titleText = hadApp ? 'Обновление · версия ' + rel.versionName : 'Ива для Android · ' + rel.versionName;
+  const subText = rel.reinstall
     ? 'Новая версия на новом ключе: сначала удалите старое приложение, затем установите эту (данные — на сервере)'
     : 'Нативное приложение: каталог, заявки и чат';
-  const btnText = 'Скачать';
 
-  // Проверяем, может баннер уже существует
-  let banner = document.getElementById('appTopBanner');
-  if (banner) {
-    if (isPermanent) {
-      banner.classList.remove('closing');
-      banner.classList.add('permanent');
-      const t = banner.querySelector('.app-tb-title');
-      const s = banner.querySelector('.app-tb-sub');
-      const b = banner.querySelector('#appTbBtn');
-      const cl = banner.querySelector('#appTbClose');
-      const pr = banner.querySelector('.app-tb-progress');
-      if (t) t.innerHTML = esc(titleText) + ' <span class="app-tb-star">★</span>';
-      if (s) s.textContent = subText;
-      if (b) b.textContent = btnText;
-      if (cl) cl.remove();
-      if (pr) pr.remove();
-      if (window._appBannerTimer) { clearTimeout(window._appBannerTimer); window._appBannerTimer = null; }
-    }
-    return;
-  }
-
-  banner = document.createElement('div');
+  const banner = document.createElement('div');
   banner.id = 'appTopBanner';
-  banner.className = 'app-top-banner' + (isPermanent ? ' permanent' : '');
+  banner.className = 'app-top-banner';
   banner.innerHTML =
     '<div class="app-tb-wrap">' +
-      '<a class="app-tb-left" href="' + esc(APP_DOWNLOAD_URL) + '" download id="appTbLink">' +
+      '<a class="app-tb-left" href="' + esc(rel.apk) + '" download id="appTbLink">' +
         '<img class="app-tb-icon" src="assets/logo.png" alt="Ива">' +
         '<div class="app-tb-text">' +
           '<b class="app-tb-title">' + esc(titleText) + ' <span class="app-tb-star">★</span></b>' +
@@ -629,73 +627,43 @@ function mountAppTopBanner(container){
         '</div>' +
       '</a>' +
       '<div class="app-tb-right">' +
-        '<a class="app-tb-btn" href="' + esc(APP_DOWNLOAD_URL) + '" download id="appTbBtn">' + esc(btnText) + '</a>' +
-        (isPermanent ? '' : '<button class="app-tb-close" id="appTbClose" aria-label="Закрыть">×</button>') +
+        '<a class="app-tb-btn" href="' + esc(rel.apk) + '" download id="appTbBtn">Скачать</a>' +
+        '<button class="app-tb-close" id="appTbClose" aria-label="Закрыть">×</button>' +
       '</div>' +
     '</div>' +
-    (isPermanent ? '' : '<div class="app-tb-progress"><div class="app-tb-bar"></div></div>');
+    '<div class="app-tb-progress"><div class="app-tb-bar"></div></div>';
 
-  if (container && container.firstChild) {
-    container.insertBefore(banner, container.firstChild);
-  } else if (container) {
-    container.appendChild(banner);
-  } else {
-    document.body.insertBefore(banner, document.body.firstChild);
-  }
-
-  const dismiss = () => {
-    if (window._appBannerTimer) { clearTimeout(window._appBannerTimer); window._appBannerTimer = null; }
-    banner.classList.add('closing');
-    setTimeout(() => {
-      if (banner.parentNode) banner.parentNode.removeChild(banner);
-    }, 400);
-  };
+  if (container && container.firstChild) container.insertBefore(banner, container.firstChild);
+  else if (container) container.appendChild(banner);
+  else document.body.insertBefore(banner, document.body.firstChild);
 
   const close = banner.querySelector('#appTbClose');
+  close.addEventListener('click', (e) => {
+    e.preventDefault(); e.stopPropagation();
+    try { sessionStorage.setItem('prokat_app_banner_closed', '1'); } catch(err){}
+    dismissAppTopBanner();
+  });
+  if (window._appBannerTimer) clearTimeout(window._appBannerTimer);
+  window._appBannerTimer = setTimeout(dismissAppTopBanner, APP_BANNER_MS);
+}
+const APP_BANNER_MS = 10000; // 10 секунд — решение владельца 05.10.2026
 
-  if (close) {
-    close.addEventListener('click', (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-      try { sessionStorage.setItem('prokat_app_banner_closed', '1'); } catch(e){}
-      dismiss();
-    });
-  }
-
-  // Для обычных пользователей запускаем таймер на 5 секунд.
-  // Для владельца плашка постоянная, таймер НЕ запускается!
-  if (!isPermanent) {
-    if (window._appBannerTimer) clearTimeout(window._appBannerTimer);
-    window._appBannerTimer = setTimeout(dismiss, 5000);
-  }
-
-  // Если сессия еще восстанавливается — перепроверяем после восстановления
-  if (typeof restoreSess === 'function' && !isPermanent) {
-    restoreSess().then(() => {
-      let uEmail = '';
-      try {
-        const u = typeof getUser === 'function' ? getUser() : null;
-        if (u && u.email) uEmail = String(u.email).toLowerCase();
-        if (!uEmail && window.A && A.me) uEmail = String(A.me).toLowerCase();
-      } catch(e){}
-      if (isPermanentUser(uEmail)) {
-        mountAppTopBanner($('hdr') || document.body);
-      }
-    }).catch(()=>{});
-  }
+function dismissAppTopBanner(){
+  const b = document.getElementById('appTopBanner');
+  if (window._appBannerTimer) { clearTimeout(window._appBannerTimer); window._appBannerTimer = null; }
+  if (!b) return;
+  b.classList.add('closing');
+  setTimeout(() => { if (b.parentNode) b.parentNode.removeChild(b); }, 400);
 }
 
 // Клик означает скачивание, НЕ успешную установку (подписи версий могут отличаться).
 document.addEventListener('click', function(e){
-  const a = e.target.closest ? e.target.closest('a[href*="ProkatInstrumenta-10.15.apk"]') : null;
+  const a = e.target.closest ? e.target.closest('a[href*="ProkatInstrumenta-"]') : null;
   if (!a) return;
-  try { localStorage.setItem('prokat_app_download_release', APP_RELEASE_ID); } catch(err){}
-  const b = document.getElementById('appTopBanner');
-  if (b && !b.classList.contains('permanent')) {
-    if (window._appBannerTimer) { clearTimeout(window._appBannerTimer); window._appBannerTimer = null; }
-    b.classList.add('closing');
-    setTimeout(() => { if (b.parentNode) b.parentNode.removeChild(b); }, 400);
-  }
+  const file = ivaApkFile(a.getAttribute('href'));
+  if (!file) return;
+  try { localStorage.setItem('prokat_app_download_release', file); } catch(err){}
+  dismissAppTopBanner();
 });
 
 /* ---------- Инициализация общего каркаса ---------- */

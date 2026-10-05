@@ -8,7 +8,7 @@
 <meta name="robots" content="noindex, nofollow">
 <meta name="theme-color" content="#101217">
 <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
-<link rel="stylesheet" href="assets/theme.css?v=20261005-testch">
+<link rel="stylesheet" href="assets/theme.css?v=20261005-rel">
 <link rel="stylesheet" href="assets/profile.css?v=20260923-rental-profile">
 <style>
 .tabs{display:flex;gap:4px;border-bottom:1px solid var(--line);margin-bottom:18px;
@@ -123,7 +123,8 @@
 <script src="assets/data.js"></script>
 <script src="assets/geo.js?v=20260923-photon"></script>
 <script src="assets/email-guard.js?v=20260926-email"></script><script src="assets/sb.js?v=20260926-email"></script>
-<script src="assets/app.js?v=20261005-testch"></script>
+<script src="assets/app-release.js?v=20261005-rel"></script>
+<script src="assets/app.js?v=20261005-rel"></script>
 <script src="assets/profile.js?v=20260923-photon"></script>
 <script>
 (function(){
@@ -296,7 +297,7 @@
 
     return '<div class="sect" style="padding-bottom:0"><div class="sect-h">' +
         '<h2>' + esc(A.uname || 'Кабинет') + '</h2>' +
-        '<span class="cnt">' + esc(A.me) + (isAdmin() ? ' · арендодатель' : '') + '</span>' +
+        '<span class="cnt">' + esc(A.me) + (isCreator() ? ' · создатель' : isAdmin() ? ' · арендодатель' : '') + '</span>' +
       '</div></div>' +
       '<div class="tabs">' + tabsHtml + '</div>' + inner;
   }
@@ -822,14 +823,8 @@
         (isAdmin() ? '<a class="btn sec sm" href="#rentalProfile" id="jumpRental">Данные проката ↓</a>' : '<button class="btn sec sm" id="editPersonal">Редактировать данные</button>') +
         '<button class="btn ghost sm" id="bOut">Выйти</button>' +
       '</div>' +
-      '<div class="apk-test-slot" id="apkTestSlot"></div>' +
-      '<div class="apk-public" style="margin-top:24px;padding:16px;background:var(--card);border:1px solid var(--or);border-radius:var(--r);display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap">' +
-        '<div>' +
-          '<b style="font-size:15px;display:flex;align-items:center;gap:6px">📱 Нативное приложение для Android <span style="font-size:11px;background:var(--or-soft);color:var(--or);padding:2px 6px;border-radius:4px;font-weight:700">v10.15</span></b>' +
-          '<div style="font-size:12.5px;color:var(--gr);margin-top:4px">Новое: «туда и обратно» в доставке, цена за км видна сразу. Версия на новом ключе: <b>сначала удалите старое приложение</b>, затем установите эту и войдите в аккаунт — данные хранятся на сервере.</div>' +
-        '</div>' +
-        '<a class="btn hot sm" href="ProkatInstrumenta-10.15.apk" download style="white-space:nowrap">Скачать APK 10.15</a>' +
-      '</div>' +
+      // Карточки приложения (assets/app.js → mountAppCards): у всех — выпущенная версия; у создателя на телефоне — ещё новая с «Подтвердить релиз»
+      '<div class="apk-cards" id="apkCards"></div>' +
     '</div>' + (isAdmin() ? '<div id="rentalProfile"></div>' : '<div id="personalEditor"></div>');
   }
 
@@ -853,7 +848,7 @@
       copyToClipboard('89081731410', 'Номер телефона получателя скопирован');
     };
 
-    if($('apkTestSlot'))mountTestApkCard($('apkTestSlot'));
+    if($('apkCards'))mountAppCards($('apkCards'));
     if($('rentalProfile'))RentalProfile.mount($('rentalProfile'));
     const jump=$('jumpRental');if(jump)jump.onclick=function(e){e.preventDefault();$('rentalProfile').scrollIntoView({behavior:'smooth'});};
     const editPersonal=$('editPersonal');if(editPersonal)editPersonal.onclick=function(){

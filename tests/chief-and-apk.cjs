@@ -5,7 +5,14 @@ const fs = require('node:fs');
 const path = require('node:path');
 
 const BASE = process.env.SITE_BASE_URL || 'http://127.0.0.1:8000';
-const APK = 'ProkatInstrumenta-10.15.apk';
+// 05.10.2026: у всех — выпущенная версия (app_releases пусто → старая 10.14); у создателя на телефоне — ещё жёлтая карточка новой.
+const APK = 'ProkatInstrumenta-10.14.apk';
+const NEW_APK = 'ProkatInstrumenta-10.15.apk';
+const FEED = fs.readFileSync(path.join(__dirname, '../app-test.json'), 'utf8');
+async function mockRelease(page){
+  await page.route('**/rest/v1/app_releases*', r => r.fulfill({ contentType: 'application/json', body: '[]' }));
+  await page.route('**/app-test.json*', r => r.fulfill({ contentType: 'application/json', body: FEED, headers: { 'access-control-allow-origin': '*' } }));
+}
 
 (async () => {
   const browser = await chromium.launch({ headless: true });
@@ -57,14 +64,16 @@ api = async (p) => {
 moneyStats = () => ({ rent:0, fee:0, paid:0, owed:0, byAdmin:{} });
 `
       }));
+      await mockRelease(page);
       await page.goto(`${BASE}/chief.html`);
-      await page.locator('.apk-recovery').waitFor({ timeout: 10000 });
-      assert.match(await page.locator('.apk-recovery').innerText(), /версия 10\.15/);
-      assert.match(await page.locator('.apk-recovery').innerText(), /удалите текущую версию/);
-      // 05.10.2026: кнопка 10.15 в шапке и в карточке (запасную ссылку на 10.14 владелец велел убрать)
+      await page.locator('.apk-public').waitFor({ timeout: 10000 });
+      assert.match(await page.locator('.apk-public').innerText(), /версия 10\.14/);
+      // Не создатель: одна зелёная карточка + кнопка в шапке, обе на выпущенную версию; жёлтой нет
+      await page.waitForTimeout(800);
+      assert.equal(await page.locator('.apk-test').count(), 0, 'жёлтая карточка — только у создателя');
       assert.equal(await page.locator('#root a[href$=".apk"]').count(), 2);
-      assert.equal(new URL(await page.locator('.apk-recovery a.btn').getAttribute('href'), `${BASE}/chief.html`).pathname.split('/').pop(), APK);
-      assert.equal(await page.locator('.apk-recovery a[href$="ProkatInstrumenta-10.14.apk"]').count(), 0, 'запасная ссылка на 10.14 убрана');
+      for (const h of await page.locator('#root a[href$=".apk"]').evaluateAll(a => a.map(x => x.getAttribute('href')))) assert.equal(h, APK);
+      assert.match(await page.locator('.sect-h .cnt').innerText(), /владелец/);
       // Сводка: цифры обращений со страниц городов
       const dash = await page.locator('#root').innerText();
       assert.match(dash, /Обращения со страниц городов/, 'в сводке нет блока обращений');
@@ -96,8 +105,9 @@ api = async (p) => { throw new Error('relation \\"public.directory_clicks\\" doe
 moneyStats = () => ({ rent:0, fee:0, paid:0, owed:0, byAdmin:{} });
 `
         }));
+        await mockRelease(p2);
         await p2.goto(`${BASE}/chief.html`);
-        await p2.locator('.apk-recovery').waitFor({ timeout: 10000 });
+        await p2.locator('.apk-public').waitFor({ timeout: 10000 });
         const txt = await p2.locator('#root').innerText();
         assert.match(txt, /Счётчик ещё не включён/, 'кабинет должен объяснить, что счётчик ещё не включён');
         assert.match(txt, /20261001_directory_clicks\.sql/, 'нет имени файла, который надо выполнить');
@@ -107,7 +117,50 @@ moneyStats = () => ({ rent:0, fee:0, paid:0, owed:0, byAdmin:{} });
 
       const response = await page.request.get(`${BASE}/${APK}`);
       assert.equal(response.status(), 200, 'APK must be publicly downloadable');
-      assert.equal((await response.body()).length, 1116271, 'Correct APK file is served');
+      assert.equal((await response.body()).length, 1108041, 'Correct APK file is served');
+      await page.close();
+    }
+
+    // Создатель (eclips.ru@mail.ru) на телефоне: статус «создатель», жёлтая карточка новой версии НАД зелёной,
+    // «Подтвердить релиз» отправляет запись в app_releases.
+    {
+      const page = await browser.newPage({ viewport: { width: 375, height: 810 } });
+      const errors = [];
+      page.on('pageerror', e => errors.push(e.message));
+      page.on('dialog', d => d.accept());
+      const sb = fs.readFileSync(path.join(__dirname, '../assets/sb.js'), 'utf8');
+      await page.route('**/assets/sb.js*', route => route.fulfill({
+        contentType: 'text/javascript',
+        body: sb + `\n
+A.me = 'eclips.ru@mail.ru'; A.tok = 'mock'; A.admin = { role: 'chief' };
+restoreSess = async () => A; isAuthed = () => true;
+loadOrders = async () => []; loadParts = async () => []; loadFees = async () => []; loadAllTools = async () => [];
+loadAdmins = async () => [{ email:'eclips.ru@mail.ru', role:'chief', active:true }];
+loadAllCats = async () => ({ cats: [], subs: [] }); unreadCount = async () => 0;
+window.__posts = [];
+api = async (p, m, b) => { if (m === 'POST') { window.__posts.push({ p: p, b: b }); return null; } return []; };
+moneyStats = () => ({ rent:0, fee:0, paid:0, owed:0, byAdmin:{} });
+`
+      }));
+      await mockRelease(page);
+      await page.goto(`${BASE}/chief.html`);
+      await page.locator('#apkConfirm').waitFor({ timeout: 10000 });
+      assert.match(await page.locator('.sect-h .cnt').innerText(), /создатель/, 'у создателя статус «создатель»');
+      const order = await page.evaluate(() => {
+        const y = document.querySelector('.apk-test'), g = document.querySelector('.apk-public');
+        return !!(y && g && (y.compareDocumentPosition(g) & Node.DOCUMENT_POSITION_FOLLOWING));
+      });
+      assert.ok(order, 'жёлтая карточка должна стоять НАД зелёной');
+      assert.match(await page.locator('.apk-test').innerText(), /Новая версия 10\.15/);
+      assert.ok((await page.locator('.apk-test a.btn').getAttribute('href')).endsWith(NEW_APK));
+      assert.ok((await page.locator('.apk-public a.btn').getAttribute('href')).endsWith(APK));
+      await page.locator('#apkConfirm').click();
+      await page.getByText(/выпущена для всех/).waitFor({ timeout: 5000 });
+      const posts = await page.evaluate(() => window.__posts);
+      assert.equal(posts.length, 1); assert.equal(posts[0].p, '/rest/v1/app_releases');
+      assert.equal(posts[0].b.version_code, 89);
+      assert.equal(posts[0].b.apk_url, NEW_APK, 'файл уже на сайте — ссылка на сайт, а не на GitHub');
+      assert.deepEqual(errors, []);
       await page.close();
     }
     console.log('Chief cabinet, access control, outreach and native APK link: OK');
