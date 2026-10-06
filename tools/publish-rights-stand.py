@@ -163,6 +163,13 @@ print('  применение 1:', q(MIG)[0])
 print('  применение 2:', q(MIG)[0])
 bad += 0 if q(MIG)[0] == 'OK' else 1
 
+print('== 2б. Вариант боевой базы: jwt_email() написана на plpgsql (create or replace не меняет язык) ==')
+print(' ', q("create or replace function public.jwt_email() returns text language plpgsql stable "
+          "security definer set search_path = public as $$ begin return lower(coalesce(auth.jwt() ->> 'email', '')); end $$;")[0],
+      '— сделали «слабую» jwt_email на plpgsql')
+print('  применяем миграцию поверх:', q(MIG)[0])
+check('админ, в токене НЕТ почты, jwt_email была plpgsql', sess({'sub': ADM['sub']}, post_tool('eclipsik.ru@mail.ru')), 'ПУСКАЕТ')
+
 print('== 3. После миграции: админ публикувает во всех четырёх больных случаях ==')
 check('админ, токен с почтой, owner_email свой', sess(ADM, post_tool('eclipsik.ru@mail.ru')), 'ПУСКАЕТ')
 out = check('админ, в токене НЕТ почты (устаревшая сессия)', sess({'sub': ADM['sub']}, post_tool('eclipsik.ru@mail.ru')), 'ПУСКАЕТ')

@@ -55,18 +55,40 @@
 begin;
 
 -- ---------------------------------------------------------------------------
--- 1. Почта текущей сессии — надёжно, с нормализацией пробелов и регистра
+-- 1. Почта текущей сессии — надёжно, с нормализацией пробелов и регистра.
+--    Функция jwt_email() в репозитории не описана (база старше репозитория), поэтому
+--    язык её тела подставляется тот, каким она уже создана: create or replace не умеет
+--    менять язык существующей функции, и миграция не должна из-за этого падать.
 -- ---------------------------------------------------------------------------
-create or replace function public.jwt_email() returns text
-language sql stable security definer set search_path = public, pg_temp
-as $$
-  select lower(btrim(coalesce(
-    nullif(btrim(auth.jwt() ->> 'email'), ''),
-    nullif(btrim(current_setting('request.jwt.claim.email', true)), ''),
-    (select btrim(u.email) from auth.users u where u.id = auth.uid()),
-    ''
-  )))
-$$;
+do $do$
+declare
+  lang text;
+  expr text := $f$
+      lower(btrim(coalesce(
+        nullif(btrim(auth.jwt() ->> 'email'), ''),
+        nullif(btrim(current_setting('request.jwt.claim.email', true)), ''),
+        (select btrim(u.email) from auth.users u where u.id = auth.uid()),
+        ''
+      )))
+  $f$;
+begin
+  select l.lanname into lang
+  from pg_proc p
+  join pg_namespace n on n.oid = p.pronamespace
+  join pg_language l on l.oid = p.prolang
+  where n.nspname = 'public' and p.proname = 'jwt_email' and p.proargtypes::text = '';
+
+  if lang is null or lang = 'sql' then
+    execute format('create or replace function public.jwt_email() returns text
+                    language sql stable security definer set search_path = public, pg_temp
+                    as $fn$ select %s $fn$', expr);
+  else
+    execute format('create or replace function public.jwt_email() returns text
+                    language %I stable security definer set search_path = public, pg_temp
+                    as $fn$ begin return %s; end $fn$', lang, expr);
+  end if;
+end
+$do$;
 grant execute on function public.jwt_email() to anon, authenticated;
 
 -- ---------------------------------------------------------------------------
