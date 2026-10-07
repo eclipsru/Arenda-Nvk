@@ -63,10 +63,19 @@ jobs:
         run: |
           set -euo pipefail
           C="$RUNNER_TEMP/cls"; mkdir -p "$C"
-          javac -encoding UTF-8 -source 8 -target 8 -nowarn -bootclasspath "$ANDROID_JAR" -d "$C" android/patches/IvaPatch.java
+          # Журнал задачи из песочницы агента не читается (файлы лежат в хранилище Azure, оно недоступно) —
+          # поэтому ошибки компилятора и проваленные проверки дублируются в аннотации задачи.
+          fail() { grep -E "$2" "$1" 2>/dev/null | while IFS= read -r l; do echo "::error title=$3::$l"; done; exit 1; }
+          if ! javac -encoding UTF-8 -source 8 -target 8 -nowarn -bootclasspath "$ANDROID_JAR" -d "$C" android/patches/IvaPatch.java 2>&1 | tee "$RUNNER_TEMP/j1.log"; then
+            fail "$RUNNER_TEMP/j1.log" 'error:|ошибка:' 'Компиляция IvaPatch'
+          fi
           T="$RUNNER_TEMP/tcls"; mkdir -p "$T"
-          javac -encoding UTF-8 -cp "$C:$ANDROID_JAR" -d "$T" android/patches/test/IvaPatchTest.java
-          java -Dfile.encoding=UTF-8 -cp "$T:$C:$ANDROID_JAR" ru.prokatnvsk.app.IvaPatchTest
+          if ! javac -encoding UTF-8 -cp "$C:$ANDROID_JAR" -d "$T" android/patches/test/IvaPatchTest.java 2>&1 | tee "$RUNNER_TEMP/j2.log"; then
+            fail "$RUNNER_TEMP/j2.log" 'error:|ошибка:' 'Компиляция теста IvaPatch'
+          fi
+          if ! java -Dfile.encoding=UTF-8 -cp "$T:$C:$ANDROID_JAR" ru.prokatnvsk.app.IvaPatchTest 2>&1 | tee "$RUNNER_TEMP/j3.log"; then
+            fail "$RUNNER_TEMP/j3.log" '^✘|Exception' 'Тест IvaPatch'
+          fi
           mkdir -p "$RUNNER_TEMP/dex"
           "$BT/d8" --release --min-api 21 --lib "$ANDROID_JAR" --output "$RUNNER_TEMP/dex" $(find "$C" -name '*.class')
           ls -la "$RUNNER_TEMP/dex"

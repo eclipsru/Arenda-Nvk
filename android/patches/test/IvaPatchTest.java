@@ -34,7 +34,9 @@ public class IvaPatchTest {
         eq("причина помечена", IvaPatch.netError("timeout").contains("Технически: timeout"), true);
         eq("переносы убираются", IvaPatch.netError("строка1\nстрока2").contains("строка1 строка2"), true);
         String longOne = IvaPatch.netError(new String(new char[400]).replace('\0', 'x'));
-        eq("длинная причина режется", longOne.length() < 260 && longOne.endsWith("…"), true);
+        String reason = longOne.substring(longOne.indexOf(IvaPatch.TECH) + IvaPatch.TECH.length());
+        eq("длинная причина режется до 197 знаков и многоточия", reason.length() == 198 && reason.endsWith("…"), true);
+        eq("надпись = фраза + причина", longOne.length(), IvaPatch.NET_MSG.length() + 2 + IvaPatch.TECH.length() + 198);
         eq("пустая причина — только фраза", IvaPatch.netError(""), "Нет связи с сервером. Проверьте интернет и попробуйте ещё раз.");
         eq("null не роняет", IvaPatch.netError(null), "Нет связи с сервером. Проверьте интернет и попробуйте ещё раз.");
         if (fail > 0) { System.out.println("ошибок: " + fail); System.exit(1); }
