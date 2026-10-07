@@ -51,7 +51,7 @@ Android ставит обновление «поверх» только с те�
 - **Выпущенная версия** = последняя строка таблицы `public.app_releases` (миграция `supabase/migrations/20261005_app_releases.sql`). Пока строк нет или база недоступна — у всех `IVA_RELEASE_FALLBACK` в `assets/app-release.js` (сейчас **10.14**).
 - «Подтвердить релиз» добавляет строку; база примет её **только** от eclips.ru@mail.ru (политика RLS). Ссылка — только на APK этого проекта; если файл уже лежит на сайте — на сайт, иначе на GitHub.
 - **Новая версия** берётся из `app-test.json` в ветке агента (`IVA_TEST_FEED`). Его пишет сборка (`build-apk.yml`) вместе с новым APK. Уже выпущенный `ProkatInstrumenta-<версия>.apk` сборка **не перезаписывает** — для изменений поднимите `NEW_NAME`/`NEW_CODE`.
-- **Новая ветка агента → поменять имя ветки в `IVA_TEST_FEED`** (и условие `if: github.ref` в build-apk.yml).
+- **Новая ветка агента → поменять имя ветки в `IVA_TEST_FEED`** (`assets/app-release.js`) и ссылку `apk` в `app-test.json` — эти две строки должны указывать на одну ветку. `build-apk.yml` запускается на `main` и `arena/**`, а APK коммитит в любую ветку `arena/`; старые ветки не удаляются.
 - Отменить последний релиз (у всех снова предыдущая): `delete from public.app_releases where version_code = (select max(version_code) from public.app_releases);` — в SQL Editor.
 - Скрытие, а не защита: репозиторий публичный, тестовый APK можно скачать по прямой ссылке.
 - `app-update.json` (самообновление внутри приложения) этим механизмом не меняется.

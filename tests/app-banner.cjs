@@ -4,7 +4,7 @@ const assert = require('node:assert/strict');
 const BASE = process.env.SITE_BASE_URL || 'http://127.0.0.1:8000';
 // 05.10.2026: баннер у всех одинаковый, 10 секунд, ссылка на ВЫПУЩЕННУЮ версию (app_releases; пока пусто — 10.14).
 const APK_NAME = 'ProkatInstrumenta-10.14.apk';
-const NEW_URL = 'https://github.com/eclipsru/Arenda-Nvk/raw/arena/01a101d5-arenda-nvk/ProkatInstrumenta-10.15.apk';
+const NEW_URL = 'https://github.com/eclipsru/Arenda-Nvk/raw/arena/770a6265-arenda-nvk/ProkatInstrumenta-10.15.apk';
 // Ответ базы подменяется: тест не зависит от того, подтверждён ли релиз на самом деле.
 async function mockReleases(ctx, rows){
   await ctx.route('**/rest/v1/app_releases*', route => route.fulfill({ contentType: 'application/json', body: JSON.stringify(rows || []) }));
