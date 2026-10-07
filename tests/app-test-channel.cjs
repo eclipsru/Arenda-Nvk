@@ -116,6 +116,9 @@ const ROOT = path.join(__dirname, '..'); const R = p => fs.readFileSync(path.joi
   assert.ok(!/GRANT[^;]*(UPDATE|DELETE)/i.test(body), 'менять и удалять релизы через сайт нельзя');
   // ---- Сборка: выпущенный APK не перезаписывается, app-test.json обновляется ----
   const wf = R('.github/workflows/build-apk.yml');
+  assert.match(wf, /branches: \['main', 'arena\/\*\*'\]/, 'build-apk.yml: сборка должна работать на main и arena/**');
+  assert.match(wf, /if: startsWith\(github\.ref, 'refs\/heads\/arena\/'\)/, 'build-apk.yml: APK должен коммититься в ветку текущей сессии');
+  assert.ok(!wf.includes('arena/01a101d5-arenda-nvk'), 'build-apk.yml: старая ветка снова зашита в workflow');
   assert.match(wf, /git cat-file -e "HEAD:\$F"[\s\S]*exit 0/, 'build-apk.yml: выпущенный APK может быть перезаписан');
   assert.match(wf, /git add -f "\$F" app-test\.json/, 'build-apk.yml: app-test.json не обновляется');
   console.log(`Релиз приложения: до подтверждения у всех ${fb[1]}; новая ${t.versionName} — только eclips.ru@mail.ru на телефоне с «Подтвердить релиз»; баннер 10 с; 8 случаев поведения ок`);

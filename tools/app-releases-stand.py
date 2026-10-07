@@ -19,7 +19,7 @@ def as_(role,email,sql):
     claims = '{"email":"%s"}'%email if email else ''
     return q(f"begin; set local role {role}; set local request.jwt.claims = '{claims}'; {sql}; commit;")
 ins="insert into public.app_releases(version_code,version_name,apk_url,reinstall,notes) values (%s,'%s','%s',true,'x')"
-gh='https://github.com/eclipsru/Arenda-Nvk/raw/arena/01a101d5-arenda-nvk/ProkatInstrumenta-10.15.apk'
+gh='https://github.com/eclipsru/Arenda-Nvk/raw/arena/770a6265-arenda-nvk/ProkatInstrumenta-10.15.apk'
 cases=[
  ('anon вставляет', as_('anon','',ins%(89,'10.15',gh)), 'ERR'),
  ('чужой пользователь', as_('authenticated','someone@mail.ru',ins%(89,'10.15',gh)), 'ERR'),
