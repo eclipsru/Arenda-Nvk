@@ -14,7 +14,7 @@
 name: Сборка приложения
 on:
   push:
-    branches: ['main', 'arena/01a101d5-arenda-nvk']
+    branches: ['main', 'arena/7ef9c334-arenda-nvk']
     paths: ['.github/workflows/build-apk.yml', 'android/patches/**']
   workflow_dispatch:
 permissions:
@@ -131,7 +131,7 @@ jobs:
           retention-days: 30
 
       - name: Положить APK в ветку агента
-        if: github.ref == 'refs/heads/arena/01a101d5-arenda-nvk'
+        if: github.ref == 'refs/heads/arena/7ef9c334-arenda-nvk'
         run: |
           set -euo pipefail
           git config user.name "github-actions[bot]"

@@ -21,7 +21,13 @@ try {
   assert.match(code, /\[ "\$\{CERT\^\^\}" = "\$EXPECTED" \] \|\| bad/, `${f}: нет сверки сертификата с эталоном`);
   assert.match(code, /apksigner" verify "\$A" \|\| bad/, `${f}: нет apksigner verify`);
   assert.match(code, /versionCode='\$NEW_CODE'/); assert.match(code, /versionName='\$NEW_NAME'/);
-  assert.match(code, /if: github\.ref == 'refs\/heads\/arena\/01a101d5-arenda-nvk'/, `${f}: APK коммитится только в ветку агента`);
+  const feed = (R('assets/app-release.js').match(/var IVA_TEST_FEED = '([^']+)'/ ) || [])[1];
+  assert.ok(feed, 'assets/app-release.js: нет IVA_TEST_FEED');
+  const feedParts = new URL(feed).pathname.split('/').filter(Boolean);
+  const feedBranch = feedParts.slice(2, -1).join('/');
+  const branchList = (code.match(/branches:\s*\[([^\]]+)\]/) || [])[1] || '';
+  assert.ok(branchList.includes(`'${feedBranch}'`), `${f}: push должен запускаться в ветке тестового фида ${feedBranch}`);
+  assert.ok(code.includes(`if: github.ref == 'refs/heads/${feedBranch}'`), `${f}: APK должен коммититься в ветку тестового фида ${feedBranch}`);
   assert.ok(!/git add[^\n]*(out\/|\*|\.p12|\$KS)/.test(code), `${f}: в коммит попадает лишнее`);
   // эталон = памятка = проверка ключа
   const exp = (code.match(/EXPECTED: ([0-9A-F]{64})/) || [])[1];
