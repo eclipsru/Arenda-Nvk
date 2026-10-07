@@ -7,8 +7,12 @@ const path = require('node:path');
 const BASE = process.env.SITE_BASE_URL || 'http://127.0.0.1:8000';
 // 05.10.2026: у всех — выпущенная версия (app_releases пусто → старая 10.14); у создателя на телефоне — ещё жёлтая карточка новой.
 const APK = 'ProkatInstrumenta-10.14.apk';
-const NEW_APK = 'ProkatInstrumenta-10.15.apk';
 const FEED = fs.readFileSync(path.join(__dirname, '../app-test.json'), 'utf8');
+// Номер и файл тестовой сборки берём из app-test.json: их меняет «Сборка приложения» в Actions,
+// а тест из-за этого ломаться не должен (07.10.2026: тест ждал 10.15, а собралась 10.16).
+const FEED_J = JSON.parse(FEED);
+const NEW_VER = String(FEED_J.versionName);
+const NEW_APK = String(FEED_J.apk).split('/').pop();
 async function mockRelease(page){
   await page.route('**/rest/v1/app_releases*', r => r.fulfill({ contentType: 'application/json', body: '[]' }));
   await page.route('**/app-test.json*', r => r.fulfill({ contentType: 'application/json', body: FEED, headers: { 'access-control-allow-origin': '*' } }));
@@ -151,7 +155,7 @@ moneyStats = () => ({ rent:0, fee:0, paid:0, owed:0, byAdmin:{} });
         return !!(y && g && (y.compareDocumentPosition(g) & Node.DOCUMENT_POSITION_FOLLOWING));
       });
       assert.ok(order, 'жёлтая карточка должна стоять НАД зелёной');
-      assert.match(await page.locator('.apk-test').innerText(), /Новая версия 10\.15/);
+      assert.match(await page.locator('.apk-test').innerText(), new RegExp('Новая версия ' + NEW_VER.replace(/\./g, '\\.')));
       assert.ok((await page.locator('.apk-test a.btn').getAttribute('href')).endsWith(NEW_APK));
       assert.ok((await page.locator('.apk-public a.btn').getAttribute('href')).endsWith(APK));
       await page.locator('#apkConfirm').click();
