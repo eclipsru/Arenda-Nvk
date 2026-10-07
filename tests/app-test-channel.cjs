@@ -18,11 +18,19 @@ const ROOT = path.join(__dirname, '..'); const R = p => fs.readFileSync(path.joi
   assert.ok(fb && fs.existsSync(path.join(ROOT, fb[3])), 'старая версия для всех: файла нет в репозитории');
   const feed = rel.match(/var IVA_TEST_FEED = '([^']+)';/)[1];
   assert.match(feed, /^https:\/\/raw\.githubusercontent\.com\/eclipsru\/Arenda-Nvk\/[^/]+\/.*app-test\.json$/, 'IVA_TEST_FEED: не raw.githubusercontent.com/…/app-test.json');
+  const feedParts = new URL(feed).pathname.split('/').filter(Boolean);
+  const feedBranch = feedParts.slice(2, -1).join('/');
+  const TEST_BRANCH = 'arena/7ef9c334-arenda-nvk';
+  assert.equal(feedBranch, TEST_BRANCH, 'IVA_TEST_FEED должен читать app-test.json из ветки этой сессии');
   assert.match(rel, /\/rest\/v1\/app_releases\?select=version_code,version_name,apk_url,reinstall,notes&order=version_code\.desc&limit=1/, 'выпущенная версия берётся не из app_releases');
   const t = JSON.parse(R('app-test.json'));
   const apkName = (t.apk.match(/\/(ProkatInstrumenta-[\d.]+\.apk)$/) || [])[1];
   assert.ok(apkName && fs.existsSync(path.join(ROOT, apkName)), `app-test.json: файла ${apkName} нет в репозитории`);
-  assert.ok(t.apk.includes(feed.split('/')[5]), 'app-test.json: ссылка на APK не из той же ветки, что IVA_TEST_FEED');
+  const apkUrl = new URL(t.apk), apkParts = apkUrl.pathname.split('/').filter(Boolean), rawIndex = apkParts.indexOf('raw');
+  assert.equal(apkUrl.hostname, 'github.com', 'app-test.json: APK должен скачиваться из репозитория GitHub');
+  assert.ok(rawIndex >= 0, 'app-test.json: ссылка на APK должна содержать /raw/');
+  const apkBranch = apkParts.slice(rawIndex + 1, -1).join('/');
+  assert.equal(apkBranch, feedBranch, 'app-test.json: ссылка на APK должна быть из той же ветки, что IVA_TEST_FEED');
   assert.ok(t.versionCode > Number(fb[2]), 'app-test.json: новая версия должна быть новее старой');
 
   // ---- Поведение: app-release.js + функции карточек из app.js в песочнице ----

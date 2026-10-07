@@ -1,10 +1,13 @@
 const { chromium } = require('playwright');
 const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
 
 const BASE = process.env.SITE_BASE_URL || 'http://127.0.0.1:8000';
 // 05.10.2026: баннер у всех одинаковый, 10 секунд, ссылка на ВЫПУЩЕННУЮ версию (app_releases; пока пусто — 10.14).
 const APK_NAME = 'ProkatInstrumenta-10.14.apk';
-const NEW_URL = 'https://github.com/eclipsru/Arenda-Nvk/raw/arena/01a101d5-arenda-nvk/ProkatInstrumenta-10.15.apk';
+// Подтверждённую версию тестируем по текущему app-test.json, не закрепляя старую ветку.
+const NEW_URL = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'app-test.json'), 'utf8')).apk;
 // Ответ базы подменяется: тест не зависит от того, подтверждён ли релиз на самом деле.
 async function mockReleases(ctx, rows){
   await ctx.route('**/rest/v1/app_releases*', route => route.fulfill({ contentType: 'application/json', body: JSON.stringify(rows || []) }));
