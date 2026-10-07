@@ -10,11 +10,12 @@
 # Секреты: ANDROID_KEYSTORE_B64, ANDROID_KEYSTORE_PASS — только через переменные окружения, не выводятся;
 # файл ключа во временной папке, удаляется в конце. Из Pull Request (чужих веток) не запускается.
 # Запуск: при изменении этого файла или android/patches/**; кнопка Run workflow — после слияния в main.
+# Сборка запускается на main и ветках arena/**; APK коммитится только в ветку агента arena/**.
 # Откат: `git revert` коммита с этим файлом; APK 10.14 остаётся в репозитории.
 name: Сборка приложения
 on:
   push:
-    branches: ['main', 'arena/01a101d5-arenda-nvk']
+    branches: ['main', 'arena/**']
     paths: ['.github/workflows/build-apk.yml', 'android/patches/**']
   workflow_dispatch:
 permissions:
@@ -131,7 +132,7 @@ jobs:
           retention-days: 30
 
       - name: Положить APK в ветку агента
-        if: github.ref == 'refs/heads/arena/01a101d5-arenda-nvk'
+        if: startsWith(github.ref, 'refs/heads/arena/')
         run: |
           set -euo pipefail
           git config user.name "github-actions[bot]"
