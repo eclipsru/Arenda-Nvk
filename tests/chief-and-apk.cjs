@@ -162,7 +162,7 @@ moneyStats = () => ({ rent:0, fee:0, paid:0, owed:0, byAdmin:{} });
       await page.getByText(/выпущена для всех/).waitFor({ timeout: 5000 });
       const posts = await page.evaluate(() => window.__posts);
       assert.equal(posts.length, 1); assert.equal(posts[0].p, '/rest/v1/app_releases');
-      assert.equal(posts[0].b.version_code, 89);
+      assert.equal(posts[0].b.version_code, Number(FEED_J.versionCode));
       assert.equal(posts[0].b.apk_url, NEW_APK, 'файл уже на сайте — ссылка на сайт, а не на GitHub');
       assert.deepEqual(errors, []);
       await page.close();
