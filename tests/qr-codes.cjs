@@ -32,9 +32,11 @@ const base = (sitemap.match(/<loc>(https:\/\/[^/<]+\/[^/<]+)/) || [])[1];
 assert.ok(base, 'sitemap.xml: не нашёл базовый адрес сайта');
 assert.ok(make.includes(`SITE = "${base}"`), `tools/make-qr.py: базовый адрес ${base} не совпадает со строкой SITE`);
 assert.ok(make.includes('/app.html'), 'tools/make-qr.py: нет адреса страницы приложения (app.html)');
-const appUpdate = JSON.parse(fs.readFileSync(path.join(ROOT, 'app-update.json'), 'utf8'));
-const apkFile = (appUpdate.apk || '').split('/').pop();
-assert.ok(make.includes(apkFile), `tools/make-qr.py: код приложения ведёт не на файл текущей версии (${apkFile})`);
+// Код «сразу скачать» ведёт на файл подтверждённой версии; файл с таким именем
+// обязан лежать в корне репозитория (иначе QR укажет на несуществующий APK).
+const qrApk = (make.match(/ProkatInstrumenta-[\d.]+\.apk/) || [])[0];
+assert.ok(qrApk, 'tools/make-qr.py: не найден файл APK для кода «сразу скачать»');
+assert.ok(fs.existsSync(path.join(ROOT, qrApk)), `код «сразу скачать» ведёт на ${qrApk}, но такого файла нет в корне`);
 
 // 3. Никаких внешних сервисов для генерации — только локальная библиотека
 for (const bad of ['urlopen', 'requests.get', 'http://', 'api.qrserver', 'quickchart', 'chart.googleapis']) {
