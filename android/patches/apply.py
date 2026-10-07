@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Ива — патч 10.14 → 10.15 в разобранном apktool-проекте.
+"""Ива — патч 10.14 → новая версия в разобранном apktool-проекте (сейчас 10.16; номер передаётся аргументом).
 
 Запуск: python3 android/patches/apply.py <папка apktool d> <versionCode> <versionName>
 Строго: каждое место вставки должно найтись ровно столько раз, сколько ожидается,
@@ -11,6 +11,7 @@
   3. paintDelToggle(Z)      : тексты кнопки «Доставка: есть / нет» с подсказкой (форма админа)
   4. showAdmHub(I)          : после скрытия вкладки «Добавить» → IvaPatch.onHub(this) (объяснение про долг)
   5. lambda$setupAddTool$…(Button, Exception) : после humanError → IvaPatch.publishError(текст)
+  6. humanError(String)                      : общая фраза «Нет связи с сервером…» → IvaPatch.netError(причина)
 Плюс versionCode/versionName в apktool.yml.
 """
 import os
@@ -108,6 +109,21 @@ def patch(lines):
     lines[mr[0] + 1:mr[0] + 1] = ['', f'    invoke-static/range {{{r} .. {r}}}, {P}->publishError(Ljava/lang/String;)Ljava/lang/String;',
                                   f'    move-result-object {r}']
     done.append('5 publishError')
+
+    # 6. причина сбоя связи словами: в humanError общая фраза «Нет связи с сервером…» заменяется
+    #    на вызов IvaPatch.netError(причина) — он вернёт ту же фразу плюс техническую причину.
+    #    Зачем: 07.10.2026 владелец на двух телефонах видел эту фразу при рабочем интернете.
+    s, e = one_method(lines, r' humanError\(Ljava/lang/String;\)Ljava/lang/String;$')
+    net = 'Нет связи с сервером. Проверьте интернет и попробуйте ещё раз.'
+    hits = [i for i in range(s, e)
+            if re.search(r'const-string(?:/jumbo)? (\w+), "(%s|%s)"$' % (re.escape(esc(net)), re.escape(net)), lines[i])]
+    if len(hits) != 1:
+        die(f'humanError: фраза «Нет связи с сервером…» найдена {len(hits)} раз, нужно ровно 1')
+    reg = re.search(r'const-string(?:/jumbo)? (\w+),', lines[hits[0]]).group(1)
+    lines[hits[0]:hits[0] + 1] = [
+        f'    invoke-static {{{reg}}}, {P}->netError(Ljava/lang/String;)Ljava/lang/String;',
+        f'    move-result-object {reg}']
+    done.append('6 netError')
     return done
 
 

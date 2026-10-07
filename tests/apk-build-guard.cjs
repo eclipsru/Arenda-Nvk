@@ -2,7 +2,8 @@
 // Ловит: вывод ключа/пароля (set -x, echo, пароль в командной строке), запуск из Pull Request,
 // подпись без сверки сертификата с эталоном ключа №6, эталон ≠ памятке, коммит APK не в ветку агента,
 // поломку смены версии в двоичном манифесте (проверяется на настоящем манифесте 10.14),
-// пропажу любой из 5 точек вставки в apply.py, кандидата без нужной версии.
+// пропажу любой из 6 точек вставки в apply.py, кандидата без нужной версии,
+// и что фраза «Нет связи с сервером…» в classes.dex 10.14 одна (точка 6 однозначна).
 // Запуск: node tests/apk-build-guard.cjs
 const fs = require('node:fs'), path = require('node:path'), os = require('node:os'), assert = require('node:assert/strict');
 const { execFileSync } = require('node:child_process');
@@ -29,14 +30,24 @@ try {
   const doc = (R('docs/КЛЮЧ-ПОДПИСИ.md').match(/Эталон проверки: `([0-9A-F]{64})`/) || [])[1];
   assert.ok(exp && exp === doc, `${f}: эталон ${exp} ≠ памятке ${doc}`);
   assert.match(R('.github/workflows/keystore-check.yml'), new RegExp('EXPECTED=' + exp));
-  // 5 точек вставки
+  // 6 точек вставки
   const ap = R('android/patches/apply.py');
   for (const k of ['->onPrice(Ljava/lang/String;)Ljava/lang/String;', '->onSummary(Landroid/app/Activity;)V',
-    "one_method(lines, r' paintDelToggle\\(Z\\)V$')", '->onHub(Landroid/app/Activity;)V', '->publishError(Ljava/lang/String;)Ljava/lang/String;'])
+    "one_method(lines, r' paintDelToggle\\(Z\\)V$')", '->onHub(Landroid/app/Activity;)V', '->publishError(Ljava/lang/String;)Ljava/lang/String;',
+    '->netError(Ljava/lang/String;)Ljava/lang/String;'])
     assert.ok(ap.includes(k), `apply.py: нет вставки ${k}`);
   const jp = R('android/patches/IvaPatch.java');
-  for (const k of ['onPrice(String', 'onSummary(final Activity', 'onHub(Activity', 'publishError(String'])
+  for (const k of ['onPrice(String', 'onSummary(final Activity', 'onHub(Activity', 'publishError(String', 'netError(String'])
     assert.ok(jp.includes('public static ') && jp.includes(k), `IvaPatch.java: нет метода ${k}`);
+  // точка 6 есть в настоящем APK: фраза «Нет связи с сервером…» лежит в classes.dex 10.14 ровно один раз —
+  // значит вставка однозначна и владелец увидит причину именно там, где раньше была общая фраза (07.10.2026)
+  const NET = 'Нет связи с сервером. Проверьте интернет и попробуйте ещё раз.';
+  const dex = execFileSync('python3', ['-c',
+    'import zipfile,sys;sys.stdout.buffer.write(zipfile.ZipFile(sys.argv[1]).read("classes.dex"))',
+    path.join(ROOT, 'ProkatInstrumenta-10.14.apk')], { maxBuffer: 64 * 1024 * 1024 });
+  let n = 0, from = 0, needle = Buffer.from(NET, 'utf8');
+  while ((from = dex.indexOf(needle, from)) !== -1) { n++; from += needle.length; }
+  assert.equal(n, 1, `в classes.dex 10.14 фраза «Нет связи с сервером…» встречается ${n} раз, нужно ровно 1`);
   assert.ok(/catch \(Throwable ignore\)/.test(jp), 'IvaPatch: доработка должна молча отступать при сбое, не ломая заявку');
   // смена версии — на настоящем двоичном манифесте 10.14
   const name = (code.match(/NEW_NAME: '([\d.]+)'/) || [])[1], vcode = (code.match(/NEW_CODE: '(\d+)'/) || [])[1];
@@ -63,5 +74,5 @@ try {
     assert.ok(i >= 0, 'кандидат: нет versionCode');
   }
   fs.rmSync(tmp, { recursive: true, force: true });
-  console.log(`Сборка приложения: секреты не выводятся, сертификат сверяется с эталоном ${exp.slice(0, 8)}…, версия ${name} (${vcode}) пишется в манифест 10.14, 5 точек вставки на месте`);
+  console.log(`Сборка приложения: секреты не выводятся, сертификат сверяется с эталоном ${exp.slice(0, 8)}…, версия ${name} (${vcode}) пишется в манифест 10.14, 6 точек вставки на месте, фраза «Нет связи с сервером…» в classes.dex 10.14 одна`);
 } catch (e) { console.error('✘ ' + e.message); process.exit(1); }
