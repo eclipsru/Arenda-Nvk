@@ -13,8 +13,11 @@
 var IVA_CREATOR_EMAIL = 'eclips.ru@mail.ru';
 // Старая (проверенная) версия — её видят все, пока создатель не подтвердил новую.
 var IVA_RELEASE_FALLBACK = { versionName: '10.14', versionCode: 88, apk: 'ProkatInstrumenta-10.14.apk', reinstall: false, notes: '' };
-// Сведения о новой (тестовой) сборке: пишет «Сборка приложения» (build-apk.yml). При смене ветки агента — поменять.
-var IVA_TEST_FEED = 'https://raw.githubusercontent.com/eclipsru/Arenda-Nvk/arena/01a101d5-arenda-nvk/app-test.json';
+// Сведения о новой (тестовой) сборке: пишет «Сборка приложения» (build-apk.yml).
+// ВНИМАНИЕ: при смене ветки агента поменять имя ветки здесь — иначе жёлтая карточка
+// создателя не найдёт сборку. Забыть не даст сторож tests/app-test-channel.cjs
+// (проверяет, что ветка из этой строки существует на сервере и совпадает со ссылкой в app-test.json).
+var IVA_TEST_FEED = 'https://raw.githubusercontent.com/eclipsru/Arenda-Nvk/arena/01a10a83-arenda-nvk/app-test.json';
 var IVA_RELEASE_SB = 'https://wdxdeatphizclskfmfxi.supabase.co';
 var IVA_RELEASE_KEY = 'sb_publishable_dtRaEHNNPBFbHFvg8hw9iA_FqJSz9BE';
 var IVA_RELEASE_CACHE = 'iva_app_release_v1';

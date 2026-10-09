@@ -14,6 +14,9 @@ const expectedHash = '29cbc61bb4275faa010f759ca9f40bea1efaf1dc20470b9a9da215ef30
 // Новая версия (10.15) ни на одной странице жёстко не прописана — её видит только создатель на жёлтой карточке.
 const newName = 'ProkatInstrumenta-10.15.apk';
 const newHash = '48c8b922989c8f7fb436688edf02ef1cdc5a1ac41d54b3644e3210edd9b0d7df';
+// Текущая тестовая сборка (её пишет Actions в app-test.json) тоже не должна быть прописана на страницах.
+// Номер берём из файла, чтобы тест не ломался на каждой новой сборке.
+const candName = String(JSON.parse(fs.readFileSync(path.join(root, 'app-test.json'), 'utf8')).apk).split('/').pop();
 let scripts = 0;
 
 for (const name of fs.readdirSync(root).filter(name => name.endsWith('.html'))) {
@@ -46,6 +49,7 @@ let links = 0;
 for (const name of ['chief.html', 'admin.html', 'account.html', 'app.html', 'assets/app.js']) {
   const content = fs.readFileSync(path.join(root, name), 'utf8');
   assert.ok(!content.includes(newName), `${name}: новая версия ${newName} не должна быть прописана на странице — только после «Подтвердить релиз»`);
+  assert.ok(!content.includes(candName), `${name}: тестовая сборка ${candName} не должна быть прописана на странице`);
   // Каждая ссылка на APK в HTML — с data-app-dl (подставляется выпущенная версия)
   for (const m of content.matchAll(/<a\b[^>]*href="(ProkatInstrumenta-[\d.]+\.apk)"[^>]*>/g)) {
     assert.match(m[0], /data-app-dl=/, `${name}: ссылка ${m[1]} без data-app-dl — не переключится на выпущенную версию`);

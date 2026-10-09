@@ -1,6 +1,6 @@
-# Ива — сборка приложения 10.15 из 10.14 + доработки (android/patches). Подпись — ключом №6 из секретов.
+# Ива — сборка приложения 10.16 из 10.14 + доработки (android/patches). Подпись — ключом №6 из секретов.
 # Почему так: исходников 10.14 нет, есть только APK. Сборка разбирает APK (apktool, без пересборки ресурсов),
-# вставляет 5 вызовов (android/patches/apply.py), меняет версию в манифесте (axml_version.py),
+# вставляет 6 вызовов (android/patches/apply.py), меняет версию в манифесте (axml_version.py),
 # добавляет класс IvaPatch (android/patches/IvaPatch.java → classes3.dex), выравнивает и подписывает.
 # Проверки перед выдачей: тесты логики IvaPatch; пакет ru.prokatnvsk.app, версия 89 / 10.15;
 # подпись проходит apksigner verify; сертификат = эталон ключа №6 (как в keystore-check.yml).
@@ -10,11 +10,13 @@
 # Секреты: ANDROID_KEYSTORE_B64, ANDROID_KEYSTORE_PASS — только через переменные окружения, не выводятся;
 # файл ключа во временной папке, удаляется в конце. Из Pull Request (чужих веток) не запускается.
 # Запуск: при изменении этого файла или android/patches/**; кнопка Run workflow — после слияния в main.
+# Ветка агента в этом файле НЕ прописана (запуск на `arena/**`, шаг коммита — только на ветках `arena/…`):
+# при смене сессии править нужно только IVA_TEST_FEED в assets/app-release.js (и ссылку в app-test.json).
 # Откат: `git revert` коммита с этим файлом; APK 10.14 остаётся в репозитории.
 name: Сборка приложения
 on:
   push:
-    branches: ['main', 'arena/01a101d5-arenda-nvk']
+    branches: ['main', 'arena/**']
     paths: ['.github/workflows/build-apk.yml', 'android/patches/**']
   workflow_dispatch:
 permissions:
@@ -25,12 +27,12 @@ concurrency:
 env:
   SRC_APK: ProkatInstrumenta-10.14.apk
   OLD_NAME: '10.14'
-  NEW_NAME: '10.15'
-  NEW_CODE: '89'
+  NEW_NAME: '10.16'
+  NEW_CODE: '90'
   APKTOOL_VER: '2.10.0'
   # Тестовый канал (жёлтая карточка владельца на сайте): описание сборки для app-test.json
-  TEST_NOTES: 'Туда и обратно в доставке, цена за км сразу, верный итог доставки от 1 000 ₽, понятные ошибки публикации.'
-  TEST_REINSTALL: 'true'   # true — подпись сменилась (10.15, ключ №6), нужна переустановка; дальше false
+  TEST_NOTES: 'То же, что в 10.15, плюс причина сбоя связи словами: вместо голого «Нет связи с сервером» видно, что именно не вышло (адрес не определился, не подключился или истекло время ожидания).'
+  TEST_REINSTALL: 'false'  # 10.15 и 10.16 подписаны одним ключом №6 — ставится поверх, удалять не нужно
   # Эталон ключа №6 (решение №22, 05.10.2026) — тот же, что в keystore-check.yml и docs/КЛЮЧ-ПОДПИСИ.md
   EXPECTED: 5D2B9F8BB54AD0B816A779B5991746957EBD6FA056D8A63D1D1635077BED5DDE
 jobs:
@@ -61,10 +63,19 @@ jobs:
         run: |
           set -euo pipefail
           C="$RUNNER_TEMP/cls"; mkdir -p "$C"
-          javac -encoding UTF-8 -source 8 -target 8 -nowarn -bootclasspath "$ANDROID_JAR" -d "$C" android/patches/IvaPatch.java
+          # Журнал задачи из песочницы агента не читается (файлы лежат в хранилище Azure, оно недоступно) —
+          # поэтому ошибки компилятора и проваленные проверки дублируются в аннотации задачи.
+          fail() { grep -E "$2" "$1" 2>/dev/null | while IFS= read -r l; do echo "::error title=$3::$l"; done; exit 1; }
+          if ! javac -encoding UTF-8 -source 8 -target 8 -nowarn -bootclasspath "$ANDROID_JAR" -d "$C" android/patches/IvaPatch.java 2>&1 | tee "$RUNNER_TEMP/j1.log"; then
+            fail "$RUNNER_TEMP/j1.log" 'error:|ошибка:' 'Компиляция IvaPatch'
+          fi
           T="$RUNNER_TEMP/tcls"; mkdir -p "$T"
-          javac -encoding UTF-8 -cp "$C:$ANDROID_JAR" -d "$T" android/patches/test/IvaPatchTest.java
-          java -Dfile.encoding=UTF-8 -cp "$T:$C:$ANDROID_JAR" ru.prokatnvsk.app.IvaPatchTest
+          if ! javac -encoding UTF-8 -cp "$C:$ANDROID_JAR" -d "$T" android/patches/test/IvaPatchTest.java 2>&1 | tee "$RUNNER_TEMP/j2.log"; then
+            fail "$RUNNER_TEMP/j2.log" 'error:|ошибка:' 'Компиляция теста IvaPatch'
+          fi
+          if ! java -Dfile.encoding=UTF-8 -cp "$T:$C:$ANDROID_JAR" ru.prokatnvsk.app.IvaPatchTest 2>&1 | tee "$RUNNER_TEMP/j3.log"; then
+            fail "$RUNNER_TEMP/j3.log" '^✘|Exception' 'Тест IvaPatch'
+          fi
           mkdir -p "$RUNNER_TEMP/dex"
           "$BT/d8" --release --min-api 21 --lib "$ANDROID_JAR" --output "$RUNNER_TEMP/dex" $(find "$C" -name '*.class')
           ls -la "$RUNNER_TEMP/dex"
@@ -131,7 +142,7 @@ jobs:
           retention-days: 30
 
       - name: Положить APK в ветку агента
-        if: github.ref == 'refs/heads/arena/01a101d5-arenda-nvk'
+        if: startsWith(github.ref, 'refs/heads/arena/')
         run: |
           set -euo pipefail
           git config user.name "github-actions[bot]"

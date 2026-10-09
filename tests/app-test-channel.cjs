@@ -17,12 +17,16 @@ const ROOT = path.join(__dirname, '..'); const R = p => fs.readFileSync(path.joi
   const fb = rel.match(/IVA_RELEASE_FALLBACK = \{ versionName: '([\d.]+)', versionCode: (\d+), apk: '([^']+)'/);
   assert.ok(fb && fs.existsSync(path.join(ROOT, fb[3])), 'старая версия для всех: файла нет в репозитории');
   const feed = rel.match(/var IVA_TEST_FEED = '([^']+)';/)[1];
-  assert.match(feed, /^https:\/\/raw\.githubusercontent\.com\/eclipsru\/Arenda-Nvk\/[^/]+\/.*app-test\.json$/, 'IVA_TEST_FEED: не raw.githubusercontent.com/…/app-test.json');
+  const fm = feed.match(/^https:\/\/raw\.githubusercontent\.com\/eclipsru\/Arenda-Nvk\/(.+)\/app-test\.json$/);
+  assert.ok(fm, 'IVA_TEST_FEED: нужен вид https://raw.githubusercontent.com/eclipsru/Arenda-Nvk/<ветка агента>/app-test.json');
+  const feedBranch = fm[1];
+  assert.match(feedBranch, /^arena\//, `IVA_TEST_FEED: тестовый канал должен читать ветку агента (arena/…), а не ${feedBranch}`);
   assert.match(rel, /\/rest\/v1\/app_releases\?select=version_code,version_name,apk_url,reinstall,notes&order=version_code\.desc&limit=1/, 'выпущенная версия берётся не из app_releases');
   const t = JSON.parse(R('app-test.json'));
   const apkName = (t.apk.match(/\/(ProkatInstrumenta-[\d.]+\.apk)$/) || [])[1];
   assert.ok(apkName && fs.existsSync(path.join(ROOT, apkName)), `app-test.json: файла ${apkName} нет в репозитории`);
-  assert.ok(t.apk.includes(feed.split('/')[5]), 'app-test.json: ссылка на APK не из той же ветки, что IVA_TEST_FEED');
+  assert.ok(t.apk.includes('/raw/' + feedBranch + '/'),
+    `app-test.json: ссылка на APK должна вести из той же ветки, что IVA_TEST_FEED (${feedBranch})`);
   assert.ok(t.versionCode > Number(fb[2]), 'app-test.json: новая версия должна быть новее старой');
 
   // ---- Поведение: app-release.js + функции карточек из app.js в песочнице ----
@@ -118,5 +122,19 @@ const ROOT = path.join(__dirname, '..'); const R = p => fs.readFileSync(path.joi
   const wf = R('.github/workflows/build-apk.yml');
   assert.match(wf, /git cat-file -e "HEAD:\$F"[\s\S]*exit 0/, 'build-apk.yml: выпущенный APK может быть перезаписан');
   assert.match(wf, /git add -f "\$F" app-test\.json/, 'build-apk.yml: app-test.json не обновляется');
-  console.log(`Релиз приложения: до подтверждения у всех ${fb[1]}; новая ${t.versionName} — только eclips.ru@mail.ru на телефоне с «Подтвердить релиз»; баннер 10 с; 8 случаев поведения ок`);
+  assert.match(wf, /branches: \['main', 'arena\/\*\*'\]/, 'build-apk.yml: сборка должна запускаться на любой ветке агента (arena/**), без имени конкретной ветки');
+  assert.match(wf, /if: startsWith\(github\.ref, 'refs\/heads\/arena\/'\)/, 'build-apk.yml: шаг «Положить APK в ветку агента» должен срабатывать на ветках агента без имени конкретной ветки');
+  assert.ok(!/arena\/01a101d5/.test(wf), 'build-apk.yml: осталось имя старой ветки агента');
+  // Ветка из IVA_TEST_FEED обязана существовать на сервере: иначе жёлтая карточка молча останется без новой сборки.
+  // Без сети проверка честно пропускается (git не отвечает) — но не «зеленеет».
+  try {
+    const out = require('node:child_process').execFileSync('git', ['ls-remote', '--heads', 'origin', feedBranch],
+      { cwd: ROOT, encoding: 'utf8', timeout: 30000, stdio: ['ignore', 'pipe', 'pipe'] });
+    assert.ok(out.trim().length > 0, `ветки ${feedBranch} нет на сервере — жёлтая карточка не найдёт app-test.json (поменяйте IVA_TEST_FEED)`);
+    console.log(`  ветка тестового канала ${feedBranch} на сервере есть`);
+  } catch (e) {
+    if (e && e.name === 'AssertionError') throw e;
+    console.log('  • наличие ветки на сервере не проверено (нет сети): ' + String(e && e.message || e).split('\n')[0]);
+  }
+  console.log(`Релиз приложения: до подтверждения у всех ${fb[1]}; новая ${t.versionName} — только eclips.ru@mail.ru на телефоне с «Подтвердить релиз»; тестовый канал — ветка ${feedBranch}; баннер 10 с; 8 случаев поведения ок`);
 })().catch(e => { console.error('✘ ' + (e && e.message || e)); process.exit(1); });

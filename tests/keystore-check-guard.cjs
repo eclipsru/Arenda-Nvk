@@ -27,12 +27,15 @@ try {
   assert.ok(m, 'docs/КЛЮЧ-ПОДПИСИ.md: нет строки «Эталон проверки: `…`»');
   assert.match(code, new RegExp('EXPECTED=' + m[1] + '\\n'), `${f}: эталон проверки не совпадает с памяткой (${m[1]})`);
   assert.ok(!tracked.some(p => /КЛЮЧ-ИВА|KLUCH-IVA/i.test(p)), 'папка с ключом попала в репозиторий');
-  // Уборка 05.10.2026: в корне только APK, на которые есть ссылка (app-update.json), и ProkatInstrumenta.apk.
-  // С 05.10.2026 ещё «кандидат» — версия, которую собирает build-apk.yml (NEW_NAME), пока владелец её проверяет.
-  const upd = R('app-update.json');
+  // Уборка 05.10.2026: в корне только APK, на которые есть ссылка, и ProkatInstrumenta.apk.
+  // Ссылкой считается упоминание в app-update.json (выпущенная для всех), app-test.json (тестовая сборка)
+  // или tools/make-qr.py (QR «сразу скачать»). Плюс «кандидат» — версия из build-apk.yml (NEW_NAME).
+  // Зачем так: 10.15 выпущена владельцем (app_releases, код 89) и на неё указывает QR-код, но app-update.json
+  // по решению остаётся 88/10.14 — без этого правила сторож требовал бы удалить выпущенный файл.
+  const refs = R('app-update.json') + R('app-test.json') + R('tools/make-qr.py');
   const cand = (R('.github/workflows/build-apk.yml').match(/NEW_NAME: '([\d.]+)'/) || [])[1];
-  const stale = tracked.filter(p => /^[^/]+\.apk$/i.test(p) && p !== 'ProkatInstrumenta.apk' && !upd.includes(p)
+  const stale = tracked.filter(p => /^[^/]+\.apk$/i.test(p) && p !== 'ProkatInstrumenta.apk' && !refs.includes(p)
     && p !== `ProkatInstrumenta-${cand}.apk`);
-  assert.equal(stale.length, 0, 'старые APK без ссылки в app-update.json (уберите, чтобы не путаться): ' + stale.join(', '));
+  assert.equal(stale.length, 0, 'APK в корне без ссылки в app-update.json / app-test.json / tools/make-qr.py: ' + stale.join(', '));
   console.log('Проверка ключа: секреты не выводятся, права — чтение, файлов ключей 0, эталон совпадает с памяткой, старых APK 0');
 } catch (e) { console.error('✘ ' + e.message); process.exit(1); }

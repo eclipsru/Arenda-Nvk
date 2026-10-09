@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ива — диагностика прав на публикацию</title>
+<!--
+  Служебная страница (не часть дизайна сайта). Зачем:
+  приложение на отказ базы отвечает одинаково — «нет прав на публикацию (код 42501)»,
+  а настоящая причина видна только в ответе сервера. Страница входит под указанным
+  админом и показывает: что в токене, что база думает про эту сессию, проходит ли
+  настоящая публикация (создать и тут же удалить тестовое объявление) и как в базе
+  устроены правило доступа, триггеры и права.
+
+  Пароль уходит только в Supabase (как при обычном входе), никуда не сохраняется.
+  Откат: удалить этот файл (git revert коммита).
+-->
+<style>
+  body{font:16px/1.5 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;margin:0;padding:16px;background:#f5f6f8;color:#1b1f24}
+  .box{max-width:820px;margin:0 auto}
+  h1{font-size:20px;margin:0 0 4px}
+  .note{color:#5b6470;font-size:14px;margin:0 0 16px}
+  .card{background:#fff;border:1px solid #e2e5ea;border-radius:12px;padding:14px;margin:0 0 12px}
+  label{display:block;font-size:14px;margin:0 0 4px;color:#3c444e}
+  input{width:100%;box-sizing:border-box;padding:10px;font-size:16px;border:1px solid #ccd2da;border-radius:8px;margin-bottom:10px}
+  button{font-size:16px;padding:10px 14px;border:0;border-radius:8px;background:#2563eb;color:#fff;margin:0 8px 8px 0;cursor:pointer}
+  button.gray{background:#4b5563}
+  button:disabled{background:#9aa3ad;cursor:default}
+  pre{white-space:pre-wrap;word-break:break-word;background:#0f172a;color:#e2e8f0;padding:12px;border-radius:8px;font-size:13px;margin:8px 0 0}
+  .ok{color:#166534}.bad{color:#b91c1c}
+  textarea{width:100%;box-sizing:border-box;height:220px;font:12px/1.4 monospace}
+</style>
+</head>
+<body>
+<div class="box">
+  <h1>Диагностика прав на публикацию</h1>
+  <p class="note">Войдите под тем админом, у которого не получается выложить объявление,
+     и нажмите кнопки по порядку. Всё, что появится в чёрных окнах, можно скопировать и прислать —
+     это ответ сервера, по нему видна настоящая причина.</p>
+
+  <div class="card">
+    <label for="email">Почта входа</label>
+    <input id="email" type="email" autocomplete="username" placeholder="eclipsik.ru@mail.ru">
+    <label for="pass">Пароль (уходит только в Supabase, не сохраняется)</label>
+    <input id="pass" type="password" autocomplete="current-password" placeholder="пароль">
+    <button id="login">1. Войти и показать, что видит база</button>
+  </div>
+
+  <div class="card">
+    <button id="pub" class="gray" disabled>2. Проверить настоящую публикацию</button>
+    <button id="schema" class="gray" disabled>3. Показать, как устроены права в базе</button>
+    <button id="copy" class="gray">Скопировать всё</button>
+  </div>
+
+  <pre id="out">Жду вход…</pre>
+  <div class="card" id="schemaBox" style="display:none">
+    <label>Схема базы (выделить всё → скопировать → прислать)</label>
+    <textarea id="schemaText" readonly></textarea>
+  </div>
+</div>
+
+<script src="../assets/app-release.js"></script>
+<script>
+var SB  = (typeof IVA_RELEASE_SB  !== 'undefined') ? IVA_RELEASE_SB  : 'https://wdxdeatphizclskfmfxi.supabase.co';
+var KEY = (typeof IVA_RELEASE_KEY !== 'undefined') ? IVA_RELEASE_KEY : '';
+var TOK = '';
+var out = document.getElementById('out');
+
+function log(t){ out.textContent += '\n\n' + t; }
+function jq(s){ return JSON.stringify(s, null, 2); }
+
+async function api(path, method, body, headers){
+  var h = Object.assign({ 'apikey': KEY, 'Content-Type': 'application/json' }, headers || {});
+  if (TOK) h['Authorization'] = 'Bearer ' + TOK;
+  var r = await fetch(SB + path, { method: method || 'GET', headers: h, body: body ? JSON.stringify(body) : undefined });
+  var text = await r.text();
+  var json = null; try { json = JSON.parse(text); } catch (e) {}
+  return { status: r.status, text: text, json: json };
+}
+
+document.getElementById('login').onclick = async function(){
+  out.textContent = 'Вхожу…';
+  TOK = '';
+  try {
+    var r = await api('/auth/v1/token?grant_type=password', 'POST', {
+      email: document.getElementById('email').value.trim(),
+      password: document.getElementById('pass').value
+    });
+    if (r.status !== 200 || !r.json || !r.json.access_token) {
+      out.textContent = 'Войти не получилось. Ответ сервера (код ' + r.status + '):\n' + r.text;
+      return;
+    }
+    TOK = r.json.access_token;
+
+    // что внутри токена (без подписи — только то, что и так видно клиенту)
+    var claims = {};
+    try { claims = JSON.parse(decodeURIComponent(escape(atob(TOK.split('.')[1].replace(/-/g,'+').replace(/_/g,'/'))))); } catch (e) {}
+    out.textContent = 'ВХОД ВЫПОЛНЕН\nПочта в токене: ' + (claims.email || 'НЕТ ПОЛЯ email — вот причина отказа') +
+      '\nИдентификатор (sub): ' + (claims.sub || '—') +
+      '\nРоль в токене: ' + (claims.role || '—') +
+      '\nТокен действует до: ' + (claims.exp ? new Date(claims.exp * 1000).toLocaleString('ru-RU') : '—');
+
+    var w = await api('/rest/v1/rpc/iva_whoami', 'POST', {});
+    if (w.status === 200) {
+      log('ЧТО БАЗА ВИДИТ ПРО ЭТУ СЕССИЮ\n' + jq(w.json));
+      log(w.json && w.json.is_admin
+        ? 'ВЫВОД: база считает вас админом — публикация должна проходить.'
+        : 'ВЫВОД: база НЕ считает эту сессию админом (is_admin = false) — причина в правиле доступа или в данных таблицы admins.');
+    } else {
+      log('Функция iva_whoami() не ответила (код ' + w.status + '):\n' + w.text +
+          '\nПохоже, миграция 20261006_publish_rights_fix.sql ещё не применена.');
+    }
+    document.getElementById('pub').disabled = false;
+    document.getElementById('schema').disabled = false;
+  } catch (e) {
+    out.textContent = 'Ошибка сети: ' + e.message;
+  }
+};
+
+document.getElementById('pub').onclick = async function(){
+  log('ПРОВЕРЯЮ НАСТОЯЩУЮ ПУБЛИКАЦИЮ…');
+  // тело — ровно то, что шлёт приложение (разобран ProkatInstrumenta-10.15.apk)
+  var body = {
+    name: 'Диагностика (можно удалить)', active: true, cat: 'hand',
+    owner_email: document.getElementById('email').value.trim().toLowerCase(),
+    price: 1, deposit: 1, descr: 'тест прав', terms: '', delivery: false, imgs: [], img: ''
+  };
+  var r = await api('/rest/v1/tools', 'POST', body, { 'Prefer': 'return=representation' });
+  if (r.status >= 200 && r.status < 300) {
+    log('ПУБЛИКАЦИЯ ПРОШЛА (код ' + r.status + '). Ответ:\n' + r.text);
+    var id = r.json && r.json[0] && r.json[0].id;
+    if (id) {
+      var d = await api('/rest/v1/tools?id=eq.' + encodeURIComponent(id), 'DELETE', null, { 'Prefer': 'return=minimal' });
+      log('Тестовое объявление удалено (код ' + d.status + ').');
+    }
+    log('Значит, база публикацию разрешает: проблема была в сессии/клиенте, а не в правах.');
+  } else {
+    log('ОТКАЗ СЕРВЕРА (код ' + r.status + '). Вот настоящий текст ошибки:\n' + r.text);
+  }
+};
+
+document.getElementById('schema').onclick = async function(){
+  log('ЧТЕНИЮ СХЕМУ ПРАВ ИЗ БАЗЫ…');
+  var r = await api('/rest/v1/rpc/iva_diag_schema', 'POST', {});
+  if (r.status === 200) {
+    document.getElementById('schemaBox').style.display = '';
+    document.getElementById('schemaText').value = r.json || r.text;
+    log('Схема выведена в поле ниже — скопируйте её целиком.');
+  } else {
+    log('Не получилось (код ' + r.status + '):\n' + r.text);
+  }
+};
+
+document.getElementById('copy').onclick = function(){
+  var all = out.textContent + '\n\n=== СХЕМА ===\n' + document.getElementById('schemaText').value;
+  navigator.clipboard.writeText(all).then(function(){ log('Скопировано в буфер обмена.'); },
+                                          function(){ log('Не смог скопировать — выделите текст вручную.'); });
+};
+</script>
+</body>
+</html>

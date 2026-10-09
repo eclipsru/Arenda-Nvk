@@ -65,7 +65,7 @@ head_ "3. Релиз приложения (app-update.json ↔ APK ↔ этал�
 if node tools/check-release.js; then ok "релиз приложения согласован"; else bad "см. замечания выше"; fi
 
 head_ "4. Статические тесты (без браузера)"
-for t in syntax-and-release email-guard cities-sync directory-import city-pages city-priority py-compat empty-states p4-personal-data p6-commission diag-owner-readonly p5-bot-no-contacts p5-max-no-contacts p5-order-email deploy-functions-guard reset-password keystore-check-guard apk-build-guard app-test-channel; do
+for t in syntax-and-release email-guard cities-sync directory-import city-pages city-priority py-compat empty-states p4-personal-data p6-commission diag-owner-readonly p5-bot-no-contacts p5-max-no-contacts p5-order-email deploy-functions-guard reset-password keystore-check-guard apk-build-guard app-test-channel publish-rights-guard qr-codes; do
   if node "tests/$t.cjs" >"/tmp/iva-test-$t.log" 2>&1; then ok "tests/$t.cjs"
   else bad "tests/$t.cjs"; tail -6 "/tmp/iva-test-$t.log" | sed 's/^/      /'; fi
 done
@@ -82,6 +82,11 @@ fi
 head_ "4.2. Стенд миграций бота (локальный PostgreSQL)"
 bash tools/tg-migrations-stand.sh >/tmp/iva-test-tg-stand.log 2>&1
 rc=$?
+if [ "$rc" = "2" ] && "$PG_PY" -c "import pgserver" >/dev/null 2>&1; then
+  # системной базы нет — поднимаем одноразовый PostgreSQL из pgserver (PyPI) и гоняем стенд на нём
+  "$PG_PY" tools/tg-migrations-stand-pgserver.py >/tmp/iva-test-tg-stand.log 2>&1
+  rc=$?
+fi
 if [ "$rc" = "0" ]; then
   ok "стенд бота: миграции проверены на живом PostgreSQL"
 elif [ "$rc" = "2" ]; then
@@ -96,6 +101,40 @@ if [ "$?" = "0" ]; then
   ok "$(tail -1 /tmp/iva-test-bundle.log)"
 else
   bad "канал «пакет одним файлом»"; tail -20 /tmp/iva-test-bundle.log | sed 's/^/      /'
+fi
+
+head_ "4.4. Проверка APK без Java (подпись, дайджесты записей)"
+# В песочнице агента нет ни Java, ни apksigner, поэтому файл приложения проверяется
+# инструментом tools/apk-verify.py: сертификат = ключ №6, подпись v2 подтверждается
+# открытым ключом сертификата, дайджесты всех записей из MANIFEST.MF сверяются с файлом.
+if "$PG_PY" -c "import androguard, cryptography" >/dev/null 2>&1; then
+  APK_TEST="$("$PG_PY" -c "import json;print(json.load(open('app-test.json'))['apk'].split('/')[-1])" 2>/dev/null)"
+  if [ -n "$APK_TEST" ] && [ -f "$APK_TEST" ]; then
+    if "$PG_PY" tools/apk-verify.py "$APK_TEST" >/tmp/iva-apk-verify.log 2>&1; then
+      ok "$APK_TEST: подпись ключом №6 подтверждена, дайджесты записей сошлись"
+    else
+      bad "$APK_TEST: проверка не прошла"; grep -E '✘|Итог' /tmp/iva-apk-verify.log | head -6 | sed 's/^/      /'
+    fi
+  else
+    skip "APK из app-test.json ($APK_TEST) не найден в корне — проверка APK пропущена"
+  fi
+else
+  skip "нет androguard/cryptography — проверка APK пропущена (pip install androguard cryptography)"
+fi
+
+head_ "4.5. Стенд прав на публикацию объявления (локальный PostgreSQL)"
+# Зачем: админ eclipsik.ru@mail.ru получал «не опубликовано: нет прав на публикацию (42501)»,
+# хотя по базе он активный админ. Стенд поднимает боевую схему «до», воспроизводит отказ,
+# применяет миграцию 20261006_publish_rights_fix.sql и проверяет, что отказ ушёл,
+# а защита осталась (чужой, аноним, неактивный админ, публикация в чужую почту — отказ).
+if "$PG_PY" -c "import pgserver" >/dev/null 2>&1; then
+  if "$PG_PY" tools/publish-rights-stand.py >/tmp/iva-test-publish-rights.log 2>&1; then
+    ok "публикация админа: $(grep -c '✔' /tmp/iva-test-publish-rights.log) проверок на PostgreSQL (4 причины отказа 42501 закрыты, защита цела)"
+  else
+    bad "стенд прав на публикацию"; grep -E '✘|ИТОГ' /tmp/iva-test-publish-rights.log | head -8 | sed 's/^/      /'
+  fi
+else
+  skip "стенд прав на публикацию: нет pgserver (PG_PY=<python с pgserver> bash tools/check.sh)"
 fi
 
 head_ "5. Браузерные тесты (Playwright + локальный сервер)"
