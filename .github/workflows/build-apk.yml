@@ -105,7 +105,10 @@ jobs:
           N=$(ls -d "$W"/smali_classes* 2>/dev/null | wc -l)
           echo "дополнительных dex: $N"
           echo "::notice title=Разбор::подготовка к пересборке (дополнительных dex: $N)"
-          java -jar "$RUNNER_TEMP/apktool.jar" b -o "$RUNNER_TEMP/unsigned.apk" "$W"
+          if ! java -jar "$RUNNER_TEMP/apktool.jar" b -o "$RUNNER_TEMP/unsigned.apk" "$W" >"$RUNNER_TEMP/apktool-build.log" 2>&1; then
+            tail -20 "$RUNNER_TEMP/apktool-build.log" | while IFS= read -r line; do echo "::error title=Apktool::$line"; done
+            exit 1
+          fi
           echo "::notice title=Разбор::APK пересобран apktool"
           # IvaPatch — следующим dex-файлом (classes3.dex при двух исходных).
           NEXT=$(( $(unzip -Z1 "$RUNNER_TEMP/unsigned.apk" | grep -cE '^classes[0-9]*\.dex$') + 1 ))
