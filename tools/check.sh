@@ -137,6 +137,15 @@ else
   skip "стенд прав на публикацию: нет pgserver (PG_PY=<python с pgserver> bash tools/check.sh)"
 fi
 
+head_ "4.6. Скачивание приложения у всех: файл выпущенной версии на месте"
+# Выпущенная версия живёт строкой в базе (app_releases) и ссылается на файл в корне сайта.
+# Если файл убрать, у всех пользователей ломается «Скачать APK». Код 2 = проверить не удалось (нет сети).
+node tests/released-apk-present.cjs >/tmp/iva-test-released-apk.log 2>&1
+rc=$?
+if [ "$rc" = "0" ]; then ok "$(tail -1 /tmp/iva-test-released-apk.log)"
+elif [ "$rc" = "2" ]; then skip "$(tail -1 /tmp/iva-test-released-apk.log)"
+else bad "файл выпущенной версии пропал из корня"; tail -6 /tmp/iva-test-released-apk.log | sed 's/^/      /'; fi
+
 head_ "5. Браузерные тесты (Playwright + локальный сервер)"
 # Три разных «нет»: нет модуля, модуль есть без браузера, нет python3 для сервера.
 # Во всех трёх случаях тесты честно пропускаются — окружение не должно

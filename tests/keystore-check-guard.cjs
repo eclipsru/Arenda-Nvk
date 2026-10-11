@@ -28,14 +28,25 @@ try {
   assert.match(code, new RegExp('EXPECTED=' + m[1] + '\\n'), `${f}: эталон проверки не совпадает с памяткой (${m[1]})`);
   assert.ok(!tracked.some(p => /КЛЮЧ-ИВА|KLUCH-IVA/i.test(p)), 'папка с ключом попала в репозиторий');
   // Уборка 05.10.2026: в корне только APK, на которые есть ссылка, и ProkatInstrumenta.apk.
-  // Ссылкой считается упоминание в app-update.json (выпущенная для всех), app-test.json (тестовая сборка)
-  // или tools/make-qr.py (QR «сразу скачать»). Плюс «кандидат» — версия из build-apk.yml (NEW_NAME).
+  // Ссылкой считается упоминание в app-update.json (выпущенная для всех), app-test.json (тестовая сборка),
+  // tools/make-qr.py (QR «сразу скачать») или app-keep-apks.txt (оставили намеренно, см. ниже).
+  // Плюс «кандидат» — версия из build-apk.yml (NEW_NAME).
   // Зачем так: 10.15 выпущена владельцем (app_releases, код 89) и на неё указывает QR-код, но app-update.json
   // по решению остаётся 88/10.14 — без этого правила сторож требовал бы удалить выпущенный файл.
-  const refs = R('app-update.json') + R('app-test.json') + R('tools/make-qr.py');
+  // 11.10.2026: у выпущенной для всех версии ссылка живёт в базе (app_releases), а не в репозитории, поэтому
+  // сторож о ней не знает. Ровно так из корня чуть не пропал выпущенный ProkatInstrumenta-10.16.apk при
+  // переводе тестового канала на 10.17 — у всех пользователей ссылка «Скачать APK» стала бы битой.
+  // Теперь такие файлы перечисляются руками в app-keep-apks.txt, и список проверяется в обе стороны.
+  const keep = R('app-keep-apks.txt').split('\n').map(l => l.trim()).filter(l => l && !l.startsWith('#'))
+    .map(l => l.split(/\s+/)[0]);
+  for (const k of keep) assert.match(k, /^ProkatInstrumenta-[\d.]+\.apk$/, `app-keep-apks.txt: непонятная строка «${k}» — нужен файл вида ProkatInstrumenta-<версия>.apk`);
+  assert.equal(new Set(keep).size, keep.length, 'app-keep-apks.txt: один и тот же файл указан дважды');
+  const refs = R('app-update.json') + R('app-test.json') + R('tools/make-qr.py') + keep.join('\n');
   const cand = (R('.github/workflows/build-apk.yml').match(/NEW_NAME: '([\d.]+)'/) || [])[1];
   const stale = tracked.filter(p => /^[^/]+\.apk$/i.test(p) && p !== 'ProkatInstrumenta.apk' && !refs.includes(p)
     && p !== `ProkatInstrumenta-${cand}.apk`);
-  assert.equal(stale.length, 0, 'APK в корне без ссылки в app-update.json / app-test.json / tools/make-qr.py: ' + stale.join(', '));
-  console.log('Проверка ключа: секреты не выводятся, права — чтение, файлов ключей 0, эталон совпадает с памяткой, старых APK 0');
+  assert.equal(stale.length, 0, 'APK в корне без ссылки в app-update.json / app-test.json / tools/make-qr.py / app-keep-apks.txt: ' + stale.join(', '));
+  const keepMissing = keep.filter(k => !tracked.includes(k));
+  assert.equal(keepMissing.length, 0, 'app-keep-apks.txt ссылается на файлы, которых нет в корне: ' + keepMissing.join(', ') + ' (уберите строку из списка)');
+  console.log(`Проверка ключа: секреты не выводятся, права — чтение, файлов ключей 0, эталон совпадает с памяткой, лишних APK 0 (намеренно оставлено ${keep.length})`);
 } catch (e) { console.error('✘ ' + e.message); process.exit(1); }

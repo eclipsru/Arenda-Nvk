@@ -151,6 +151,16 @@ const APK_RE = /^ProkatInstrumenta-[\d.]+\.apk$/;
   r = await run({ email: 'eclips.ru@mail.ru', mobile: true, released: row });
   assert.match(r.html, /Новых версий нет/); assert.ok(!/apkConfirm/.test(r.html), 'когда новых версий нет — кнопки «Подтвердить релиз» быть не должно');
   cases += 1;
+  // Случай владельца 11.10.2026: у всех выпущена 10.16, а тестовая сборка — 10.17 (новее).
+  // Тогда у создателя на телефоне обязана появиться жёлтая карточка 10.17 над зелёной 10.16.
+  const relRow = [{ version_code: 90, version_name: '10.16', apk_url: 'ProkatInstrumenta-10.16.apk', reinstall: false, notes: '' }];
+  r = await run({ email: 'eclips.ru@mail.ru', mobile: true, released: relRow });
+  assert.match(r.html, new RegExp('Новая версия ' + feedNow.versionName.replace(/\./g, '\\.')), 'новая сборка новее выпущенной — жёлтая карточка обязана появиться');
+  assert.ok(r.html.includes(`href="${feedNow.apk}"`), 'жёлтая карточка: ссылка на новую сборку');
+  assert.ok(r.html.includes('href="ProkatInstrumenta-10.16.apk"'), 'зелёная карточка: ссылка на выпущенную сборку');
+  assert.ok(fs.existsSync(path.join(ROOT, 'ProkatInstrumenta-10.16.apk')),
+    'выпущенный файл должен лежать в корне (ссылка живёт в базе, а файл — в репозитории): см. app-keep-apks.txt');
+  cases += 1;
   // «Подтвердить релиз» пишет в app_releases имя файла — но только если файл уже на сайте
   const post = []; r = await run({ email: 'eclips.ru@mail.ru', mobile: true, post });
   const msg = { textContent: '', className: '' }, btn = { disabled: false };
