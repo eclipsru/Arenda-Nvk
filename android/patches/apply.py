@@ -169,7 +169,9 @@ def patch(lines):
     rets = [i for i in range(s, e) if lines[i].strip() == 'return-void']
     if len(rets) != 1:
         die(f'showTab: return-void найдено {len(rets)}, нужно 1')
-    lines[rets[0]:rets[0]] = ['', f'    invoke-static {{p0, p1}}, {P}->onTab(Landroid/app/Activity;Ljava/lang/String;)V']
+    # showTab has enough local registers that p1 may alias v16+; the compact
+    # invoke form only encodes v0..v15, so use the range form deliberately.
+    lines[rets[0]:rets[0]] = ['', f'    invoke-static/range {{p0 .. p1}}, {P}->onTab(Landroid/app/Activity;Ljava/lang/String;)V']
     done.append('11 onTab')
     return done
 
