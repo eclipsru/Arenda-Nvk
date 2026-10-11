@@ -1,6 +1,7 @@
 // Ива — доработки приложения поверх 10.14 (исходников 10.14 нет, только APK). Сборки: 10.15 (п. 1–5), 10.16 (+ п. 6),
 // 10.17 (+ п. 7–10: нижнее меню), 10.18 (+ п. 11: выбранный раздел нижнего меню),
-// 10.19 (+ п. 12: окантовка аватарки в открытом «Кабинете»). Этот класс компилируется в GitHub Actions
+// 10.19 (+ п. 12: окантовка аватарки в открытом «Кабинете»), 10.20 (+ п. 13: виньетка фоновой картинки главной).
+// Этот класс компилируется в GitHub Actions
 // (build-apk.yml) и добавляется в APK отдельным classes3.dex. Точки вызова вставляет android/patches/apply.py
 // в smali-код MainActivity (11 мест, 13 вызовов IvaPatch, потому что onPrice вызывается 4 раза).
 // Поля MainActivity читаются через reflection: класс не зависит от исходников приложения.
@@ -22,6 +23,8 @@
 //     оранжевые; заливки оранжевого круга больше нет. Логотип и аватарка не перекрашиваются.
 // 12) (10.19) когда открыт «Кабинет», на самой аватарке появляется такая же оранжевая окантовка,
 //     как на логотипе и остальных вкладках; при переходе в другой раздел окантовка исчезает.
+// 13) (10.20) на изображении pageBg главной страницы появляется настоящая виньетка:
+//     центр остаётся светлее, края темнее; слой стоит под поиском и категориями и не перехватывает их касания.
 package ru.prokatnvsk.app;
 
 import android.app.Activity;
@@ -34,6 +37,7 @@ import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Matrix;
 import android.graphics.Paint;
+import android.graphics.RadialGradient;
 import android.graphics.Shader;
 import android.graphics.drawable.GradientDrawable;
 import android.view.Gravity;
@@ -44,6 +48,7 @@ import android.widget.CheckBox;
 import android.widget.CompoundButton;
 import android.widget.FrameLayout;
 import android.widget.ImageView;
+import android.widget.LinearLayout;
 import android.widget.RadioButton;
 import android.widget.TextView;
 
@@ -242,6 +247,87 @@ public final class IvaPatch {
     // поверх неё кладём круглый вид CircleImageView 40dp, при выходе он убирается и иконка видна снова.
     static final String AV_TAG = "iva_nav_avatar";
     static final String AV_RING_TAG = "iva_nav_avatar_ring";
+    static final String HOME_VIGNETTE_TAG = "iva_home_vignette";
+
+    /**
+     * 13) Фоновая картинка главной страницы уже лежит в вертикальном контейнере pageHome:
+     * searchBox и динамические catGrid/feedGrid идут следующими детьми. Добавляем слой сразу
+     * после pageBg и компенсируем его высоту отрицательным верхним отступом. Поэтому слой
+     * совпадает с картинкой, но не сдвигает поиск и плитки вниз и не оказывается поверх них.
+     */
+    static void installHomeVignette(Activity a) {
+        try {
+            Object raw = get(a, "pageBg");
+            if (!(raw instanceof ImageView)) return;
+            ImageView bg = (ImageView) raw;
+            ViewParent rawParent = bg.getParent();
+            if (!(rawParent instanceof LinearLayout)) return;
+            LinearLayout parent = (LinearLayout) rawParent;
+            if (parent.findViewWithTag(HOME_VIGNETTE_TAG) != null) return;
+
+            ViewGroup.LayoutParams source = bg.getLayoutParams();
+            float density = a.getResources().getDisplayMetrics().density;
+            int height = source == null ? 0 : source.height;
+            if (height <= 0) height = bg.getHeight();
+            if (height <= 0) height = px(141, density);
+            int width = source == null ? ViewGroup.LayoutParams.MATCH_PARENT : source.width;
+            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(width, height);
+            if (source instanceof ViewGroup.MarginLayoutParams) {
+                ViewGroup.MarginLayoutParams margins = (ViewGroup.MarginLayoutParams) source;
+                lp.leftMargin = margins.leftMargin;
+                lp.rightMargin = margins.rightMargin;
+                lp.bottomMargin = margins.bottomMargin;
+            }
+            // The parent is vertical. This makes the new child occupy exactly the same
+            // slot as pageBg instead of taking another 141dp before the search box.
+            lp.topMargin = -height;
+            lp.bottomMargin = 0;
+
+            HomeVignette overlay = new HomeVignette(a);
+            overlay.setTag(HOME_VIGNETTE_TAG);
+            overlay.setClickable(false);
+            overlay.setFocusable(false);
+            if (android.os.Build.VERSION.SDK_INT >= 16) {
+                overlay.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
+            }
+            parent.addView(overlay, parent.indexOfChild(bg) + 1, lp);
+        } catch (Throwable ignore) {
+            // The home page must remain usable even if a device has an unusual layout.
+        }
+    }
+
+    /** Transparent in the centre, progressively black towards the image edges. */
+    static final class HomeVignette extends View {
+        private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
+        private RadialGradient gradient;
+
+        HomeVignette(Context context) {
+            super(context);
+            setWillNotDraw(false);
+            paint.setDither(true);
+        }
+
+        @Override protected void onSizeChanged(int w, int h, int oldW, int oldH) {
+            super.onSizeChanged(w, h, oldW, oldH);
+            if (w <= 0 || h <= 0) {
+                gradient = null;
+                return;
+            }
+            float radius = (float) Math.hypot(w / 2f, h / 2f) * 0.82f;
+            gradient = new RadialGradient(
+                w / 2f, h / 2f, radius,
+                new int[] { 0x00000000, 0x16000000, 0x58000000, 0xb8000000 },
+                new float[] { 0f, 0.38f, 0.72f, 1f },
+                Shader.TileMode.CLAMP);
+        }
+
+        @Override protected void onDraw(Canvas canvas) {
+            if (gradient == null) return;
+            paint.setShader(gradient);
+            canvas.drawRect(0, 0, getWidth(), getHeight(), paint);
+            paint.setShader(null);
+        }
+    }
 
     /** 7) Конец onCreate: «+» → логотип. Затем профиль (аватарка), если уже вошли. */
     public static void onCreated(Activity a) {
@@ -249,6 +335,7 @@ public final class IvaPatch {
             logoOnPlus(a, a.getResources().getDisplayMetrics().density);
             // restoreSession() мог выбрать вкладку до этого вызова; повторяем её стиль после замены «+».
             onTab(a, (String) get(a, "curTab"));
+            installHomeVignette(a);
         } catch (Throwable ignore) {
             // логотип и подсветка — только внешний вид: без них меню работает как раньше
         }
