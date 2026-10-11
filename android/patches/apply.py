@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
-"""Ива — патч 10.14 → новая версия в разобранном apktool-проекте (сейчас 10.17; номер передаётся аргументом).
+"""Ива — патч 10.14 → новая версия в разобранном apktool-проекте (сейчас 10.18; номер передаётся аргументом).
 
 Запуск: python3 android/patches/apply.py <папка apktool d> <versionCode> <versionName>
 Строго: каждое место вставки должно найтись ровно столько раз, сколько ожидается,
 иначе — ошибка и сборка останавливается (молча кривой APK не получится).
 
 Вставки в smali/ru/prokatnvsk/app/MainActivity.smali (класс IvaPatch — android/patches/IvaPatch.java):
-  1. lambda$calcDelivery$… : перед каждой записью delivTxt → IvaPatch.onPrice(текст) (×2, неразрывный пробел)
+  1. lambda$calcDelivery$… : перед каждой записью delivTxt → IvaPatch.onPrice(текст) (×4, неразрывный пробел)
   2. updateSummary()        : в начале → IvaPatch.onSummary(this) (галочка «Туда и обратно», «от N ₽/км»)
   3. paintDelToggle(Z)      : тексты кнопки «Доставка: есть / нет» с подсказкой (форма админа)
   4. showAdmHub(I)          : после скрытия вкладки «Добавить» → IvaPatch.onHub(this) (объяснение про долг)
@@ -16,6 +16,7 @@
   8. saveSession(JSONObject)                 : в конце → IvaPatch.onSession(this) (вход: подгрузить профиль с аватаркой)
   9. lambda$loadAdminProfile$201(String)     : после чтения поля avatar → IvaPatch.onAvatar(this, адрес) (аватарка в «Кабинете»)
  10. logoutLocal()                           : в конце → IvaPatch.onLogout(this) (выход: иконка «Кабинета» снова на месте)
+ 11. showTab(String)                         : после штатного выбора вкладки → IvaPatch.onTab(this, имя) (оранжевая окантовка без заливки)
 Плюс versionCode/versionName в apktool.yml.
 """
 import os
@@ -160,6 +161,16 @@ def patch(lines):
     s, e = one_method(lines, r' logoutLocal\(\)V$')
     before_return(lines, s, e, f'invoke-static {{p0}}, {P}->onLogout(Landroid/app/Activity;)V', 'logoutLocal')
     done.append('10 onLogout')
+
+    # 11. конец showTab: штатный setCircle сначала рисует старую оранжевую заливку,
+    #     а IvaPatch поверх неё оставляет только оранжевую окантовку выбранного раздела.
+    #     Имя вкладки передаём явно: вызов стоит после всех четырёх setCircle.
+    s, e = one_method(lines, r' showTab\(Ljava/lang/String;\)V$')
+    rets = [i for i in range(s, e) if lines[i].strip() == 'return-void']
+    if len(rets) != 1:
+        die(f'showTab: return-void найдено {len(rets)}, нужно 1')
+    lines[rets[0]:rets[0]] = ['', f'    invoke-static {{p0, p1}}, {P}->onTab(Landroid/app/Activity;Ljava/lang/String;)V']
+    done.append('11 onTab')
     return done
 
 

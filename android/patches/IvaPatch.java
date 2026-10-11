@@ -1,6 +1,7 @@
 // Ива — доработки приложения поверх 10.14 (исходников 10.14 нет, только APK). Сборки: 10.15 (п. 1–5), 10.16 (+ п. 6),
-// 10.17 (+ п. 7–10: нижнее меню). Этот класс компилируется в GitHub Actions (build-apk.yml) и добавляется в APK отдельным classes3.dex.
-// Точки вызова вставляет android/patches/apply.py в smali-код MainActivity (10 мест, см. там).
+// 10.17 (+ п. 7–10: нижнее меню), 10.18 (+ п. 11: выбранный раздел нижнего меню). Этот класс компилируется в GitHub Actions
+// (build-apk.yml) и добавляется в APK отдельным classes3.dex. Точки вызова вставляет android/patches/apply.py
+// в smali-код MainActivity (11 мест, 13 вызовов IvaPatch, потому что onPrice вызывается 4 раза).
 // Поля MainActivity читаются через reflection: класс не зависит от исходников приложения.
 //
 // Что делает (баг 1 от владельца, 04.10.2026):
@@ -16,6 +17,8 @@
 //  8) (10.17) вход и запуск: профиль админа подгружается сразу, чтобы аватарка появилась в меню без захода в «Кабинет».
 //  9) (10.17) «Кабинет» в нижнем меню: загруженная аватарка кружком 40dp вместо иконки.
 // 10) (10.17) выход: аватарка убирается, иконка «Кабинета» снова на месте.
+// 11) (10.18) выбранный раздел нижнего меню получает оранжевую окантовку, значок и подпись —
+//     оранжевые; заливки оранжевого круга больше нет. Логотип и аватарка не перекрашиваются.
 package ru.prokatnvsk.app;
 
 import android.app.Activity;
@@ -25,9 +28,11 @@ import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.graphics.BitmapShader;
 import android.graphics.Canvas;
+import android.graphics.Color;
 import android.graphics.Matrix;
 import android.graphics.Paint;
 import android.graphics.Shader;
+import android.graphics.drawable.GradientDrawable;
 import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
@@ -37,6 +42,7 @@ import android.widget.CompoundButton;
 import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.RadioButton;
+import android.widget.TextView;
 
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
@@ -237,8 +243,10 @@ public final class IvaPatch {
     public static void onCreated(Activity a) {
         try {
             logoOnPlus(a, a.getResources().getDisplayMetrics().density);
+            // restoreSession() мог выбрать вкладку до этого вызова; повторяем её стиль после замены «+».
+            onTab(a, (String) get(a, "curTab"));
         } catch (Throwable ignore) {
-            // логотип — только внешний вид: без него меню работает как раньше
+            // логотип и подсветка — только внешний вид: без них меню работает как раньше
         }
         reloadProfile(a);
     }
@@ -253,6 +261,93 @@ public final class IvaPatch {
         a.runOnUiThread(new Runnable() {
             @Override public void run() { applyAvatar(a, url); }
         });
+    }
+
+    // ── 11. Выбранный раздел нижнего меню (10.18) ──
+    // Штатный setCircle() вызывается в showTab() и рисует оранжевую заливку с белым значком.
+    // Этот вызов стоит после всех четырёх setCircle: заливка убирается, а выбранный пункт получает
+    // прозрачный круг с оранжевой окантовкой и оранжевые текст/значок.
+    public static void onTab(Activity a, String tab) {
+        try {
+            String t = tab == null ? "" : tab;
+            int orange = navColor(a, "orange", 0xffff9800);
+            int gray = navColor(a, "gray", 0xff9aa0a6);
+            styleNavItem(a, get(a, "circHome"), get(a, "navHomeIc"), get(a, "navHomeTxt"),
+                navSelected(t, "home"), orange, gray);
+            styleNavItem(a, get(a, "circChat"), get(a, "navChatIc"), get(a, "navChatTxt"),
+                navSelected(t, "chat"), orange, gray);
+            styleNavItem(a, get(a, "circOrders"), get(a, "navOrdersIc"), get(a, "navOrdersTxt"),
+                navSelected(t, "orders"), orange, gray);
+            styleNavItem(a, get(a, "circProfile"), get(a, "navProfIc"), get(a, "navProfTxt"),
+                navSelected(t, "profile"), orange, gray);
+            styleLogoNav(a, isLogoTab(t), orange);
+            // Аватарка — фотография, а не иконка нижнего меню. Никогда не накладываем на неё tint.
+            clearAvatarFilter(a);
+        } catch (Throwable ignore) {
+            // подсветка — только внешний вид: переход между разделами не должен ломаться
+        }
+    }
+
+    /** Чистая проверка выбора пункта — вынесена отдельно, чтобы её можно было проверить без Activity. */
+    static boolean navSelected(String current, String item) {
+        return current != null && item != null && item.equals(current);
+    }
+
+    /** Центральный логотип ведёт в заявку или в раздел добавления инструментов. */
+    static boolean isLogoTab(String tab) {
+        return "order".equals(tab) || "admhub".equals(tab) || "addtool".equals(tab);
+    }
+
+    static int navColor(Activity a, String name, int fallback) {
+        try {
+            int rid = a.getResources().getIdentifier(name, "color", a.getPackageName());
+            return rid == 0 ? fallback : a.getResources().getColor(rid);
+        } catch (Throwable ignore) {
+            return fallback;
+        }
+    }
+
+    static void styleNavItem(Activity a, Object circle, Object icon, Object label,
+                             boolean selected, int orange, int gray) {
+        if (circle instanceof View) {
+            outline((View) circle, selected, a.getResources().getDisplayMetrics().density, orange);
+        }
+        if (icon instanceof ImageView) {
+            ((ImageView) icon).setColorFilter(selected ? orange : gray);
+        }
+        if (label instanceof TextView) {
+            ((TextView) label).setTextColor(selected ? orange : gray);
+        }
+    }
+
+    /** Прозрачный круг без заливки; окантовка появляется только у выбранного раздела. */
+    static void outline(View view, boolean selected, float density, int orange) {
+        if (view == null) return;
+        if (!selected) {
+            view.setBackgroundColor(Color.TRANSPARENT);
+            return;
+        }
+        GradientDrawable bg = new GradientDrawable();
+        bg.setShape(GradientDrawable.OVAL);
+        bg.setColor(Color.TRANSPARENT);
+        bg.setStroke(px(2, density), orange);
+        view.setBackground(bg);
+    }
+
+    /** Центральный логотип не перекрашиваем; меняем только его внешний круг. */
+    static void styleLogoNav(Activity a, boolean selected, int orange) {
+        View plus = a.findViewById(id(a, "navPlus"));
+        View col = plus instanceof ViewGroup ? ((ViewGroup) plus).getChildAt(0) : null;
+        View circle = col instanceof ViewGroup ? ((ViewGroup) col).getChildAt(0) : null;
+        View icon = circle instanceof ViewGroup ? ((ViewGroup) circle).getChildAt(0) : null;
+        if (circle != null) outline(circle, selected, a.getResources().getDisplayMetrics().density, orange);
+        if (icon instanceof ImageView) ((ImageView) icon).clearColorFilter();
+    }
+
+    static void clearAvatarFilter(Activity a) {
+        ViewGroup box = navBox(a);
+        View avatar = box == null ? null : box.findViewWithTag(AV_TAG);
+        if (avatar instanceof ImageView) ((ImageView) avatar).clearColorFilter();
     }
 
     /** 10) Конец logoutLocal: аватарку убираем, иконка «Кабинета» снова видна. */
@@ -270,7 +365,8 @@ public final class IvaPatch {
         });
     }
 
-    /** «+» (navPlus) → круглый логотип: тот же ic_logo, что на заставке, в оранжевом ободке 50dp. */
+    /** «+» (navPlus) → круглый логотип: тот же ic_logo, что на заставке, размером 50dp.
+     * Оранжевая окантовка рисуется только styleLogoNav() для активного раздела. */
     static void logoOnPlus(Activity a, float d) {
         View plus = a.findViewById(id(a, "navPlus"));
         View col = plus instanceof ViewGroup ? ((ViewGroup) plus).getChildAt(0) : null;      // столбик кнопки
@@ -285,7 +381,8 @@ public final class IvaPatch {
         ((ImageView) ic).clearColorFilter();
     }
 
-    /** Логотип из ресурсов приложения (ic_logo) → круг size×size; inset — отступ от края (виден ободок). */
+    /** Логотип из ресурсов приложения (ic_logo) → круг size×size; inset — прозрачный отступ,
+     * в который при активном разделе попадает оранжевая окантовка родительского круга. */
     static Bitmap roundLogo(Activity a, int size, int inset) {
         int rid = a.getResources().getIdentifier("ic_logo", "drawable", a.getPackageName());
         if (rid == 0) return null;

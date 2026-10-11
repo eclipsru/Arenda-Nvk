@@ -49,6 +49,13 @@ public class IvaPatchTest {
         eq("40dp при плотности 2.0 = 80 px", IvaPatch.px(40, 2.0f), 80);
         eq("50dp при плотности 2.625 = 131 px", IvaPatch.px(50, 2.625f), 131);
         eq("2dp при плотности 3.5 = 7 px", IvaPatch.px(2, 3.5f), 7);
+        // 10.18. Подсветка выбирается по имени вкладки; центральный логотип — отдельный раздел.
+        eq("выбран home", IvaPatch.navSelected("home", "home"), true);
+        eq("chat не выбран на home", IvaPatch.navSelected("home", "chat"), false);
+        eq("null не выбран", IvaPatch.navSelected(null, "home"), false);
+        eq("логотип для заявки", IvaPatch.isLogoTab("order"), true);
+        eq("логотип для раздела админа", IvaPatch.isLogoTab("admhub"), true);
+        eq("логотип не для каталога", IvaPatch.isLogoTab("home"), false);
         if (fail > 0) { System.out.println("ошибок: " + fail); System.exit(1); }
         System.out.println("все проверки IvaPatch пройдены");
     }
