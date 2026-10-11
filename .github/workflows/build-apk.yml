@@ -104,6 +104,7 @@ jobs:
           echo "::notice title=Версия::манифест обновлён"
           N=$(ls -d "$W"/smali_classes* 2>/dev/null | wc -l)
           echo "дополнительных dex: $N"
+          echo "::notice title=Разбор::подготовка к пересборке (дополнительных dex: $N)"
           java -jar "$RUNNER_TEMP/apktool.jar" b -o "$RUNNER_TEMP/unsigned.apk" "$W"
           echo "::notice title=Разбор::APK пересобран apktool"
           # IvaPatch — следующим dex-файлом (classes3.dex при двух исходных).
