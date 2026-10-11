@@ -1,5 +1,6 @@
 // Ива — доработки приложения поверх 10.14 (исходников 10.14 нет, только APK). Сборки: 10.15 (п. 1–5), 10.16 (+ п. 6),
-// 10.17 (+ п. 7–10: нижнее меню), 10.18 (+ п. 11: выбранный раздел нижнего меню). Этот класс компилируется в GitHub Actions
+// 10.17 (+ п. 7–10: нижнее меню), 10.18 (+ п. 11: выбранный раздел нижнего меню),
+// 10.19 (+ п. 12: окантовка аватарки в открытом «Кабинете»). Этот класс компилируется в GitHub Actions
 // (build-apk.yml) и добавляется в APK отдельным classes3.dex. Точки вызова вставляет android/patches/apply.py
 // в smali-код MainActivity (11 мест, 13 вызовов IvaPatch, потому что onPrice вызывается 4 раза).
 // Поля MainActivity читаются через reflection: класс не зависит от исходников приложения.
@@ -19,6 +20,8 @@
 // 10) (10.17) выход: аватарка убирается, иконка «Кабинета» снова на месте.
 // 11) (10.18) выбранный раздел нижнего меню получает оранжевую окантовку, значок и подпись —
 //     оранжевые; заливки оранжевого круга больше нет. Логотип и аватарка не перекрашиваются.
+// 12) (10.19) когда открыт «Кабинет», на самой аватарке появляется такая же оранжевая окантовка,
+//     как на логотипе и остальных вкладках; при переходе в другой раздел окантовка исчезает.
 package ru.prokatnvsk.app;
 
 import android.app.Activity;
@@ -238,6 +241,7 @@ public final class IvaPatch {
     // loadPhoto приложения (кэш, фоновый поток; при ошибке остаётся иконка). Иконку navProfIc не трогаем:
     // поверх неё кладём круглый вид CircleImageView 40dp, при выходе он убирается и иконка видна снова.
     static final String AV_TAG = "iva_nav_avatar";
+    static final String AV_RING_TAG = "iva_nav_avatar_ring";
 
     /** 7) Конец onCreate: «+» → логотип. Затем профиль (аватарка), если уже вошли. */
     public static void onCreated(Activity a) {
@@ -263,7 +267,7 @@ public final class IvaPatch {
         });
     }
 
-    // ── 11. Выбранный раздел нижнего меню (10.18) ──
+    // ── 11–12. Выбранный раздел нижнего меню и окантовка аватарки (10.18–10.19) ──
     // Штатный setCircle() вызывается в showTab() и рисует оранжевую заливку с белым значком.
     // Этот вызов стоит после всех четырёх setCircle: заливка убирается, а выбранный пункт получает
     // прозрачный круг с оранжевой окантовкой и оранжевые текст/значок.
@@ -278,8 +282,10 @@ public final class IvaPatch {
                 navSelected(t, "chat"), orange, gray);
             styleNavItem(a, get(a, "circOrders"), get(a, "navOrdersIc"), get(a, "navOrdersTxt"),
                 navSelected(t, "orders"), orange, gray);
+            boolean profile = navSelected(t, "profile");
             styleNavItem(a, get(a, "circProfile"), get(a, "navProfIc"), get(a, "navProfTxt"),
-                navSelected(t, "profile"), orange, gray);
+                profile, orange, gray);
+            styleAvatarOutline(a, profile, orange);
             styleLogoNav(a, isLogoTab(t), orange);
             // Аватарка — фотография, а не иконка нижнего меню. Никогда не накладываем на неё tint.
             clearAvatarFilter(a);
@@ -350,6 +356,37 @@ public final class IvaPatch {
         if (avatar instanceof ImageView) ((ImageView) avatar).clearColorFilter();
     }
 
+    /** Окантовка поверх фотографии: родительский круг убираем, чтобы не получить двойной ободок. */
+    static void styleAvatarOutline(Activity a, boolean selected, int orange) {
+        ViewGroup box = navBox(a);
+        View avatar = box == null ? null : box.findViewWithTag(AV_TAG);
+        View ring = box == null ? null : box.findViewWithTag(AV_RING_TAG);
+        float density = a.getResources().getDisplayMetrics().density;
+        View profileCircle = get(a, "circProfile") instanceof View ? (View) get(a, "circProfile") : null;
+
+        if (!(avatar instanceof ImageView)) {
+            if (ring != null && box != null) box.removeView(ring);
+            if (profileCircle != null) outline(profileCircle, selected, density, orange);
+            return;
+        }
+
+        // Фотография закрывает фон circProfile, поэтому рисуем прозрачный слой-кольцо
+        // поверх самой аватарки. Логотип и остальные пункты по-прежнему используют свой круг.
+        if (profileCircle != null) outline(profileCircle, false, density, orange);
+        int size = px(40, density);
+        if (selected) {
+            if (ring == null) {
+                ring = new View(a);
+                ring.setTag(AV_RING_TAG);
+                ring.setClickable(false);
+                box.addView(ring, new FrameLayout.LayoutParams(size, size, Gravity.CENTER));
+            }
+            outline(ring, true, density, orange);
+        } else if (ring != null) {
+            box.removeView(ring);
+        }
+    }
+
     /** 10) Конец logoutLocal: аватарку убираем, иконка «Кабинета» снова видна. */
     public static void onLogout(final Activity a) {
         a.runOnUiThread(new Runnable() {
@@ -357,7 +394,10 @@ public final class IvaPatch {
                 try {
                     ViewGroup box = navBox(a);
                     View av = box == null ? null : box.findViewWithTag(AV_TAG);
+                    View ring = box == null ? null : box.findViewWithTag(AV_RING_TAG);
                     if (av != null) box.removeView(av);
+                    if (ring != null) box.removeView(ring);
+                    onTab(a, (String) get(a, "curTab"));
                 } catch (Throwable ignore) {
                     // иконка остаётся на месте
                 }
@@ -417,6 +457,8 @@ public final class IvaPatch {
             // ответ сервера может прийти уже после выхода — тогда аватарку не возвращаем
             if (!wantsAvatar(url) || get(a, "accessToken") == null) {
                 if (av != null) box.removeView(av);
+                int orange = navColor(a, "orange", 0xffff9800);
+                styleAvatarOutline(a, navSelected((String) get(a, "curTab"), "profile"), orange);
                 return;
             }
             if (av == null) {
@@ -426,6 +468,8 @@ public final class IvaPatch {
                 box.addView(av, new FrameLayout.LayoutParams(s, s, Gravity.CENTER));
             }
             loadPhoto(a, (ImageView) av, url.trim());
+            int orange = navColor(a, "orange", 0xffff9800);
+            styleAvatarOutline(a, navSelected((String) get(a, "curTab"), "profile"), orange);
         } catch (Throwable ignore) {
             // аватарка не должна ломать меню: останется иконка
         }
