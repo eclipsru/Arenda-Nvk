@@ -94,21 +94,25 @@ jobs:
           set -euo pipefail
           W="$RUNNER_TEMP/w"
           java -jar "$RUNNER_TEMP/apktool.jar" d -r -f -o "$W" "$SRC_APK"
+          echo "::notice title=Разбор::APK разобран apktool"
           if ! python3 android/patches/apply.py "$W" "$NEW_CODE" "$NEW_NAME"; then
             M="$W/smali/ru/prokatnvsk/app/MainActivity.smali"
             echo "::notice title=Подсказка::$(grep -cE '^\.method' "$M" 2>/dev/null) методов; $(grep -E '^\.method.*(calcDelivery|updateSummary|paintDelToggle|showAdmHub|showTab)' "$M" | cut -c1-90 | tr '\n' '|')"
             exit 1
           fi
           python3 android/patches/axml_version.py "$W/AndroidManifest.xml" "$OLD_NAME" "$NEW_NAME" "$NEW_CODE"
+          echo "::notice title=Версия::манифест обновлён"
           N=$(ls -d "$W"/smali_classes* 2>/dev/null | wc -l)
           echo "дополнительных dex: $N"
           java -jar "$RUNNER_TEMP/apktool.jar" b -o "$RUNNER_TEMP/unsigned.apk" "$W"
+          echo "::notice title=Разбор::APK пересобран apktool"
           # IvaPatch — следующим dex-файлом (classes3.dex при двух исходных).
           NEXT=$(( $(unzip -Z1 "$RUNNER_TEMP/unsigned.apk" | grep -cE '^classes[0-9]*\.dex$') + 1 ))
           mkdir -p "$RUNNER_TEMP/add"
           cp "$RUNNER_TEMP/dex/classes.dex" "$RUNNER_TEMP/add/classes$NEXT.dex"
           (cd "$RUNNER_TEMP/add" && zip -q -X "$RUNNER_TEMP/unsigned.apk" "classes$NEXT.dex")
           unzip -Z1 "$RUNNER_TEMP/unsigned.apk" | grep dex
+          echo "::notice title=Разбор::IvaPatch добавлен в classes$NEXT.dex"
 
       - name: Выравнивание и подпись
         env:
