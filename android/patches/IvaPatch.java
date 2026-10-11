@@ -1,6 +1,7 @@
 // Ива — доработки приложения поверх 10.14 (исходников 10.14 нет, только APK). Сборки: 10.15 (п. 1–5), 10.16 (+ п. 6),
 // 10.17 (+ п. 7–10: нижнее меню), 10.18 (+ п. 11: выбранный раздел нижнего меню),
-// 10.19 (+ п. 12: окантовка аватарки в открытом «Кабинете»), 10.20 (+ п. 13: виньетка фоновой картинки главной).
+// 10.19 (+ п. 12: окантовка аватарки в открытом «Кабинете»), 10.20 (+ п. 13: виньетка фоновой картинки главной),
+// 10.21 (+ п. 14: скруглённые углы фоновой картинки главной).
 // Этот класс компилируется в GitHub Actions
 // (build-apk.yml) и добавляется в APK отдельным classes3.dex. Точки вызова вставляет android/patches/apply.py
 // в smali-код MainActivity (11 мест, 13 вызовов IvaPatch, потому что onPrice вызывается 4 раза).
@@ -25,6 +26,7 @@
 //     как на логотипе и остальных вкладках; при переходе в другой раздел окантовка исчезает.
 // 13) (10.20) на изображении pageBg главной страницы появляется настоящая виньетка:
 //     центр остаётся светлее, края темнее; слой стоит под поиском и категориями и не перехватывает их касания.
+// 14) (10.21) у этой фоновой картинки скруглены все четыре угла, не затрагивая поиск и категории.
 package ru.prokatnvsk.app;
 
 import android.app.Activity;
@@ -35,6 +37,7 @@ import android.graphics.BitmapFactory;
 import android.graphics.BitmapShader;
 import android.graphics.Canvas;
 import android.graphics.Color;
+import android.graphics.Outline;
 import android.graphics.Matrix;
 import android.graphics.Paint;
 import android.graphics.RadialGradient;
@@ -43,6 +46,7 @@ import android.graphics.drawable.GradientDrawable;
 import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.ViewOutlineProvider;
 import android.view.ViewParent;
 import android.widget.CheckBox;
 import android.widget.CompoundButton;
@@ -250,49 +254,75 @@ public final class IvaPatch {
     static final String HOME_VIGNETTE_TAG = "iva_home_vignette";
 
     /**
-     * 13) Фоновая картинка главной страницы уже лежит в вертикальном контейнере pageHome:
-     * searchBox и динамические catGrid/feedGrid идут следующими детьми. Добавляем слой сразу
-     * после pageBg и компенсируем его высоту отрицательным верхним отступом. Поэтому слой
-     * совпадает с картинкой, но не сдвигает поиск и плитки вниз и не оказывается поверх них.
+     * 13–14) Фоновая картинка главной страницы уже лежит в вертикальном контейнере pageHome:
+     * searchBox и динамические catGrid/feedGrid идут следующими детьми. Оборачиваем только
+     * pageBg и виньетку в FrameLayout: картинка получает скруглённые углы, а поиск и плитки
+     * остаются соседями снаружи и не затемняются, не сдвигаются и не теряют касания.
      */
     static void installHomeVignette(Activity a) {
+        LinearLayout parent = null;
+        ImageView bg = null;
+        int index = -1;
+        ViewGroup.LayoutParams source = null;
+        FrameLayout frame = null;
         try {
             Object raw = get(a, "pageBg");
             if (!(raw instanceof ImageView)) return;
-            ImageView bg = (ImageView) raw;
+            bg = (ImageView) raw;
             ViewParent rawParent = bg.getParent();
             if (!(rawParent instanceof LinearLayout)) return;
-            LinearLayout parent = (LinearLayout) rawParent;
+            parent = (LinearLayout) rawParent;
             if (parent.findViewWithTag(HOME_VIGNETTE_TAG) != null) return;
+            index = parent.indexOfChild(bg);
+            if (index < 0) return;
 
-            ViewGroup.LayoutParams source = bg.getLayoutParams();
             float density = a.getResources().getDisplayMetrics().density;
-            int height = source == null ? 0 : source.height;
-            if (height <= 0) height = bg.getHeight();
-            if (height <= 0) height = px(141, density);
-            int width = source == null ? ViewGroup.LayoutParams.MATCH_PARENT : source.width;
-            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(width, height);
-            if (source instanceof ViewGroup.MarginLayoutParams) {
-                ViewGroup.MarginLayoutParams margins = (ViewGroup.MarginLayoutParams) source;
-                lp.leftMargin = margins.leftMargin;
-                lp.rightMargin = margins.rightMargin;
-                lp.bottomMargin = margins.bottomMargin;
+            source = bg.getLayoutParams();
+            if (source == null) source = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, px(141, density));
+
+            frame = new FrameLayout(a);
+            frame.setTag(HOME_VIGNETTE_TAG);
+            frame.setClipChildren(true);
+            if (android.os.Build.VERSION.SDK_INT >= 16) {
+                frame.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
             }
-            // The parent is vertical. This makes the new child occupy exactly the same
-            // slot as pageBg instead of taking another 141dp before the search box.
-            lp.topMargin = -height;
-            lp.bottomMargin = 0;
+            if (android.os.Build.VERSION.SDK_INT >= 21) {
+                final float radius = px(16, density);
+                frame.setClipToOutline(true);
+                frame.setOutlineProvider(new ViewOutlineProvider() {
+                    @Override public void getOutline(View view, Outline outline) {
+                        outline.setRoundRect(0, 0, view.getWidth(), view.getHeight(), radius);
+                    }
+                });
+            }
+
+            // The wrapper replaces pageBg in the same slot, so the vertical layout and
+            // the intentionally negative margin before the search box stay unchanged.
+            parent.removeViewAt(index);
+            frame.addView(bg, new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
 
             HomeVignette overlay = new HomeVignette(a);
-            overlay.setTag(HOME_VIGNETTE_TAG);
             overlay.setClickable(false);
             overlay.setFocusable(false);
             if (android.os.Build.VERSION.SDK_INT >= 16) {
                 overlay.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
             }
-            parent.addView(overlay, parent.indexOfChild(bg) + 1, lp);
+            frame.addView(overlay, new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+            parent.addView(frame, index, source);
         } catch (Throwable ignore) {
-            // The home page must remain usable even if a device has an unusual layout.
+            // Restore the original image if a device rejects an unusual layout parameter.
+            try {
+                if (parent != null && bg != null && bg.getParent() != parent) {
+                    if (frame != null && frame.getParent() == parent) parent.removeView(frame);
+                    if (bg.getParent() instanceof ViewGroup) {
+                        ((ViewGroup) bg.getParent()).removeView(bg);
+                    }
+                    parent.addView(bg, Math.max(0, Math.min(index, parent.getChildCount())), source);
+                }
+            } catch (Throwable ignored) {}
         }
     }
 

@@ -45,7 +45,7 @@ try {
   for (const k of ['onPrice(String', 'onSummary(final Activity', 'onHub(Activity', 'publishError(String', 'netError(String',
     'onCreated(Activity', 'onSession(Activity', 'onAvatar(final Activity', 'onLogout(final Activity', 'onTab(Activity',
     'navSelected(String', 'isLogoTab(String', 'styleAvatarOutline(Activity', 'wantsAvatar(String', 'installHomeVignette(Activity',
-    'HomeVignette extends View', 'new RadialGradient', 'HOME_VIGNETTE_TAG', 'px(float'])
+    'HomeVignette extends View', 'new RadialGradient', 'HOME_VIGNETTE_TAG', 'ViewOutlineProvider', 'setClipToOutline(true)', 'setRoundRect', 'px(float'])
     assert.ok(jp.includes('static ') && jp.includes(k), `IvaPatch.java: нет метода ${k}`);
   // точка 6 есть в настоящем APK: фраза «Нет связи с сервером…» лежит в classes.dex 10.14 ровно один раз —
   // значит вставка однозначна и владелец увидит причину именно там, где раньше была общая фраза (07.10.2026)
@@ -57,7 +57,7 @@ try {
   while ((from = dex.indexOf(needle, from)) !== -1) { n++; from += needle.length; }
   assert.equal(n, 1, `в classes.dex 10.14 фраза «Нет связи с сервером…» встречается ${n} раз, нужно ровно 1`);
   assert.ok(/catch \(Throwable ignore\)/.test(jp), 'IvaPatch: доработка должна молча отступать при сбое, не ломая заявку');
-  // 10.20: то, на что опирается патч, есть в настоящем APK 10.14 (иначе на телефоне вставка молча не сработает)
+  // 10.21: то, на что опирается патч, есть в настоящем APK 10.14 (иначе на телефоне вставка молча не сработает)
   const zip14 = entry => execFileSync('python3', ['-c',
     'import zipfile,sys;sys.stdout.buffer.write(zipfile.ZipFile(sys.argv[1]).read(sys.argv[2]))',
     path.join(ROOT, 'ProkatInstrumenta-10.14.apk'), entry], { maxBuffer: 64 * 1024 * 1024 });
