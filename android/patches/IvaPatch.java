@@ -1,6 +1,6 @@
-// Ива — доработки приложения поверх 10.14 (исходников 10.14 нет, только APK). Сборки: 10.15 (п. 1–5), 10.16 (+ п. 6).
-// Этот класс компилируется в GitHub Actions (build-apk.yml) и добавляется в APK отдельным classes3.dex.
-// Точки вызова вставляет android/patches/apply.py в smali-код MainActivity (6 мест, см. там).
+// Ива — доработки приложения поверх 10.14 (исходников 10.14 нет, только APK). Сборки: 10.15 (п. 1–5), 10.16 (+ п. 6),
+// 10.17 (+ п. 7–10: нижнее меню). Этот класс компилируется в GitHub Actions (build-apk.yml) и добавляется в APK отдельным classes3.dex.
+// Точки вызова вставляет android/patches/apply.py в smali-код MainActivity (10 мест, см. там).
 // Поля MainActivity читаются через reflection: класс не зависит от исходников приложения.
 //
 // Что делает (баг 1 от владельца, 04.10.2026):
@@ -12,14 +12,30 @@
 //  5) Отказ базы в правах при публикации объясняется словами, а не текстом «row-level security».
 //  6) (обращение владельца 07.10.2026) «Нет связи с сервером» показывается вместе с технической причиной —
 //     какой адрес и что именно не вышло: без этого «провайдер режет трафик» и «сервер лежит» не отличить.
+//  7) (10.17, просьба владельца) вместо «+» в нижнем меню — круглый логотип приложения.
+//  8) (10.17) вход и запуск: профиль админа подгружается сразу, чтобы аватарка появилась в меню без захода в «Кабинет».
+//  9) (10.17) «Кабинет» в нижнем меню: загруженная аватарка кружком 40dp вместо иконки.
+// 10) (10.17) выход: аватарка убирается, иконка «Кабинета» снова на месте.
 package ru.prokatnvsk.app;
 
 import android.app.Activity;
 import android.app.AlertDialog;
+import android.content.Context;
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
+import android.graphics.BitmapShader;
+import android.graphics.Canvas;
+import android.graphics.Matrix;
+import android.graphics.Paint;
+import android.graphics.Shader;
+import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.ViewParent;
 import android.widget.CheckBox;
 import android.widget.CompoundButton;
+import android.widget.FrameLayout;
+import android.widget.ImageView;
 import android.widget.RadioButton;
 
 import java.lang.reflect.Field;
@@ -209,6 +225,159 @@ public final class IvaPatch {
         while (t.contains("  ")) t = t.replace("  ", " ");
         if (t.length() > 200) t = t.substring(0, 197) + "\u2026";
         return t;
+    }
+
+    // ── 7–10. Нижнее меню (10.17) ──
+    // Аватарка — поле admins.avatar: тот же адрес, что на сайте в шапке кабинета. Картинку грузит штатный
+    // loadPhoto приложения (кэш, фоновый поток; при ошибке остаётся иконка). Иконку navProfIc не трогаем:
+    // поверх неё кладём круглый вид CircleImageView 40dp, при выходе он убирается и иконка видна снова.
+    static final String AV_TAG = "iva_nav_avatar";
+
+    /** 7) Конец onCreate: «+» → логотип. Затем профиль (аватарка), если уже вошли. */
+    public static void onCreated(Activity a) {
+        try {
+            logoOnPlus(a, a.getResources().getDisplayMetrics().density);
+        } catch (Throwable ignore) {
+            // логотип — только внешний вид: без него меню работает как раньше
+        }
+        reloadProfile(a);
+    }
+
+    /** 8) Конец saveSession (вход и восстановление сессии): профиль админа → аватарка в меню. */
+    public static void onSession(Activity a) {
+        reloadProfile(a);
+    }
+
+    /** 9) lambda$loadAdminProfile$201, сразу после чтения поля avatar. Пустой адрес — аватарки нет. */
+    public static void onAvatar(final Activity a, final String url) {
+        a.runOnUiThread(new Runnable() {
+            @Override public void run() { applyAvatar(a, url); }
+        });
+    }
+
+    /** 10) Конец logoutLocal: аватарку убираем, иконка «Кабинета» снова видна. */
+    public static void onLogout(final Activity a) {
+        a.runOnUiThread(new Runnable() {
+            @Override public void run() {
+                try {
+                    ViewGroup box = navBox(a);
+                    View av = box == null ? null : box.findViewWithTag(AV_TAG);
+                    if (av != null) box.removeView(av);
+                } catch (Throwable ignore) {
+                    // иконка остаётся на месте
+                }
+            }
+        });
+    }
+
+    /** «+» (navPlus) → круглый логотип: тот же ic_logo, что на заставке, в оранжевом ободке 50dp. */
+    static void logoOnPlus(Activity a, float d) {
+        View plus = a.findViewById(id(a, "navPlus"));
+        View col = plus instanceof ViewGroup ? ((ViewGroup) plus).getChildAt(0) : null;      // столбик кнопки
+        View circ = col instanceof ViewGroup ? ((ViewGroup) col).getChildAt(0) : null;       // оранжевый кружок 50dp
+        View ic = circ instanceof FrameLayout ? ((FrameLayout) circ).getChildAt(0) : null;   // иконка «+» 26dp
+        if (!(ic instanceof ImageView)) return;
+        int s = px(50, d);
+        Bitmap logo = roundLogo(a, s, px(2, d));
+        if (logo == null) return;
+        ic.setLayoutParams(new FrameLayout.LayoutParams(s, s, Gravity.CENTER));
+        ((ImageView) ic).setImageBitmap(logo);
+        ((ImageView) ic).clearColorFilter();
+    }
+
+    /** Логотип из ресурсов приложения (ic_logo) → круг size×size; inset — отступ от края (виден ободок). */
+    static Bitmap roundLogo(Activity a, int size, int inset) {
+        int rid = a.getResources().getIdentifier("ic_logo", "drawable", a.getPackageName());
+        if (rid == 0) return null;
+        Bitmap src = BitmapFactory.decodeResource(a.getResources(), rid);
+        return src == null ? null : circle(src, size, inset);
+    }
+
+    /** Картинка, обрезанная по кругу: края срезаются, центр остаётся (так же, как у аватарки). */
+    static Bitmap circle(Bitmap src, int size, int inset) {
+        int w = src.getWidth(), h = src.getHeight();
+        float side = size - 2f * inset;
+        if (w <= 0 || h <= 0 || side <= 0) return null;
+        float s = Math.max(side / w, side / h);
+        Matrix m = new Matrix();
+        m.setScale(s, s);
+        m.postTranslate(inset + (side - w * s) / 2f, inset + (side - h * s) / 2f);
+        BitmapShader sh = new BitmapShader(src, Shader.TileMode.CLAMP, Shader.TileMode.CLAMP);
+        sh.setLocalMatrix(m);
+        Paint p = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.FILTER_BITMAP_FLAG);
+        p.setShader(sh);
+        Bitmap out = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888);
+        new Canvas(out).drawCircle(size / 2f, size / 2f, side / 2f, p);
+        return out;
+    }
+
+    /** Показать аватарку в кружке «Кабинета» или убрать её (если адреса нет или уже вышли из кабинета). */
+    static void applyAvatar(Activity a, String url) {
+        try {
+            ViewGroup box = navBox(a);
+            if (box == null) return;
+            View av = box.findViewWithTag(AV_TAG);
+            // ответ сервера может прийти уже после выхода — тогда аватарку не возвращаем
+            if (!wantsAvatar(url) || get(a, "accessToken") == null) {
+                if (av != null) box.removeView(av);
+                return;
+            }
+            if (av == null) {
+                av = newCircle(a);
+                av.setTag(AV_TAG);
+                int s = px(40, a.getResources().getDisplayMetrics().density);
+                box.addView(av, new FrameLayout.LayoutParams(s, s, Gravity.CENTER));
+            }
+            loadPhoto(a, (ImageView) av, url.trim());
+        } catch (Throwable ignore) {
+            // аватарка не должна ломать меню: останется иконка
+        }
+    }
+
+    /** Адрес аватарки — только http(s). Пустое поле и любой другой текст означают «аватарки нет». */
+    static boolean wantsAvatar(String url) {
+        if (url == null) return false;
+        String u = url.trim();
+        return u.startsWith("https://") || u.startsWith("http://");
+    }
+
+    /** dp → пиксели экрана. */
+    static int px(float dp, float density) {
+        return Math.round(dp * density);
+    }
+
+    static int id(Activity a, String name) {
+        return a.getResources().getIdentifier(name, "id", a.getPackageName());
+    }
+
+    /** Кружок «Кабинета» (40dp) — родитель иконки navProfIc. Сюда кладём аватарку. */
+    static ViewGroup navBox(Activity a) {
+        Object ic = get(a, "navProfIc");
+        ViewParent p = ic instanceof View ? ((View) ic).getParent() : null;
+        return p instanceof ViewGroup ? (ViewGroup) p : null;
+    }
+
+    /** Круглая картинка — штатный класс приложения CircleImageView (в android.jar его нет, поэтому через reflection). */
+    static ImageView newCircle(Activity a) throws Exception {
+        Class<?> c = Class.forName("ru.prokatnvsk.app.CircleImageView");
+        return (ImageView) c.getConstructor(Context.class).newInstance(a);
+    }
+
+    /** Штатная загрузка фото приложения: кэш, фоновый поток, при ошибке — без изменений. Ключ кэша — сам адрес. */
+    static void loadPhoto(Activity a, ImageView v, String url) throws Exception {
+        Method m = a.getClass().getDeclaredMethod("loadPhoto", ImageView.class, String.class, String.class);
+        m.setAccessible(true);
+        m.invoke(a, v, url, "navav" + url);
+    }
+
+    /** Профиль админа (в нём аватарка) грузим при запуске и входе, а не только когда открыт «Кабинет». */
+    static void reloadProfile(Activity a) {
+        try {
+            if (get(a, "accessToken") == null) return;
+            Method m = a.getClass().getDeclaredMethod("loadAdminProfile");
+            m.setAccessible(true);
+            m.invoke(a);
+        } catch (Throwable ignore) {}
     }
 
     // ── reflection ──

@@ -39,6 +39,16 @@ public class IvaPatchTest {
         eq("надпись = фраза + причина", longOne.length(), IvaPatch.NET_MSG.length() + 2 + IvaPatch.TECH.length() + 198);
         eq("пустая причина — только фраза", IvaPatch.netError(""), "Нет связи с сервером. Проверьте интернет и попробуйте ещё раз.");
         eq("null не роняет", IvaPatch.netError(null), "Нет связи с сервером. Проверьте интернет и попробуйте ещё раз.");
+        // 9. аватарка в «Кабинете»: только http(s)-адрес; пусто или мусор — иконка остаётся
+        eq("аватарки нет: пусто", IvaPatch.wantsAvatar(""), false);
+        eq("аватарки нет: null", IvaPatch.wantsAvatar(null), false);
+        eq("аватарка: https с пробелами", IvaPatch.wantsAvatar(" https://wdxdeatphizclskfmfxi.supabase.co/a.jpg "), true);
+        eq("аватарка: http", IvaPatch.wantsAvatar("http://example.com/a.jpg"), true);
+        eq("аватарка: не адрес — не грузим", IvaPatch.wantsAvatar("file:///etc/passwd"), false);
+        // 7/9. размеры: dp → пиксели (кружок 40dp, логотип 50dp)
+        eq("40dp при плотности 2.0 = 80 px", IvaPatch.px(40, 2.0f), 80);
+        eq("50dp при плотности 2.625 = 131 px", IvaPatch.px(50, 2.625f), 131);
+        eq("2dp при плотности 3.5 = 7 px", IvaPatch.px(2, 3.5f), 7);
         if (fail > 0) { System.out.println("ошибок: " + fail); System.exit(1); }
         System.out.println("все проверки IvaPatch пройдены");
     }

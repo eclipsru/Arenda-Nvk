@@ -1,17 +1,19 @@
-# Ива — сборка приложения 10.16 из 10.14 + доработки (android/patches). Подпись — ключом №6 из секретов.
+# Ива — сборка приложения 10.17 из 10.14 + доработки (android/patches). Подпись — ключом №6 из секретов.
 # Почему так: исходников 10.14 нет, есть только APK. Сборка разбирает APK (apktool, без пересборки ресурсов),
-# вставляет 6 вызовов (android/patches/apply.py), меняет версию в манифесте (axml_version.py),
+# вставляет 10 вызовов (android/patches/apply.py), меняет версию в манифесте (axml_version.py),
 # добавляет класс IvaPatch (android/patches/IvaPatch.java → classes3.dex), выравнивает и подписывает.
-# Проверки перед выдачей: тесты логики IvaPatch; пакет ru.prokatnvsk.app, версия 89 / 10.15;
+# Проверки перед выдачей: тесты логики IvaPatch; пакет ru.prokatnvsk.app, версия 91 / 10.17;
 # подпись проходит apksigner verify; сертификат = эталон ключа №6 (как в keystore-check.yml).
-# Результат — артефакт ProkatInstrumenta-10.15 (APK + SHA-256) и, для ветки агента, коммит APK + app-test.json в эту же ветку
+# Результат — артефакт ProkatInstrumenta-10.17 (APK + SHA-256) и, для ветки агента, коммит APK + app-test.json в эту же ветку
 # (app-test.json читает жёлтая карточка «тестовая версия» владельца на сайте; выпущенный APK не перезаписывается)
 # (логи и артефакты из песочницы агента недоступны — выяснено 05.10.2026; сайт и app-update.json правит агент).
+# Тестовый канал (решение владельца 09.10.2026): app-test.json лежит на том же сайте, что и страницы; в нём поле apk —
+# только имя файла (ProkatInstrumenta-<версия>.apk). Поэтому после слияния PR в main новая сборка сама появляется
+# жёлтой карточкой в кабинете создателя — имя ветки нигде не прописывается и менять его не нужно.
 # Секреты: ANDROID_KEYSTORE_B64, ANDROID_KEYSTORE_PASS — только через переменные окружения, не выводятся;
 # файл ключа во временной папке, удаляется в конце. Из Pull Request (чужих веток) не запускается.
 # Запуск: при изменении этого файла или android/patches/**; кнопка Run workflow — после слияния в main.
-# Ветка агента в этом файле НЕ прописана (запуск на `arena/**`, шаг коммита — только на ветках `arena/…`):
-# при смене сессии править нужно только IVA_TEST_FEED в assets/app-release.js (и ссылку в app-test.json).
+# Ветка агента в этом файле НЕ прописана (запуск на `arena/**`, шаг коммита — только на ветках `arena/…`).
 # Откат: `git revert` коммита с этим файлом; APK 10.14 остаётся в репозитории.
 name: Сборка приложения
 on:
@@ -27,12 +29,12 @@ concurrency:
 env:
   SRC_APK: ProkatInstrumenta-10.14.apk
   OLD_NAME: '10.14'
-  NEW_NAME: '10.16'
-  NEW_CODE: '90'
+  NEW_NAME: '10.17'
+  NEW_CODE: '91'
   APKTOOL_VER: '2.10.0'
   # Тестовый канал (жёлтая карточка владельца на сайте): описание сборки для app-test.json
-  TEST_NOTES: 'То же, что в 10.15, плюс причина сбоя связи словами: вместо голого «Нет связи с сервером» видно, что именно не вышло (адрес не определился, не подключился или истекло время ожидания).'
-  TEST_REINSTALL: 'false'  # 10.15 и 10.16 подписаны одним ключом №6 — ставится поверх, удалять не нужно
+  TEST_NOTES: 'То же, что в 10.16, плюс: вместо «+» в нижнем меню — круглый логотип приложения; вместо иконки «Кабинет» — ваша аватарка кружком (появляется после входа, при выходе иконка возвращается).'
+  TEST_REINSTALL: 'false'  # 10.15, 10.16 и 10.17 подписаны одним ключом №6 — ставится поверх, удалять не нужно
   # Эталон ключа №6 (решение №22, 05.10.2026) — тот же, что в keystore-check.yml и docs/КЛЮЧ-ПОДПИСИ.md
   EXPECTED: 5D2B9F8BB54AD0B816A779B5991746957EBD6FA056D8A63D1D1635077BED5DDE
 jobs:
@@ -156,9 +158,9 @@ jobs:
           cp "out/$F" .
           python3 - <<'PY'
           import json, os, datetime
-          b = os.environ['GITHUB_REF'].split('refs/heads/', 1)[1]
+          # apk — только имя файла: app-test.json лежит на сайте рядом с APK, ссылка на ветку не нужна (09.10.2026)
           d = {"versionCode": int(os.environ['NEW_CODE']), "versionName": os.environ['NEW_NAME'],
-               "apk": f"https://github.com/{os.environ['GITHUB_REPOSITORY']}/raw/{b}/ProkatInstrumenta-{os.environ['NEW_NAME']}.apk",
+               "apk": f"ProkatInstrumenta-{os.environ['NEW_NAME']}.apk",
                "built": datetime.datetime.utcnow().strftime('%d.%m.%Y'),
                "reinstall": os.environ.get('TEST_REINSTALL') == 'true', "notes": os.environ.get('TEST_NOTES', '')}
           open('app-test.json', 'w', encoding='utf-8').write(json.dumps(d, ensure_ascii=False, indent=2) + '\n')

@@ -2,7 +2,7 @@
 // Ловит: вывод ключа/пароля (set -x, echo, пароль в командной строке), запуск из Pull Request,
 // подпись без сверки сертификата с эталоном ключа №6, эталон ≠ памятке, коммит APK не в ветку агента,
 // поломку смены версии в двоичном манифесте (проверяется на настоящем манифесте 10.14),
-// пропажу любой из 6 точек вставки в apply.py, кандидата без нужной версии,
+// пропажу любой из 10 точек apply.py (9 вызовов IvaPatch и замена текста кнопки доставки), кандидата без нужной версии,
 // и что фраза «Нет связи с сервером…» в classes.dex 10.14 одна (точка 6 однозначна).
 // Запуск: node tests/apk-build-guard.cjs
 const fs = require('node:fs'), path = require('node:path'), os = require('node:os'), assert = require('node:assert/strict');
@@ -30,15 +30,21 @@ try {
   const doc = (R('docs/КЛЮЧ-ПОДПИСИ.md').match(/Эталон проверки: `([0-9A-F]{64})`/) || [])[1];
   assert.ok(exp && exp === doc, `${f}: эталон ${exp} ≠ памятке ${doc}`);
   assert.match(R('.github/workflows/keystore-check.yml'), new RegExp('EXPECTED=' + exp));
-  // 6 точек вставки
   const ap = R('android/patches/apply.py');
-  for (const k of ['->onPrice(Ljava/lang/String;)Ljava/lang/String;', '->onSummary(Landroid/app/Activity;)V',
-    "one_method(lines, r' paintDelToggle\\(Z\\)V$')", '->onHub(Landroid/app/Activity;)V', '->publishError(Ljava/lang/String;)Ljava/lang/String;',
-    '->netError(Ljava/lang/String;)Ljava/lang/String;'])
-    assert.ok(ap.includes(k), `apply.py: нет вставки ${k}`);
+  // вставки: вызов IvaPatch в smali (их ровно 10)
+  const insertions = ['->onPrice(Ljava/lang/String;)Ljava/lang/String;', '->onSummary(Landroid/app/Activity;)V',
+    '->onHub(Landroid/app/Activity;)V', '->publishError(Ljava/lang/String;)Ljava/lang/String;',
+    '->netError(Ljava/lang/String;)Ljava/lang/String;', '->onCreated(Landroid/app/Activity;)V',
+    '->onSession(Landroid/app/Activity;)V', '->onAvatar(Landroid/app/Activity;Ljava/lang/String;)V',
+    '->onLogout(Landroid/app/Activity;)V'];
+  // якоря: по ним apply.py находит место вставки (метод, поле «avatar», тело updateSummary-подобных методов)
+  const anchors = ["one_method(lines, r' paintDelToggle\\(Z\\)V$')", "one_method(lines, r' logoutLocal\\(\\)V$')",
+    'lambda\\$loadAdminProfile\\$201', '"avatar"'];
+  for (const k of [...insertions, ...anchors]) assert.ok(ap.includes(k), `apply.py: нет ${k}`);
   const jp = R('android/patches/IvaPatch.java');
-  for (const k of ['onPrice(String', 'onSummary(final Activity', 'onHub(Activity', 'publishError(String', 'netError(String'])
-    assert.ok(jp.includes('public static ') && jp.includes(k), `IvaPatch.java: нет метода ${k}`);
+  for (const k of ['onPrice(String', 'onSummary(final Activity', 'onHub(Activity', 'publishError(String', 'netError(String',
+    'onCreated(Activity', 'onSession(Activity', 'onAvatar(final Activity', 'onLogout(final Activity', 'wantsAvatar(String', 'px(float'])
+    assert.ok(jp.includes('static ') && jp.includes(k), `IvaPatch.java: нет метода ${k}`);
   // точка 6 есть в настоящем APK: фраза «Нет связи с сервером…» лежит в classes.dex 10.14 ровно один раз —
   // значит вставка однозначна и владелец увидит причину именно там, где раньше была общая фраза (07.10.2026)
   const NET = 'Нет связи с сервером. Проверьте интернет и попробуйте ещё раз.';
@@ -49,6 +55,17 @@ try {
   while ((from = dex.indexOf(needle, from)) !== -1) { n++; from += needle.length; }
   assert.equal(n, 1, `в classes.dex 10.14 фраза «Нет связи с сервером…» встречается ${n} раз, нужно ровно 1`);
   assert.ok(/catch \(Throwable ignore\)/.test(jp), 'IvaPatch: доработка должна молча отступать при сбое, не ломая заявку');
+  // 10.17: то, на что опирается патч, есть в настоящем APK 10.14 (иначе на телефоне вставка молча не сработает)
+  const zip14 = entry => execFileSync('python3', ['-c',
+    'import zipfile,sys;sys.stdout.buffer.write(zipfile.ZipFile(sys.argv[1]).read(sys.argv[2]))',
+    path.join(ROOT, 'ProkatInstrumenta-10.14.apk'), entry], { maxBuffer: 64 * 1024 * 1024 });
+  const dex14 = Buffer.concat([zip14('classes.dex'), zip14('classes2.dex')]), arsc14 = zip14('resources.arsc');
+  const has = (buf, str) => buf.includes(Buffer.from(str, 'utf8')) || buf.includes(Buffer.from(str, 'utf16le'));
+  for (const str of ['logoutLocal', 'saveSession', 'onCreate', 'lambda$loadAdminProfile$201', 'CircleImageView', 'loadPhoto', 'loadAdminProfile', 'navProfIc', 'accessToken'])
+    assert.ok(has(dex14, str), `classes.dex 10.14: нет «${str}» — точка вставки или имя для патча пропали`);
+  for (const str of ['navPlus', 'navProfIc', 'ic_logo'])
+    assert.ok(has(arsc14, str), `resources.arsc 10.14: нет ресурса «${str}» — логотип или аватарка не найдут место в меню`);
+  assert.equal(zip14('res/drawable-nodpi/ic_logo.png').subarray(1, 4).toString('latin1'), 'PNG', '10.14: нет логотипа ic_logo.png');
   // смена версии — на настоящем двоичном манифесте 10.14
   const name = (code.match(/NEW_NAME: '([\d.]+)'/) || [])[1], vcode = (code.match(/NEW_CODE: '(\d+)'/) || [])[1];
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'iva-apk-'));
@@ -74,5 +91,5 @@ try {
     assert.ok(i >= 0, 'кандидат: нет versionCode');
   }
   fs.rmSync(tmp, { recursive: true, force: true });
-  console.log(`Сборка приложения: секреты не выводятся, сертификат сверяется с эталоном ${exp.slice(0, 8)}…, версия ${name} (${vcode}) пишется в манифест 10.14, 6 точек вставки на месте, фраза «Нет связи с сервером…» в classes.dex 10.14 одна`);
+  console.log(`Сборка приложения: секреты не выводятся, сертификат сверяется с эталоном ${exp.slice(0, 8)}…, версия ${name} (${vcode}) пишется в манифест 10.14, ${insertions.length} вызовов IvaPatch и замена текста кнопки доставки на месте, методы и ресурсы 10.14 на месте, фраза «Нет связи с сервером…» в classes.dex 10.14 одна`);
 } catch (e) { console.error('✘ ' + e.message); process.exit(1); }

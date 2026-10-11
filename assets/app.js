@@ -557,24 +557,28 @@ function mountTestApkCard(slot, rel, onReleased){
       }
     })
     .catch(function(){
-      slot.innerHTML = '<div class="apk-test"><b>🧪 Новая версия</b><p>Не удалось проверить новую сборку (нет связи с GitHub). Обновите страницу позже.</p></div>';
+      slot.innerHTML = '<div class="apk-test"><b>🧪 Новая версия</b><p>Не удалось проверить новую сборку. Обновите страницу позже.</p></div>';
     });
 }
 
-/* «Подтвердить релиз»: запись в app_releases. Права проверяет база — запись примет только у eclips.ru@mail.ru. */
+/* «Подтвердить релиз»: запись в app_releases. Права проверяет база — запись примет только у eclips.ru@mail.ru.
+   В записи — только имя файла APK, а он должен уже лежать на сайте рядом с app-test.json. Если его там нет
+   (сборка ещё не выложена на сайт), подтверждение отменяем: иначе у всех появилась бы битая ссылка. */
 async function confirmAppRelease(feed, btn, msg, onReleased){
   const say = function(t, bad){ if (msg) { msg.textContent = t; msg.className = 'apk-test-msg' + (bad ? ' bad' : ''); } };
   if (typeof api !== 'function' || typeof A === 'undefined' || !A.tok) { say('Войдите в кабинет заново и повторите.', true); return; }
-  if (!window.confirm('Выпустить версию ' + feed.versionName + ' для всех пользователей?\n\nСсылка на неё появится у всех в баннере и в кабинете.')) return;
-  btn.disabled = true; say('Подтверждаю…');
+  const file = ivaApkFile(feed.apk);
+  if (!file) { say('В тестовой сборке не указан файл APK — подтверждение отменено.', true); return; }
+  btn.disabled = true; say('Проверяю файл на сайте…');
+  let onSite = false;
+  try { const h = await fetch(file, { method: 'HEAD', cache: 'no-store' }); onSite = !!h.ok; } catch(e){ onSite = false; }
+  if (!onSite) { btn.disabled = false; say('Файл ' + file + ' ещё не открывается на сайте. Обычно это несколько минут после слияния PR — подождите и обновите страницу.', true); return; }
+  if (!window.confirm('Выпустить версию ' + feed.versionName + ' для всех пользователей?\n\nСсылка на неё появится у всех в баннере и в кабинете.')) { btn.disabled = false; say(''); return; }
+  say('Подтверждаю…');
   try {
-    // Если файл уже лежит на сайте (после слияния) — ссылаемся на него, иначе на GitHub
-    let apkUrl = feed.apk;
-    const file = ivaApkFile(feed.apk);
-    try { const h = await fetch(file, { method: 'HEAD', cache: 'no-store' }); if (h.ok) apkUrl = file; } catch(e){}
     await api('/rest/v1/app_releases', 'POST', {
       version_code: Number(feed.versionCode), version_name: String(feed.versionName),
-      apk_url: apkUrl, reinstall: !!feed.reinstall, notes: String(feed.notes || '').slice(0, 500)
+      apk_url: file, reinstall: !!feed.reinstall, notes: String(feed.notes || '').slice(0, 500)
     }, { Prefer: 'return=minimal' });
     say('Готово: версия ' + feed.versionName + ' выпущена для всех.');
     if (typeof toast === 'function') toast('Релиз ' + feed.versionName + ' подтверждён — теперь его видят все');

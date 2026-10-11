@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Ива — патч 10.14 → новая версия в разобранном apktool-проекте (сейчас 10.16; номер передаётся аргументом).
+"""Ива — патч 10.14 → новая версия в разобранном apktool-проекте (сейчас 10.17; номер передаётся аргументом).
 
 Запуск: python3 android/patches/apply.py <папка apktool d> <versionCode> <versionName>
 Строго: каждое место вставки должно найтись ровно столько раз, сколько ожидается,
@@ -12,6 +12,10 @@
   4. showAdmHub(I)          : после скрытия вкладки «Добавить» → IvaPatch.onHub(this) (объяснение про долг)
   5. lambda$setupAddTool$…(Button, Exception) : после humanError → IvaPatch.publishError(текст)
   6. humanError(String)                      : общая фраза «Нет связи с сервером…» → IvaPatch.netError(причина)
+  7. onCreate(Bundle)                        : в конце → IvaPatch.onCreated(this) («+» → круглый логотип; профиль админа)
+  8. saveSession(JSONObject)                 : в конце → IvaPatch.onSession(this) (вход: подгрузить профиль с аватаркой)
+  9. lambda$loadAdminProfile$201(String)     : после чтения поля avatar → IvaPatch.onAvatar(this, адрес) (аватарка в «Кабинете»)
+ 10. logoutLocal()                           : в конце → IvaPatch.onLogout(this) (выход: иконка «Кабинета» снова на месте)
 Плюс versionCode/versionName в apktool.yml.
 """
 import os
@@ -124,7 +128,47 @@ def patch(lines):
         f'    invoke-static {{{reg}}}, {P}->netError(Ljava/lang/String;)Ljava/lang/String;',
         f'    move-result-object {reg}']
     done.append('6 netError')
+
+    # 7. конец onCreate → IvaPatch.onCreated(this): «+» в нижнем меню становится круглым логотипом
+    #    и подгружается профиль админа (аватарка). onCreate заканчивается одним return-void — после bindViews/setupNav.
+    s, e = one_method(lines, r' onCreate\(Landroid/os/Bundle;\)V$')
+    before_return(lines, s, e, f'invoke-static {{p0}}, {P}->onCreated(Landroid/app/Activity;)V', 'onCreate')
+    done.append('7 onCreated')
+
+    # 8. конец saveSession (вход и восстановление сессии) → IvaPatch.onSession(this)
+    s, e = one_method(lines, r' saveSession\(Lorg/json/JSONObject;\)V$')
+    before_return(lines, s, e, f'invoke-static {{p0}}, {P}->onSession(Landroid/app/Activity;)V', 'saveSession')
+    done.append('8 onSession')
+
+    # 9. лямбда загрузки профиля админа: сразу после чтения поля avatar (optString → move-result-object)
+    #    → IvaPatch.onAvatar(this, адрес). Пустой адрес в onAvatar означает «аватарки нет» (иконка остаётся).
+    s, e = one_method(lines, r'lambda\$loadAdminProfile\$201\$')
+    av = [i for i in range(s, e) if re.match(r'\s*const-string \w+, "avatar"$', lines[i])]
+    if len(av) != 1:
+        die(f'профиль админа: поле "avatar" найдено {len(av)} раз, нужно 1')
+    opt = [k for k in range(av[0], min(av[0] + 4, e)) if 'Lorg/json/JSONObject;->optString(' in lines[k]]
+    if not opt:
+        die('профиль админа: нет optString после "avatar"')
+    mr = [k for k in range(opt[0] + 1, min(opt[0] + 3, e)) if lines[k].strip().startswith('move-result-object')]
+    if not mr:
+        die('профиль админа: нет move-result-object после optString("avatar")')
+    reg = lines[mr[0]].split()[-1]
+    lines[mr[0] + 1:mr[0] + 1] = [f'    invoke-static {{p0, {reg}}}, {P}->onAvatar(Landroid/app/Activity;Ljava/lang/String;)V']
+    done.append('9 onAvatar')
+
+    # 10. конец logoutLocal (выход) → IvaPatch.onLogout(this): аватарка убирается, иконка возвращается
+    s, e = one_method(lines, r' logoutLocal\(\)V$')
+    before_return(lines, s, e, f'invoke-static {{p0}}, {P}->onLogout(Landroid/app/Activity;)V', 'logoutLocal')
+    done.append('10 onLogout')
     return done
+
+
+def before_return(lines, s, e, call, what):
+    """Вставка перед единственным return-void метода (метод с двумя выходами — ошибка, а не догадка)."""
+    rets = [i for i in range(s, e) if lines[i].strip() == 'return-void']
+    if len(rets) != 1:
+        die(f'{what}: return-void найдено {len(rets)}, нужно 1')
+    lines[rets[0]:rets[0]] = [f'    {call}']
 
 
 def bump(yml: Path, code: str, name: str):
