@@ -88,7 +88,7 @@ public final class IvaSearchPatch {
     static final int BAR_DP = 22;            // 10.46: полоса с ручкой внизу, над нижним меню; лента кончается над ней
     static final int CITY_ROW_DP = 34;       // 10.49: строка «Ваш город» (была 40dp)
     static final int CITY_BTN_DP = 30;       // 10.49: кнопки города и «Фильтр» (кнопка города была 36dp)
-    static final int SEARCH_DP = 36;         // 10.49: строка поиска — как прежняя кнопка города (штатно 44dp)
+    static final int SEARCH_DP = 37;         // 10.50: строка поиска 37dp (10.49 — 36dp, штатно 44dp)
     static final float SHEET_MAX = 0.85f;    // шторка — 85% области страниц (10.48: вернули как в 10.46 по решению владельца)
     static final String CITY_ROW_TAG = "iva_search_city_row";
     static final String CHIPS_TAG = "iva_search_chips";
@@ -480,7 +480,15 @@ public final class IvaSearchPatch {
         }
     }
 
+    /** 10.50: плитки категорий на главной скрыты. Штатный код видимость сетки не меняет — достаточно одного раза,
+     * но при каждом показе главной повторяем (дёшево и надёжно). */
+    static void hideCatGrid(Activity a) {
+        Object cg = IvaClientPatch.get(a, "catGrid");
+        if (cg instanceof View && ((View) cg).getVisibility() != View.GONE) ((View) cg).setVisibility(View.GONE);
+    }
+
     static void onHomeShown(Activity a) {
+        hideCatGrid(a);
         checkAccount(a);
         refreshCityRow(a);
         refreshChips(a);
@@ -545,16 +553,20 @@ public final class IvaSearchPatch {
             home.setLayoutParams(hlp);
         }
 
-        // 2) Строка города встаёт на место строки поиска (её отрицательный отступ поверх шапки переходит к строке города).
+        // 2) 10.50: строка поиска — на своём штатном месте поверх картинки-шапки (отступ штатный, картинка не двигается),
+        //    строка «Ваш город · Фильтр» — под ней, после подсказок поиска (подсказки остаются прямо под строкой поиска).
         LinearLayout.LayoutParams slp = (LinearLayout.LayoutParams) searchFrame.getLayoutParams();
+        slp.height = dp(a, SEARCH_DP);   // 10.49–10.50: строка поиска тоньше штатных 44dp
+        searchFrame.setLayoutParams(slp);
         View row = buildCityRow(a);
         LinearLayout.LayoutParams rlp = new LinearLayout.LayoutParams(-1, dp(a, CITY_ROW_DP));
-        rlp.topMargin = slp.topMargin;
-        int idx = content.indexOfChild(searchFrame);
-        content.addView(row, idx, rlp);
-        slp.topMargin = dp(a, 6);
-        slp.height = dp(a, SEARCH_DP);   // 10.49: строка поиска тоньше (было 44dp) — как прежняя кнопка города
-        searchFrame.setLayoutParams(slp);
+        rlp.topMargin = dp(a, 8);
+        int below = (sg instanceof View && ((View) sg).getParent() == content) ? content.indexOfChild((View) sg) : content.indexOfChild(searchFrame);
+        content.addView(row, below + 1, rlp);
+
+        // 2а) 10.50: плитки категорий на главной пока убраны (решение владельца). Штатная сетка по-прежнему
+        //     заполняется (штатные поля catMode/curCat/curSub работают), но не видна; категория — в шторке фильтров.
+        hideCatGrid(a);
 
         // 3) Ряд активных фильтров — сразу под подсказками поиска (подсказки остаются прямо под строкой поиска).
         //    10.49: один ряд, листается вбок свайпом, без полосы прокрутки; ряд — от края до края экрана.
@@ -573,8 +585,7 @@ public final class IvaSearchPatch {
         clp.topMargin = dp(a, 10);
         clp.leftMargin = -edge;
         clp.rightMargin = -content.getPaddingRight();
-        int after = (sg instanceof View && ((View) sg).getParent() == content) ? content.indexOfChild((View) sg) : content.indexOfChild(searchFrame);
-        content.addView(chipsScroll, after + 1, clp);
+        content.addView(chipsScroll, content.indexOfChild(row) + 1, clp);   // 10.50: под строкой города
 
         // 4) Панель и ручка — поверх страниц (под нижним меню приложения), только пока открыта главная.
         FrameLayout panel = buildPanelRoot(a);

@@ -199,8 +199,18 @@ try {
     assert.ok(row.includes('fb.setOnClickListener(new View.OnClickListener() { @Override public void onClick(View v) { openPanel(a); } });')
       && row.includes('row.addView(fb, flp);') && row.indexOf('row.addView(cityBox, blp);') < row.indexOf('row.addView(fb, flp);'),
       'IvaSearchPatch: кнопка «Фильтр» справа от города должна открывать шторку');
-    assert.ok(js45.includes('SEARCH_DP = 36;') && js45.includes('slp.height = dp(a, SEARCH_DP);') && js45.includes('CITY_BTN_DP = 30;'),
-      'IvaSearchPatch: строка поиска 36dp, кнопки города и «Фильтр» 30dp');
+    assert.ok(js45.includes('SEARCH_DP = 37;') && js45.includes('slp.height = dp(a, SEARCH_DP);') && js45.includes('CITY_BTN_DP = 30;'),
+      'IvaSearchPatch: строка поиска 37dp (10.50), кнопки города и «Фильтр» 30dp');
+    // 10.50: поиск — сверху на штатном месте (его отступ поверх картинки не трогаем), город — под подсказками, ряд условий — под городом
+    const ins = js45.slice(js45.indexOf('static void install('), js45.indexOf('static void syncVisibility('));
+    assert.ok(!/slp\.topMargin\s*=/.test(ins) && !ins.includes('rlp.topMargin = slp.topMargin'), 'IvaSearchPatch.install: отступ строки поиска (поверх картинки-шапки) должен остаться штатным');
+    assert.ok(ins.includes('content.addView(row, below + 1, rlp);') && ins.includes('content.addView(chipsScroll, content.indexOfChild(row) + 1, clp);')
+      && ins.indexOf('slp.height = dp(a, SEARCH_DP);') < ins.indexOf('content.addView(row, below + 1, rlp);'),
+      'IvaSearchPatch.install: порядок — поиск, подсказки, «Ваш город · Фильтр», ряд условий');
+    // 10.50: плитки категорий скрыты (и при установке, и при каждом показе главной), штатная сетка не удаляется
+    assert.ok(ins.includes('hideCatGrid(a);') && /static void onHomeShown\(Activity a\) \{\n        hideCatGrid\(a\);/.test(js45)
+      && js45.includes('((View) cg).setVisibility(View.GONE);') && !/removeView\([^)]*catGrid|catGrid[^;]*removeAllViews/.test(js45),
+      'IvaSearchPatch: плитки категорий на главной скрыты, штатная сетка не удалена');
     assert.ok(js45.includes('chipsScroll.setHorizontalScrollBarEnabled(false);') && js45.includes('chips.setOrientation(LinearLayout.HORIZONTAL);')
       && js45.includes('chips.setTag(CHIPS_TAG);') && !/chip\(a, "Фильтры"/.test(js45),
       'IvaSearchPatch: ряд условий под поиском — один ряд без полосы прокрутки, без кнопки «Фильтры»');
