@@ -56,7 +56,6 @@ import android.widget.LinearLayout;
 import android.widget.RadioButton;
 import android.widget.TextView;
 
-import java.lang.ref.WeakReference;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.util.Locale;
@@ -253,43 +252,6 @@ public final class IvaPatch {
     static final String AV_TAG = "iva_nav_avatar";
     static final String AV_RING_TAG = "iva_nav_avatar_ring";
     static final String HOME_VIGNETTE_TAG = "iva_home_vignette";
-    // Native polling без Handler/Looper в статическом инициализаторе: на старых
-    // Samsung это не должно влиять на запуск Activity. Scheduler — обычный View UI.
-    static final long CHAT_REFRESH_MS = 5000L;
-    static WeakReference<Activity> chatActivity = new WeakReference<Activity>(null);
-    static View chatScheduler;
-    static final Runnable CHAT_TICK = new Runnable() {
-        @Override public void run() {
-            Activity a = chatActivity.get();
-            View scheduler = chatScheduler;
-            if (a == null || scheduler == null || a.isFinishing() ||
-                (android.os.Build.VERSION.SDK_INT >= 17 && a.isDestroyed())) {
-                chatActivity.clear();
-                chatScheduler = null;
-                return;
-            }
-            try {
-                Method m = a.getClass().getDeclaredMethod("loadChat");
-                m.setAccessible(true);
-                m.invoke(a);
-            } catch (Throwable ignore) {}
-            if (chatScheduler == scheduler) scheduler.postDelayed(this, CHAT_REFRESH_MS);
-        }
-    };
-
-    static void chatPoll(Activity a, boolean active) {
-        View old = chatScheduler;
-        if (old != null) old.removeCallbacks(CHAT_TICK);
-        chatActivity.clear();
-        chatScheduler = null;
-        if (active && a != null) {
-            View root = a.getWindow() == null ? null : a.getWindow().getDecorView();
-            if (root == null) return;
-            chatActivity = new WeakReference<Activity>(a);
-            chatScheduler = root;
-            root.post(CHAT_TICK);
-        }
-    }
 
     /**
      * 13–14) Фоновая картинка главной страницы уже лежит в вертикальном контейнере pageHome:
@@ -427,8 +389,8 @@ public final class IvaPatch {
     // Этот вызов стоит после всех четырёх setCircle: заливка убирается, а выбранный пункт получает
     // прозрачный круг с оранжевой окантовкой и оранжевые текст/значок.
     public static void onTab(Activity a, String tab) {
-        String t = tab == null ? "" : tab;
         try {
+            String t = tab == null ? "" : tab;
             int orange = navColor(a, "orange", 0xffff9800);
             int gray = navColor(a, "gray", 0xff9aa0a6);
             styleNavItem(a, get(a, "circHome"), get(a, "navHomeIc"), get(a, "navHomeTxt"),
@@ -447,7 +409,6 @@ public final class IvaPatch {
         } catch (Throwable ignore) {
             // подсветка — только внешний вид: переход между разделами не должен ломаться
         }
-        try { chatPoll(a, "chat".equals(t)); } catch (Throwable ignore) {}
     }
 
     /** Чистая проверка выбора пункта — вынесена отдельно, чтобы её можно было проверить без Activity. */

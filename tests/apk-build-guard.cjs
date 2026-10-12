@@ -43,8 +43,15 @@ try {
   for (const k of [...insertions, ...anchors]) assert.ok(ap.includes(k), `apply.py: нет ${k}`);
   const jp = R('android/patches/IvaPatch.java');
   const jpc = R('android/patches/IvaClientPatch.java');
-  assert.match(code, /android\/patches\/IvaPatch\.java android\/patches\/IvaClientPatch\.java/, `${f}: клиентский native-класс не компилируется`);
-  assert.match(ap, /IvaClientPatch/, `${f}: новые клиентские hooks не изолированы`);
+  // 10.28 — диагностическая минимальная сборка: в APK попадает только проверенный
+  // IvaPatch из 10.21. Клиентский класс сохраняется в исходниках для следующей
+  // поэтапной итерации, но в эту сборку не компилируется и не вызывается.
+  assert.match(code, /android\/patches\/IvaPatch\.java 2>&1/,
+    `${f}: диагностическая сборка не компилирует IvaPatch`);
+  assert.doesNotMatch(code, /android\/patches\/IvaPatch\.java android\/patches\/IvaClientPatch\.java/,
+    `${f}: минимальная сборка не должна компилировать IvaClientPatch`);
+  assert.doesNotMatch(ap, /IvaClientPatch|PC->/,
+    `${f}: новые клиентские hooks не отключены в диагностическом apply.py`);
   for (const k of ['onProfile(Activity', 'onFeed(Activity', 'onDetail(Activity', 'installHomeFilter(final Activity', 'loadNativeClientCoords(final Activity'])
     assert.ok(jpc.includes(k), `IvaClientPatch.java: нет метода ${k}`);
   for (const k of ['onPrice(String', 'onSummary(final Activity', 'onHub(Activity', 'publishError(String', 'netError(String',

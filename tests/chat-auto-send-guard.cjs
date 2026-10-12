@@ -39,19 +39,12 @@ assert.match(chat, /\}, 5000\);/, 'chat: REST fallback must refresh messages eve
 assert.match(cabinet, /S\.chatSub=subscribeMessages\(onCabinetMessage\)/,
   'cabinet: realtime subscription is missing');
 
-// Native APK: the visible chat tab must refresh the existing MainActivity chat without
-// opening a new conversation or sending anything, and the timer must stop elsewhere.
-assert.match(nativePatch, /static final long CHAT_REFRESH_MS = 5000L/,
-  'native: chat polling interval must be 5 seconds');
-assert.match(nativePatch, /getDeclaredMethod\("loadChat"\)/,
-  'native: polling must call MainActivity.loadChat');
-assert.match(nativePatch, /(?:CHAT_HANDLER\.postDelayed|scheduler\.postDelayed)\(this, CHAT_REFRESH_MS\)/,
-  'native: polling must schedule its next refresh');
-assert.match(nativePatch, /(?:CHAT_HANDLER\.removeCallbacks|old\.removeCallbacks)\(CHAT_TICK\)/,
-  'native: polling must be cancellable');
-assert.match(nativePatch, /chatPoll\(a, "chat"\.equals\(t\)\)/,
-  'native: tab changes must enable polling only for chat');
+// Native APK: 10.28 is deliberately a minimal diagnostic build. The web fallback
+// remains enabled, but all native chat polling is removed so the 10.22 hypothesis
+// is tested without retaining any timer or loadChat call in the APK.
+assert.doesNotMatch(nativePatch, /CHAT_REFRESH_MS|CHAT_TICK|chatPoll|getDeclaredMethod\("loadChat"\)/,
+  'native: diagnostic build must contain no chat polling');
 assert.match(nativeApply, /onTab\(Landroid\/app\/Activity;Ljava\/lang\/String;\)V/,
-  'native: showTab must invoke IvaPatch.onTab');
+  'native: stable showTab hook must remain present');
 
-console.log('Чат: автоотправка отключена, контекст инструмента сохраняется, веб realtime и нативный 5-секундный polling включены');
+console.log('Чат: автоотправка отключена, контекст инструмента сохраняется, веб realtime включён, native polling отключён для диагностики');
