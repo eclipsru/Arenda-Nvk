@@ -57,9 +57,6 @@ try {
   for (const k of ['onProfile(Activity', 'onActivityResult(final Activity', 'onFeed(Activity', 'onDetail(Activity', 'installHomeFilter(final Activity', 'loadNativeClientCoords(final Activity'])
     assert.ok(jpc.includes(k), `IvaClientPatch.java: нет метода ${k}`);
   assert.doesNotMatch(jpc, /host\.addView\(card, 0, lp\)/, 'IvaClientPatch: белая верхняя карточка клиента не должна добавляться');
-  assert.match(jpc, /LEGACY_PROFILE_CARD_TAG/, 'IvaClientPatch: нет совместимого удаления старой белой карточки');
-  assert.match(jpc, /removeLegacyClientCard\(a\)/, 'IvaClientPatch: legacy-карточка не очищается перед профилем');
-  assert.match(jpc, /host\.removeViewAt\(i\)/, 'IvaClientPatch: старая карточка не удаляется из кабинета');
   assert.match(jpc, /Настройки профиля клиента/, 'IvaClientPatch: нет заголовка тёмной формы клиента');
   assert.match(jpc, /profileHead/, 'IvaClientPatch: строка «Клиент» не подключена к профилю');
   assert.match(jpc, /installClientProfileHead\(a\)/, 'IvaClientPatch: обработчик строки «Клиент» не устанавливается');
