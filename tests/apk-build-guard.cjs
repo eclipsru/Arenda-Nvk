@@ -155,7 +155,7 @@ try {
     assert.ok(js45.includes(k), `IvaSearchPatch.java: нет ${k}`);
   // 10.46: ручка внизу над нижним меню, шторка снизу (85%), левой полосы нет; 10.47 — до шапки, 10.48 — снова 85% (решение владельца)
   for (const k of ['BAR_DP = 22', 'SHEET_MAX = 0.85f', 'new FrameLayout.LayoutParams(-1, dp(a, BAR_DP), Gravity.BOTTOM)', 'hlp.bottomMargin = dp(a, BAR_DP)',
-    'sheet.setTranslationY((1f - progress) * sheetSize)', 'setProgress(a, p0 - dy / sheetSize)', 'DragListener.HANDLE', 'DragListener.SHEET', 'DragListener.SCRIM',
+    'sheet.setTranslationY((1f - progress) * sheetSize)', 'setProgress(a, p0 - dy / sheetSize)', 'DragListener.HANDLE', 'DragListener.GRAB', 'DragListener.SCRIM',
     'Gravity.BOTTOM));', 'fitSheet(a)', 'LengthFilter(7)', 'facetVisible(catKeys, catCounts, draft.cat)', 'facetVisible(subKeys, subCounts, draft.sub)',
     'normRange(from, to)', '"Радиус \\u00b7 скоро"', 'rc.setEnabled(false)',
     // поля для «Показать N» читаются как в штатной ленте (optString: null → "null"), не через js()
@@ -184,6 +184,29 @@ try {
       'IvaSearchPatch: нажатие на полосу вверху шторки должно закрывать её');
     const pc = js45.slice(js45.indexOf('static TextView plainChip('), js45.indexOf('static void addActiveChips('));
     assert.ok(!/setBackground\(|bg_chip/.test(pc), 'IvaSearchPatch.plainChip: без фона-«пузыря»');
+  }
+  // 10.49: шапка шторки прокручивается вместе с фильтрами, закреплена только полоса с «язычком» (и кнопки внизу)
+  {
+    const bs = js45.slice(js45.indexOf('static void buildSheet('), js45.indexOf('static EditText priceField('));
+    assert.ok(bs.includes('sh.addView(grabBar, new LinearLayout.LayoutParams(-1, dp(a, 22)));')
+      && bs.includes('scroll.addView(head, new LinearLayout.LayoutParams(-1, -2));') && bs.includes('scroll.addView(hs, new LinearLayout.LayoutParams(-1, -2));')
+      && bs.includes('scroll.addView(body, new LinearLayout.LayoutParams(-1, -2));') && !bs.includes('sh.addView(head') && !bs.includes('sh.addView(hs'),
+      'IvaSearchPatch.buildSheet: шапка шторки должна прокручиваться вместе с фильтрами, закреплена только полоса');
+    assert.ok(bs.indexOf('sh.addView(grabBar') < bs.indexOf('sh.addView(sc,') && bs.indexOf('sh.addView(sc,') < bs.indexOf('sh.addView(foot'),
+      'IvaSearchPatch.buildSheet: порядок — полоса, прокрутка, кнопки внизу');
+    // главная: «Фильтр» справа от города открывает шторку; поиск 36dp; ряд условий — вбок без полосы и без кнопки «Фильтры»
+    const row = js45.slice(js45.indexOf('static View buildCityRow('), js45.indexOf('static void refreshCityRow('));
+    assert.ok(row.includes('fb.setOnClickListener(new View.OnClickListener() { @Override public void onClick(View v) { openPanel(a); } });')
+      && row.includes('row.addView(fb, flp);') && row.indexOf('row.addView(cityBox, blp);') < row.indexOf('row.addView(fb, flp);'),
+      'IvaSearchPatch: кнопка «Фильтр» справа от города должна открывать шторку');
+    assert.ok(js45.includes('SEARCH_DP = 36;') && js45.includes('slp.height = dp(a, SEARCH_DP);') && js45.includes('CITY_BTN_DP = 30;'),
+      'IvaSearchPatch: строка поиска 36dp, кнопки города и «Фильтр» 30dp');
+    assert.ok(js45.includes('chipsScroll.setHorizontalScrollBarEnabled(false);') && js45.includes('chips.setOrientation(LinearLayout.HORIZONTAL);')
+      && js45.includes('chips.setTag(CHIPS_TAG);') && !/chip\(a, "Фильтры"/.test(js45),
+      'IvaSearchPatch: ряд условий под поиском — один ряд без полосы прокрутки, без кнопки «Фильтры»');
+    // ряд под поиском — оранжевые «пузыри» (как было), не текст
+    assert.ok(/addActiveChips\(a, box, f, new Runnable\(\) \{[\s\S]{0,400}?\n            \}\);/.test(js45.slice(js45.indexOf('static void refreshChips('))),
+      'IvaSearchPatch.refreshChips: ряд под поиском — оранжевые «пузыри»');
   }
   // радиус — только вид: варианты встречаются лишь в объявлении и в шторке, на фильтр/подсчёт не влияют
   assert.equal((js45.match(/RADIUS_TITLES/g) || []).length, 3, 'IvaSearchPatch: радиус не должен участвовать в фильтре (только заготовка в шторке)');

@@ -86,9 +86,13 @@ public final class IvaSearchPatch {
 
     // ── Разметка ──
     static final int BAR_DP = 22;            // 10.46: полоса с ручкой внизу, над нижним меню; лента кончается над ней
+    static final int CITY_ROW_DP = 34;       // 10.49: строка «Ваш город» (была 40dp)
+    static final int CITY_BTN_DP = 30;       // 10.49: кнопки города и «Фильтр» (кнопка города была 36dp)
+    static final int SEARCH_DP = 36;         // 10.49: строка поиска — как прежняя кнопка города (штатно 44dp)
     static final float SHEET_MAX = 0.85f;    // шторка — 85% области страниц (10.48: вернули как в 10.46 по решению владельца)
     static final String CITY_ROW_TAG = "iva_search_city_row";
     static final String CHIPS_TAG = "iva_search_chips";
+    static final String FILTER_BTN_TAG = "iva_search_filter_btn";   // 10.49: «Фильтр» справа от города
     static final String HANDLE_TAG = "iva_search_handle";
     static final String PANEL_TAG = "iva_search_panel";
 
@@ -294,6 +298,21 @@ public final class IvaSearchPatch {
     }
 
     /** Текст главной кнопки панели. */
+    /** Сколько условий выбрано — столько же, сколько снимаемых «пузырей» под поиском. */
+    static int activeCount(String cat, String sub, long from, long to, boolean delivery, int conds) {
+        int n = 0;
+        if (cat != null && !cat.isEmpty()) {
+            n++;
+            if (sub != null && !sub.isEmpty()) n++;
+        }
+        if (from >= 0 || to >= 0) n++;
+        if (delivery) n++;
+        n += Integer.bitCount(conds & 7);
+        return n;
+    }
+
+    static String filterButtonText(int n) { return n > 0 ? "Фильтр \u00b7 " + n : "Фильтр"; }
+
     static String showLabel(int n) {
         return n <= 0 ? "Ничего не найдено" : "Показать " + toolsCount(n);
     }
@@ -529,21 +548,33 @@ public final class IvaSearchPatch {
         // 2) Строка города встаёт на место строки поиска (её отрицательный отступ поверх шапки переходит к строке города).
         LinearLayout.LayoutParams slp = (LinearLayout.LayoutParams) searchFrame.getLayoutParams();
         View row = buildCityRow(a);
-        LinearLayout.LayoutParams rlp = new LinearLayout.LayoutParams(-1, dp(a, 40));
+        LinearLayout.LayoutParams rlp = new LinearLayout.LayoutParams(-1, dp(a, CITY_ROW_DP));
         rlp.topMargin = slp.topMargin;
         int idx = content.indexOfChild(searchFrame);
         content.addView(row, idx, rlp);
         slp.topMargin = dp(a, 6);
+        slp.height = dp(a, SEARCH_DP);   // 10.49: строка поиска тоньше (было 44dp) — как прежняя кнопка города
         searchFrame.setLayoutParams(slp);
 
         // 3) Ряд активных фильтров — сразу под подсказками поиска (подсказки остаются прямо под строкой поиска).
-        Flow chips = new Flow(a, dp(a, 6));
+        //    10.49: один ряд, листается вбок свайпом, без полосы прокрутки; ряд — от края до края экрана.
+        HorizontalScrollView chipsScroll = new HorizontalScrollView(a);
+        chipsScroll.setHorizontalScrollBarEnabled(false);
+        chipsScroll.setOverScrollMode(View.OVER_SCROLL_NEVER);
+        chipsScroll.setVisibility(View.GONE);
+        LinearLayout chips = new LinearLayout(a);
+        chips.setOrientation(LinearLayout.HORIZONTAL);
+        chips.setGravity(Gravity.CENTER_VERTICAL);
         chips.setTag(CHIPS_TAG);
-        chips.setVisibility(View.GONE);
+        int edge = content.getPaddingLeft();
+        chips.setPadding(edge, 0, content.getPaddingRight(), 0);
+        chipsScroll.addView(chips, new FrameLayout.LayoutParams(-2, -2));
         LinearLayout.LayoutParams clp = new LinearLayout.LayoutParams(-1, -2);
         clp.topMargin = dp(a, 10);
+        clp.leftMargin = -edge;
+        clp.rightMargin = -content.getPaddingRight();
         int after = (sg instanceof View && ((View) sg).getParent() == content) ? content.indexOfChild((View) sg) : content.indexOfChild(searchFrame);
-        content.addView(chips, after + 1, clp);
+        content.addView(chipsScroll, after + 1, clp);
 
         // 4) Панель и ручка — поверх страниц (под нижним меню приложения), только пока открыта главная.
         FrameLayout panel = buildPanelRoot(a);
@@ -701,8 +732,21 @@ public final class IvaSearchPatch {
         callNative(a, "renderCatGrid");
     }
 
+    static boolean chipsRefreshPosted = false;
+
     static void onFeedChild(final Activity a, View child) {
         try {
+            // 10.49: категорию могли выбрать в штатной сетке — ряд условий, «Фильтр · N» и ручку обновляем
+            // один раз после перерисовки ленты (а не на каждую карточку).
+            if (!chipsRefreshPosted) {
+                chipsRefreshPosted = true;
+                new Handler(Looper.getMainLooper()).post(new Runnable() {
+                    @Override public void run() {
+                        chipsRefreshPosted = false;
+                        try { refreshChips(a); refreshHandle(a); } catch (Throwable ignore) {}
+                    }
+                });
+            }
             if (child instanceof TextView) {
                 String t = String.valueOf(((TextView) child).getText());
                 if (anyActive() && t.startsWith("Каталог пуст") && !allToolsQuiet(a).isEmpty()) {
@@ -850,8 +894,10 @@ public final class IvaSearchPatch {
 
     static TextView cityButton;
     static TextView cityLabel;
+    static TextView filterButton;
 
     static View buildCityRow(final Activity a) {
+        // 10.49: «Ваш город» и кнопка города рядом слева (кнопка меньше), справа — «Фильтр» (открывает шторку).
         LinearLayout row = new LinearLayout(a);
         row.setTag(CITY_ROW_TAG);
         row.setOrientation(LinearLayout.HORIZONTAL);
@@ -862,28 +908,63 @@ public final class IvaSearchPatch {
         label.setTextColor(color(a, "text", 0xfff2f4f8));
         label.setShadowLayer(dp(a, 3), 0, dp(a, 1), 0xaa000000);   // поверх картинки шапки
         label.setSingleLine(true);
-        label.setEllipsize(TextUtils.TruncateAt.END);
         label.setPadding(dp(a, 4), 0, dp(a, 8), 0);
-        row.addView(label, new LinearLayout.LayoutParams(0, -2, 1f));
+        row.addView(label, new LinearLayout.LayoutParams(-2, -2));
         cityLabel = label;
 
         TextView btn = new TextView(a);
-        btn.setTextSize(14f);
+        btn.setTextSize(13f);
         btn.setTypeface(null, android.graphics.Typeface.BOLD);
         btn.setTextColor(color(a, "text", 0xfff2f4f8));
         btn.setSingleLine(true);
         btn.setEllipsize(TextUtils.TruncateAt.END);
         btn.setGravity(Gravity.CENTER_VERTICAL);
-        btn.setMaxWidth(dp(a, 230));
-        btn.setPadding(dp(a, 14), 0, dp(a, 12), 0);
+        btn.setPadding(dp(a, 12), 0, dp(a, 10), 0);
         Drawable bgs = drawable(a, "bg_search");     // та же «стеклянная» рамка, что у строки поиска
         if (bgs != null) btn.setBackground(bgs);
         else btn.setBackground(pill(a, 0x33ffffff, color(a, "orange", 0xffff8f1f)));
         btn.setClickable(true);
         btn.setOnClickListener(new View.OnClickListener() { @Override public void onClick(View v) { openCityPicker(a); } });
-        row.addView(btn, new LinearLayout.LayoutParams(-2, dp(a, 36)));
+        // кнопка города — по тексту, но не шире остатка строки (длинное название — с многоточием)
+        LinearLayout.LayoutParams blp = new LinearLayout.LayoutParams(-2, dp(a, CITY_BTN_DP), 1f);
+        blp.width = 0;
+        LinearLayout cityBox = new LinearLayout(a);   // обёртка: кнопка прижата к надписи, свободное место — справа
+        cityBox.setOrientation(LinearLayout.HORIZONTAL);
+        cityBox.setGravity(Gravity.CENTER_VERTICAL);
+        cityBox.addView(btn, new LinearLayout.LayoutParams(-2, dp(a, CITY_BTN_DP)));
+        row.addView(cityBox, blp);
         cityButton = btn;
+
+        TextView fb = new TextView(a);
+        fb.setTag(FILTER_BTN_TAG);
+        fb.setTextSize(13f);
+        fb.setTypeface(null, android.graphics.Typeface.BOLD);
+        fb.setTextColor(color(a, "text", 0xfff2f4f8));
+        fb.setSingleLine(true);
+        fb.setGravity(Gravity.CENTER);
+        fb.setPadding(dp(a, 12), 0, dp(a, 12), 0);
+        Drawable bgf = drawable(a, "bg_search");
+        if (bgf != null) fb.setBackground(bgf);
+        else fb.setBackground(pill(a, 0x33ffffff, color(a, "orange", 0xffff8f1f)));
+        fb.setClickable(true);
+        fb.setOnClickListener(new View.OnClickListener() { @Override public void onClick(View v) { openPanel(a); } });
+        LinearLayout.LayoutParams flp = new LinearLayout.LayoutParams(-2, dp(a, CITY_BTN_DP));
+        flp.leftMargin = dp(a, 8);
+        row.addView(fb, flp);
+        filterButton = fb;
+        refreshFilterButton(a);
         return row;
+    }
+
+    /** «Фильтр» справа от города: число применённых условий и оранжевый цвет, если они есть. */
+    static void refreshFilterButton(Activity a) {
+        TextView b = filterButton;
+        if (b == null) return;
+        Filter f = current(a);
+        int n = activeCount(f.cat, f.sub, f.from, f.to, f.delivery, f.conds);
+        b.setText(filterButtonText(n));
+        b.setTextColor(n > 0 ? color(a, "orange", 0xffff8f1f) : color(a, "text", 0xfff2f4f8));
+        b.setContentDescription(n > 0 ? "Фильтры, выбрано условий: " + n + ". Открыть" : "Открыть фильтры");
     }
 
     static void refreshCityRow(Activity a) {
@@ -1213,9 +1294,9 @@ public final class IvaSearchPatch {
         c.setOnClickListener(new View.OnClickListener() {
             @Override public void onClick(View v) { action.remove(); changed.run(); }
         });
-        if (plain) {   // 10.48: шапка шторки — один ряд, прокрутка вбок свайпом
+        if (box instanceof LinearLayout) {   // один ряд с прокруткой вбок: шапка шторки (10.48), лента под поиском (10.49)
             LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-2, -2);
-            if (box.getChildCount() > 0) lp.leftMargin = dp(a, 16);
+            if (box.getChildCount() > 0) lp.leftMargin = dp(a, plain ? 16 : 6);
             box.addView(c, lp);
         } else box.addView(c);
     }
@@ -1225,9 +1306,10 @@ public final class IvaSearchPatch {
         try {
             Object ph = IvaClientPatch.get(a, "pageHome");
             if (!(ph instanceof View)) return;
+            refreshFilterButton(a);
             View v = ((View) ph).findViewWithTag(CHIPS_TAG);
-            if (!(v instanceof Flow)) return;
-            Flow box = (Flow) v;
+            if (!(v instanceof LinearLayout)) return;
+            LinearLayout box = (LinearLayout) v;
             box.removeAllViews();
             final Filter f = current(a);
             final String cat0 = f.cat, sub0 = f.sub;
@@ -1238,14 +1320,9 @@ public final class IvaSearchPatch {
                     applySearch(a);
                 }
             });
-            if (box.getChildCount() > 0) {
-                TextView more = chip(a, "Фильтры", false, false);
-                more.setTextColor(color(a, "orange", 0xffff8f1f));
-                more.setContentDescription("Открыть фильтры");
-                more.setOnClickListener(new View.OnClickListener() { @Override public void onClick(View x) { openPanel(a); } });
-                box.addView(more);
-            }
-            box.setVisibility(box.getChildCount() > 0 ? View.VISIBLE : View.GONE);
+            // 10.49: кнопки «Фильтры» в ряду больше нет — шторку открывает «Фильтр» справа от города
+            View scroller = box.getParent() instanceof View ? (View) box.getParent() : box;
+            scroller.setVisibility(box.getChildCount() > 0 ? View.VISIBLE : View.GONE);
         } catch (Throwable ignore) {}
     }
 
@@ -1448,7 +1525,7 @@ public final class IvaSearchPatch {
      * Короткое нажатие: ручка — открыть/закрыть, затемнение и полоса с «язычком» вверху шторки — закрыть, остальная шапка — ничего.
      */
     static final class DragListener implements View.OnTouchListener {
-        static final int HANDLE = 0, SCRIM = 1, SHEET = 2, GRAB = 3;   // GRAB — полоса с «язычком» вверху шторки
+        static final int HANDLE = 0, SCRIM = 1, SHEET = 2, GRAB = 3;   // GRAB — полоса с «язычком» вверху шторки (с 10.49 тянуть шторку — только за неё)
         static final int NONE = 0, DRAG = 1, IGNORE = 2;
         final Activity a;
         final int kind;
@@ -1559,12 +1636,9 @@ public final class IvaSearchPatch {
             cGray2 = color(a, "gray2", 0xff6b7080), cLine = color(a, "line", 0xff262b35), cOrange = color(a, "orange", 0xffff8f1f);
         backKeys(a, sh);
 
-        // Шапка (10.47 — компактная): «язычок», одна строка «Фильтры · город ▾ · ✕», под ней выбранное — текстом с ✕.
-        // За шапку шторку можно утянуть вниз.
-        LinearLayout headBox = new LinearLayout(a);
-        headBox.setOrientation(LinearLayout.VERTICAL);
-        headBox.setOnTouchListener(new DragListener(a, DragListener.SHEET));
-        // 10.48: полоса с «язычком» во всю ширину (22dp): нажатие закрывает шторку, потянуть вниз — тоже
+        // 10.48: полоса с «язычком» во всю ширину (22dp): нажатие закрывает шторку, потянуть вниз — тоже.
+        // 10.49: закреплена только эта полоса — шапка («Фильтры · город ▾ · ✕» и выбранное) прокручивается вместе
+        // с фильтрами (решение владельца), а закрыть шторку можно всегда, даже пролистав вниз.
         FrameLayout grabBar = new FrameLayout(a);
         grabBar.setContentDescription("Закрыть фильтры");
         grabBar.setClickable(true);
@@ -1573,7 +1647,16 @@ public final class IvaSearchPatch {
         View grab = new View(a);
         grab.setBackground(pill(a, cGray2, 0));
         grabBar.addView(grab, new FrameLayout.LayoutParams(dp(a, 36), dp(a, 4), Gravity.CENTER));
-        headBox.addView(grabBar, new LinearLayout.LayoutParams(-1, dp(a, 22)));
+        sh.addView(grabBar, new LinearLayout.LayoutParams(-1, dp(a, 22)));
+
+        ScrollView sc = new ScrollView(a);
+        sc.setFillViewport(true);
+        LinearLayout scroll = new LinearLayout(a);   // шапка + фильтры — одна прокручиваемая колонка
+        scroll.setOrientation(LinearLayout.VERTICAL);
+        sc.addView(scroll, new FrameLayout.LayoutParams(-1, -2));
+        sh.addView(sc, new LinearLayout.LayoutParams(-1, 0, 1f));
+
+        // Шапка (10.47 — компактная): одна строка «Фильтры · город ▾ · ✕», под ней выбранное — текстом с ✕.
         LinearLayout head = new LinearLayout(a);
         head.setOrientation(LinearLayout.HORIZONTAL);
         head.setGravity(Gravity.CENTER_VERTICAL);
@@ -1606,8 +1689,7 @@ public final class IvaSearchPatch {
         feedback(a, close);
         close.setOnClickListener(new View.OnClickListener() { @Override public void onClick(View v) { closePanel(a, true); } });
         head.addView(close, new LinearLayout.LayoutParams(dp(a, 44), dp(a, 44)));
-        headBox.addView(head, new LinearLayout.LayoutParams(-1, -2));
-        sh.addView(headBox, new LinearLayout.LayoutParams(-1, -2));
+        scroll.addView(head, new LinearLayout.LayoutParams(-1, -2));
 
         // Выбранные условия — простым текстом с ✕, каждое убирается отдельно.
         // 10.48: в один ряд, прокрутка вбок свайпом, без полосы прокрутки (шапка не растёт вниз).
@@ -1620,21 +1702,18 @@ public final class IvaSearchPatch {
         pc.setGravity(Gravity.CENTER_VERTICAL);
         pc.setPadding(dp(a, 16), 0, dp(a, 16), dp(a, 4));
         hs.addView(pc, new FrameLayout.LayoutParams(-2, -2));
-        sh.addView(hs, new LinearLayout.LayoutParams(-1, -2));
+        scroll.addView(hs, new LinearLayout.LayoutParams(-1, -2));
         panelChips = pc;
         panelChipsScroll = hs;
 
         View line = new View(a);
         line.setBackgroundColor(cLine);
-        sh.addView(line, new LinearLayout.LayoutParams(-1, Math.max(1, dp(a, 1))));
+        scroll.addView(line, new LinearLayout.LayoutParams(-1, Math.max(1, dp(a, 1))));
 
-        ScrollView sc = new ScrollView(a);
-        sc.setFillViewport(true);
         LinearLayout body = new LinearLayout(a);
         body.setOrientation(LinearLayout.VERTICAL);
         body.setPadding(dp(a, 16), 0, dp(a, 16), dp(a, 16));
-        sc.addView(body, new FrameLayout.LayoutParams(-1, -2));
-        sh.addView(sc, new LinearLayout.LayoutParams(-1, 0, 1f));
+        scroll.addView(body, new LinearLayout.LayoutParams(-1, -2));
 
         body.addView(sectionTitle(a, "Категория"));
         catBox = new Flow(a, dp(a, 6));
