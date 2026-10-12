@@ -80,7 +80,8 @@ jobs:
           PLAT="$ANDROID_HOME/platforms/$(ls "$ANDROID_HOME/platforms" | grep -E '^android-[0-9]+$' | sort -t- -k2 -n | tail -1)"
           echo "BT=$BT" >> "$GITHUB_ENV"
           echo "ANDROID_JAR=$PLAT/android.jar" >> "$GITHUB_ENV"
-          curl -fsSL -o "$RUNNER_TEMP/apktool.jar" \
+          # Повторы: 12.10.2026 сборка 10.46 упала на разовой ошибке скачивания apktool (curl 22).
+          curl -fsSL --retry 5 --retry-delay 10 --retry-all-errors -o "$RUNNER_TEMP/apktool.jar" \
             "https://github.com/iBotPeaches/Apktool/releases/download/v${APKTOOL_VER}/apktool_${APKTOOL_VER}.jar"
           echo "apktool ${APKTOOL_VER}: $(sha256sum "$RUNNER_TEMP/apktool.jar" | cut -c1-16)…; build-tools: $(basename "$BT"); $(basename "$PLAT"); $(javac -version 2>&1)"
 
