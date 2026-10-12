@@ -469,15 +469,18 @@ public final class IvaPatch {
         } catch (Throwable ignore) {
             // логотип и подсветка — только внешний вид: без них меню работает как раньше
         }
-        reloadProfile(a);
-        onProfile(a);
+        // Все новые функции необязательны для запуска APK. Если конкретная
+        // прошивка/вариант 10.14 не содержит ожидаемого поля или метода,
+        // исходный каталог всё равно должен открыться без падения.
+        try { reloadProfile(a); } catch (Throwable ignore) {}
+        try { onProfile(a); } catch (Throwable ignore) {}
     }
 
     /** 8) Конец saveSession (вход и восстановление сессии): профиль админа → аватарка в меню. */
     public static void onSession(Activity a) {
-        reloadProfile(a);
-        onProfile(a);
-        installHomeFilter(a);
+        try { reloadProfile(a); } catch (Throwable ignore) {}
+        try { onProfile(a); } catch (Throwable ignore) {}
+        try { installHomeFilter(a); } catch (Throwable ignore) {}
     }
 
     /** 9) lambda$loadAdminProfile$201, сразу после чтения поля avatar. Пустой адрес — аватарки нет. */
@@ -713,8 +716,11 @@ public final class IvaPatch {
 
     /** 9) Профиль подмешивается в native после штатного renderProfile. */
     public static void onProfile(Activity a) {
-        ensureClientProfile();
-        try { installClientProfile(a); loadClientProfile(a); } catch (Throwable ignore) {}
+        try {
+            ensureClientProfile();
+            installClientProfile(a);
+            loadClientProfile(a);
+        } catch (Throwable ignore) {}
     }
 
     // ── 11–12. Выбранный раздел нижнего меню и окантовка аватарки (10.18–10.19) ──
@@ -742,7 +748,7 @@ public final class IvaPatch {
         } catch (Throwable ignore) {
             // подсветка — только внешний вид: переход между разделами не должен ломаться
         }
-        chatPoll(a, "chat".equals(t));
+        try { chatPoll(a, "chat".equals(t)); } catch (Throwable ignore) {}
     }
 
     /** Чистая проверка выбора пункта — вынесена отдельно, чтобы её можно было проверить без Activity. */
@@ -1153,11 +1159,13 @@ public final class IvaPatch {
     }
 
     static void onCatalogLoaded(Activity a) {
-        Object v = get(a, "tools");
-        if (!(v instanceof ArrayList)) return;
-        allNativeTools = new ArrayList((ArrayList) v);
-        synchronized (nativeDistanceCache) { nativeDistanceCache.clear(); }
-        if (nativeFilterActive) set(a, "tools", filteredTools(a, allNativeTools));
+        try {
+            Object v = get(a, "tools");
+            if (!(v instanceof ArrayList)) return;
+            allNativeTools = new ArrayList((ArrayList) v);
+            synchronized (nativeDistanceCache) { nativeDistanceCache.clear(); }
+            if (nativeFilterActive) set(a, "tools", filteredTools(a, allNativeTools));
+        } catch (Throwable ignore) {}
     }
 
     // ── 19. Расстояние на карточках native ──
@@ -1337,7 +1345,9 @@ public final class IvaPatch {
     }
 
     public static void onLocationPermission(Activity a, int[] grants) {
-        locationAsked=true; clientCoordsLoading=false; loadNativeClientCoords(a);
+        try {
+            locationAsked=true; clientCoordsLoading=false; loadNativeClientCoords(a);
+        } catch (Throwable ignore) {}
     }
 
     /** Вызывается после каждого штатного renderFeed: карточки получают
@@ -1355,9 +1365,13 @@ public final class IvaPatch {
 
     // ── 20. Автоматическая оценка доставки в открытой карточке ──
     public static void onDetail(Activity a, JSONObject item, boolean service) {
-        activeDetail = item; activeDetailIsService = service; deliveryEstimateKey = ""; deliveryEstimateLoading = false;
-        updateNativeDelivery(a);
-        loadNativeClientCoords(a);
+        try {
+            activeDetail = item; activeDetailIsService = service; deliveryEstimateKey = ""; deliveryEstimateLoading = false;
+            updateNativeDelivery(a);
+            loadNativeClientCoords(a);
+        } catch (Throwable ignore) {
+            // Расчёт доставки не должен закрывать экран карточки.
+        }
     }
 
     static void updateNativeDelivery(final Activity a) {
