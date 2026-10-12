@@ -289,8 +289,7 @@ public final class IvaPatch {
         if (active && a != null) {
             if (CHAT_HANDLER == null) CHAT_HANDLER = new Handler(Looper.getMainLooper());
             chatActivity = new WeakReference<Activity>(a);
-            // MainActivity already performs the initial load on chat entry; poll after 5 seconds.
-            CHAT_HANDLER.postDelayed(CHAT_TICK, CHAT_REFRESH_MS);
+            CHAT_HANDLER.post(CHAT_TICK);
         }
     }
 
