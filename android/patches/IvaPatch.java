@@ -1,7 +1,8 @@
 // Ива — доработки приложения поверх 10.14 (исходников 10.14 нет, только APK). Сборки: 10.15 (п. 1–5), 10.16 (+ п. 6),
 // 10.17 (+ п. 7–10: нижнее меню), 10.18 (+ п. 11: выбранный раздел нижнего меню),
 // 10.19 (+ п. 12: окантовка аватарки в открытом «Кабинете»), 10.20 (+ п. 13: виньетка фоновой картинки главной),
-// 10.21 (+ п. 14: скруглённые углы фоновой картинки главной).
+// 10.21 (+ п. 14: скруглённые углы фоновой картинки главной),
+// 10.22 (+ п. 15: новые сообщения в чате приложения подгружаются без ручного обновления).
 // Этот класс компилируется в GitHub Actions
 // (build-apk.yml) и добавляется в APK отдельным classes3.dex. Точки вызова вставляет android/patches/apply.py
 // в smali-код MainActivity (11 мест, 13 вызовов IvaPatch, потому что onPrice вызывается 4 раза).
@@ -27,6 +28,8 @@
 // 13) (10.20) на изображении pageBg главной страницы появляется настоящая виньетка:
 //     центр остаётся светлее, края темнее; слой стоит под поиском и категориями и не перехватывает их касания.
 // 14) (10.21) у этой фоновой картинки скруглены все четыре угла, не затрагивая поиск и категории.
+// 15) (10.22) пока открыт раздел «Сообщения», чат приложения перечитывается каждые 5 секунд:
+//     ответ собеседника появляется сам, без выхода из чата и ручного обновления страницы.
 package ru.prokatnvsk.app;
 
 import android.app.Activity;
@@ -43,6 +46,8 @@ import android.graphics.Paint;
 import android.graphics.RadialGradient;
 import android.graphics.Shader;
 import android.graphics.drawable.GradientDrawable;
+import android.os.Handler;
+import android.os.Looper;
 import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
@@ -56,6 +61,7 @@ import android.widget.LinearLayout;
 import android.widget.RadioButton;
 import android.widget.TextView;
 
+import java.lang.ref.WeakReference;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.util.Locale;
@@ -252,6 +258,37 @@ public final class IvaPatch {
     static final String AV_TAG = "iva_nav_avatar";
     static final String AV_RING_TAG = "iva_nav_avatar_ring";
     static final String HOME_VIGNETTE_TAG = "iva_home_vignette";
+    static final long CHAT_REFRESH_MS = 5000L;
+    static final Handler CHAT_HANDLER = new Handler(Looper.getMainLooper());
+    static WeakReference<Activity> chatActivity = new WeakReference<Activity>(null);
+    static final Runnable CHAT_TICK = new Runnable() {
+        @Override public void run() {
+            Activity a = chatActivity.get();
+            if (a == null || a.isFinishing() ||
+                (android.os.Build.VERSION.SDK_INT >= 17 && a.isDestroyed())) {
+                chatActivity.clear();
+                return;
+            }
+            try {
+                Method m = a.getClass().getDeclaredMethod("loadChat");
+                m.setAccessible(true);
+                m.invoke(a);
+            } catch (Throwable ignore) {
+                // A refresh failure must not break navigation; the next tick retries.
+            }
+            CHAT_HANDLER.postDelayed(this, CHAT_REFRESH_MS);
+        }
+    };
+
+    /** Refresh the native chat while its tab is visible; stop it on every other tab. */
+    static void chatPoll(Activity a, boolean active) {
+        CHAT_HANDLER.removeCallbacks(CHAT_TICK);
+        chatActivity.clear();
+        if (active && a != null) {
+            chatActivity = new WeakReference<Activity>(a);
+            CHAT_HANDLER.post(CHAT_TICK);
+        }
+    }
 
     /**
      * 13–14) Фоновая картинка главной страницы уже лежит в вертикальном контейнере pageHome:
@@ -389,8 +426,8 @@ public final class IvaPatch {
     // Этот вызов стоит после всех четырёх setCircle: заливка убирается, а выбранный пункт получает
     // прозрачный круг с оранжевой окантовкой и оранжевые текст/значок.
     public static void onTab(Activity a, String tab) {
+        String t = tab == null ? "" : tab;
         try {
-            String t = tab == null ? "" : tab;
             int orange = navColor(a, "orange", 0xffff9800);
             int gray = navColor(a, "gray", 0xff9aa0a6);
             styleNavItem(a, get(a, "circHome"), get(a, "navHomeIc"), get(a, "navHomeTxt"),
@@ -409,6 +446,7 @@ public final class IvaPatch {
         } catch (Throwable ignore) {
             // подсветка — только внешний вид: переход между разделами не должен ломаться
         }
+        chatPoll(a, "chat".equals(t));
     }
 
     /** Чистая проверка выбора пункта — вынесена отдельно, чтобы её можно было проверить без Activity. */

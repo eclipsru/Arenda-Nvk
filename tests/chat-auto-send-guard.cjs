@@ -10,6 +10,8 @@ const cabinet = read('cabinet.html');
 const chat = read('chat.html');
 const sb = read('assets/sb.js');
 const tool = read('tool.html');
+const nativePatch = read('android/patches/IvaPatch.java');
+const nativeApply = read('android/patches/apply.py');
 
 assert.ok(!cabinet.includes('Вопрос по инструменту'), 'cabinet: preset question must not be sent or prefilled');
 assert.match(cabinet, /openChatWith\(t\.owner_email\|\|OWNER_EMAIL,'',t\)/,
@@ -37,4 +39,19 @@ assert.match(chat, /\}, 5000\);/, 'chat: REST fallback must refresh messages eve
 assert.match(cabinet, /S\.chatSub=subscribeMessages\(onCabinetMessage\)/,
   'cabinet: realtime subscription is missing');
 
-console.log('Чат: автоотправка отключена, контекст инструмента сохраняется, realtime и 5-секундный fallback включены');
+// Native APK: the visible chat tab must refresh the existing MainActivity chat without
+// opening a new conversation or sending anything, and the timer must stop elsewhere.
+assert.match(nativePatch, /static final long CHAT_REFRESH_MS = 5000L/,
+  'native: chat polling interval must be 5 seconds');
+assert.match(nativePatch, /getDeclaredMethod\("loadChat"\)/,
+  'native: polling must call MainActivity.loadChat');
+assert.match(nativePatch, /CHAT_HANDLER\.postDelayed\(this, CHAT_REFRESH_MS\)/,
+  'native: polling must schedule its next refresh');
+assert.match(nativePatch, /CHAT_HANDLER\.removeCallbacks\(CHAT_TICK\)/,
+  'native: polling must be cancellable');
+assert.match(nativePatch, /chatPoll\(a, "chat"\.equals\(t\)\)/,
+  'native: tab changes must enable polling only for chat');
+assert.match(nativeApply, /onTab\(Landroid\/app\/Activity;Ljava\/lang\/String;\)V/,
+  'native: showTab must invoke IvaPatch.onTab');
+
+console.log('Чат: автоотправка отключена, контекст инструмента сохраняется, веб realtime и нативный 5-секундный polling включены');
