@@ -45,9 +45,9 @@ assert.match(nativePatch, /static final long CHAT_REFRESH_MS = 5000L/,
   'native: chat polling interval must be 5 seconds');
 assert.match(nativePatch, /getDeclaredMethod\("loadChat"\)/,
   'native: polling must call MainActivity.loadChat');
-assert.match(nativePatch, /CHAT_HANDLER\.postDelayed\(this, CHAT_REFRESH_MS\)/,
+assert.match(nativePatch, /(?:CHAT_HANDLER\.postDelayed|scheduler\.postDelayed)\(this, CHAT_REFRESH_MS\)/,
   'native: polling must schedule its next refresh');
-assert.match(nativePatch, /CHAT_HANDLER\.removeCallbacks\(CHAT_TICK\)/,
+assert.match(nativePatch, /(?:CHAT_HANDLER\.removeCallbacks|old\.removeCallbacks)\(CHAT_TICK\)/,
   'native: polling must be cancellable');
 assert.match(nativePatch, /chatPoll\(a, "chat"\.equals\(t\)\)/,
   'native: tab changes must enable polling only for chat');
