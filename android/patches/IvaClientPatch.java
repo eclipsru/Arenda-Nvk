@@ -293,6 +293,8 @@ public final class IvaClientPatch {
     static AlertDialog clientProfileDialog;
     static EditText[] clientProfileFields;
     static TextView clientAvatarStatus;
+    static TextView clientProfileCardName;
+    static TextView clientProfileCardInfo;
     static String clientAvatarPath = "";
 
     // Фильтр главной страницы native: те же семь параметров, что и web-каталог.
@@ -519,26 +521,95 @@ public final class IvaClientPatch {
         return page;
     }
 
-    /** Кнопка добавляется в уже существующую прокручиваемую страницу, а не в
-     * landlord_profiles/admins. Поэтому обычный клиент не видит админские поля. */
+    /** Профиль клиента располагается первым блоком в уже существующей странице
+     * кабинета — там же, где штатный кабинет показывает профиль администратора.
+     * В блоке только данные клиента; landlord_profiles/admins не читаются. */
     static void installClientProfile(final Activity a) {
         if (!isClient(a)) return;
         try {
             final ViewGroup host = profileHost(a);
-            if (host == null || host.findViewWithTag(PROFILE_BUTTON_TAG) != null) return;
-            Button b = new Button(a);
-            b.setTag(PROFILE_BUTTON_TAG);
-            b.setText("\u041d\u0430\u0441\u0442\u0440\u043e\u0439\u043a\u0438 \u043f\u0440\u043e\u0444\u0438\u043b\u044f \u043a\u043b\u0438\u0435\u043d\u0442\u0430");
-            b.setAllCaps(false);
-            b.setTextSize(14f);
-            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2);
-            lp.setMargins(px(16, a.getResources().getDisplayMetrics().density), px(8, a.getResources().getDisplayMetrics().density), px(16, a.getResources().getDisplayMetrics().density), px(8, a.getResources().getDisplayMetrics().density));
-            b.setLayoutParams(lp);
-            b.setOnClickListener(new View.OnClickListener() {
+            if (host == null) return;
+            View old = host.findViewWithTag(PROFILE_BUTTON_TAG);
+            if (old != null) {
+                if (old == clientProfileCard) {
+                    updateClientProfileCard(a);
+                    loadClientProfile(a);
+                    return;
+                }
+                if (old.getParent() == host) host.removeView(old);
+            }
+
+            final LinearLayout card = new LinearLayout(a);
+            card.setTag(PROFILE_BUTTON_TAG);
+            card.setOrientation(LinearLayout.VERTICAL);
+            card.setPadding(px(16, a.getResources().getDisplayMetrics().density), px(14, a.getResources().getDisplayMetrics().density), px(16, a.getResources().getDisplayMetrics().density), px(12, a.getResources().getDisplayMetrics().density));
+            GradientDrawable background = new GradientDrawable();
+            background.setColor(0xfffafafa);
+            background.setCornerRadius(px(12, a.getResources().getDisplayMetrics().density));
+            background.setStroke(px(1, a.getResources().getDisplayMetrics().density), 0xffdedede);
+            card.setBackground(background);
+
+            TextView title = new TextView(a);
+            title.setText("Профиль клиента");
+            title.setTextSize(17f);
+            title.setTextColor(Color.DKGRAY);
+            title.setTypeface(null, android.graphics.Typeface.BOLD);
+            card.addView(title, new LinearLayout.LayoutParams(-1, -2));
+            clientProfileCardName = new TextView(a);
+            clientProfileCardName.setTextSize(15f);
+            clientProfileCardName.setTextColor(Color.DKGRAY);
+            clientProfileCardName.setPadding(0, px(7, a.getResources().getDisplayMetrics().density), 0, 0);
+            card.addView(clientProfileCardName, new LinearLayout.LayoutParams(-1, -2));
+            clientProfileCardInfo = new TextView(a);
+            clientProfileCardInfo.setTextSize(13f);
+            clientProfileCardInfo.setTextColor(Color.GRAY);
+            clientProfileCardInfo.setPadding(0, px(3, a.getResources().getDisplayMetrics().density), 0, 0);
+            card.addView(clientProfileCardInfo, new LinearLayout.LayoutParams(-1, -2));
+
+            Button edit = new Button(a);
+            edit.setText("Изменить данные");
+            edit.setAllCaps(false);
+            edit.setTextSize(14f);
+            edit.setOnClickListener(new View.OnClickListener() {
                 @Override public void onClick(View v) { showClientProfile(a); }
             });
-            host.addView(b);
+            LinearLayout.LayoutParams editLp = new LinearLayout.LayoutParams(-1, -2);
+            editLp.setMargins(0, px(10, a.getResources().getDisplayMetrics().density), 0, 0);
+            card.addView(edit, editLp);
+            card.setOnClickListener(new View.OnClickListener() {
+                @Override public void onClick(View v) { showClientProfile(a); }
+            });
+
+            ViewGroup.LayoutParams lp;
+            if (host instanceof LinearLayout) {
+                LinearLayout.LayoutParams llp = new LinearLayout.LayoutParams(-1, -2);
+                llp.setMargins(px(12, a.getResources().getDisplayMetrics().density), px(8, a.getResources().getDisplayMetrics().density), px(12, a.getResources().getDisplayMetrics().density), px(8, a.getResources().getDisplayMetrics().density));
+                lp = llp;
+            } else {
+                lp = new ViewGroup.LayoutParams(-1, -2);
+            }
+            clientProfileCard = card;
+            host.addView(card, 0, lp);
+            updateClientProfileCard(a);
             loadClientProfile(a);
+        } catch (Throwable ignore) {}
+    }
+
+    static void updateClientProfileCard(Activity a) {
+        try {
+            if (clientProfileCardName == null || clientProfileCardInfo == null) return;
+            ensureClientProfile();
+            String name = profileName(clientProfile);
+            if (name.length() == 0) name = activityText(a, "userName").trim();
+            if (name.length() == 0) name = "Имя пока не указано";
+            clientProfileCardName.setText(name);
+            String phone = clientProfile.optString("phone", "").trim();
+            String address = clientProfile.optString("address", "").trim();
+            String email = activityText(a, "userEmail").trim();
+            String info = phone.length() > 0 ? phone : email;
+            if (address.length() > 0) info = info.length() > 0 ? info + "\n" + address : address;
+            if (info.length() == 0) info = "Откройте настройки, чтобы заполнить данные";
+            clientProfileCardInfo.setText(info);
         } catch (Throwable ignore) {}
     }
 
@@ -592,6 +663,7 @@ public final class IvaClientPatch {
                     clientProfileUid = p.optString("user_id", "");
                     clientAvatarPath = p.optString("avatar_path", "");
                     a.runOnUiThread(new Runnable() { @Override public void run() {
+                        updateClientProfileCard(a);
                         Object dialog = clientProfileDialog;
                         if (dialog instanceof AlertDialog && ((AlertDialog) dialog).isShowing()) fillClientProfileFields();
                     }});
@@ -656,7 +728,7 @@ public final class IvaClientPatch {
             } catch (Throwable t) { Toast.makeText(a, "Не удалось открыть выбор файла", Toast.LENGTH_SHORT).show(); }
         }});
 
-        AlertDialog d = new AlertDialog.Builder(a).setTitle("Профиль клиента").setView(box).setNegativeButton("Отмена", null).setPositiveButton("Сохранить", null).create();
+        AlertDialog d = new AlertDialog.Builder(a).setTitle("Настройки профиля клиента").setView(box).setNegativeButton("Отмена", null).setPositiveButton("Сохранить", null).create();
         clientProfileDialog = d;
         d.setOnShowListener(new DialogInterface.OnShowListener() { @Override public void onShow(DialogInterface x) {
             d.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(new View.OnClickListener() { @Override public void onClick(View v) {
@@ -854,6 +926,7 @@ public final class IvaClientPatch {
                     if (ring != null) box.removeView(ring);
                     ViewGroup ph = profileHost(a);
                     if (ph != null) { View pb = ph.findViewWithTag(PROFILE_BUTTON_TAG); if (pb != null) ph.removeView(pb); }
+                    clientProfileCard = null; clientProfileCardName = null; clientProfileCardInfo = null;
                     clientProfile = new JSONObject(); clientProfileEmail = ""; clientProfileUid = ""; clientAvatarPath = ""; clientCoords = null; clientCoordsLoading = false; activeDetail = null; synchronized (nativeDistanceCache) { nativeDistanceCache.clear(); } synchronized (nativeGeoCache) { nativeGeoCache.clear(); } allNativeTools = null; nativeFilterActive = false; nativeFilterQuery = nativeFilterCat = nativeFilterSub = nativeFilterCity = nativeFilterFrom = nativeFilterTo = nativeFilterConds = ""; nativeFilterDelivery = false;
                     onTab(a, (String) get(a, "curTab"));
                 } catch (Throwable ignore) {

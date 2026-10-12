@@ -43,8 +43,7 @@ try {
   for (const k of [...insertions, ...anchors]) assert.ok(ap.includes(k), `apply.py: нет ${k}`);
   const jp = R('android/patches/IvaPatch.java');
   const jpc = R('android/patches/IvaClientPatch.java');
-  // 10.30 — подключён ровно один клиентский hook: onProfile.
-  // Остальные точки остаются выключенными, чтобы проверять их по одной.
+  // 10.31 — подключён только onProfile; клиентская карточка должна быть первым блоком кабинета.
   assert.match(code, /android\/patches\/IvaPatch\.java android\/patches\/IvaClientPatch\.java 2>&1/,
     `${f}: шаг 10.30 не компилирует IvaClientPatch`);
   assert.match(ap, /IvaClientPatch;->onProfile\(Landroid\/app\/Activity;\)V/,
@@ -54,6 +53,8 @@ try {
       `${f}: hook ${call} должен оставаться выключенным`);
   for (const k of ['onProfile(Activity', 'onFeed(Activity', 'onDetail(Activity', 'installHomeFilter(final Activity', 'loadNativeClientCoords(final Activity'])
     assert.ok(jpc.includes(k), `IvaClientPatch.java: нет метода ${k}`);
+  assert.match(jpc, /host\.addView\(card, 0, lp\)/, 'IvaClientPatch: карточка клиента должна быть первой в кабинете');
+  assert.match(jpc, /Настройки профиля клиента/, 'IvaClientPatch: нет заголовка настроек клиента');
   for (const k of ['onPrice(String', 'onSummary(final Activity', 'onHub(Activity', 'publishError(String', 'netError(String',
     'onCreated(Activity', 'onSession(Activity', 'onAvatar(final Activity', 'onLogout(final Activity', 'onTab(Activity',
     'navSelected(String', 'isLogoTab(String', 'styleAvatarOutline(Activity', 'wantsAvatar(String', 'installHomeVignette(Activity',
