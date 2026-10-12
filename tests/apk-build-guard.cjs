@@ -42,6 +42,11 @@ try {
     "one_method(lines, r' showTab\\(Ljava/lang/String;\\)V$')", 'lambda\\$loadAdminProfile\\$201', '"avatar"'];
   for (const k of [...insertions, ...anchors]) assert.ok(ap.includes(k), `apply.py: нет ${k}`);
   const jp = R('android/patches/IvaPatch.java');
+  const jpc = R('android/patches/IvaClientPatch.java');
+  assert.match(code, /android\/patches\/IvaPatch\.java android\/patches\/IvaClientPatch\.java/, `${f}: клиентский native-класс не компилируется`);
+  assert.match(ap, /IvaClientPatch/, `${f}: новые клиентские hooks не изолированы`);
+  for (const k of ['onProfile(Activity', 'onFeed(Activity', 'onDetail(Activity', 'installHomeFilter(final Activity', 'loadNativeClientCoords(final Activity'])
+    assert.ok(jpc.includes(k), `IvaClientPatch.java: нет метода ${k}`);
   for (const k of ['onPrice(String', 'onSummary(final Activity', 'onHub(Activity', 'publishError(String', 'netError(String',
     'onCreated(Activity', 'onSession(Activity', 'onAvatar(final Activity', 'onLogout(final Activity', 'onTab(Activity',
     'navSelected(String', 'isLogoTab(String', 'styleAvatarOutline(Activity', 'wantsAvatar(String', 'installHomeVignette(Activity',

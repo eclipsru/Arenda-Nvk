@@ -5,7 +5,7 @@
 Строго: каждое место вставки должно найтись ровно столько раз, сколько ожидается,
 иначе — ошибка и сборка останавливается (молча кривой APK не получится).
 
-Вставки в smali/ru/prokatnvsk/app/MainActivity.smali (класс IvaPatch — android/patches/IvaPatch.java):
+Вставки в smali/ru/prokatnvsk/app/MainActivity.smali: старые hooks используют IvaPatch, новые клиентские — IvaClientPatch.
   1. lambda$calcDelivery$… : перед каждой записью delivTxt → IvaPatch.onPrice(текст) (×4, неразрывный пробел)
   2. updateSummary()        : в начале → IvaPatch.onSummary(this) (галочка «Туда и обратно», «от N ₽/км»)
   3. paintDelToggle(Z)      : тексты кнопки «Доставка: есть / нет» с подсказкой (форма админа)
@@ -17,12 +17,12 @@
   9. lambda$loadAdminProfile$201(String)     : после чтения поля avatar → IvaPatch.onAvatar(this, адрес) (аватарка в «Кабинете»)
  10. logoutLocal()                           : в конце → IvaPatch.onLogout(this) (выход: иконка «Кабинета» снова на месте)
  11. showTab(String)                         : после штатного выбора вкладки → IvaPatch.onTab(this, имя) (оранжевая окантовка без заливки)
- 12. renderProfile()                         : профиль обычного клиента (аватарка, ФИО, телефон, адрес, паспорт)
- 13. renderFeed()                            : расстояние до пункта выдачи с fallback по адресу/геолокации
- 14. lambda$loadCatalog$70$…                 : повторное применение компактного фильтра после обновления каталога
- 15. onActivityResult(I,I,Intent)            : загрузка клиентской аватарки из приватного bucket
- 16. onRequestPermissionsResult(I,String[],int[]): повторный расчёт после разрешения геолокации
- 17. openDetail(JSONObject,boolean)          : автоматическая оценка стоимости доставки по тарифу объявления
+ 12. renderProfile()                         : IvaClientPatch — профиль обычного клиента (аватарка, ФИО, телефон, адрес, паспорт)
+ 13. renderFeed()                            : IvaClientPatch — расстояние до пункта выдачи с fallback по адресу/геолокации
+ 14. lambda$loadCatalog$70$…                 : IvaClientPatch — повторное применение компактного фильтра после обновления каталога
+ 15. onActivityResult(I,I,Intent)            : IvaClientPatch — загрузка клиентской аватарки из приватного bucket
+ 16. onRequestPermissionsResult(I,String[],int[]): IvaClientPatch — повторный расчёт после разрешения геолокации
+ 17. openDetail(JSONObject,boolean)          : IvaClientPatch — автоматическая оценка стоимости доставки по тарифу объявления
 Плюс versionCode/versionName в apktool.yml и runtime permissions в binary manifest.
 """
 import os
@@ -31,6 +31,7 @@ import sys
 from pathlib import Path
 
 P = 'Lru/prokatnvsk/app/IvaPatch;'
+PC = 'Lru/prokatnvsk/app/IvaClientPatch;'
 DELIV = 'Lru/prokatnvsk/app/MainActivity;->delivTxt:Ljava/lang/String;'
 
 
@@ -183,7 +184,7 @@ def patch(lines):
     # 12. штатный renderProfile: обычный клиент получает безопасную кнопку
     #     профиля, а landlord/admin остаётся на своём существующем экране.
     s, e = one_method(lines, r' renderProfile\(\)V$')
-    before_return(lines, s, e, f'invoke-static/range {{p0 .. p0}}, {P}->onProfile(Landroid/app/Activity;)V', 'renderProfile')
+    before_return(lines, s, e, f'invoke-static/range {{p0 .. p0}}, {PC}->onProfile(Landroid/app/Activity;)V', 'renderProfile')
     done.append('12 onProfile')
 
     # 13. native home: расстояние до пункта выдачи и компактный фильтр.
@@ -192,7 +193,7 @@ def patch(lines):
     if len(rets) < 2:
         die(f'renderFeed: return-void найдено {len(rets)}, нужно минимум 2')
     for i in reversed(rets):
-        lines[i:i] = ['', f'    invoke-static/range {{p0 .. p0}}, {P}->onFeed(Landroid/app/Activity;)V']
+        lines[i:i] = ['', f'    invoke-static/range {{p0 .. p0}}, {PC}->onFeed(Landroid/app/Activity;)V']
     done.append(f'13 onFeed ×{len(rets)}')
 
     # 14. После загрузки каталога сохраняем полный список: фильтр можно
@@ -201,25 +202,25 @@ def patch(lines):
     loc = [i for i in range(s, e) if lines[i].strip().startswith('.locals')]
     if len(loc) != 1:
         die('loadCatalog UI: нет .locals')
-    lines[loc[0] + 1:loc[0] + 1] = ['', f'    invoke-static/range {{p0 .. p0}}, {P}->onCatalogLoaded(Landroid/app/Activity;)V']
+    lines[loc[0] + 1:loc[0] + 1] = ['', f'    invoke-static/range {{p0 .. p0}}, {PC}->onCatalogLoaded(Landroid/app/Activity;)V']
     done.append('14 onCatalogLoaded')
 
     # 15. Выбор файла аватарки клиента. Штатные request-коды 5401–5403
-    #     не трогаем: собственный код 6403 обрабатывается только IvaPatch.
+    #     не трогаем: собственный код 6403 обрабатывается только IvaClientPatch.
     s, e = one_method(lines, r' onActivityResult\(IILandroid/content/Intent;\)V$')
-    before_return(lines, s, e, f'invoke-static/range {{p0 .. p3}}, {P}->onActivityResult(Landroid/app/Activity;IILandroid/content/Intent;)V', 'onActivityResult')
+    before_return(lines, s, e, f'invoke-static/range {{p0 .. p3}}, {PC}->onActivityResult(Landroid/app/Activity;IILandroid/content/Intent;)V', 'onActivityResult')
     done.append('15 client avatar result')
 
     # 16. После системного диалога разрешений повторяем fallback: GPS имеет
     #     приоритет, адрес клиента используется без разрешения геолокации.
     s, e = one_method(lines, r' onRequestPermissionsResult\(I\[Ljava/lang/String;\[I\)V$')
-    before_return(lines, s, e, f'invoke-static/range {{p0 .. p3}}, {P}->onLocationPermission(Landroid/app/Activity;[I)V', 'onRequestPermissionsResult')
+    before_return(lines, s, e, f'invoke-static/range {{p0 .. p3}}, {PC}->onLocationPermission(Landroid/app/Activity;[I)V', 'onRequestPermissionsResult')
     done.append('16 location permission')
 
     # 17. Карточка инструмента: штатный экран уже показывает тариф объявления,
-    #     а IvaPatch дописывает автоматическую сумму до выбранной точки клиента.
+    #     а IvaClientPatch дописывает автоматическую сумму до выбранной точки клиента.
     s, e = one_method(lines, r' openDetail\(Lorg/json/JSONObject;Z\)V$')
-    before_return(lines, s, e, f'invoke-static/range {{p0 .. p2}}, {P}->onDetail(Landroid/app/Activity;Lorg/json/JSONObject;Z)V', 'openDetail')
+    before_return(lines, s, e, f'invoke-static/range {{p0 .. p2}}, {PC}->onDetail(Landroid/app/Activity;Lorg/json/JSONObject;Z)V', 'openDetail')
     done.append('17 onDetail')
     return done
 
