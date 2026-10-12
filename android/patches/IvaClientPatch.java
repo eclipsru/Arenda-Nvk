@@ -278,7 +278,6 @@ public final class IvaClientPatch {
     static final String AV_TAG = "iva_nav_avatar";
     static final String AV_RING_TAG = "iva_nav_avatar_ring";
     static final String HOME_VIGNETTE_TAG = "iva_home_vignette";
-    static final String PROFILE_BUTTON_TAG = "iva_client_profile_button";
     static final String FILTER_BUTTON_TAG = "iva_catalog_filter_button";
     static final String DISTANCE_TAG = "iva_distance_";
     static final int CLIENT_AVATAR_REQUEST = 6403;
@@ -293,10 +292,8 @@ public final class IvaClientPatch {
     static AlertDialog clientProfileDialog;
     static EditText[] clientProfileFields;
     static TextView clientAvatarStatus;
-    static View clientProfileCard;
+    static ImageView clientAvatarPreview;
     static View clientProfileHead;
-    static TextView clientProfileCardName;
-    static TextView clientProfileCardInfo;
     static String clientAvatarPath = "";
 
     // Фильтр главной страницы native: те же семь параметров, что и web-каталог.
@@ -523,78 +520,13 @@ public final class IvaClientPatch {
         return page;
     }
 
-    /** Профиль клиента располагается первым блоком в уже существующей странице
-     * кабинета — там же, где штатный кабинет показывает профиль администратора.
-     * В блоке только данные клиента; landlord_profiles/admins не читаются. */
+    /** Клиент не получает отдельную светлую карточку в кабинете: штатная
+     * строка «Клиент» остаётся единственной точкой входа, а данные и настройки
+     * открываются по нажатию на неё. */
     static void installClientProfile(final Activity a) {
         if (!isClient(a)) return;
         try {
-            final ViewGroup host = profileHost(a);
-            if (host == null) return;
-            View old = host.findViewWithTag(PROFILE_BUTTON_TAG);
-            if (old != null) {
-                if (old == clientProfileCard) {
-                    installClientProfileHead(a);
-                    updateClientProfileCard(a);
-                    loadClientProfile(a);
-                    return;
-                }
-                if (old.getParent() == host) host.removeView(old);
-            }
-
-            final LinearLayout card = new LinearLayout(a);
-            card.setTag(PROFILE_BUTTON_TAG);
-            card.setOrientation(LinearLayout.VERTICAL);
-            card.setPadding(px(16, a.getResources().getDisplayMetrics().density), px(14, a.getResources().getDisplayMetrics().density), px(16, a.getResources().getDisplayMetrics().density), px(12, a.getResources().getDisplayMetrics().density));
-            GradientDrawable background = new GradientDrawable();
-            background.setColor(0xfffafafa);
-            background.setCornerRadius(px(12, a.getResources().getDisplayMetrics().density));
-            background.setStroke(px(1, a.getResources().getDisplayMetrics().density), 0xffdedede);
-            card.setBackground(background);
-
-            TextView title = new TextView(a);
-            title.setText("Профиль клиента");
-            title.setTextSize(17f);
-            title.setTextColor(Color.DKGRAY);
-            title.setTypeface(null, android.graphics.Typeface.BOLD);
-            card.addView(title, new LinearLayout.LayoutParams(-1, -2));
-            clientProfileCardName = new TextView(a);
-            clientProfileCardName.setTextSize(15f);
-            clientProfileCardName.setTextColor(Color.DKGRAY);
-            clientProfileCardName.setPadding(0, px(7, a.getResources().getDisplayMetrics().density), 0, 0);
-            card.addView(clientProfileCardName, new LinearLayout.LayoutParams(-1, -2));
-            clientProfileCardInfo = new TextView(a);
-            clientProfileCardInfo.setTextSize(13f);
-            clientProfileCardInfo.setTextColor(Color.GRAY);
-            clientProfileCardInfo.setPadding(0, px(3, a.getResources().getDisplayMetrics().density), 0, 0);
-            card.addView(clientProfileCardInfo, new LinearLayout.LayoutParams(-1, -2));
-
-            Button edit = new Button(a);
-            edit.setText("Изменить данные");
-            edit.setAllCaps(false);
-            edit.setTextSize(14f);
-            edit.setOnClickListener(new View.OnClickListener() {
-                @Override public void onClick(View v) { showClientProfile(a); }
-            });
-            LinearLayout.LayoutParams editLp = new LinearLayout.LayoutParams(-1, -2);
-            editLp.setMargins(0, px(10, a.getResources().getDisplayMetrics().density), 0, 0);
-            card.addView(edit, editLp);
-            card.setOnClickListener(new View.OnClickListener() {
-                @Override public void onClick(View v) { showClientProfile(a); }
-            });
-
-            ViewGroup.LayoutParams lp;
-            if (host instanceof LinearLayout) {
-                LinearLayout.LayoutParams llp = new LinearLayout.LayoutParams(-1, -2);
-                llp.setMargins(px(12, a.getResources().getDisplayMetrics().density), px(8, a.getResources().getDisplayMetrics().density), px(12, a.getResources().getDisplayMetrics().density), px(8, a.getResources().getDisplayMetrics().density));
-                lp = llp;
-            } else {
-                lp = new ViewGroup.LayoutParams(-1, -2);
-            }
-            clientProfileCard = card;
-            host.addView(card, 0, lp);
             installClientProfileHead(a);
-            updateClientProfileCard(a);
             loadClientProfile(a);
         } catch (Throwable ignore) {}
     }
@@ -631,39 +563,41 @@ public final class IvaClientPatch {
         } catch (Throwable ignore) {}
     }
 
-    static void updateClientProfileCard(Activity a) {
-        try {
-            if (clientProfileCardName == null || clientProfileCardInfo == null) return;
-            ensureClientProfile();
-            String name = profileName(clientProfile);
-            if (name.length() == 0) name = activityText(a, "userName").trim();
-            if (name.length() == 0) name = "Имя пока не указано";
-            clientProfileCardName.setText(name);
-            String phone = clientProfile.optString("phone", "").trim();
-            String address = clientProfile.optString("address", "").trim();
-            String email = activityText(a, "userEmail").trim();
-            String info = phone.length() > 0 ? phone : email;
-            if (address.length() > 0) info = info.length() > 0 ? info + "\n" + address : address;
-            if (info.length() == 0) info = "Откройте настройки, чтобы заполнить данные";
-            clientProfileCardInfo.setText(info);
-        } catch (Throwable ignore) {}
-    }
-
     static EditText profileEdit(Activity a, LinearLayout box, String label, String value, int inputType) {
+        float d = a.getResources().getDisplayMetrics().density;
         TextView l = new TextView(a);
         l.setText(label);
         l.setTextSize(13f);
-        l.setTextColor(Color.GRAY);
-        l.setPadding(0, px(8, a.getResources().getDisplayMetrics().density), 0, px(3, a.getResources().getDisplayMetrics().density));
+        l.setTextColor(0xffb8bbc5);
+        l.setPadding(0, px(9, d), 0, px(4, d));
         box.addView(l);
         EditText e = new EditText(a);
         e.setSingleLine(false);
         e.setText(value == null ? "" : value);
         e.setTextSize(15f);
+        e.setTextColor(0xfff5f5f7);
+        e.setHintTextColor(0xff777b87);
         e.setInputType(inputType);
-        e.setPadding(px(10, a.getResources().getDisplayMetrics().density), px(8, a.getResources().getDisplayMetrics().density), px(10, a.getResources().getDisplayMetrics().density), px(8, a.getResources().getDisplayMetrics().density));
+        e.setPadding(px(12, d), px(8, d), px(12, d), px(8, d));
+        GradientDrawable fieldBg = new GradientDrawable();
+        fieldBg.setColor(0xff1b1e26);
+        fieldBg.setCornerRadius(px(8, d));
+        fieldBg.setStroke(px(1, d), 0xff3a3e49);
+        e.setBackground(fieldBg);
         box.addView(e, new LinearLayout.LayoutParams(-1, -2));
         return e;
+    }
+
+    static void styleProfileButton(Button b, Activity a) {
+        float d = a.getResources().getDisplayMetrics().density;
+        b.setAllCaps(false);
+        b.setTextSize(14f);
+        b.setTextColor(Color.WHITE);
+        b.setPadding(px(14, d), px(8, d), px(14, d), px(8, d));
+        GradientDrawable bg = new GradientDrawable();
+        bg.setColor(0xffff9518);
+        bg.setCornerRadius(px(9, d));
+        b.setBackground(bg);
     }
 
     static String activityText(Activity a, String name) {
@@ -699,7 +633,6 @@ public final class IvaClientPatch {
                     clientProfileUid = p.optString("user_id", "");
                     clientAvatarPath = p.optString("avatar_path", "");
                     a.runOnUiThread(new Runnable() { @Override public void run() {
-                        updateClientProfileCard(a);
                         Object dialog = clientProfileDialog;
                         if (dialog instanceof AlertDialog && ((AlertDialog) dialog).isShowing()) fillClientProfileFields();
                     }});
@@ -730,49 +663,112 @@ public final class IvaClientPatch {
         ensureClientProfile();
         if (!isClient(a)) return;
         loadClientProfile(a);
+        final float dpx = a.getResources().getDisplayMetrics().density;
+        final ScrollView scroll = new ScrollView(a);
+        scroll.setFillViewport(true);
+        scroll.setBackgroundColor(0xff111318);
         final LinearLayout box = new LinearLayout(a);
         box.setOrientation(LinearLayout.VERTICAL);
-        box.setPadding(px(20, a.getResources().getDisplayMetrics().density), px(4, a.getResources().getDisplayMetrics().density), px(20, a.getResources().getDisplayMetrics().density), 0);
+        box.setPadding(px(20, dpx), px(4, dpx), px(20, dpx), px(12, dpx));
+        scroll.addView(box, new ScrollView.LayoutParams(-1, -2));
+
         TextView privacy = new TextView(a);
-        privacy.setText("Фамилия, имя, отчество, телефон и адрес нужны для оформления аренды. Паспортные данные необязательны и помогают ускорить оформление договора; они не публикуются для арендодателя.");
+        privacy.setText("Данные нужны для оформления аренды. Паспортные данные необязательны, хранятся в защищённой записи клиента и не показываются арендодателю.");
         privacy.setTextSize(12.5f);
-        privacy.setTextColor(Color.GRAY);
+        privacy.setTextColor(0xffaeb2bd);
         privacy.setLineSpacing(0, 1.15f);
-        box.addView(privacy);
+        box.addView(privacy, new LinearLayout.LayoutParams(-1, -2));
+
+        TextView avatarTitle = new TextView(a);
+        avatarTitle.setText("Фотография профиля");
+        avatarTitle.setTextSize(13f);
+        avatarTitle.setTextColor(0xffb8bbc5);
+        avatarTitle.setPadding(0, px(15, dpx), 0, px(5, dpx));
+        box.addView(avatarTitle);
+        LinearLayout avatarRow = new LinearLayout(a);
+        avatarRow.setGravity(Gravity.CENTER_VERTICAL);
+        clientAvatarPreview = new ImageView(a);
+        clientAvatarPreview.setScaleType(ImageView.ScaleType.CENTER_CROP);
+        GradientDrawable avatarBg = new GradientDrawable();
+        avatarBg.setColor(0xffff9518);
+        avatarBg.setShape(GradientDrawable.OVAL);
+        clientAvatarPreview.setBackground(avatarBg);
+        avatarRow.addView(clientAvatarPreview, new LinearLayout.LayoutParams(px(56, dpx), px(56, dpx)));
+        LinearLayout avatarActions = new LinearLayout(a);
+        avatarActions.setOrientation(LinearLayout.VERTICAL);
+        avatarActions.setPadding(px(12, dpx), 0, 0, 0);
+        Button av = new Button(a);
+        av.setText("Добавить аватарку");
+        styleProfileButton(av, a);
+        avatarActions.addView(av, new LinearLayout.LayoutParams(-2, -2));
+        clientAvatarStatus = new TextView(a);
+        clientAvatarStatus.setTextSize(12f);
+        clientAvatarStatus.setTextColor(0xffaeb2bd);
+        clientAvatarStatus.setText(clientProfile.optString("avatar_path", "").isEmpty() ? "JPG или PNG" : "Аватарка загружена");
+        avatarActions.addView(clientAvatarStatus, new LinearLayout.LayoutParams(-2, -2));
+        avatarRow.addView(avatarActions, new LinearLayout.LayoutParams(-1, -2));
+        box.addView(avatarRow, new LinearLayout.LayoutParams(-1, -2));
+        av.setOnClickListener(new View.OnClickListener() { @Override public void onClick(View v) {
+            try {
+                Intent i = new Intent("android.intent.action.GET_CONTENT");
+                i.setType("image/*");
+                i.addCategory(Intent.CATEGORY_OPENABLE);
+                a.startActivityForResult(Intent.createChooser(i, "Аватарка профиля"), CLIENT_AVATAR_REQUEST);
+            } catch (Throwable t) {
+                Toast.makeText(a, "Не удалось открыть выбор файла", Toast.LENGTH_SHORT).show();
+            }
+        }});
+
+        TextView personalTitle = new TextView(a);
+        personalTitle.setText("Личные данные");
+        personalTitle.setTextSize(15f);
+        personalTitle.setTextColor(0xffffa12a);
+        personalTitle.setTypeface(null, android.graphics.Typeface.BOLD);
+        personalTitle.setPadding(0, px(18, dpx), 0, 0);
+        box.addView(personalTitle);
         EditText surname = profileEdit(a, box, "Фамилия", clientProfile.optString("surname", ""), InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_CAP_WORDS);
         EditText given = profileEdit(a, box, "Имя *", clientProfile.optString("given_name", activityText(a, "userName")), InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_CAP_WORDS);
         EditText patronymic = profileEdit(a, box, "Отчество", clientProfile.optString("patronymic", ""), InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_CAP_WORDS);
         EditText phone = profileEdit(a, box, "Номер телефона", clientProfile.optString("phone", activityText(a, "userPhone")), InputType.TYPE_CLASS_PHONE);
         EditText address = profileEdit(a, box, "Адрес", clientProfile.optString("address", ""), InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_CAP_SENTENCES);
-        EditText passportSeries = profileEdit(a, box, "Паспорт: серия (необязательно)", "", InputType.TYPE_CLASS_TEXT);
-        EditText passportNumber = profileEdit(a, box, "Паспорт: номер (необязательно)", "", InputType.TYPE_CLASS_NUMBER);
-        EditText passportIssuedBy = profileEdit(a, box, "Паспорт: кем выдан", "", InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_CAP_SENTENCES);
-        EditText passportIssuedAt = profileEdit(a, box, "Паспорт: дата выдачи", "", InputType.TYPE_CLASS_DATETIME);
-        clientProfileFields = new EditText[] {surname, given, patronymic, phone, address, passportSeries, passportNumber, passportIssuedBy, passportIssuedAt};
+        clientProfileFields = new EditText[] {surname, given, patronymic, phone, address, null, null, null, null};
+
+        TextView passportTitle = new TextView(a);
+        passportTitle.setText("Паспортные данные — необязательно");
+        passportTitle.setTextSize(15f);
+        passportTitle.setTextColor(0xffffa12a);
+        passportTitle.setTypeface(null, android.graphics.Typeface.BOLD);
+        passportTitle.setPadding(0, px(18, dpx), 0, 0);
+        box.addView(passportTitle);
+        EditText passportSeries = profileEdit(a, box, "Серия", "", InputType.TYPE_CLASS_TEXT);
+        EditText passportNumber = profileEdit(a, box, "Номер", "", InputType.TYPE_CLASS_NUMBER);
+        EditText passportIssuedBy = profileEdit(a, box, "Кем выдан", "", InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_CAP_SENTENCES);
+        EditText passportIssuedAt = profileEdit(a, box, "Дата выдачи", "", InputType.TYPE_CLASS_DATETIME);
+        clientProfileFields[5] = passportSeries;
+        clientProfileFields[6] = passportNumber;
+        clientProfileFields[7] = passportIssuedBy;
+        clientProfileFields[8] = passportIssuedAt;
         fillClientProfileFields();
 
-        Button av = new Button(a);
-        av.setText("Загрузить аватарку"); av.setAllCaps(false); av.setTextSize(14f);
-        box.addView(av, new LinearLayout.LayoutParams(-1, -2));
-        clientAvatarStatus = new TextView(a);
-        clientAvatarStatus.setTextSize(12f); clientAvatarStatus.setTextColor(Color.GRAY);
-        box.addView(clientAvatarStatus);
-        av.setOnClickListener(new View.OnClickListener() { @Override public void onClick(View v) {
-            try {
-                Intent i = new Intent("android.intent.action.GET_CONTENT"); i.setType("image/*");
-                a.startActivityForResult(Intent.createChooser(i, "Аватарка профиля"), CLIENT_AVATAR_REQUEST);
-            } catch (Throwable t) { Toast.makeText(a, "Не удалось открыть выбор файла", Toast.LENGTH_SHORT).show(); }
-        }});
-
-        AlertDialog d = new AlertDialog.Builder(a).setTitle("Настройки профиля клиента").setView(box).setNegativeButton("Отмена", null).setPositiveButton("Сохранить", null).create();
+        AlertDialog d = new AlertDialog.Builder(a)
+            .setTitle("Настройки профиля клиента")
+            .setView(scroll)
+            .setNegativeButton("Отмена", null)
+            .setPositiveButton("Сохранить", null)
+            .create();
         clientProfileDialog = d;
         d.setOnShowListener(new DialogInterface.OnShowListener() { @Override public void onShow(DialogInterface x) {
+            d.getButton(AlertDialog.BUTTON_POSITIVE).setTextColor(0xffff9518);
+            d.getButton(AlertDialog.BUTTON_NEGATIVE).setTextColor(0xffff9518);
             d.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(new View.OnClickListener() { @Override public void onClick(View v) {
                 saveClientProfile(a, d);
             }});
         }});
         d.setOnDismissListener(new DialogInterface.OnDismissListener() { @Override public void onDismiss(DialogInterface x) {
-            clientProfileDialog = null; clientProfileFields = null; clientAvatarStatus = null;
+            clientProfileDialog = null;
+            clientProfileFields = null;
+            clientAvatarStatus = null;
+            clientAvatarPreview = null;
         }});
         d.show();
     }
@@ -960,9 +956,7 @@ public final class IvaClientPatch {
                     View ring = box == null ? null : box.findViewWithTag(AV_RING_TAG);
                     if (av != null) box.removeView(av);
                     if (ring != null) box.removeView(ring);
-                    ViewGroup ph = profileHost(a);
-                    if (ph != null) { View pb = ph.findViewWithTag(PROFILE_BUTTON_TAG); if (pb != null) ph.removeView(pb); }
-                    clientProfileCard = null; clientProfileHead = null; clientProfileCardName = null; clientProfileCardInfo = null;
+                    clientProfileHead = null;
                     clientProfile = new JSONObject(); clientProfileEmail = ""; clientProfileUid = ""; clientAvatarPath = ""; clientCoords = null; clientCoordsLoading = false; activeDetail = null; synchronized (nativeDistanceCache) { nativeDistanceCache.clear(); } synchronized (nativeGeoCache) { nativeGeoCache.clear(); } allNativeTools = null; nativeFilterActive = false; nativeFilterQuery = nativeFilterCat = nativeFilterSub = nativeFilterCity = nativeFilterFrom = nativeFilterTo = nativeFilterConds = ""; nativeFilterDelivery = false;
                     onTab(a, (String) get(a, "curTab"));
                 } catch (Throwable ignore) {
@@ -1154,7 +1148,12 @@ public final class IvaClientPatch {
         if (clientAvatarStatus != null) clientAvatarStatus.setText("Загружаем аватарку…");
         new Thread(new Runnable() { @Override public void run() {
             try {
-                final String path = uploadClientAvatar(a, readUri(a, data.getData()));
+                final byte[] bytes = readUri(a, data.getData());
+                final Bitmap preview = BitmapFactory.decodeByteArray(bytes, 0, bytes.length);
+                a.runOnUiThread(new Runnable() { @Override public void run() {
+                    if (clientAvatarPreview != null && preview != null) clientAvatarPreview.setImageBitmap(preview);
+                }});
+                final String path = uploadClientAvatar(a, bytes);
                 clientAvatarPath = path; clientProfileUid = authUid(a);
                 try { clientProfile.put("avatar_path", path); } catch (Throwable ignore) {}
                 a.runOnUiThread(new Runnable() { @Override public void run() {

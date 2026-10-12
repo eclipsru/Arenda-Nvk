@@ -18,7 +18,8 @@
  10. logoutLocal()                           : в конце → IvaPatch.onLogout(this) (выход: иконка «Кабинета» снова на месте)
  11. showTab(String)                         : после штатного выбора вкладки → IvaPatch.onTab(this, имя) (оранжевая окантовка без заливки)
  12. renderProfile()                          : только на шаге 10.30 → IvaClientPatch.onProfile(this) (профиль обычного клиента)
-Плюс versionCode/versionName в apktool.yml.
+ 13. onActivityResult(I,I,Intent)              : шаг 10.34 → IvaClientPatch.onActivityResult(this, ...) (аватарка клиента)
+ Плюс versionCode/versionName в apktool.yml.
 """
 import os
 import re
@@ -181,6 +182,15 @@ def patch(lines):
     s, e = one_method(lines, r' renderProfile\(\)V$')
     before_return(lines, s, e, f'invoke-static/range {{p0 .. p0}}, Lru/prokatnvsk/app/IvaClientPatch;->onProfile(Landroid/app/Activity;)V', 'client onProfile')
     done.append('12 client onProfile')
+
+    # 13. Результат системного выбора изображения → клиентский uploader
+    #     аватарки. Hook вызывается для всех результатов, но сам патч
+    #     немедленно выходит для чужих requestCode/экранов.
+    s, e = one_method(lines, r' onActivityResult\(IILandroid/content/Intent;\)V$')
+    before_return(lines, s, e,
+                  f'invoke-static/range {{p0 .. p3}}, Lru/prokatnvsk/app/IvaClientPatch;->onActivityResult(Landroid/app/Activity;IILandroid/content/Intent;)V',
+                  'client onActivityResult')
+    done.append('13 client onActivityResult')
     return done
 
 
