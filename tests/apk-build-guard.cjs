@@ -46,7 +46,7 @@ try {
   // 10.40 — штатная строка «Клиент» остаётся единственной точкой входа, но открывает
   // отдельный полноэкранный экран настроек (не AlertDialog-форму); hook onActivityResult
   // в MainActivity по-прежнему отключён (с 10.39), фото возвращается во вспомогательный Fragment.
-  assert.match(code, /android\/patches\/IvaPatch\.java android\/patches\/IvaClientPatch\.java 2>&1/,
+  assert.match(code, /android\/patches\/IvaPatch\.java android\/patches\/IvaClientPatch\.java android\/patches\/IvaSearchPatch\.java 2>&1/,
     `${f}: шаг 10.30 не компилирует IvaClientPatch`);
   assert.match(ap, /IvaClientPatch;->onProfile\(Landroid\/app\/Activity;\)V/,
     `${f}: hook onProfile не подключён`);
@@ -93,7 +93,7 @@ try {
   assert.match(jpc, /View plus = a\.findViewById\(id\(a, "navPlus"\)\);/, 'IvaClientPatch: обработчик логотипа не ставится на navPlus');
   assert.match(jpc, /if \(toHub && openClientHub\(a\)\) return;\n\s*callNativeTab\(a, "home"\);/, 'IvaClientPatch: «Назад» в карточке инструмента должна вести на главную, как штатная');
   assert.match(jpc, /try \{ installClientNav\(a\); \} catch \(Throwable ignore\) \{\}\n\s*try \{ if \(hubVisible && !isClient\(a\)\) callNativeTab\(a, "home"\); \}/, 'IvaClientPatch: onProfile не ставит логотип клиента или не прячет раздел при выходе');
-  assert.match(jp, /try \{ IvaClientPatch\.onShowTab\(a, tab\); \} catch \(Throwable ignore\) \{\}\n    \}/, 'IvaPatch.onTab: штатный переход должен прятать раздел клиента');
+  assert.match(jp, /try \{ IvaClientPatch\.onShowTab\(a, tab\); \} catch \(Throwable ignore\) \{\}\n(?:\s*\/\/[^\n]*\n)?\s*try \{ IvaSearchPatch\.onShowTab\(a, tab\); \} catch \(Throwable ignore\) \{\}\n    \}/, 'IvaPatch.onTab: штатный переход должен прятать раздел клиента и включать/прятать поиск 10.45');
   assert.match(jpc, /if \(hubVisible\) \{\n\s*detailFromHub = "detail"\.equals\(t\);\n\s*hideClientHub\(a\);/, 'IvaClientPatch: раздел клиента не прячется при штатном переходе');
   assert.match(jpc, /hubStyling = true;\n\s*try \{ IvaPatch\.onTab\(a, HUB_PAGE\); \}[^\n]*finally \{ hubStyling = false; \}/, 'IvaClientPatch: подсветка логотипа не должна прятать сам раздел');
   assert.match(jpc, /favs\.contains\("t" \+ tid\)/, 'IvaClientPatch: «Избранное» должно брать штатный набор favs (ключ t+id)');
@@ -138,6 +138,26 @@ try {
   for (const str of ['navPlus', 'navProfIc', 'ic_logo'])
     assert.ok(has(arsc14, str), `resources.arsc 10.14: нет ресурса «${str}» — логотип или аватарка не найдут место в меню`);
   assert.equal(zip14('res/drawable-nodpi/ic_logo.png').subarray(1, 4).toString('latin1'), 'PNG', '10.14: нет логотипа ic_logo.png');
+  // 10.45: поиск на главной (IvaSearchPatch) — без новых точек вставки, на штатных полях и ресурсах 10.14.
+  const js45 = R('android/patches/IvaSearchPatch.java');
+  assert.ok(!/IvaSearchPatch/.test(ap), 'apply.py: поиск 10.45 не должен добавлять точек вставки в smali');
+  for (const str of ['pageHome', 'searchBox', 'feedGrid', 'suggestBox', 'pageBg', 'renderFeed', 'renderCatGrid', 'curCat', 'curSub', 'catMode', 'subcats', 'prokat_session', 'Каталог пуст', 'Ничего не найдено'])
+    assert.ok(has(dex14, str), `classes.dex 10.14: нет «${str}» — поиск 10.45 опирается на это имя`);
+  for (const str of ['bg_chip', 'bg_chip_on', 'bg_search', 'bg_field', 'bg_card', 'bg_btn_orange'])
+    assert.ok(has(arsc14, str), `resources.arsc 10.14: нет «${str}» — фильтры потеряют штатный вид`);
+  const cities = s => (s.match(/'[^']+'|"[^"]+"/g) || []).map(x => x.slice(1, -1));
+  const webCities = cities(R('assets/data.js').match(/const CITIES = \[([\s\S]*?)\];/)[1]);
+  const appCities = cities(js45.match(/static final String\[\] CITIES = \{([\s\S]*?)\};/)[1]);
+  assert.deepEqual(appCities, webCities, 'IvaSearchPatch.CITIES должен совпадать с CITIES в assets/data.js');
+  for (const k of ['"Ваш город"', '"Выберите город"', '"Сбросить"', '"Фильтры"', 'showLabel(n)', 'KeyEvent.KEYCODE_BACK', 'setSystemGestureExclusionRects',
+    'requestDisallowInterceptTouchEvent(true)', 'page.dispatchTouchEvent(c)', 'STRIP_DP = 24', 'OnHierarchyChangeListener', 'K_CITY', 'K_SEEN',
+    '"/auth/v1/user"', '"/rest/v1/rpc/get_my_customer_profile"', 'Город в профиле не меняется'])
+    assert.ok(js45.includes(k), `IvaSearchPatch.java: нет ${k}`);
+  // профиль из поиска не сохраняется: ни PUT в /auth/v1/user, ни save_customer_profile
+  assert.ok(!/"PUT"|save_customer_profile|upsert_my_customer_profile/.test(js45), 'IvaSearchPatch: выбор города не должен менять профиль');
+  // геолокация автоматически не запрашивается, карт и «рядом» нет
+  assert.ok(!/requestPermissions|ACCESS_FINE_LOCATION|LocationManager|haversine/i.test(js45), 'IvaSearchPatch: геолокация и расстояния не используются');
+  assert.match(jpc, /try \{ return new ArrayList\(IvaSearchPatch\.allTools\(a\)\); \}/, 'IvaClientPatch.hubTools: раздел логотипа должен брать полный каталог, а не выдачу по городу');
   // смена версии — на настоящем двоичном манифесте 10.14
   const name = (code.match(/NEW_NAME: '([\d.]+)'/) || [])[1], vcode = (code.match(/NEW_CODE: '(\d+)'/) || [])[1];
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'iva-apk-'));

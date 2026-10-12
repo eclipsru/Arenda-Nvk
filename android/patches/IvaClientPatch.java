@@ -1819,6 +1819,8 @@ public final class IvaClientPatch {
     }
 
     static ArrayList hubTools(Activity a) {
+        // 10.45: в tools может лежать выдача по городу и фильтрам — раздел берёт полный каталог.
+        try { return new ArrayList(IvaSearchPatch.allTools(a)); } catch (Throwable ignore) {}
         Object v = get(a, "tools");
         return v instanceof ArrayList ? new ArrayList((ArrayList) v) : new ArrayList();
     }
