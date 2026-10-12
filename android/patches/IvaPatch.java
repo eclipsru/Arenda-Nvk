@@ -469,18 +469,16 @@ public final class IvaPatch {
         } catch (Throwable ignore) {
             // логотип и подсветка — только внешний вид: без них меню работает как раньше
         }
-        // Все новые функции необязательны для запуска APK. Если конкретная
-        // прошивка/вариант 10.14 не содержит ожидаемого поля или метода,
-        // исходный каталог всё равно должен открыться без падения.
+        // Запуск не зависит от нового клиентского профиля: профиль, фильтр,
+        // GPS и доставка подключаются лениво из соответствующих экранов.
+        // Если конкретная прошивка/вариант 10.14 не содержит ожидаемого
+        // поля или метода, исходный каталог всё равно должен открыться.
         try { reloadProfile(a); } catch (Throwable ignore) {}
-        try { onProfile(a); } catch (Throwable ignore) {}
     }
 
     /** 8) Конец saveSession (вход и восстановление сессии): профиль админа → аватарка в меню. */
     public static void onSession(Activity a) {
         try { reloadProfile(a); } catch (Throwable ignore) {}
-        try { onProfile(a); } catch (Throwable ignore) {}
-        try { installHomeFilter(a); } catch (Throwable ignore) {}
     }
 
     /** 9) lambda$loadAdminProfile$201, сразу после чтения поля avatar. Пустой адрес — аватарки нет. */
