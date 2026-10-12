@@ -413,6 +413,8 @@ public final class IvaPatch {
         try { IvaClientPatch.onShowTab(a, tab); } catch (Throwable ignore) {}
         // 10.45: строка «Ваш город», ручка и панель фильтров на главной (ставятся и прячутся здесь же).
         try { IvaSearchPatch.onShowTab(a, tab); } catch (Throwable ignore) {}
+        // 10.54: чат — список переписок по инструментам, закреплённая карточка, аватарки, без автосообщения.
+        try { IvaChatPatch.onShowTab(a, tab); } catch (Throwable ignore) {}
     }
 
     /** Чистая проверка выбора пункта — вынесена отдельно, чтобы её можно было проверить без Activity. */

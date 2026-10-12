@@ -43,6 +43,9 @@ def get(url, key, path, method='GET', body=None):
             return r.status, r.read().decode('utf-8', 'replace')
     except urllib.error.HTTPError as e:
         return e.code, e.read().decode('utf-8', 'replace')
+    except (urllib.error.URLError, OSError) as e:
+        # нет сети / TLS оборвался — код 0, а не трассировка (шаг проверки не должен падать)
+        return 0, str(e)
 
 
 def code_of(body):

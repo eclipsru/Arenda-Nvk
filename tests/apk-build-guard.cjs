@@ -46,7 +46,7 @@ try {
   // 10.40 — штатная строка «Клиент» остаётся единственной точкой входа, но открывает
   // отдельный полноэкранный экран настроек (не AlertDialog-форму); hook onActivityResult
   // в MainActivity по-прежнему отключён (с 10.39), фото возвращается во вспомогательный Fragment.
-  assert.match(code, /android\/patches\/IvaPatch\.java android\/patches\/IvaClientPatch\.java android\/patches\/IvaSearchPatch\.java 2>&1/,
+  assert.match(code, /android\/patches\/IvaPatch\.java android\/patches\/IvaClientPatch\.java android\/patches\/IvaSearchPatch\.java android\/patches\/IvaChatPatch\.java 2>&1/,
     `${f}: шаг 10.30 не компилирует IvaClientPatch`);
   assert.match(ap, /IvaClientPatch;->onProfile\(Landroid\/app\/Activity;\)V/,
     `${f}: hook onProfile не подключён`);
@@ -93,7 +93,7 @@ try {
   assert.match(jpc, /View plus = a\.findViewById\(id\(a, "navPlus"\)\);/, 'IvaClientPatch: обработчик логотипа не ставится на navPlus');
   assert.match(jpc, /if \(toHub && openClientHub\(a\)\) return;\n\s*callNativeTab\(a, "home"\);/, 'IvaClientPatch: «Назад» в карточке инструмента должна вести на главную, как штатная');
   assert.match(jpc, /try \{ installClientNav\(a\); \} catch \(Throwable ignore\) \{\}\n\s*try \{ if \(hubVisible && !isClient\(a\)\) callNativeTab\(a, "home"\); \}/, 'IvaClientPatch: onProfile не ставит логотип клиента или не прячет раздел при выходе');
-  assert.match(jp, /try \{ IvaClientPatch\.onShowTab\(a, tab\); \} catch \(Throwable ignore\) \{\}\n(?:\s*\/\/[^\n]*\n)?\s*try \{ IvaSearchPatch\.onShowTab\(a, tab\); \} catch \(Throwable ignore\) \{\}\n    \}/, 'IvaPatch.onTab: штатный переход должен прятать раздел клиента и включать/прятать поиск 10.45');
+  assert.match(jp, /try \{ IvaClientPatch\.onShowTab\(a, tab\); \} catch \(Throwable ignore\) \{\}\n(?:\s*\/\/[^\n]*\n)?\s*try \{ IvaSearchPatch\.onShowTab\(a, tab\); \} catch \(Throwable ignore\) \{\}\n(?:\s*\/\/[^\n]*\n)?\s*try \{ IvaChatPatch\.onShowTab\(a, tab\); \} catch \(Throwable ignore\) \{\}\n    \}/, 'IvaPatch.onTab: штатный переход должен прятать раздел клиента, включать/прятать поиск 10.45 и чат 10.54');
   assert.match(jpc, /if \(hubVisible\) \{\n\s*detailFromHub = "detail"\.equals\(t\);\n\s*hideClientHub\(a\);/, 'IvaClientPatch: раздел клиента не прячется при штатном переходе');
   assert.match(jpc, /hubStyling = true;\n\s*try \{ IvaPatch\.onTab\(a, HUB_PAGE\); \}[^\n]*finally \{ hubStyling = false; \}/, 'IvaClientPatch: подсветка логотипа не должна прятать сам раздел');
   assert.match(jpc, /favs\.contains\("t" \+ tid\)/, 'IvaClientPatch: «Избранное» должно брать штатный набор favs (ключ t+id)');
@@ -254,6 +254,57 @@ try {
     // ряд под поиском — оранжевые «пузыри» (как было), не текст
     assert.ok(/addActiveChips\(a, box, f, new Runnable\(\) \{[\s\S]{0,400}?\n            \}\);/.test(js45.slice(js45.indexOf('static void refreshChips('))),
       'IvaSearchPatch.refreshChips: ряд под поиском — оранжевые «пузыри»');
+  }
+  // 10.54: чат по инструментам — новый файл компилируется и в сборке, и в проверке; вход только через IvaPatch.onTab
+  {
+    const chat = R('android/patches/IvaChatPatch.java'), chk54 = R('.github/workflows/check.yml'), ip = R('android/patches/IvaPatch.java');
+    assert.ok(/javac [^\n]*android\/patches\/IvaSearchPatch\.java android\/patches\/IvaChatPatch\.java 2>&1/.test(code), 'build-apk.yml: IvaChatPatch.java не компилируется в сборку');
+    assert.ok(chk54.includes('android/patches/IvaSearchPatch.java android/patches/IvaChatPatch.java \\'), 'check.yml: IvaChatPatch.java не компилируется в проверке');
+    const onTab = ip.slice(ip.indexOf('public static void onTab('), ip.indexOf('static boolean navSelected('));
+    assert.ok(onTab.includes('try { IvaChatPatch.onShowTab(a, tab); } catch (Throwable ignore) {}'), 'IvaPatch.onTab: нет безопасного вызова IvaChatPatch');
+    assert.ok(!R('android/patches/apply.py').includes('IvaChatPatch'), 'IvaChatPatch: новые smali-хуки не нужны (вход — IvaPatch.onTab)');
+    // штатные поля, методы и ресурсы, к которым чат обращается через отражение, — есть в 10.14
+    for (const str of ['chatWith', 'chatTool', 'detItem', 'detOwner', 'chatList', 'chatScroll', 'pageChat', 'chatInput', 'curTab',
+      'userEmail', 'userName', 'accessToken', 'isAdminEmail', 'loadChat', 'sendChat', 'showTab', 'loadPhoto', 'playVoice', 'humanError',
+      'lambda$setupChat$88$ru-prokatnvsk-app-MainActivity'])
+      assert.ok(has(dex14, str), `classes.dex 10.14: нет «${str}» — чат 10.54 не найдёт штатное поле или метод`);
+    for (const str of ['detAsk', 'chatSend', 'bg_bubble_me', 'bg_bubble_other', 'bg_avatar', 'bg_card', 'bg_photo', 'bg_badge', 'ic_play', 'ic_wrench'])
+      assert.ok(has(arsc14, str), `resources.arsc 10.14: нет «${str}» — чат 10.54 потеряет штатный вид`);
+    // «Спросить…» без автосообщения: в нашем обработчике нет POST с текстом «Вопрос по инструменту»; без входа / админу — штатный обработчик
+    const ask = chat.slice(chat.indexOf('static void hookAsk('), chat.indexOf('static void nativeAsk('));
+    assert.ok(!/Вопрос по инструменту|apiCall|"POST"/.test(ask) && ask.includes('if (!loggedIn(a) || isAdmin(a)) { nativeAsk(a, v); return; }')
+      && ask.includes('openThread(a, owner, toolIdOf(tool), tool);') && ask.includes('callTab(a, "chat");'),
+      'IvaChatPatch.hookAsk: «Спросить об инструменте» должен открывать пустую переписку без автосообщения');
+    // отправка: только нажатие (запись голоса — штатная), tool_id открытой переписки, при отказе базы — без него
+    const snd = chat.slice(chat.indexOf('static void hookSend('), chat.indexOf('static boolean ok('));
+    assert.ok(snd.includes('send.setOnClickListener(') && !/setOnLongClickListener|setOnTouchListener/.test(snd)
+      && snd.includes('b.put("tool_id", tool);') && snd.includes('b.remove("tool_id");')
+      && snd.includes('if (input.getText().toString().trim().isEmpty()) input.setText(text);'),
+      'IvaChatPatch.send: только нажатие, tool_id, повтор без него и возврат текста при ошибке');
+    // свои — справа, собеседника — слева; аватарка у каждого сообщения
+    const row = chat.slice(chat.indexOf('static View bubbleRow('), chat.indexOf('static String senderTitle('));
+    assert.ok(row.includes('row.setGravity(mine ? Gravity.END | Gravity.BOTTOM : Gravity.START | Gravity.BOTTOM);')
+      && row.indexOf('row.addView(col, new LinearLayout.LayoutParams(-2, -2));\n            row.addView(ava, al);') > 0
+      && row.includes('setBg(a, t, mine ? "bg_bubble_me" : "bg_bubble_other");'),
+      'IvaChatPatch.bubbleRow: свои справа с аватаркой справа, собеседника слева');
+    // шапка закреплена над прокруткой: карточка, затем «Назад к чатам»
+    const hd = chat.slice(chat.indexOf('static void renderHeader('), chat.indexOf('static String partnerTitle('));
+    assert.ok(hd.indexOf('header.addView(card') >= 0 && hd.indexOf('header.addView(card') < hd.indexOf('header.addView(back')
+      && chat.includes('r.addView(h, new LinearLayout.LayoutParams(-1, -2));') && chat.includes('r.addView(s, new LinearLayout.LayoutParams(-1, 0, 1f));')
+      && chat.includes('static final String BACK_TITLE = "‹  Назад к чатам";'),
+      'IvaChatPatch: карточка инструмента и «Назад к чатам» закреплены над перепиской (карточка первой)');
+    // штатный чат не удаляется: только скрывается и возвращается при сбое
+    assert.ok(!/removeView\([^)]*sc\b|removeAllViews\(\);[^\n]*chatList/.test(chat) && chat.includes('((View) sc).setVisibility(View.VISIBLE);'),
+      'IvaChatPatch: штатный chatScroll только скрывается и возвращается при сбое');
+    // личные данные: от сервера — только почта и путь к фото, никаких ФИО/телефонов клиентов
+    assert.ok(chat.includes('"/rest/v1/rpc/iva_chat_peers"') && !/customer_profiles|passport|phone/.test(chat), 'IvaChatPatch: лишние персональные данные');
+    const sql = R('supabase/migrations/20261012_chat_tools_avatars.sql');
+    assert.ok(sql.includes('returns table (email text, avatar_path text)') && /security definer/i.test(sql)
+      && sql.includes("revoke all on function public.iva_chat_peers() from public, anon;")
+      && sql.includes("revoke all on function public.iva_tag_my_messages(text[], uuid) from public, anon;")
+      && !/passport|phone|surname|given_name/.test(sql.replace(/^--.*$/gm, '')),
+      'supabase/migrations/20261012_chat_tools_avatars.sql: функции без лишних данных и без доступа anon');
+    assert.ok(/eq\("чат 10\.54: строки списка — по инструменту/.test(R('android/patches/test/IvaPatchTest.java')), 'IvaPatchTest: проверки чата 10.54');
   }
   // радиус — только вид: варианты встречаются лишь в объявлении и в шторке, на фильтр/подсчёт не влияют
   assert.equal((js45.match(/RADIUS_TITLES/g) || []).length, 3, 'IvaSearchPatch: радиус не должен участвовать в фильтре (только заготовка в шторке)');
