@@ -35,6 +35,107 @@ function initials(name){
   return ((p[0] || '')[0] + (p[1] ? p[1][0] : '')).toUpperCase();
 }
 
+/* ---------- Расстояние до пункта выдачи и доставка ----------
+   На сайте расстояние считается только по адресу, который клиент сохранил
+   в приватном профиле. Публичная карточка не получает и не показывает этот
+   адрес; она получает только готовый текст результата. */
+const IvaDistance = (function(){
+  const cache = new Map();
+  const pending = new Map();
+  let observerTimer = null;
+  function num(v){ return v !== null && v !== undefined && v !== '' && isFinite(Number(v)) ? Number(v) : null; }
+  function coords(lat, lon){
+    lat=num(lat); lon=num(lon);
+    return lat !== null && lon !== null && lat >= -90 && lat <= 90 && lon >= -180 && lon <= 180
+      ? {lat:lat, lon:lon} : null;
+  }
+  function profileAddress(){
+    if (typeof A === 'undefined') return '';
+    const p=A.customerProfile||{};
+    return String(p.address || (A.userMeta && A.userMeta.address) || '').trim();
+  }
+  function geocode(address){
+    address=String(address||'').trim();
+    if (!address || !window.IvaGeo || typeof IvaGeo.search !== 'function') return Promise.resolve(null);
+    const key='geo:'+address.toLowerCase();
+    if (cache.has(key)) return Promise.resolve(cache.get(key));
+    if (pending.has(key)) return pending.get(key);
+    const job=IvaGeo.search(address,'address').then(function(rows){
+      const r=rows&&rows[0]&&rows[0].coordinates;
+      const c=r&&coords(r[1],r[0]);cache.set(key,c);return c;
+    }).catch(function(){cache.set(key,null);return null;}).finally(function(){pending.delete(key);});
+    pending.set(key,job);return job;
+  }
+  function pickupAddress(ad){
+    if (!ad) return '';
+    return String(ad.pickup_address || ad.address || '').trim();
+  }
+  function pickupCoords(ad){ return coords(ad&&ad.pickup_lat,ad&&ad.pickup_lng); }
+  function haversine(a,b){
+    const r=6371, dLat=(b.lat-a.lat)*Math.PI/180, dLon=(b.lon-a.lon)*Math.PI/180;
+    const q=Math.sin(dLat/2)*Math.sin(dLat/2)+Math.cos(a.lat*Math.PI/180)*Math.cos(b.lat*Math.PI/180)*Math.sin(dLon/2)*Math.sin(dLon/2);
+    return Math.max(1,Math.ceil(r*2*Math.atan2(Math.sqrt(q),Math.sqrt(1-q))));
+  }
+  function key(ad){ return String(ad&&ad.id||'')+'|'+pickupAddress(ad)+'|'+(ad&&ad.pickup_lat||'')+'|'+(ad&&ad.pickup_lng||'|')+'|'+profileAddress(); }
+  function estimate(ad){
+    const k=key(ad);
+    if (cache.has('estimate:'+k)) return Promise.resolve(cache.get('estimate:'+k));
+    if (pending.has('estimate:'+k)) return pending.get('estimate:'+k);
+    let result;
+    if (typeof A === 'undefined' || !A.tok){
+      result={ok:false,reason:'guest'};
+    } else if (!profileAddress()){
+      result={ok:false,reason:'profile'};
+    } else if (!pickupCoords(ad) && !pickupAddress(ad)){
+      result={ok:false,reason:'pickup'};
+    }
+    if (result){cache.set('estimate:'+k,result);return Promise.resolve(result);}
+    const job=Promise.all([
+      Promise.resolve(pickupCoords(ad)||geocode(pickupAddress(ad))),
+      geocode(profileAddress())
+    ]).then(function(pair){
+      if (!pair[0] || !pair[1]) result={ok:false,reason:pair[0]?'destination':'pickup'};
+      else {
+        const km=haversine(pair[0],pair[1]), rate=Number(ad.delivery_price)||40;
+        result={ok:true,km:km,rate:rate,cost:ad.delivery?km*rate:0};
+      }
+      cache.set('estimate:'+k,result);return result;
+    }).catch(function(){result={ok:false,reason:'geocode'};cache.set('estimate:'+k,result);return result;})
+      .finally(function(){pending.delete('estimate:'+k);});
+    pending.set('estimate:'+k,job);return job;
+  }
+  function fallback(reason){
+    if (reason==='guest') return 'Расстояние — войдите и укажите адрес';
+    if (reason==='profile') return 'Расстояние — добавьте адрес в профиле';
+    if (reason==='pickup') return 'Расстояние — адрес пункта не указан';
+    return 'Расстояние — не удалось определить автоматически';
+  }
+  function paintCards(root){
+    const nodes=$$('[data-distance-ad]',root||document);
+    nodes.forEach(function(node){
+      const ad=typeof adById==='function'?adById(node.getAttribute('data-distance-ad')):null;
+      if (!ad) return;
+      const initial=fallback(typeof A!=='undefined'&&A.tok?(profileAddress()?'geocode':'profile'):'guest');
+      if (node.textContent!==initial && !node.dataset.distanceReady) node.textContent=initial;
+      const k=key(ad);
+      if (node.dataset.distanceKey===k) return;
+      node.dataset.distanceKey=k;node.dataset.distanceReady='';
+      estimate(ad).then(function(r){
+        if (node.getAttribute('data-distance-ad')!==String(ad.id)) return;
+        const text=r.ok ? ('Расстояние до пункта: '+r.km+' км') : fallback(r.reason);
+        node.textContent=text;node.dataset.distanceReady='1';
+      });
+    });
+  }
+  function observe(){
+    if (!window.MutationObserver || !document.body) return;
+    const run=function(){clearTimeout(observerTimer);observerTimer=setTimeout(function(){paintCards();},40);};
+    new MutationObserver(run).observe(document.body,{childList:true,subtree:true});
+  }
+  setTimeout(observe,0);
+  return {estimate:estimate,paintCards:paintCards,fallback:fallback,profileAddress:profileAddress,geocode:geocode,haversine:haversine};
+})();
+
 /* ---------- Тост ---------- */
 let _toastT;
 function toast(msg){
@@ -205,6 +306,7 @@ function adCard(ad){
       '<div class="ad-meta">' +
         rHTML +
         '<span>·</span><span>' + esc(ad.city) + '</span>' +
+        '<span class="ad-distance" data-distance-ad="' + esc(ad.id) + '">Расстояние — уточняется</span>' +
       '</div>' +
     '</div>' +
   '</article>';
@@ -713,6 +815,7 @@ async function paintChiefLink(){
     if (typeof isChief === 'function' && isChief()){
       $$('.chief-link').forEach(function(el){ el.classList.remove('hide'); });
     }
+    if (typeof IvaDistance !== 'undefined') IvaDistance.paintCards();
   } catch(e){}
 }
 

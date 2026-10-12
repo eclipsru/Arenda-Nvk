@@ -135,8 +135,21 @@ textarea.inp{resize:vertical;min-height:70px}
 .thr .nm{font-weight:600;font-size:14.5px}
 .thr .ms{color:var(--g2);font-size:13px;margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:200px}
 .thr .un{min-width:20px;height:20px;border-radius:10px;background:var(--or);color:#fff;font-size:11.5px;font-weight:700;display:flex;align-items:center;justify-content:center;padding:0 6px;margin-left:auto}
-.msgs{padding:6px 14px 100px}.chdr{display:flex;align-items:center;gap:11px;padding:10px 14px;border-bottom:1px solid var(--line)}.chdr .tt{flex:1;font-weight:700;font-size:15px}
-.msg{max-width:78%;margin-top:8px;padding:9px 12px;border-radius:14px;font-size:14.5px;line-height:1.4;white-space:pre-wrap;word-break:break-word}
+.chdr{display:flex;align-items:center;gap:11px;padding:10px 14px;border-bottom:1px solid var(--line)}.chdr .tt{flex:1;font-weight:700;font-size:15px}
+.chat-tool-ref{display:flex;align-items:center;gap:9px;padding:8px 14px;border-bottom:1px solid var(--line);background:var(--bg-2);color:var(--tx);text-decoration:none}
+.chat-tool-ref:hover{background:var(--field)}
+.chat-tool-ref img,.chat-tool-ref .noimg{width:40px;height:40px;border-radius:8px;object-fit:cover;flex:0 0 40px}
+.chat-tool-ref .noimg{display:flex;align-items:center;justify-content:center;background:var(--field);font-size:20px}
+.chat-tool-ref .tc-copy{display:flex;flex-direction:column;gap:2px;min-width:0}
+.chat-tool-ref small{font-size:11px;color:var(--g2)}
+.chat-tool-ref b{font-size:13.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.chat-tool-ref .tc-arrow{margin-left:auto;color:var(--or);font-size:19px}
+.chat-draft{display:none;align-items:center;gap:8px;padding:6px 10px;border-top:1px solid var(--line);background:var(--field);font-size:12px;color:var(--g2)}
+.chat-draft img{width:40px;height:40px;border-radius:7px;object-fit:cover}
+.chat-draft span{flex:1;min-width:0}
+.chat-draft button{width:26px;height:26px;border-radius:50%;font-size:18px;color:var(--gr)}
+.chat-draft button:hover{background:var(--card);color:var(--tx)}
+.msgs{padding:6px 14px 100px}.msg{max-width:78%;margin-top:8px;padding:9px 12px;border-radius:14px;font-size:14.5px;line-height:1.4;white-space:pre-wrap;word-break:break-word}
 .msg.me{background:var(--ord);color:#fff;margin-left:auto;border-bottom-right-radius:4px}
 .msg.ot{background:var(--card);border:1px solid var(--line);border-bottom-left-radius:4px}
 .msg .tm{display:block;font-size:10.5px;opacity:.75;margin-top:3px}
@@ -407,7 +420,7 @@ var KEY='sb_publishable_dtRaEHNNPBFbHFvg8hw9iA_FqJSz9BE';
 var SKLAD={lat:47.4526182,lon:40.1008652};
 var OWNER_EMAIL='eclips.ru@mail.ru';
 var DELIV_PER_KM=40;
-var S={city:'',tok:null,ref:null,exp:0,me:'',uname:'',uphone:'',admin:null,tools:[],cats:[],subs:[],limited:[],likes:{},cart:{},screen:'home',cat:'',sub:'',q:'',chatWith:null,pollT:null,days:1,delivery:false,daddr:'',dkm:0,dsum:0,cabTab:'tools',ordTab:'act'};
+var S={city:'',tok:null,ref:null,exp:0,me:'',uname:'',uphone:'',admin:null,tools:[],cats:[],subs:[],limited:[],likes:{},cart:{},screen:'home',cat:'',sub:'',q:'',chatWith:null,chatTool:null,chatDraftImg:'',chatSub:null,pollT:null,days:1,delivery:false,daddr:'',dkm:0,dsum:0,cabTab:'tools',ordTab:'act'};
 function $(id){return document.getElementById(id)}
 function esc(s){return (s==null?'':''+s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;')}
 function m(x){x=Math.round(x||0);return String(x).replace(/\B(?=(\d{3})+(?!\d))/g,'\u00A0')+' \u20BD'}
@@ -655,7 +668,9 @@ function plusBtn(){
 }
 function navOn(n){var b=document.querySelectorAll('#nav button,#tophead .tlinks button');for(var i=0;i<b.length;i++){var d=b[i].getAttribute('data-n');b[i].classList.toggle('on',d===n||(n==='home'&&S.favOnly&&d==='fav'))}}
 function go(n){
-  S.screen=n;if(S.pollT){clearInterval(S.pollT);S.pollT=null}
+  S.screen=n;
+  if(n!=='chat'&&S.chatSub){S.chatSub.close();S.chatSub=null}
+  if(S.pollT){clearInterval(S.pollT);S.pollT=null}
   if(n==='home')vHome();
   else if(n==='chat')vChat();
   else if(n==='orders')vOrders();
@@ -782,7 +797,7 @@ function toolCard(id){
   btns[0].onclick=function(){if(qty>1)qty--;qv.textContent=qty};
   btns[1].onclick=function(){if(qty<20)qty++;qv.textContent=qty};
   $('toCart').onclick=function(){S.cart[id]=(S.cart[id]||0)+qty;closeLayer();cartBar();toast('Добавлено в корзину')};
-  $('toChat').onclick=function(){closeLayer();openChatWith(t.owner_email||OWNER_EMAIL,'Вопрос по инструменту: «'+t.name+'»')};
+  $('toChat').onclick=function(){closeLayer();openChatWith(t.owner_email||OWNER_EMAIL,'',t)};
 }
 function adminByMail(em){var lst=cget('admins',300000)||[];em=(em||'').toLowerCase();for(var i=0;i<lst.length;i++)if((lst[i].email||'').toLowerCase()===em)return lst[i];return null}
 
@@ -966,7 +981,15 @@ function whoName(em){
   return em.split('@')[0];
 }
 function isWide(){return window.matchMedia('(min-width:800px)').matches}
+function onCabinetMessage(m){
+  var f=(m&&m.from_email||'').toLowerCase(),t=(m&&m.to_email||'').toLowerCase();
+  if(!S.me|| (f!==S.me&&t!==S.me))return;
+  loadUnread();
+  if(S.chatWith && (f===S.chatWith||t===S.chatWith)) drawMsgs();
+  else if(S.screen==='chat'&&!S.chatWith) vChat();
+}
 async function vChat(){
+  if(S.chatSub){S.chatSub.close();S.chatSub=null}
   navOn('chat');
   if(isWide()){
     $('view').innerHTML='<div class="chatwrap"><div class="clist" id="thr"><div class="empt">Загрузка…</div></div><div class="cpane" id="cpane"><div class="empt" style="margin:auto">Выберите чат слева</div></div></div>';
@@ -997,6 +1020,7 @@ async function vChat(){
     $('thr').innerHTML=h||'<div class="empt">Сообщений пока нет</div>';
     $('thr').onclick=function(ev){var d=ev.target.closest('[data-e]');if(d)openChatWith(d.getAttribute('data-e'),'')};
     loadUnread();
+    S.chatSub=subscribeMessages(onCabinetMessage);
   }catch(e){$('thr').innerHTML='<div class="empt">Ошибка: '+esc(e.message)+'</div>'}
 }
 async function loadUnread(){
@@ -1008,15 +1032,38 @@ async function loadUnread(){
     var bd=$('mBellDot');if(bd)bd.classList.toggle('show',!!(u&&u.length));
   }catch(e){}
 }
-async function openChatWith(who,prefill){
+function chatToolHtml(t){
+  if(!t)return '';
+  var im=(t.imgs&&t.imgs[0])||t.img||'';
+  return '<a class="chat-tool-ref" href="tool.html?id='+encodeURIComponent(t.id)+'" title="Открыть объявление инструмента">'
+    +(im?'<img src="'+esc(im)+'" alt="">':'<span class="noimg">🔧</span>')
+    +'<span class="tc-copy"><small>Обсуждение инструмента</small><b>'+esc(t.name||'Инструмент')+'</b></span>'
+    +'<span class="tc-arrow">↗</span></a>';
+}
+function renderChatTool(){
+  var el=$('chatToolContext');if(!el)return;
+  el.innerHTML=chatToolHtml(S.chatTool);el.style.display=S.chatTool?'block':'none';
+}
+function renderChatDraft(){
+  var el=$('chatDraft');if(!el)return;
+  if(!S.chatDraftImg){el.innerHTML='';el.style.display='none';return}
+  el.style.display='flex';
+  el.innerHTML='<img src="'+esc(S.chatDraftImg)+'" alt="Фото к отправке">'
+    +'<span>Фото добавлено. Нажмите «Отправить»</span><button type="button" id="chatDraftRemove" title="Убрать фото">×</button>';
+  $('chatDraftRemove').onclick=function(){S.chatDraftImg='';renderChatDraft()};
+}
+async function openChatWith(who,prefill,tool){
   who=(who||OWNER_EMAIL).toLowerCase();
-  S.chatWith=who;if(S.pollT){clearInterval(S.pollT);S.pollT=null}
+  S.chatWith=who;S.chatTool=tool||null;S.chatDraftImg='';
+  if(S.pollT){clearInterval(S.pollT);S.pollT=null}
   var wide=isWide();
   var hh='<div class="chdr">'+(wide?'':'<span class="out" id="bk" style="padding:6px 10px 6px 0">←</span>')
   +'<div class="ava" style="width:36px;height:36px;flex:0 0 36px;font-size:15px">'+esc((whoName(who)[0]||'?').toUpperCase())+'</div>'
   +'<div class="tt">'+esc(whoName(who))+'</div></div>'
+  +'<div id="chatToolContext" style="display:none"></div>'
   +'<div class="msgs" id="msgs"><div class="empt">Загрузка…</div></div>'
-  +'<div class="ibar"><button class="clip" id="mClip" title="Фото"><svg viewBox="0 0 24 24"><path d="M16.5 6v9.5a4.5 4.5 0 0 1-9 0V5a3 3 0 0 1 6 0v9.5a1.5 1.5 0 0 1-3 0V6H9v8.5a3 3 0 0 0 6 0V5a4.5 4.5 0 0 0-9 0v10.5a6 6 0 0 0 12 0V6z"/></svg></button><input type="file" id="mFile" accept="image/*" class="hide"><input id="mIn" placeholder="Сообщение…" autocomplete="off"><button class="send" id="mSend"><svg viewBox="0 0 24 24"><path d="M2 21 23 12 2 3l4 8 10 1-10 1z"/></svg></button></div>';
+  +'<div class="chat-draft" id="chatDraft"></div>'
+  +'<div class="ibar"><button class="clip" id="mClip" title="Добавить фото"><svg viewBox="0 0 24 24"><path d="M16.5 6v9.5a4.5 4.5 0 0 1-9 0V5a3 3 0 0 1 6 0v9.5a1.5 1.5 0 0 1-3 0V6H9v8.5a3 3 0 0 0 6 0V5a4.5 4.5 0 0 0-9 0v10.5a6 6 0 0 0 12 0V6z"/></svg></button><input type="file" id="mFile" accept="image/*" class="hide"><input id="mIn" placeholder="Сообщение…" autocomplete="off"><button class="send" id="mSend"><svg viewBox="0 0 24 24"><path d="M2 21 23 12 2 3l4 8 10 1-10 1z"/></svg></button></div>';
   if(wide){
     $('cpane').innerHTML=hh;
     var ths=document.querySelectorAll('#thr .thr');
@@ -1028,9 +1075,13 @@ async function openChatWith(who,prefill){
   var bk=$('bk');if(bk)bk.onclick=function(){closeChat()};
   $('mSend').onclick=sendMsg;
   $('mClip').onclick=function(){$('mFile').click()};
-  $('mFile').onchange=function(){var fs=Array.prototype.slice.call(this.files);this.value='';if(!fs.length)return;upPhoto(fs[0],function(u){api('/rest/v1/app_messages','POST',{from_email:S.me,to_email:S.chatWith,text:'',img:u}).then(function(){drawMsgs();loadUnread()}).catch(function(e){toast('Не отправлено: '+e.message)})})};
+  $('mFile').onchange=function(){
+    var fs=Array.prototype.slice.call(this.files);this.value='';if(!fs.length)return;
+    upPhoto(fs[0],function(u){S.chatDraftImg=u;renderChatDraft();toast('Фото добавлено. Нажмите «Отправить»')});
+  };
   $('mIn').addEventListener('keydown',function(e){if(e.key==='Enter')sendMsg()});
-  if(prefill)$('mIn').value=prefill;
+  renderChatTool();
+  renderChatDraft();
   await drawMsgs();
   api('/rest/v1/app_messages?to_email=eq.'+encodeURIComponent(S.me)+'&from_email=eq.'+encodeURIComponent(who)+'&is_read=eq.false','PATCH',{is_read:true}).catch(function(){});
   S.pollT=setInterval(drawMsgs,5000);
@@ -1038,14 +1089,22 @@ async function openChatWith(who,prefill){
 }
 function closeChat(){
   if(S.pollT){clearInterval(S.pollT);S.pollT=null}
-  S.chatWith=null;$('nav').style.display='';vChat();
+  S.chatWith=null;S.chatTool=null;S.chatDraftImg='';$('nav').style.display='';vChat();
 }
 async function drawMsgs(){
   if(!S.chatWith)return;
   try{
     var w=S.chatWith;
-    var ms=await api('/rest/v1/app_messages?select=id,from_email,to_email,text,img,is_read,created_at&order=created_at.desc&limit=200&or=(and(from_email.eq.'+encodeURIComponent(S.me)+',to_email.eq.'+encodeURIComponent(w)+'),and(from_email.eq.'+encodeURIComponent(w)+',to_email.eq.'+encodeURIComponent(S.me)+'))');
+    var ms=await api('/rest/v1/app_messages?select=id,from_email,to_email,text,img,tool_id,is_read,created_at&order=created_at.desc&limit=200&or=(and(from_email.eq.'+encodeURIComponent(S.me)+',to_email.eq.'+encodeURIComponent(w)+'),and(from_email.eq.'+encodeURIComponent(w)+',to_email.eq.'+encodeURIComponent(S.me)+'))');
     ms=(ms||[]).slice().reverse();
+    if(!S.chatTool){
+      for(var ri=ms.length-1;ri>=0;ri--){
+        if(!ms[ri].tool_id)continue;
+        try{S.chatTool=await loadTool(ms[ri].tool_id)}catch(e){S.chatTool=null}
+        break;
+      }
+      renderChatTool();
+    }
     var el=$('msgs');if(!el)return;
     var lastDay='',h='';
     for(var i=0;i<ms.length;i++){var x=ms[i];var dk=dayKey(x.created_at);
@@ -1059,12 +1118,15 @@ async function drawMsgs(){
   }catch(e){}
 }
 async function sendMsg(){
-  var i=$('mIn'),t=i.value.trim();if(!t)return;
-  i.value='';
+  var i=$('mIn'),t=i.value.trim(),img=S.chatDraftImg||'';
+  if(!t&&!img)return;
+  i.value='';S.chatDraftImg='';renderChatDraft();
+  var row={from_email:S.me,to_email:S.chatWith,text:t,img:img};
+  if(S.chatTool&&S.chatTool.id)row.tool_id=S.chatTool.id;
   try{
-    await api('/rest/v1/app_messages','POST',{from_email:S.me,to_email:S.chatWith,text:t});
+    await api('/rest/v1/app_messages','POST',row);
     drawMsgs();loadUnread();
-  }catch(e){toast('Не отправлено: '+e.message);i.value=t}
+  }catch(e){toast('Не отправлено: '+e.message);i.value=t;S.chatDraftImg=img;renderChatDraft()}
 }
 
 async function upPhoto(file,cb){
