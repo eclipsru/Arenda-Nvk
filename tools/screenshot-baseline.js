@@ -43,6 +43,7 @@ const PAGES = [
   { file: 'favorites.html',         stable: false, note: 'зависит от localStorage' },
   { file: 'new.html',               stable: false, note: 'форма подачи объявления' },
   { file: 'account.html',           stable: false, note: 'кабинет, без входа — заглушка' },
+  { file: 'profile.html',           stable: false, note: 'настройки профиля клиента, без входа — заглушка' },
   { file: 'app.html',               stable: true,  note: 'страница приложения' },
   { file: 'offer.html',             stable: true,  note: 'оферта' },
   { file: 'partner-terms.html',     stable: true,  note: 'правила арендодателей' },
