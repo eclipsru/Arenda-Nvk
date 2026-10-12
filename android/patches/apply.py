@@ -17,6 +17,7 @@
   9. lambda$loadAdminProfile$201(String)     : после чтения поля avatar → IvaPatch.onAvatar(this, адрес) (аватарка в «Кабинете»)
  10. logoutLocal()                           : в конце → IvaPatch.onLogout(this) (выход: иконка «Кабинета» снова на месте)
  11. showTab(String)                         : после штатного выбора вкладки → IvaPatch.onTab(this, имя) (оранжевая окантовка без заливки)
+ 12. renderProfile()                          : только на шаге 10.30 → IvaClientPatch.onProfile(this) (профиль обычного клиента)
 Плюс versionCode/versionName в apktool.yml.
 """
 import os
@@ -173,6 +174,13 @@ def patch(lines):
     # invoke form only encodes v0..v15, so use the range form deliberately.
     lines[rets[0]:rets[0]] = ['', f'    invoke-static/range {{p0 .. p1}}, {P}->onTab(Landroid/app/Activity;Ljava/lang/String;)V']
     done.append('11 onTab')
+
+    # 12. Первый клиентский hook подключается отдельно: только экран
+    #     профиля. Остальные клиентские hooks возвращаются последующими
+    #     диагностическими сборками.
+    s, e = one_method(lines, r' renderProfile\(\)V$')
+    before_return(lines, s, e, f'invoke-static/range {{p0 .. p0}}, Lru/prokatnvsk/app/IvaClientPatch;->onProfile(Landroid/app/Activity;)V', 'client onProfile')
+    done.append('12 client onProfile')
     return done
 
 

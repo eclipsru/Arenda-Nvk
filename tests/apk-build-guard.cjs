@@ -43,13 +43,15 @@ try {
   for (const k of [...insertions, ...anchors]) assert.ok(ap.includes(k), `apply.py: нет ${k}`);
   const jp = R('android/patches/IvaPatch.java');
   const jpc = R('android/patches/IvaClientPatch.java');
-  // 10.29 — второй диагностический шаг: IvaClientPatch компилируется и попадает
-  // в dex, но apply.py по-прежнему вставляет только стабильные hooks 10.21.
-  // Так отдельно проверяется проблема загрузки/верификации класса.
+  // 10.30 — подключён ровно один клиентский hook: onProfile.
+  // Остальные точки остаются выключенными, чтобы проверять их по одной.
   assert.match(code, /android\/patches\/IvaPatch\.java android\/patches\/IvaClientPatch\.java 2>&1/,
-    `${f}: шаг 10.29 не компилирует IvaClientPatch`);
-  assert.doesNotMatch(ap, /IvaClientPatch|PC->/,
-    `${f}: новые клиентские hooks не должны вызываться на шаге проверки класса`);
+    `${f}: шаг 10.30 не компилирует IvaClientPatch`);
+  assert.match(ap, /IvaClientPatch;->onProfile\(Landroid\/app\/Activity;\)V/,
+    `${f}: hook onProfile не подключён`);
+  for (const call of ['onFeed', 'onCatalogLoaded', 'onActivityResult', 'onLocationPermission', 'onDetail'])
+    assert.doesNotMatch(ap, new RegExp(`IvaClientPatch;->${call}\\(`),
+      `${f}: hook ${call} должен оставаться выключенным`);
   for (const k of ['onProfile(Activity', 'onFeed(Activity', 'onDetail(Activity', 'installHomeFilter(final Activity', 'loadNativeClientCoords(final Activity'])
     assert.ok(jpc.includes(k), `IvaClientPatch.java: нет метода ${k}`);
   for (const k of ['onPrice(String', 'onSummary(final Activity', 'onHub(Activity', 'publishError(String', 'netError(String',
