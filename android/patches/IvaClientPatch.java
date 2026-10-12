@@ -40,6 +40,9 @@
 //     нижнего меню: картинка из приватного bucket скачивается по токену, при выходе убирается.
 //     (10.42) вместо «Клиент» в строке кабинета — имя из поля «Имя» профиля; ФИО и телефон сохраняются
 //     в настройках телефона (ключи name/phone штатного saveSession) и переживают перезапуск.
+//   16.5 (10.43) логотип в нижнем меню у клиента открывает раздел «Избранное / Мои инструменты» вместо
+//     формы заявки: карточки отмеченных сердечком инструментов и инструментов из прошлых заявок
+//     (штатный feedCard). У админа и гостя логотип прежний. Скрытие — из onTab, новых точек вставки нет.
 package ru.prokatnvsk.app;
 
 import android.Manifest;
@@ -1467,6 +1470,8 @@ public final class IvaClientPatch {
         } catch (Throwable ignore) {}
         try { showClientName(a); } catch (Throwable ignore) {}
         try { showClientAvatar(a); } catch (Throwable ignore) {}
+        try { installClientNav(a); } catch (Throwable ignore) {}
+        try { if (hubVisible && !isClient(a)) callNativeTab(a, "home"); } catch (Throwable ignore) {}   // выход из аккаунта
     }
 
     // ── 16.4. Имя клиента в строке «Клиент» (10.42) ──
@@ -1526,6 +1531,439 @@ public final class IvaClientPatch {
                 e.apply();
             }
         } catch (Throwable ignore) {}
+    }
+
+    // ── 16.5. Логотип в нижнем меню у клиента: «Избранное» и «Мои инструменты» (10.43) ──
+    // Раньше логотип у клиента открывал форму заявки (штатный onPlus → showTab("order")). Теперь у клиента
+    // открывается свой раздел с двумя вкладками вверху: «Избранное» — карточки инструментов, отмеченных
+    // сердечком (штатный набор favs из таблицы likes), «Мои инструменты» — карточки инструментов из прошлых
+    // заявок клиента (orders.tools, как в проверке права на отзыв). Карточки — штатные feedCard, как на главной:
+    // нажатие открывает штатную карточку инструмента, сердечко работает как обычно; «Назад» в карточке
+    // инструмента возвращает в раздел. Форма заявки по-прежнему открывается кнопкой «Заказать» в карточке.
+    // Новых точек вставки нет: обработчики ставятся на штатные кнопки navPlus и detBack из onProfile,
+    // скрытие раздела — из уже подключённого onTab. У админа и гостя логотип работает как раньше.
+    static final String HUB_TAG = "iva_client_hub";
+    static final String HUB_CONTENT_TAG = "iva_client_hub_content";
+    static final String HUB_TAB_FAV_TAG = "iva_client_hub_fav";
+    static final String HUB_TAB_MINE_TAG = "iva_client_hub_mine";
+    static final String HUB_PAGE = "clienthub";            // curTab, пока открыт раздел (штатные проверки вкладок молчат)
+    static volatile boolean hubVisible = false;
+    static boolean hubStyling = false;                      // идёт подсветка логотипа через onTab — раздел не прятать
+    static boolean detailFromHub = false;                   // карточка инструмента открыта из раздела — «Назад» вернёт сюда
+    static int hubTab = 0;                                  // 0 — «Избранное», 1 — «Мои инструменты»
+    static int hubGen = 0;                                  // поколение отрисовки: устаревшие ответы не рисуем
+    static int hubCatalogWaits = 0;
+    static WeakReference<View> hubNavPlus, hubDetBack;
+
+    /** Статусы заявки, при которых инструмент уже был выдан клиенту. */
+    static boolean isRentedStatus(String s) {
+        String v = s == null ? "" : s.trim().toLowerCase(Locale.ROOT);
+        return "rented".equals(v) || "closed".equals(v);
+    }
+
+    /** Есть ли инструмент в тексте заявки. Текст заявки собирается как «Название ×1, Название 2 ×3»
+     * (сайт и приложение), поэтому название должно стоять целиком: перед ним — начало, «,», «;», «•» или
+     * перевод строки, после — «×N»/«xN», «,», «;», перевод строки или конец. «Перфоратор» не совпадёт
+     * с «Перфоратор Bosch ×1». */
+    static boolean orderMentionsTool(String toolsText, String name) {
+        String text = toolsText == null ? "" : toolsText.toLowerCase(Locale.ROOT);
+        String n = name == null ? "" : name.trim().toLowerCase(Locale.ROOT);
+        if (n.length() < 2 || text.isEmpty()) return false;
+        int from = 0;
+        while (true) {
+            int i = text.indexOf(n, from);
+            if (i < 0) return false;
+            from = i + 1;
+            int b = i - 1;
+            while (b >= 0 && text.charAt(b) == ' ') b--;
+            boolean startOk = b < 0 || ",;\n\u2022".indexOf(text.charAt(b)) >= 0;
+            int e = i + n.length();
+            while (e < text.length() && text.charAt(e) == ' ') e++;
+            boolean endOk = e >= text.length() || ",;\n\r".indexOf(text.charAt(e)) >= 0
+                || ((text.charAt(e) == '\u00d7' || text.charAt(e) == 'x' || text.charAt(e) == '*')
+                    && (e + 1 >= text.length() || Character.isDigit(text.charAt(e + 1)) || text.charAt(e + 1) == ' '));
+            if (startOk && endOk) return true;
+        }
+    }
+
+    /** Поставить обработчики на штатные кнопки: логотип (navPlus) и «Назад» в карточке инструмента (detBack).
+     * Один раз на экран; у не-клиента нажатия уходят в штатные onPlus / showTab("home"). */
+    static void installClientNav(final Activity a) {
+        try {
+            View plus = a.findViewById(id(a, "navPlus"));
+            if (plus != null && (hubNavPlus == null || hubNavPlus.get() != plus)) {
+                plus.setOnClickListener(new View.OnClickListener() {
+                    @Override public void onClick(View v) {
+                        boolean client = false;
+                        try { client = isClient(a); } catch (Throwable ignore) {}
+                        if (client && openClientHub(a)) return;
+                        callNative(a, "onPlus");
+                    }
+                });
+                hubNavPlus = new WeakReference<View>(plus);
+            }
+            View back = a.findViewById(id(a, "detBack"));
+            if (back != null && (hubDetBack == null || hubDetBack.get() != back)) {
+                back.setOnClickListener(new View.OnClickListener() {
+                    @Override public void onClick(View v) {
+                        boolean toHub = false;
+                        try { toHub = detailFromHub && isClient(a); } catch (Throwable ignore) {}
+                        detailFromHub = false;
+                        if (toHub && openClientHub(a)) return;
+                        callNativeTab(a, "home");   // как штатная кнопка: на главную
+                    }
+                });
+                hubDetBack = new WeakReference<View>(back);
+            }
+        } catch (Throwable ignore) {
+            // кнопки остаются штатными
+        }
+    }
+
+    static void callNative(Activity a, String method) {
+        try {
+            Method m = a.getClass().getDeclaredMethod(method);
+            m.setAccessible(true);
+            m.invoke(a);
+        } catch (Throwable ignore) {}
+    }
+
+    static void callNativeTab(Activity a, String tab) {
+        try {
+            Method m = a.getClass().getDeclaredMethod("showTab", String.class);
+            m.setAccessible(true);
+            m.invoke(a, tab);
+        } catch (Throwable ignore) {}
+    }
+
+    /** Из IvaPatch.onTab (конец штатного showTab): любой штатный переход прячет раздел. */
+    public static void onShowTab(Activity a, String tab) {
+        if (hubStyling) return;
+        try { installClientNav(a); } catch (Throwable ignore) {}   // первый showTab при запуске — кнопки уже наши
+        try {
+            String t = tab == null ? "" : tab;
+            if (hubVisible) {
+                detailFromHub = "detail".equals(t);
+                hideClientHub(a);
+            } else if (!"detail".equals(t) && !"seller".equals(t)) {
+                detailFromHub = false;
+            }
+        } catch (Throwable ignore) {}
+    }
+
+    static ViewGroup hubPages(Activity a) {
+        Object po = get(a, "pageOrder");
+        ViewParent p = po instanceof View ? ((View) po).getParent() : null;
+        return p instanceof ViewGroup ? (ViewGroup) p : null;
+    }
+
+    static void hideClientHub(Activity a) {
+        hubVisible = false;
+        try {
+            ViewGroup pages = hubPages(a);
+            View hub = pages == null ? null : pages.findViewWithTag(HUB_TAG);
+            if (hub != null) hub.setVisibility(View.GONE);
+        } catch (Throwable ignore) {}
+    }
+
+    /** Открыть раздел на месте страниц (нижнее меню остаётся). false — не вышло, пусть сработает штатный onPlus. */
+    static boolean openClientHub(final Activity a) {
+        try {
+            ViewGroup pages = hubPages(a);
+            if (pages == null) return false;
+            View hub = pages.findViewWithTag(HUB_TAG);
+            if (hub == null) {
+                hub = buildClientHub(a);
+                hub.setTag(HUB_TAG);
+                pages.addView(hub, new FrameLayout.LayoutParams(-1, -1));
+            }
+            for (int i = 0; i < pages.getChildCount(); i++) {
+                View c = pages.getChildAt(i);
+                if (c != hub && c.getVisibility() == View.VISIBLE) c.setVisibility(View.GONE);
+            }
+            hub.setVisibility(View.VISIBLE);
+            hubVisible = true;
+            detailFromHub = false;
+            hubCatalogWaits = 0;
+            try { set(a, "curTab", HUB_PAGE); } catch (Throwable ignore) {}
+            // Подсветка: логотип выбран, остальные пункты меню — нет (тот же код, что после штатного showTab).
+            hubStyling = true;
+            try { IvaPatch.onTab(a, HUB_PAGE); } catch (Throwable ignore) {} finally { hubStyling = false; }
+            try {
+                android.view.inputmethod.InputMethodManager imm = (android.view.inputmethod.InputMethodManager)
+                    a.getSystemService(Context.INPUT_METHOD_SERVICE);
+                if (imm != null) imm.hideSoftInputFromWindow(pages.getWindowToken(), 0);
+            } catch (Throwable ignore) {}
+            renderClientHub(a);
+            return true;
+        } catch (Throwable t) {
+            hubVisible = false;
+            return false;
+        }
+    }
+
+    static int hubDp(Activity a, float v) {
+        return px(v, a.getResources().getDisplayMetrics().density);
+    }
+
+    static GradientDrawable hubPill(Activity a, int fill, int stroke) {
+        GradientDrawable g = new GradientDrawable();
+        g.setColor(fill);
+        g.setCornerRadius(hubDp(a, 20));
+        if (stroke != 0) g.setStroke(Math.max(1, hubDp(a, 1)), stroke);
+        return g;
+    }
+
+    static View buildClientHub(final Activity a) {
+        LinearLayout root = new LinearLayout(a);
+        root.setOrientation(LinearLayout.VERTICAL);
+        root.setClickable(true);   // нажатия не проходят на спрятанные страницы под разделом
+        LinearLayout tabs = new LinearLayout(a);
+        tabs.setOrientation(LinearLayout.HORIZONTAL);
+        tabs.setPadding(hubDp(a, 16), hubDp(a, 12), hubDp(a, 16), hubDp(a, 8));
+        tabs.addView(hubTabButton(a, "Избранное", HUB_TAB_FAV_TAG, 0), hubTabParams(a, 0));
+        tabs.addView(hubTabButton(a, "Мои инструменты", HUB_TAB_MINE_TAG, 1), hubTabParams(a, 1));
+        root.addView(tabs, new LinearLayout.LayoutParams(-1, -2));
+        ScrollView scroll = new ScrollView(a);
+        scroll.setFillViewport(true);
+        scroll.setVerticalScrollBarEnabled(false);
+        LinearLayout content = new LinearLayout(a);
+        content.setOrientation(LinearLayout.VERTICAL);
+        content.setTag(HUB_CONTENT_TAG);
+        content.setPadding(hubDp(a, 12), hubDp(a, 4), hubDp(a, 12), hubDp(a, 20));
+        scroll.addView(content, new FrameLayout.LayoutParams(-1, -2));
+        root.addView(scroll, new LinearLayout.LayoutParams(-1, 0, 1f));
+        return root;
+    }
+
+    static LinearLayout.LayoutParams hubTabParams(Activity a, int index) {
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(0, hubDp(a, 40), 1f);
+        if (index == 0) lp.rightMargin = hubDp(a, 5); else lp.leftMargin = hubDp(a, 5);
+        return lp;
+    }
+
+    static TextView hubTabButton(final Activity a, String text, String tag, final int index) {
+        TextView b = new TextView(a);
+        b.setText(text);
+        b.setTag(tag);
+        b.setGravity(Gravity.CENTER);
+        b.setTextSize(14.5f);
+        b.setSingleLine(true);
+        b.setClickable(true);
+        b.setOnClickListener(new View.OnClickListener() {
+            @Override public void onClick(View v) {
+                if (hubTab == index) return;
+                hubTab = index;
+                hubCatalogWaits = 0;
+                renderClientHub(a);
+            }
+        });
+        return b;
+    }
+
+    static void styleHubTabs(Activity a, View hub) {
+        int orange = navColor(a, "orange", 0xffff8f1f);
+        int card = navColor(a, "card", 0xff1a1d24);
+        int line = navColor(a, "line", 0xff262b35);
+        int gray = navColor(a, "gray", 0xff9aa1b0);
+        String[] tags = {HUB_TAB_FAV_TAG, HUB_TAB_MINE_TAG};
+        for (int i = 0; i < tags.length; i++) {
+            View v = hub.findViewWithTag(tags[i]);
+            if (!(v instanceof TextView)) continue;
+            TextView t = (TextView) v;
+            boolean on = hubTab == i;
+            t.setBackground(hubPill(a, on ? orange : card, on ? 0 : line));
+            t.setTextColor(on ? Color.WHITE : gray);
+            t.setTypeface(null, on ? android.graphics.Typeface.BOLD : android.graphics.Typeface.NORMAL);
+        }
+    }
+
+    static void renderClientHub(final Activity a) {
+        try {
+            ViewGroup pages = hubPages(a);
+            final View hub = pages == null ? null : pages.findViewWithTag(HUB_TAG);
+            if (hub == null || !hubVisible) return;
+            styleHubTabs(a, hub);
+            View cv = hub.findViewWithTag(HUB_CONTENT_TAG);
+            if (!(cv instanceof LinearLayout)) return;
+            LinearLayout content = (LinearLayout) cv;
+            content.removeAllViews();
+            final int gen = ++hubGen;
+            ArrayList tools = hubTools(a);
+            if (tools.isEmpty()) {
+                // каталог (а с ним и избранное) ещё грузится штатным loadCatalog
+                if (hubCatalogWaits < 10) {
+                    hubCatalogWaits++;
+                    content.addView(hubEmpty(a, "Загружаем каталог\u2026"));
+                    new Handler(Looper.getMainLooper()).postDelayed(new Runnable() {
+                        @Override public void run() { if (hubVisible && gen == hubGen) renderClientHub(a); }
+                    }, 1500);
+                } else {
+                    content.addView(hubEmpty(a, "Каталог не загрузился. Проверьте интернет и откройте раздел ещё раз."));
+                }
+                return;
+            }
+            if (hubTab == 0) renderHubFavorites(a, content, tools);
+            else renderHubMine(a, content, tools, gen);
+        } catch (Throwable ignore) {
+            // раздел — только показ: остальное приложение не трогаем
+        }
+    }
+
+    static ArrayList hubTools(Activity a) {
+        Object v = get(a, "tools");
+        return v instanceof ArrayList ? new ArrayList((ArrayList) v) : new ArrayList();
+    }
+
+    static void renderHubFavorites(Activity a, LinearLayout content, ArrayList tools) {
+        Object fv = get(a, "favs");
+        java.util.Set favs = fv instanceof java.util.Set ? (java.util.Set) fv : new java.util.HashSet();
+        ArrayList list = new ArrayList();
+        for (Object o : tools) {
+            if (!(o instanceof JSONObject)) continue;
+            String tid = ((JSONObject) o).optString("id", "");
+            if (!tid.isEmpty() && favs.contains("t" + tid)) list.add(o);
+        }
+        if (list.isEmpty()) {
+            content.addView(hubEmpty(a, "В избранном пока пусто.\n\nНажмите на сердечко на карточке инструмента в каталоге — он появится здесь."));
+            return;
+        }
+        addHubCards(a, content, list);
+    }
+
+    static void renderHubMine(final Activity a, final LinearLayout content, final ArrayList tools, final int gen) {
+        content.addView(hubEmpty(a, "Загружаем ваши заявки\u2026"));
+        final String email = String.valueOf(get(a, "userEmail")).trim().toLowerCase(Locale.ROOT);
+        new Thread(new Runnable() { @Override public void run() {
+            String error = null;
+            JSONArray rows = null;
+            boolean statusKnown = true;
+            try {
+                String q = "&user_email=eq." + java.net.URLEncoder.encode(email, "UTF-8") + "&order=created_at.desc&limit=100";
+                Method get = a.getClass().getDeclaredMethod("apiGet", String.class);
+                get.setAccessible(true);
+                try {
+                    rows = new JSONArray(String.valueOf(get.invoke(a, "/rest/v1/orders?select=created_at,tools,status" + q)));
+                } catch (Throwable first) {
+                    // если в таблице нет поля status — без разделения на «выдано» и «в заявке»
+                    statusKnown = false;
+                    rows = new JSONArray(String.valueOf(get.invoke(a, "/rest/v1/orders?select=created_at,tools" + q)));
+                }
+            } catch (Throwable e) {
+                Throwable c = e instanceof java.lang.reflect.InvocationTargetException && e.getCause() != null ? e.getCause() : e;
+                error = brief(c.getMessage());
+                if (error.isEmpty()) error = "нет связи с сервером";
+            }
+            final String err = error;
+            final JSONArray data = rows;
+            final boolean known = statusKnown;
+            a.runOnUiThread(new Runnable() { @Override public void run() {
+                try {
+                    if (!hubVisible || gen != hubGen) return;
+                    content.removeAllViews();
+                    if (err != null) {
+                        TextView t = hubEmpty(a, "Не удалось загрузить заявки: " + err + "\n\nНажмите, чтобы повторить.");
+                        t.setOnClickListener(new View.OnClickListener() { @Override public void onClick(View v) { renderClientHub(a); } });
+                        content.addView(t);
+                        return;
+                    }
+                    showHubMine(a, content, tools, data, known);
+                } catch (Throwable ignore) {}
+            }});
+        }}).start();
+    }
+
+    static void showHubMine(Activity a, LinearLayout content, ArrayList tools, JSONArray orders, boolean statusKnown) {
+        if (orders == null || orders.length() == 0) {
+            content.addView(hubEmpty(a, "Здесь появятся инструменты, которые вы брали в аренду.\n\nПока заявок нет — выберите инструмент в каталоге."));
+            return;
+        }
+        java.util.LinkedHashMap<String, Object> rented = new java.util.LinkedHashMap<String, Object>();
+        java.util.LinkedHashMap<String, Object> asked = new java.util.LinkedHashMap<String, Object>();
+        for (int i = 0; i < orders.length(); i++) {          // заявки — от новых к старым
+            JSONObject o = orders.optJSONObject(i);
+            if (o == null) continue;
+            String text = o.optString("tools", "");
+            boolean done = !statusKnown || isRentedStatus(o.optString("status", ""));
+            for (Object t : tools) {
+                if (!(t instanceof JSONObject)) continue;
+                JSONObject tool = (JSONObject) t;
+                String tid = tool.optString("id", "");
+                if (tid.isEmpty() || !orderMentionsTool(text, tool.optString("name", ""))) continue;
+                if (done) { asked.remove(tid); if (!rented.containsKey(tid)) rented.put(tid, tool); }
+                else if (!rented.containsKey(tid) && !asked.containsKey(tid)) asked.put(tid, tool);
+            }
+        }
+        if (rented.isEmpty() && asked.isEmpty()) {
+            content.addView(hubEmpty(a, "Инструментов из ваших заявок сейчас нет в каталоге."));
+            return;
+        }
+        if (!rented.isEmpty()) {
+            if (!asked.isEmpty()) content.addView(hubSection(a, statusKnown ? "Брали в аренду" : "Из ваших заявок"));
+            addHubCards(a, content, new ArrayList(rented.values()));
+        }
+        if (!asked.isEmpty()) {
+            content.addView(hubSection(a, "В заявках — ещё не выданы"));
+            if (rented.isEmpty()) {
+                TextView hint = hubSection(a, "Инструмент перейдёт в «Брали в аренду», когда арендодатель отметит выдачу.");
+                hint.setTypeface(null, android.graphics.Typeface.NORMAL);
+                hint.setPadding(hubDp(a, 6), 0, hubDp(a, 6), hubDp(a, 8));
+                content.addView(hint);
+            }
+            addHubCards(a, content, new ArrayList(asked.values()));
+        }
+    }
+
+    /** Карточки по две в ряд — штатный feedCard (тот же вид и поведение, что на главной). */
+    static void addHubCards(Activity a, LinearLayout content, ArrayList list) {
+        Method card;
+        try {
+            card = a.getClass().getDeclaredMethod("feedCard", JSONObject.class, boolean.class);
+            card.setAccessible(true);
+        } catch (Throwable e) {
+            content.addView(hubEmpty(a, "Не удалось показать карточки."));
+            return;
+        }
+        for (int i = 0; i < list.size(); i += 2) {
+            LinearLayout row = new LinearLayout(a);
+            row.setOrientation(LinearLayout.HORIZONTAL);
+            int added = 0;
+            for (int j = i; j < Math.min(i + 2, list.size()); j++) {
+                try {
+                    Object v = card.invoke(a, list.get(j), false);
+                    if (v instanceof View) { row.addView((View) v); added++; }
+                } catch (Throwable ignore) {}
+            }
+            if (added == 0) continue;
+            if (added == 1) row.addView(new View(a), new LinearLayout.LayoutParams(0, 1, 1f));   // половина ряда, как в сетке
+            content.addView(row, new LinearLayout.LayoutParams(-1, -2));
+        }
+    }
+
+    static TextView hubEmpty(Activity a, String text) {
+        try {
+            Method m = a.getClass().getDeclaredMethod("emptyText", String.class);
+            m.setAccessible(true);
+            Object v = m.invoke(a, text);
+            if (v instanceof TextView) return (TextView) v;
+        } catch (Throwable ignore) {}
+        TextView t = new TextView(a);
+        t.setText(text);
+        t.setTextColor(navColor(a, "gray", 0xff9aa1b0));
+        t.setTextSize(15f);
+        t.setGravity(Gravity.CENTER);
+        t.setPadding(0, hubDp(a, 50), 0, 0);
+        return t;
+    }
+
+    static TextView hubSection(Activity a, String text) {
+        TextView t = new TextView(a);
+        t.setText(text);
+        t.setTextColor(navColor(a, "gray", 0xff9aa1b0));
+        t.setTextSize(13f);
+        t.setTypeface(null, android.graphics.Typeface.BOLD);
+        t.setPadding(hubDp(a, 6), hubDp(a, 12), hubDp(a, 6), hubDp(a, 6));
+        return t;
     }
 
     // ── 16.3. Фото клиента в строке «Клиент» и в нижнем меню (10.41) ──

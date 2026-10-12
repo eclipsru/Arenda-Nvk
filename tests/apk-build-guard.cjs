@@ -76,7 +76,7 @@ try {
   assert.match(jpc, /public AvatarPicker\(\) \{\}/, 'IvaClientPatch: AvatarPicker должен иметь публичный конструктор без параметров (восстановление после смерти процесса)');
   assert.match(jpc, /f\.startActivityForResult\(/, 'IvaClientPatch: выбор фото должен запускаться от имени AvatarPicker');
   // 10.41: фото клиента — в штатном кружке строки «Клиент» и в кружке «Кабинета» нижнего меню.
-  assert.match(jpc, /try \{ showClientAvatar\(a\); \} catch \(Throwable ignore\) \{\}\n    \}/, 'IvaClientPatch: onProfile не показывает фото клиента');
+  assert.match(jpc, /\n        try \{ showClientAvatar\(a\); \} catch \(Throwable ignore\) \{\}\n/, 'IvaClientPatch: onProfile не показывает фото клиента');
   assert.match(jpc, /Object img = get\(a, "avatarImg"\);[\s\S]{0,500}iv\.setVisibility\(View\.VISIBLE\);/, 'IvaClientPatch: фото клиента не ставится в строку «Клиент» (avatarImg)');
   assert.match(jpc, /static void putClientAvatar[\s\S]{0,1200}box\.findViewWithTag\(AV_TAG\)[\s\S]{0,600}box\.addView\(av, new FrameLayout\.LayoutParams\(s, s, Gravity\.CENTER\)\)/, 'IvaClientPatch: фото клиента не ставится в нижнее меню');
   assert.match(jpc, /if \(!signedIn\) \{[\s\S]{0,300}clientAvatarBitmap = null;[\s\S]{0,200}restoreClientHead\(a\)/, 'IvaClientPatch: после выхода фото клиента должно убираться');
@@ -88,6 +88,21 @@ try {
   assert.match(jpc, /static void showClientName\(Activity a\) \{\n\s*try \{\n\s*if \(!isClient\(a\)\) return;/, 'IvaClientPatch: имя админа ведёт штатный код');
   assert.match(jpc, /e\.putString\("name", full\)/, 'IvaClientPatch: ФИО клиента не сохраняется в настройках телефона (после перезапуска снова «Клиент»)');
   assert.match(jpc, /if \(err == null\) \{\n\s*try \{ showClientName\(a\); \}/, 'IvaClientPatch: имя не обновляется после загрузки профиля');
+  // 10.43: логотип у клиента — раздел «Избранное / Мои инструменты» вместо формы заявки; у админа и гостя — штатный onPlus.
+  assert.match(jpc, /client = isClient\(a\);[\s\S]{0,120}if \(client && openClientHub\(a\)\) return;\n\s*callNative\(a, "onPlus"\);/, 'IvaClientPatch: логотип у админа и гостя должен вести в штатный onPlus');
+  assert.match(jpc, /View plus = a\.findViewById\(id\(a, "navPlus"\)\);/, 'IvaClientPatch: обработчик логотипа не ставится на navPlus');
+  assert.match(jpc, /if \(toHub && openClientHub\(a\)\) return;\n\s*callNativeTab\(a, "home"\);/, 'IvaClientPatch: «Назад» в карточке инструмента должна вести на главную, как штатная');
+  assert.match(jpc, /try \{ installClientNav\(a\); \} catch \(Throwable ignore\) \{\}\n\s*try \{ if \(hubVisible && !isClient\(a\)\) callNativeTab\(a, "home"\); \}/, 'IvaClientPatch: onProfile не ставит логотип клиента или не прячет раздел при выходе');
+  assert.match(jp, /try \{ IvaClientPatch\.onShowTab\(a, tab\); \} catch \(Throwable ignore\) \{\}\n    \}/, 'IvaPatch.onTab: штатный переход должен прятать раздел клиента');
+  assert.match(jpc, /if \(hubVisible\) \{\n\s*detailFromHub = "detail"\.equals\(t\);\n\s*hideClientHub\(a\);/, 'IvaClientPatch: раздел клиента не прячется при штатном переходе');
+  assert.match(jpc, /hubStyling = true;\n\s*try \{ IvaPatch\.onTab\(a, HUB_PAGE\); \}[^\n]*finally \{ hubStyling = false; \}/, 'IvaClientPatch: подсветка логотипа не должна прятать сам раздел');
+  assert.match(jpc, /favs\.contains\("t" \+ tid\)/, 'IvaClientPatch: «Избранное» должно брать штатный набор favs (ключ t+id)');
+  assert.match(jpc, /getDeclaredMethod\("feedCard", JSONObject\.class, boolean\.class\)/, 'IvaClientPatch: карточки раздела — штатный feedCard');
+  assert.match(jpc, /"\/rest\/v1\/orders\?select=created_at,tools,status" \+ q/, 'IvaClientPatch: «Мои инструменты» должны читать заявки клиента');
+  assert.match(jpc, /"&user_email=eq\." \+ java\.net\.URLEncoder\.encode\(email, "UTF-8"\)/, 'IvaClientPatch: заявки — только свои (user_email)');
+  for (const k of ['"Избранное"', '"Мои инструменты"', 'HUB_TAG', 'orderMentionsTool(String', 'isRentedStatus(String', 'if (hubTab == 0) renderHubFavorites'])
+    assert.ok(jpc.includes(k), `IvaClientPatch.java: нет части раздела логотипа ${k}`);
+  assert.ok(!/IvaClientPatch\.(onShowTab|openClientHub|installClientNav)/.test(R('android/patches/apply.py')), 'apply.py: раздел логотипа не должен добавлять точек вставки');
   assert.match(jpc, /profileHead/, 'IvaClientPatch: строка «Клиент» не подключена к профилю');
   assert.match(jpc, /installClientProfileHead\(a\)/, 'IvaClientPatch: обработчик строки «Клиент» не устанавливается');
   assert.match(jpc, /depth < 3/, 'IvaClientPatch: оболочки строки «Клиент» не подключены');

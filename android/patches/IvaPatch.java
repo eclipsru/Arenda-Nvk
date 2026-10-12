@@ -409,6 +409,8 @@ public final class IvaPatch {
         } catch (Throwable ignore) {
             // подсветка — только внешний вид: переход между разделами не должен ломаться
         }
+        // 10.43: штатный переход прячет раздел клиента «Избранное / Мои инструменты» (логотип в меню).
+        try { IvaClientPatch.onShowTab(a, tab); } catch (Throwable ignore) {}
     }
 
     /** Чистая проверка выбора пункта — вынесена отдельно, чтобы её можно было проверить без Activity. */
@@ -416,9 +418,10 @@ public final class IvaPatch {
         return current != null && item != null && item.equals(current);
     }
 
-    /** Центральный логотип ведёт в заявку или в раздел добавления инструментов. */
+    /** Центральный логотип ведёт в заявку, в раздел добавления инструментов или (у клиента, 10.43)
+     * в раздел «Избранное / Мои инструменты». */
     static boolean isLogoTab(String tab) {
-        return "order".equals(tab) || "admhub".equals(tab) || "addtool".equals(tab);
+        return "order".equals(tab) || "admhub".equals(tab) || "addtool".equals(tab) || "clienthub".equals(tab);
     }
 
     static int navColor(Activity a, String name, int fallback) {
