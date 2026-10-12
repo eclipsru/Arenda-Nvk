@@ -78,6 +78,13 @@ public class IvaPatchTest {
         eq("маленькое фото не уменьшается", IvaClientPatch.avatarSample(500, 400, 640), 1);
         eq("буквы: имя и фамилия", IvaClientPatch.initialsOf("иван петров"), "ИП");
         eq("буквы: пусто — вопрос", IvaClientPatch.initialsOf("  "), "?");
+        // 10.42: имя клиента в строке «Клиент»
+        eq("имя в строке: из поля «Имя», без лишних пробелов", IvaClientPatch.clientHeadName("  Иван   Сергеевич "), "Иван Сергеевич");
+        eq("имя в строке: пусто — штатный текст", IvaClientPatch.clientHeadName("   "), "");
+        eq("имя в строке: null — штатный текст", IvaClientPatch.clientHeadName(null), "");
+        eq("имя в строке: длинное обрезается до 60", IvaClientPatch.clientHeadName(new String(new char[80]).replace('\0', 'Я')).length(), 60);
+        eq("буква в кружке: первая буква имени заглавной", IvaClientPatch.clientHeadLetter("иван"), "И");
+        eq("буква в кружке: пусто", IvaClientPatch.clientHeadLetter(" "), "");
         // 10.41: кэш фото клиента для строки «Клиент» и нижнего меню
         eq("фото: ключ — почта без регистра и путь", IvaClientPatch.avatarCacheKey(" Ivan@Mail.RU ", "u1/avatar.jpg"), "ivan@mail.ru|u1/avatar.jpg");
         eq("фото: пустой путь — фото нет", IvaClientPatch.avatarCacheKey("ivan@mail.ru", "  "), "");

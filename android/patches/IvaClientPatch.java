@@ -38,6 +38,8 @@
 //     через вспомогательный Fragment AvatarPicker. Новых точек вставки в MainActivity нет (только onProfile).
 //     (10.41) фото клиента видно и в строке «Клиент» (штатный кружок avatarImg), и в кружке «Кабинета»
 //     нижнего меню: картинка из приватного bucket скачивается по токену, при выходе убирается.
+//     (10.42) вместо «Клиент» в строке кабинета — имя из поля «Имя» профиля; ФИО и телефон сохраняются
+//     в настройках телефона (ключи name/phone штатного saveSession) и переживают перезапуск.
 package ru.prokatnvsk.app;
 
 import android.Manifest;
@@ -47,6 +49,7 @@ import android.app.Dialog;
 import android.content.Context;
 import android.content.DialogInterface;
 import android.content.Intent;
+import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
@@ -645,7 +648,10 @@ public final class IvaClientPatch {
                 a.runOnUiThread(new Runnable() { @Override public void run() {
                     ProfileScreen s = clientScreen;
                     if (s != null) s.onProfileLoaded(err);
-                    if (err == null) { try { showClientAvatar(a); } catch (Throwable ignore) {} }
+                    if (err == null) {
+                        try { showClientName(a); } catch (Throwable ignore) {}
+                        try { showClientAvatar(a); } catch (Throwable ignore) {}
+                    }
                 }});
             }
         }).start();
@@ -1323,10 +1329,8 @@ public final class IvaClientPatch {
                     clientProfileLoaded = true;
                     a.runOnUiThread(new Runnable() { @Override public void run() {
                         saving = false;
-                        try {
-                            set(a, "userName", profileName(clientProfile));
-                            set(a, "userPhone", clientProfile.optString("phone", ""));
-                        } catch (Throwable ignore) {}
+                        // ФИО и телефон — в userName/userPhone и в настройки телефона (переживут перезапуск).
+                        rememberClientName(a);
                         clientCoords = null; clientCoordsLoading = false;
                         synchronized (nativeDistanceCache) { nativeDistanceCache.clear(); }
                         avatarChanged = false;
@@ -1461,10 +1465,70 @@ public final class IvaClientPatch {
             ensureClientProfile();
             installClientProfile(a);
         } catch (Throwable ignore) {}
+        try { showClientName(a); } catch (Throwable ignore) {}
         try { showClientAvatar(a); } catch (Throwable ignore) {}
     }
 
-    // ── 16.2. Фото клиента в строке «Клиент» и в нижнем меню (10.41) ──
+    // ── 16.4. Имя клиента в строке «Клиент» (10.42) ──
+    // Штатный renderProfile пишет в строку userName из настроек телефона (имя при регистрации) или «Клиент».
+    // Когда профиль загружен и поле «Имя» заполнено, в строке — это имя, а в кружке без фото — его первая буква.
+    // Полное ФИО (фамилия имя отчество) кладём в userName и в настройки телефона: им штатный код
+    // подставляет имя в заявку, и после перезапуска строка не мигает «Клиентом».
+
+    /** Что писать в строке: имя из поля «Имя»; пустая строка — оставить штатный текст. */
+    static String clientHeadName(String given) {
+        String g = given == null ? "" : given.trim().replaceAll("\\s+", " ");
+        if (g.length() > 60) g = g.substring(0, 60).trim();
+        return g;
+    }
+
+    /** Буква в кружке без фото — как у штатного кода: первая буква имени заглавной. */
+    static String clientHeadLetter(String name) {
+        String n = name == null ? "" : name.trim();
+        if (n.isEmpty()) return "";
+        return new String(Character.toChars(Character.toUpperCase(n.codePointAt(0))));
+    }
+
+    static void showClientName(Activity a) {
+        try {
+            if (!isClient(a)) return;   // админ: строку ведёт штатный код
+            String email = String.valueOf(get(a, "userEmail"));
+            if (!clientProfileLoaded || clientProfile == null || !email.equalsIgnoreCase(clientProfileEmail)) return;
+            String name = clientHeadName(clientProfile.optString("given_name", ""));
+            if (name.isEmpty()) return;
+            Object pn = get(a, "profName");
+            if (pn instanceof TextView) ((TextView) pn).setText(name);
+            Object at = get(a, "avatarTxt");
+            if (at instanceof TextView) ((TextView) at).setText(clientHeadLetter(name));
+            rememberClientName(a);
+        } catch (Throwable ignore) {
+            // имя — только подпись: кабинет работает и со штатным «Клиент»
+        }
+    }
+
+    /** ФИО и телефон из профиля → userName/userPhone и настройки телефона (те же ключи, что у штатного saveSession). */
+    static void rememberClientName(Activity a) {
+        try {
+            if (clientProfile == null) return;
+            String full = profileName(clientProfile).trim();
+            String phone = clientProfile.optString("phone", "").trim();
+            String curName = activityText(a, "userName"), curPhone = activityText(a, "userPhone");
+            boolean nameChanged = !full.isEmpty() && !full.equals(curName);
+            boolean phoneChanged = !phone.isEmpty() && !phone.equals(curPhone);
+            if (!nameChanged && !phoneChanged) return;
+            if (nameChanged) set(a, "userName", full);
+            if (phoneChanged) set(a, "userPhone", phone);
+            Object prefs = get(a, "prefs");
+            if (prefs instanceof SharedPreferences) {
+                SharedPreferences.Editor e = ((SharedPreferences) prefs).edit();
+                if (nameChanged) e.putString("name", full);
+                if (phoneChanged) e.putString("phone", phone);
+                e.apply();
+            }
+        } catch (Throwable ignore) {}
+    }
+
+    // ── 16.3. Фото клиента в строке «Клиент» и в нижнем меню (10.41) ──
     // У админа фото ставит штатный код (поле admins.avatar, публичный адрес). У клиента фото лежит
     // в приватном bucket customer-avatars — штатный loadPhoto его не скачает (нужен токен), поэтому
     // картинку качаем сами по токену клиента и кладём в те же места: штатный CircleImageView avatarImg
