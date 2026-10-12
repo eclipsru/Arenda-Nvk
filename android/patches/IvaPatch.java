@@ -1308,10 +1308,9 @@ public final class IvaPatch {
 
     static double[] lastPhoneLocation(Activity a) {
         try {
-            if (!hasLocationPermission(a)) {
-                if (!locationAsked) { locationAsked=true; a.requestPermissions(new String[] {Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION}, CLIENT_LOCATION_REQUEST); }
-                return null;
-            }
+            // Permission dialogs must be requested by the Activity/main thread;
+            // onFeed/onDetail do that before this background lookup starts.
+            if (!hasLocationPermission(a)) return null;
             LocationManager lm=(LocationManager)a.getSystemService(Context.LOCATION_SERVICE); Location best=null;
             Location g=lm.getLastKnownLocation(LocationManager.GPS_PROVIDER), n=lm.getLastKnownLocation(LocationManager.NETWORK_PROVIDER);
             if(g!=null)best=g;if(n!=null&&(best==null||n.getTime()>best.getTime()))best=n;
@@ -1356,6 +1355,10 @@ public final class IvaPatch {
     // ── 20. Автоматическая оценка доставки в открытой карточке ──
     public static void onDetail(Activity a, JSONObject item, boolean service) {
         activeDetail = item; activeDetailIsService = service; deliveryEstimateKey = ""; deliveryEstimateLoading = false;
+        if (isClient(a) && !hasLocationPermission(a) && !locationAsked) {
+            locationAsked = true;
+            a.requestPermissions(new String[] {Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION}, CLIENT_LOCATION_REQUEST);
+        }
         updateNativeDelivery(a);
         loadNativeClientCoords(a);
     }
