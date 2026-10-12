@@ -520,10 +520,31 @@ public final class IvaClientPatch {
         return page;
     }
 
+    // Версии 10.30–10.33 успевали добавить белую карточку с этим tag. При
+    // обновлении поверх них не полагаемся на перезапуск Activity: сначала
+    // удаляем уже существующий legacy-view из кабинета. Это также не даёт
+    // карточке клиента остаться при переходе между клиентским и админским UI.
+    static final String LEGACY_PROFILE_CARD_TAG = "iva_client_profile_button";
+
+    static void removeLegacyClientCard(Activity a) {
+        try {
+            ViewGroup host = profileHost(a);
+            if (host == null) return;
+            for (int i = host.getChildCount() - 1; i >= 0; i--) {
+                View child = host.getChildAt(i);
+                Object tag = child == null ? null : child.getTag();
+                if (LEGACY_PROFILE_CARD_TAG.equals(tag)) host.removeViewAt(i);
+            }
+        } catch (Throwable ignore) {}
+    }
+
     /** Клиент не получает отдельную светлую карточку в кабинете: штатная
      * строка «Клиент» остаётся единственной точкой входа, а данные и настройки
      * открываются по нажатию на неё. */
     static void installClientProfile(final Activity a) {
+        // Сначала чистим legacy-карточку без проверки роли: при смене
+        // client/admin она не должна пережить перерисовку кабинета.
+        removeLegacyClientCard(a);
         if (!isClient(a)) return;
         try {
             installClientProfileHead(a);

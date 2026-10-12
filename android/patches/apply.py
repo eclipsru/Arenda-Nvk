@@ -18,7 +18,7 @@
  10. logoutLocal()                           : в конце → IvaPatch.onLogout(this) (выход: иконка «Кабинета» снова на месте)
  11. showTab(String)                         : после штатного выбора вкладки → IvaPatch.onTab(this, имя) (оранжевая окантовка без заливки)
  12. renderProfile()                          : только на шаге 10.30 → IvaClientPatch.onProfile(this) (профиль обычного клиента)
- 13. onActivityResult(I,I,Intent)              : шаг 10.34 → IvaClientPatch.onActivityResult(this, ...) (аватарка клиента)
+ 13. onActivityResult(I,I,Intent)              : шаг 10.34+ → IvaClientPatch.onActivityResult(this, ...) (аватарка клиента)
  Плюс versionCode/versionName в apktool.yml.
 """
 import os
