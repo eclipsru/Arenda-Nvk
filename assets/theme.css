@@ -475,10 +475,23 @@ select.inp{cursor:pointer;appearance:none;
 .bub.they .btime{color:var(--g2)}
 .bub img.bimg{border-radius:10px;max-width:100%;margin:-2px 0 4px;cursor:pointer;display:block}
 .bub audio{margin:2px 0;max-width:240px;height:38px}
-.bub .tool-ref{display:flex;gap:8px;align-items:center;padding:7px 9px;margin:-3px -4px 7px;
-  background:rgba(0,0,0,.18);border-radius:9px;font-size:12.5px}
-.bub.they .tool-ref{background:var(--bg-2)}
-.bub .tool-ref img{width:34px;height:34px;border-radius:6px;object-fit:cover;flex-shrink:0}
+.tool-context{display:flex;align-items:center;gap:10px;padding:9px 16px;
+  border-bottom:1px solid var(--line);background:var(--bg-2);color:var(--tx);text-decoration:none;flex-shrink:0}
+.tool-context:hover{background:var(--field)}
+.tool-context img,.tool-context-empty{width:42px;height:42px;border-radius:8px;object-fit:cover;flex:0 0 42px}
+.tool-context-empty{display:flex;align-items:center;justify-content:center;background:var(--field);font-size:21px}
+.tool-context-copy{display:flex;flex-direction:column;gap:2px;min-width:0}
+.tool-context-copy small{font-size:11px;color:var(--g2)}
+.tool-context-copy b{font-size:13.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tool-context-arrow{margin-left:auto;color:var(--or);font-size:20px;flex-shrink:0}
+
+/* Черновик вложения: выбор фото ничего не отправляет без кнопки «Отправить». */
+.th-draft{display:none;align-items:center;gap:9px;margin:0 0 8px;padding:6px 9px;
+  background:var(--field);border:1px solid var(--line);border-radius:10px;font-size:12px;color:var(--g2)}
+.th-draft img{width:42px;height:42px;border-radius:7px;object-fit:cover;flex:0 0 42px}
+.th-draft span{flex:1;min-width:0}
+.th-draft button{width:26px;height:26px;border-radius:50%;color:var(--gr);font-size:18px;line-height:1}
+.th-draft button:hover{background:var(--card);color:var(--tx)}
 
 /* Поле ввода */
 .th-foot{padding:11px 14px;border-top:1px solid var(--line);flex-shrink:0}
