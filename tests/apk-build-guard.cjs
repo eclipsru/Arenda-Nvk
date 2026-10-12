@@ -60,8 +60,6 @@ try {
   assert.match(jpc, /LEGACY_PROFILE_CARD_TAG/, 'IvaClientPatch: нет совместимого удаления старой белой карточки');
   assert.match(jpc, /removeLegacyClientCard\(a\)/, 'IvaClientPatch: legacy-карточка не очищается перед профилем');
   assert.match(jpc, /host\.removeViewAt\(i\)/, 'IvaClientPatch: старая карточка не удаляется из кабинета');
-  assert.match(jpc, /LEGACY_PROFILE_EDIT_TEXT/, 'IvaClientPatch: нет резервного поиска старой карточки по кнопке');
-  assert.match(jpc, /hasLegacyProfileEdit\(child\)/, 'IvaClientPatch: старая карточка не очищается без tag');
   assert.match(jpc, /Настройки профиля клиента/, 'IvaClientPatch: нет заголовка тёмной формы клиента');
   assert.match(jpc, /profileHead/, 'IvaClientPatch: строка «Клиент» не подключена к профилю');
   assert.match(jpc, /installClientProfileHead\(a\)/, 'IvaClientPatch: обработчик строки «Клиент» не устанавливается');

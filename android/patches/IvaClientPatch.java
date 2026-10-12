@@ -503,9 +503,9 @@ public final class IvaClientPatch {
             Object v = m.invoke(a);
             return !(v instanceof Boolean) || !((Boolean) v);
         } catch (Throwable ignore) {
-            // Без надёжной проверки роли не добавляем клиентский UI: иначе
-            // профиль администратора может получить клиентскую карточку.
-            return false;
+            // Если у конкретного варианта APK нет метода-проверки, не прячем
+            // пользовательские настройки: admins всё равно видят свой штатный UI.
+            return true;
         }
     }
 
@@ -525,18 +525,6 @@ public final class IvaClientPatch {
     // удаляем уже существующий legacy-view из кабинета. Это также не даёт
     // карточке клиента остаться при переходе между клиентским и админским UI.
     static final String LEGACY_PROFILE_CARD_TAG = "iva_client_profile_button";
-    static final String LEGACY_PROFILE_EDIT_TEXT = "Изменить данные";
-
-    static boolean hasLegacyProfileEdit(View view) {
-        if (view instanceof TextView && LEGACY_PROFILE_EDIT_TEXT.equals(((TextView) view).getText().toString())) return true;
-        if (view instanceof ViewGroup) {
-            ViewGroup group = (ViewGroup) view;
-            for (int i = 0; i < group.getChildCount(); i++) {
-                if (hasLegacyProfileEdit(group.getChildAt(i))) return true;
-            }
-        }
-        return false;
-    }
 
     static void removeLegacyClientCard(Activity a) {
         try {
@@ -545,7 +533,7 @@ public final class IvaClientPatch {
             for (int i = host.getChildCount() - 1; i >= 0; i--) {
                 View child = host.getChildAt(i);
                 Object tag = child == null ? null : child.getTag();
-                if (LEGACY_PROFILE_CARD_TAG.equals(tag) || hasLegacyProfileEdit(child)) host.removeViewAt(i);
+                if (LEGACY_PROFILE_CARD_TAG.equals(tag)) host.removeViewAt(i);
             }
         } catch (Throwable ignore) {}
     }
