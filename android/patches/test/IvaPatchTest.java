@@ -78,6 +78,11 @@ public class IvaPatchTest {
         eq("маленькое фото не уменьшается", IvaClientPatch.avatarSample(500, 400, 640), 1);
         eq("буквы: имя и фамилия", IvaClientPatch.initialsOf("иван петров"), "ИП");
         eq("буквы: пусто — вопрос", IvaClientPatch.initialsOf("  "), "?");
+        // 10.41: кэш фото клиента для строки «Клиент» и нижнего меню
+        eq("фото: ключ — почта без регистра и путь", IvaClientPatch.avatarCacheKey(" Ivan@Mail.RU ", "u1/avatar.jpg"), "ivan@mail.ru|u1/avatar.jpg");
+        eq("фото: пустой путь — фото нет", IvaClientPatch.avatarCacheKey("ivan@mail.ru", "  "), "");
+        eq("фото: путь null — фото нет", IvaClientPatch.avatarCacheKey("ivan@mail.ru", null), "");
+        eq("фото: другой аккаунт — другой ключ", IvaClientPatch.avatarCacheKey("a@b.ru", "u1/avatar.jpg").equals(IvaClientPatch.avatarCacheKey("c@d.ru", "u1/avatar.jpg")), false);
         if (fail > 0) { System.out.println("ошибок: " + fail); System.exit(1); }
         System.out.println("все проверки IvaPatch пройдены");
     }

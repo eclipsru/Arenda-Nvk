@@ -36,6 +36,8 @@
 //     закреплённая кнопка «Сохранить» (доступна только после загрузки записи с сервера), выбор даты выдачи,
 //     подтверждение при выходе с несохранёнными изменениями; фото уменьшается до 640 px и возвращается
 //     через вспомогательный Fragment AvatarPicker. Новых точек вставки в MainActivity нет (только onProfile).
+//     (10.41) фото клиента видно и в строке «Клиент» (штатный кружок avatarImg), и в кружке «Кабинета»
+//     нижнего меню: картинка из приватного bucket скачивается по токену, при выходе убирается.
 package ru.prokatnvsk.app;
 
 import android.Manifest;
@@ -301,6 +303,13 @@ public final class IvaClientPatch {
     static final String AVATAR_PICKER_TAG = "iva_client_avatar_picker";
     static View clientProfileHead;
     static String clientAvatarPath = "";
+    // 10.41: фото клиента в строке «Клиент» (штатный кружок avatarImg) и в нижнем меню.
+    // Картинка из приватного хранилища скачивается один раз и живёт до выхода из аккаунта.
+    static volatile Bitmap clientAvatarBitmap;
+    static volatile String clientAvatarBitmapKey = "";            // почта|путь, к которым относится картинка
+    static volatile String clientAvatarFailedKey = "";            // после ошибки не качаем при каждом переключении вкладки
+    static volatile boolean clientAvatarFetching = false;
+    static boolean clientHeadPhotoShown = false;           // штатный avatarImg показан нами (вернуть буквы при выходе)
 
     // Фильтр главной страницы native: те же семь параметров, что и web-каталог.
     static ArrayList allNativeTools;
@@ -632,9 +641,11 @@ public final class IvaClientPatch {
                     clientProfileLoading = false;
                 }
                 final String err = error;
+                if (err == null) clientAvatarFailedKey = "";   // свежая запись — фото можно попробовать снова
                 a.runOnUiThread(new Runnable() { @Override public void run() {
                     ProfileScreen s = clientScreen;
                     if (s != null) s.onProfileLoaded(err);
+                    if (err == null) { try { showClientAvatar(a); } catch (Throwable ignore) {} }
                 }});
             }
         }).start();
@@ -1372,6 +1383,10 @@ public final class IvaClientPatch {
                         uploading = false;
                         clientAvatarPath = path;
                         if (version == avatarVersion && preview != null) showAvatar(preview);
+                        // Файл на сервере уже заменён: строка «Клиент» и меню берут новую картинку сразу,
+                        // если этот путь уже в записи, иначе — после «Сохранить» (renderProfile → onProfile).
+                        rememberClientAvatar(avatarCacheKey(clientProfileEmail, path), preview);
+                        showClientAvatar(a);
                         // Файл на сервере уже заменён. Если путь в записи тот же — фото обновилось сразу;
                         // если фото первое — путь закрепится в записи кнопкой «Сохранить».
                         avatarChanged = !path.equals(before);
@@ -1404,10 +1419,14 @@ public final class IvaClientPatch {
             if (path.isEmpty()) { avatarStatus.setText("Фото ещё не добавлено"); return; }
             avatarStatus.setText("Фото загружено");
             final int version = avatarVersion;
+            final String key = avatarCacheKey(clientProfileEmail, path);
+            Bitmap cached = key.equals(clientAvatarBitmapKey) ? clientAvatarBitmap : null;
+            if (cached != null) { showAvatar(cached); return; }
             new Thread(new Runnable() { @Override public void run() {
                 try {
                     byte[] bytes = downloadClientAvatar(a, path);
                     final Bitmap b = decodeAvatar(bytes, dp(96));
+                    if (b != null && path.equals(savedAvatarPath())) rememberClientAvatar(key, b);
                     a.runOnUiThread(new Runnable() { @Override public void run() {
                         if (clientScreen == ProfileScreen.this && version == avatarVersion && b != null) showAvatar(b);
                     }});
@@ -1441,6 +1460,141 @@ public final class IvaClientPatch {
         try {
             ensureClientProfile();
             installClientProfile(a);
+        } catch (Throwable ignore) {}
+        try { showClientAvatar(a); } catch (Throwable ignore) {}
+    }
+
+    // ── 16.2. Фото клиента в строке «Клиент» и в нижнем меню (10.41) ──
+    // У админа фото ставит штатный код (поле admins.avatar, публичный адрес). У клиента фото лежит
+    // в приватном bucket customer-avatars — штатный loadPhoto его не скачает (нужен токен), поэтому
+    // картинку качаем сами по токену клиента и кладём в те же места: штатный CircleImageView avatarImg
+    // строки «Клиент» (буквы avatarTxt прячем) и кружок «Кабинета» в нижнем меню (тег AV_TAG, как у админа:
+    // окантовку рисует onTab, при выходе кружок убирает штатный hook onLogout).
+
+    /** Ключ кэша картинки: почта аккаунта + путь в хранилище. Пустой путь — фото нет. */
+    static String avatarCacheKey(String email, String path) {
+        String p = path == null ? "" : path.trim();
+        if (p.isEmpty()) return "";
+        return (email == null ? "" : email.trim().toLowerCase(Locale.ROOT)) + "|" + p;
+    }
+
+    /** Путь к фото из сохранённой записи (не из несохранённой загрузки на открытом экране). */
+    static String savedAvatarPath() {
+        return clientProfile == null ? "" : clientProfile.optString("avatar_path", "").trim();
+    }
+
+    /** Показать фото клиента (или вернуть буквы). Только UI-поток; сеть — в фоне, один запрос за раз. */
+    static void showClientAvatar(final Activity a) {
+        try {
+            Object token = get(a, "accessToken");
+            boolean signedIn = token instanceof String && !((String) token).trim().isEmpty();
+            if (!signedIn) {
+                // Выход: фото прежнего клиента не остаётся ни в строке, ни в памяти.
+                clientAvatarBitmap = null; clientAvatarBitmapKey = ""; clientAvatarFailedKey = "";
+                if (clientHeadPhotoShown) restoreClientHead(a);
+                return;
+            }
+            if (!isClient(a)) return;   // админ: строку и меню ведёт штатный код
+            String email = String.valueOf(get(a, "userEmail"));
+            if (!clientProfileLoaded || !email.equalsIgnoreCase(clientProfileEmail)) return;   // запись ещё грузится
+            final String path = savedAvatarPath();
+            final String key = avatarCacheKey(clientProfileEmail, path);
+            if (key.isEmpty()) {
+                if (clientHeadPhotoShown) restoreClientHead(a);
+                removeClientNavAvatar(a);
+                return;
+            }
+            Bitmap b = key.equals(clientAvatarBitmapKey) ? clientAvatarBitmap : null;
+            if (b != null) { putClientAvatar(a, b); return; }
+            if (clientAvatarFetching || key.equals(clientAvatarFailedKey)) return;
+            clientAvatarFetching = true;
+            final int size = px(96, a.getResources().getDisplayMetrics().density);
+            new Thread(new Runnable() { @Override public void run() {
+                boolean ok = false;
+                try {
+                    Bitmap d = decodeAvatar(downloadClientAvatar(a, path), size);
+                    if (d != null) {
+                        rememberClientAvatar(key, d);
+                        ok = true;
+                    }
+                } catch (Throwable ignore) {
+                    // нет связи или файла — остаются буквы и значок меню
+                } finally {
+                    if (!ok) clientAvatarFailedKey = key;
+                    clientAvatarFetching = false;
+                }
+                try {
+                    a.runOnUiThread(new Runnable() { @Override public void run() {
+                        try { if (!a.isFinishing()) showClientAvatar(a); } catch (Throwable ignore) {}
+                    }});
+                } catch (Throwable ignore) {}
+            }}).start();
+        } catch (Throwable ignore) {
+            // фото — только внешний вид: кабинет и меню работают и без него
+        }
+    }
+
+    static void rememberClientAvatar(String key, Bitmap b) {
+        if (key == null || key.isEmpty() || b == null) return;
+        clientAvatarBitmap = b;
+        clientAvatarBitmapKey = key;
+        clientAvatarFailedKey = "";
+    }
+
+    static void putClientAvatar(Activity a, Bitmap b) {
+        try {
+            Object img = get(a, "avatarImg");
+            Object txt = get(a, "avatarTxt");
+            if (img instanceof ImageView) {
+                ImageView iv = (ImageView) img;
+                iv.setImageBitmap(b);
+                iv.setPadding(0, 0, 0, 0);
+                iv.clearColorFilter();
+                iv.setVisibility(View.VISIBLE);
+                if (txt instanceof View) ((View) txt).setVisibility(View.GONE);
+                clientHeadPhotoShown = true;
+            }
+        } catch (Throwable ignore) {}
+        try {
+            ViewGroup box = navBox(a);
+            if (box == null) return;
+            View av = box.findViewWithTag(AV_TAG);
+            if (!(av instanceof ImageView)) {
+                if (av != null) box.removeView(av);
+                av = newCircle(a);
+                av.setTag(AV_TAG);
+                int s = px(40, a.getResources().getDisplayMetrics().density);
+                box.addView(av, new FrameLayout.LayoutParams(s, s, Gravity.CENTER));
+            }
+            ((ImageView) av).setImageBitmap(b);
+            ((ImageView) av).clearColorFilter();
+            int orange = navColor(a, "orange", 0xffff9800);
+            styleAvatarOutline(a, navSelected((String) get(a, "curTab"), "profile"), orange);
+        } catch (Throwable ignore) {}
+    }
+
+    /** Буквы вместо фото в строке «Клиент» (так, как рисует штатный renderProfile). */
+    static void restoreClientHead(Activity a) {
+        try {
+            Object img = get(a, "avatarImg");
+            Object txt = get(a, "avatarTxt");
+            if (img instanceof ImageView) {
+                ((ImageView) img).setImageDrawable(null);
+                ((ImageView) img).setVisibility(View.GONE);
+            }
+            if (txt instanceof View) ((View) txt).setVisibility(View.VISIBLE);
+        } catch (Throwable ignore) {}
+        clientHeadPhotoShown = false;
+    }
+
+    static void removeClientNavAvatar(Activity a) {
+        try {
+            ViewGroup box = navBox(a);
+            View av = box == null ? null : box.findViewWithTag(AV_TAG);
+            if (av == null) return;
+            box.removeView(av);
+            int orange = navColor(a, "orange", 0xffff9800);
+            styleAvatarOutline(a, navSelected((String) get(a, "curTab"), "profile"), orange);
         } catch (Throwable ignore) {}
     }
 

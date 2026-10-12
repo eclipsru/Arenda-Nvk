@@ -75,6 +75,13 @@ try {
   assert.match(jpc, /public static final class AvatarPicker extends android\.app\.Fragment/, 'IvaClientPatch: нет помощника AvatarPicker для выбора фото');
   assert.match(jpc, /public AvatarPicker\(\) \{\}/, 'IvaClientPatch: AvatarPicker должен иметь публичный конструктор без параметров (восстановление после смерти процесса)');
   assert.match(jpc, /f\.startActivityForResult\(/, 'IvaClientPatch: выбор фото должен запускаться от имени AvatarPicker');
+  // 10.41: фото клиента — в штатном кружке строки «Клиент» и в кружке «Кабинета» нижнего меню.
+  assert.match(jpc, /try \{ showClientAvatar\(a\); \} catch \(Throwable ignore\) \{\}\n    \}/, 'IvaClientPatch: onProfile не показывает фото клиента');
+  assert.match(jpc, /Object img = get\(a, "avatarImg"\);[\s\S]{0,500}iv\.setVisibility\(View\.VISIBLE\);/, 'IvaClientPatch: фото клиента не ставится в строку «Клиент» (avatarImg)');
+  assert.match(jpc, /static void putClientAvatar[\s\S]{0,1200}box\.findViewWithTag\(AV_TAG\)[\s\S]{0,600}box\.addView\(av, new FrameLayout\.LayoutParams\(s, s, Gravity\.CENTER\)\)/, 'IvaClientPatch: фото клиента не ставится в нижнее меню');
+  assert.match(jpc, /if \(!signedIn\) \{[\s\S]{0,300}clientAvatarBitmap = null;[\s\S]{0,200}restoreClientHead\(a\)/, 'IvaClientPatch: после выхода фото клиента должно убираться');
+  assert.match(jpc, /if \(!isClient\(a\)\) return;   \/\/ админ/, 'IvaClientPatch: фото админа ведёт штатный код — клиентский код его не трогает');
+  assert.match(jpc, /rememberClientAvatar\(avatarCacheKey\(clientProfileEmail, path\), preview\);\n\s*showClientAvatar\(a\);/, 'IvaClientPatch: новое фото не попадает в строку и меню после загрузки');
   assert.match(jpc, /profileHead/, 'IvaClientPatch: строка «Клиент» не подключена к профилю');
   assert.match(jpc, /installClientProfileHead\(a\)/, 'IvaClientPatch: обработчик строки «Клиент» не устанавливается');
   assert.match(jpc, /depth < 3/, 'IvaClientPatch: оболочки строки «Клиент» не подключены');
@@ -102,7 +109,7 @@ try {
     path.join(ROOT, 'ProkatInstrumenta-10.14.apk'), entry], { maxBuffer: 64 * 1024 * 1024 });
   const dex14 = Buffer.concat([zip14('classes.dex'), zip14('classes2.dex')]), arsc14 = zip14('resources.arsc');
   const has = (buf, str) => buf.includes(Buffer.from(str, 'utf8')) || buf.includes(Buffer.from(str, 'utf16le'));
-  for (const str of ['logoutLocal', 'saveSession', 'onCreate', 'lambda$loadAdminProfile$201', 'CircleImageView', 'loadPhoto', 'loadAdminProfile', 'navProfIc', 'accessToken'])
+  for (const str of ['logoutLocal', 'saveSession', 'onCreate', 'lambda$loadAdminProfile$201', 'CircleImageView', 'loadPhoto', 'loadAdminProfile', 'navProfIc', 'accessToken', 'avatarImg', 'avatarTxt', 'userEmail'])
     assert.ok(has(dex14, str), `classes.dex 10.14: нет «${str}» — точка вставки или имя для патча пропали`);
   for (const str of ['navPlus', 'navProfIc', 'ic_logo'])
     assert.ok(has(arsc14, str), `resources.arsc 10.14: нет ресурса «${str}» — логотип или аватарка не найдут место в меню`);
