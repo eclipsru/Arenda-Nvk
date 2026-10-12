@@ -611,16 +611,23 @@ public final class IvaClientPatch {
             }
             if (!(raw instanceof View)) return;
             View head = (View) raw;
-            View target = head;
-            ViewParent parent = head.getParent();
             ViewGroup host = profileHost(a);
-            if (parent instanceof ViewGroup && parent != host) target = (View) parent;
-            if (target == clientProfileHead) return;
-            target.setClickable(true);
-            target.setOnClickListener(new View.OnClickListener() {
-                @Override public void onClick(View v) { showClientProfile(a); }
-            });
-            clientProfileHead = target;
+            View current = head;
+            int depth = 0;
+            // profileHead may be the text inside the dark row, not the row itself.
+            // Put the same action on the row and its immediate wrapper(s), but stop
+            // before pageProfile so the rest of the cabinet is not clickable.
+            while (current != null && current != host && depth < 3) {
+                final View clickable = current;
+                clickable.setClickable(true);
+                clickable.setOnClickListener(new View.OnClickListener() {
+                    @Override public void onClick(View v) { showClientProfile(a); }
+                });
+                clientProfileHead = clickable;
+                ViewParent p = current.getParent();
+                current = p instanceof View ? (View) p : null;
+                depth++;
+            }
         } catch (Throwable ignore) {}
     }
 
