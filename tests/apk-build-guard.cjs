@@ -100,6 +100,9 @@ try {
   assert.match(jpc, /getDeclaredMethod\("feedCard", JSONObject\.class, boolean\.class\)/, 'IvaClientPatch: карточки раздела — штатный feedCard');
   assert.match(jpc, /"\/rest\/v1\/orders\?select=created_at,tools,status" \+ q/, 'IvaClientPatch: «Мои инструменты» должны читать заявки клиента');
   assert.match(jpc, /"&user_email=eq\." \+ java\.net\.URLEncoder\.encode\(email, "UTF-8"\)/, 'IvaClientPatch: заявки — только свои (user_email)');
+  // Выдачу отмечает арендодатель в части заявки (order_parts.status) — «Брали в аренду» должно её учитывать.
+  assert.match(jpc, /"\/rest\/v1\/orders\?select=created_at,tools,status,order_parts\(status,tools_text\)" \+ q/, 'IvaClientPatch: «Мои инструменты» не читают статусы частей заявки (order_parts)');
+  assert.match(jpc, /done = partMarksRented\(part\.optString\("status", ""\), part\.optString\("tools_text", ""\), name\);/, 'IvaClientPatch: выдача по части заявки не учитывается');
   for (const k of ['"Избранное"', '"Мои инструменты"', 'HUB_TAG', 'orderMentionsTool(String', 'isRentedStatus(String', 'if (hubTab == 0) renderHubFavorites'])
     assert.ok(jpc.includes(k), `IvaClientPatch.java: нет части раздела логотипа ${k}`);
   assert.ok(!/IvaClientPatch\.(onShowTab|openClientHub|installClientNav)/.test(R('android/patches/apply.py')), 'apply.py: раздел логотипа не должен добавлять точек вставки');

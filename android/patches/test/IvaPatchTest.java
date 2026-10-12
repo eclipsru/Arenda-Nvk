@@ -101,6 +101,10 @@ public class IvaPatchTest {
         eq("статус: закрыт (вернули)", IvaClientPatch.isRentedStatus(" Closed "), true);
         eq("статус: новая заявка", IvaClientPatch.isRentedStatus("new"), false);
         eq("статус: пусто", IvaClientPatch.isRentedStatus(null), false);
+        eq("часть заявки: «Выдал» по этому инструменту", IvaClientPatch.partMarksRented("rented", "Болгарка ×1", "Болгарка"), true);
+        eq("часть заявки: «Вернули», пустой текст — вся часть", IvaClientPatch.partMarksRented("closed", " ", "Болгарка"), true);
+        eq("часть заявки: выдан другой инструмент", IvaClientPatch.partMarksRented("rented", "Миксер ×1", "Болгарка"), false);
+        eq("часть заявки: ещё новая", IvaClientPatch.partMarksRented("new", "Болгарка ×1", "Болгарка"), false);
         // 10.41: кэш фото клиента для строки «Клиент» и нижнего меню
         eq("фото: ключ — почта без регистра и путь", IvaClientPatch.avatarCacheKey(" Ivan@Mail.RU ", "u1/avatar.jpg"), "ivan@mail.ru|u1/avatar.jpg");
         eq("фото: пустой путь — фото нет", IvaClientPatch.avatarCacheKey("ivan@mail.ru", "  "), "");

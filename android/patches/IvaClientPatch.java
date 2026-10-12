@@ -1561,6 +1561,14 @@ public final class IvaClientPatch {
         return "rented".equals(v) || "closed".equals(v);
     }
 
+    /** Часть заявки (одного арендодателя) отмечена «Выдал»/«Вернули» и относится к этому инструменту.
+     * Пустой текст части — вся часть целиком (в заявке один арендодатель). */
+    static boolean partMarksRented(String status, String partTools, String name) {
+        if (!isRentedStatus(status)) return false;
+        String pt = partTools == null ? "" : partTools.trim();
+        return pt.isEmpty() || orderMentionsTool(pt, name);
+    }
+
     /** Есть ли инструмент в тексте заявки. Текст заявки собирается как «Название ×1, Название 2 ×3»
      * (сайт и приложение), поэтому название должно стоять целиком: перед ним — начало, «,», «;», «•» или
      * перевод строки, после — «×N»/«xN», «,», «;», перевод строки или конец. «Перфоратор» не совпадёт
@@ -1843,11 +1851,19 @@ public final class IvaClientPatch {
                 Method get = a.getClass().getDeclaredMethod("apiGet", String.class);
                 get.setAccessible(true);
                 try {
-                    rows = new JSONArray(String.valueOf(get.invoke(a, "/rest/v1/orders?select=created_at,tools,status" + q)));
+                    // Выдачу отмечает арендодатель в части заявки (order_parts.status: «Выдал» → rented,
+                    // «Вернули» → closed), поэтому сначала читаем заявки вместе с их частями. Если части
+                    // клиенту не видны (политика RLS), PostgREST вернёт пустой список — тогда статус берётся
+                    // из самой заявки.
+                    rows = new JSONArray(String.valueOf(get.invoke(a, "/rest/v1/orders?select=created_at,tools,status,order_parts(status,tools_text)" + q)));
                 } catch (Throwable first) {
-                    // если в таблице нет поля status — без разделения на «выдано» и «в заявке»
-                    statusKnown = false;
-                    rows = new JSONArray(String.valueOf(get.invoke(a, "/rest/v1/orders?select=created_at,tools" + q)));
+                    try {
+                        rows = new JSONArray(String.valueOf(get.invoke(a, "/rest/v1/orders?select=created_at,tools,status" + q)));
+                    } catch (Throwable second) {
+                        // если в таблице нет поля status — без разделения на «выдано» и «в заявке»
+                        statusKnown = false;
+                        rows = new JSONArray(String.valueOf(get.invoke(a, "/rest/v1/orders?select=created_at,tools" + q)));
+                    }
                 }
             } catch (Throwable e) {
                 Throwable c = e instanceof java.lang.reflect.InvocationTargetException && e.getCause() != null ? e.getCause() : e;
@@ -1884,12 +1900,20 @@ public final class IvaClientPatch {
             JSONObject o = orders.optJSONObject(i);
             if (o == null) continue;
             String text = o.optString("tools", "");
-            boolean done = !statusKnown || isRentedStatus(o.optString("status", ""));
+            boolean orderDone = !statusKnown || isRentedStatus(o.optString("status", ""));
+            JSONArray parts = o.optJSONArray("order_parts");
             for (Object t : tools) {
                 if (!(t instanceof JSONObject)) continue;
                 JSONObject tool = (JSONObject) t;
                 String tid = tool.optString("id", "");
-                if (tid.isEmpty() || !orderMentionsTool(text, tool.optString("name", ""))) continue;
+                String name = tool.optString("name", "");
+                if (tid.isEmpty() || !orderMentionsTool(text, name)) continue;
+                boolean done = orderDone;
+                for (int k = 0; !done && parts != null && k < parts.length(); k++) {
+                    JSONObject part = parts.optJSONObject(k);
+                    if (part == null) continue;
+                    done = partMarksRented(part.optString("status", ""), part.optString("tools_text", ""), name);
+                }
                 if (done) { asked.remove(tid); if (!rented.containsKey(tid)) rented.put(tid, tool); }
                 else if (!rented.containsKey(tid) && !asked.containsKey(tid)) asked.put(tid, tool);
             }
