@@ -259,7 +259,9 @@ public final class IvaPatch {
     static final String AV_RING_TAG = "iva_nav_avatar_ring";
     static final String HOME_VIGNETTE_TAG = "iva_home_vignette";
     static final long CHAT_REFRESH_MS = 5000L;
-    static final Handler CHAT_HANDLER = new Handler(Looper.getMainLooper());
+    // Lazy: the JVM test uses Android's compile-time stubs, whose Handler constructor throws.
+    // The real APK initializes this only after the Activity has entered the chat tab.
+    static Handler CHAT_HANDLER;
     static WeakReference<Activity> chatActivity = new WeakReference<Activity>(null);
     static final Runnable CHAT_TICK = new Runnable() {
         @Override public void run() {
@@ -276,15 +278,16 @@ public final class IvaPatch {
             } catch (Throwable ignore) {
                 // A refresh failure must not break navigation; the next tick retries.
             }
-            CHAT_HANDLER.postDelayed(this, CHAT_REFRESH_MS);
+            if (CHAT_HANDLER != null) CHAT_HANDLER.postDelayed(this, CHAT_REFRESH_MS);
         }
     };
 
     /** Refresh the native chat while its tab is visible; stop it on every other tab. */
     static void chatPoll(Activity a, boolean active) {
-        CHAT_HANDLER.removeCallbacks(CHAT_TICK);
+        if (CHAT_HANDLER != null) CHAT_HANDLER.removeCallbacks(CHAT_TICK);
         chatActivity.clear();
         if (active && a != null) {
+            if (CHAT_HANDLER == null) CHAT_HANDLER = new Handler(Looper.getMainLooper());
             chatActivity = new WeakReference<Activity>(a);
             CHAT_HANDLER.post(CHAT_TICK);
         }
