@@ -84,8 +84,8 @@ import org.json.JSONObject;
 public final class IvaSearchPatch {
 
     // ── Разметка ──
-    static final int STRIP_DP = 24;          // зарезервированная полоса слева: в ней живёт ручка, карточек там нет
-    static final int RIGHT_DP = 12;          // было 14 — сетка теряет всего 8dp ширины на ручку (24 − 14 − 2)
+    static final int BAR_DP = 22;            // 10.46: полоса с ручкой внизу, над нижним меню; лента кончается над ней
+    static final float SHEET_MAX = 0.85f;    // шторка — не выше 85% области страниц
     static final String CITY_ROW_TAG = "iva_search_city_row";
     static final String CHIPS_TAG = "iva_search_chips";
     static final String HANDLE_TAG = "iva_search_handle";
@@ -150,7 +150,8 @@ public final class IvaSearchPatch {
     /** Пробелы (в т.ч. неразрывные) схлопываются, края обрезаются. null → "". */
     static String text(String s) {
         if (s == null) return "";
-        return s.replaceAll("[\\s\\u00a0]+", " ").trim();
+        // Как JS /\s+/ у сайта: кроме ASCII-пробелов — неразрывный и прочие пробелы Юникода (из скопированных адресов).
+        return s.replaceAll("[\\s\\u00a0\\u1680\\u2000-\\u200a\\u2028\\u2029\\u202f\\u205f\\u3000\\ufeff]+", " ").trim();
     }
 
     static String lower(String s) { return s == null ? "" : s.toLowerCase(new Locale("ru")); }
@@ -204,15 +205,16 @@ public final class IvaSearchPatch {
         return m.find() ? m.group(1).trim() : "";
     }
 
-    /** Город объявления — как на сайте (assets/sb.js toolToAd): pickup_city → город из адреса → Новочеркасск. */
+    /**
+     * Город объявления — ровно как на сайте (assets/sb.js toolToAd):
+     * pickup_city → если есть адрес выдачи, город из него (не нашёлся — "" : город неизвестен, не придумываем) →
+     * адреса нет совсем — Новочеркасск.
+     */
     static String toolCity(String pickupCity, String pickupAddress, String terms) {
         String c = city(pickupCity);
         if (!c.isEmpty()) return c;
         String addr = pickupAddress(pickupAddress, terms);
-        if (!addr.isEmpty()) {
-            c = addressCity(addr);
-            if (!c.isEmpty()) return c;
-        }
+        if (!addr.isEmpty()) return addressCity(addr);
         return DEFAULT_CITY;
     }
 
@@ -257,8 +259,11 @@ public final class IvaSearchPatch {
     static boolean extraMatch(String toolCity, double price, boolean delivery, int cond,
                               String selCity, long from, long to, boolean onlyDelivery, int conds) {
         if (selCity != null && !selCity.isEmpty() && !cityMatches(toolCity, selCity)) return false;
-        if (from >= 0 && price < from) return false;
-        if (to >= 0 && price > to) return false;
+        long[] r = normRange(from, to);
+        // Цена 0 / не указана — под границы цены не подходит (иначе «до 500» показывало бы объявления без цены).
+        if ((r[0] >= 0 || r[1] >= 0) && !(price > 0)) return false;
+        if (r[0] >= 0 && price < r[0]) return false;
+        if (r[1] >= 0 && price > r[1]) return false;
         if (onlyDelivery && !delivery) return false;
         if (conds != 0 && (cond & conds) == 0) return false;
         return true;
@@ -299,7 +304,28 @@ public final class IvaSearchPatch {
     }
 
     /** Подпись фильтра цены. */
+    /** «от» больше «до» — границы меняются местами (а не пустая выдача). -1 — без границы. */
+    static long[] normRange(long from, long to) {
+        if (from >= 0 && to >= 0 && from > to) return new long[] {to, from};
+        return new long[] {from, to};
+    }
+
+    /** Какие варианты (категории, подкатегории) показывать: только непустые, плюс выбранный; порядок — штатный. */
+    static List<String> facetVisible(List<String> keys, Map<String, Integer> counts, String selected) {
+        List<String> out = new ArrayList<String>();
+        for (String k : keys) {
+            if (k == null || k.isEmpty() || out.contains(k)) continue;
+            Integer n = counts == null ? null : counts.get(k);
+            if ((n != null && n > 0) || k.equals(selected)) out.add(k);
+        }
+        return out;
+    }
+
+    static final String[] RADIUS_TITLES = {"любой", "5 км", "10 км", "25 км", "50 км"};
+
     static String priceChip(long from, long to) {
+        long[] r = normRange(from, to);
+        from = r[0]; to = r[1];
         if (from >= 0 && to >= 0) return money(from) + "–" + money(to) + NB + "₽/сутки";
         if (from >= 0) return "от " + money(from) + NB + "₽/сутки";
         if (to >= 0) return "до " + money(to) + NB + "₽/сутки";
@@ -472,7 +498,6 @@ public final class IvaSearchPatch {
         Object sb = IvaClientPatch.get(a, "searchBox");
         Object fg = IvaClientPatch.get(a, "feedGrid");
         Object sg = IvaClientPatch.get(a, "suggestBox");
-        Object bg = IvaClientPatch.get(a, "pageBg");
         // Сначала проверяем, что разметка именно та, что в 10.14; иначе ничего не трогаем.
         if (!(ph instanceof ScrollView) || !(sb instanceof View) || !(fg instanceof LinearLayout)) return;
         ScrollView home = (ScrollView) ph;
@@ -492,14 +517,12 @@ public final class IvaSearchPatch {
         fullTools = null;
         loadCityFromPrefs(a);
 
-        // 1) Полоса под ручку: левый отступ ленты 24dp вместо 14, правый 12. Картинка-шапка остаётся во всю ширину.
-        content.setPadding(dp(a, STRIP_DP), content.getPaddingTop(), dp(a, RIGHT_DP), content.getPaddingBottom());
-        View banner = directChild(content, bg instanceof View ? (View) bg : null);   // pageBg или рамка виньетки вокруг него
-        if (banner != null && banner.getLayoutParams() instanceof ViewGroup.MarginLayoutParams) {
-            ViewGroup.MarginLayoutParams blp = (ViewGroup.MarginLayoutParams) banner.getLayoutParams();
-            blp.leftMargin = -dp(a, STRIP_DP);
-            blp.rightMargin = -dp(a, RIGHT_DP);
-            banner.setLayoutParams(blp);
+        // 1) Полоса под ручку внизу (над нижним меню): главная кончается над ней — ручка не закрывает карточки.
+        //    Отступы ленты и картинка-шапка — штатные (как в 10.44).
+        if (home.getLayoutParams() instanceof ViewGroup.MarginLayoutParams) {
+            ViewGroup.MarginLayoutParams hlp = (ViewGroup.MarginLayoutParams) home.getLayoutParams();
+            hlp.bottomMargin = dp(a, BAR_DP);
+            home.setLayoutParams(hlp);
         }
 
         // 2) Строка города встаёт на место строки поиска (её отрицательный отступ поверх шапки переходит к строке города).
@@ -527,7 +550,7 @@ public final class IvaSearchPatch {
         HandleView handle = new HandleView(a);
         handle.setTag(HANDLE_TAG);
         handle.setVisibility(View.GONE);
-        pages.addView(handle, new FrameLayout.LayoutParams(dp(a, STRIP_DP), dp(a, 120), Gravity.LEFT | Gravity.CENTER_VERTICAL));
+        pages.addView(handle, new FrameLayout.LayoutParams(-1, dp(a, BAR_DP), Gravity.BOTTOM));
 
         // 5) Свежий каталог и пустые надписи штатной ленты.
         ((LinearLayout) fg).setOnHierarchyChangeListener(new ViewGroup.OnHierarchyChangeListener() {
@@ -540,17 +563,6 @@ public final class IvaSearchPatch {
         if (anyActive()) applySearch(a);
     }
 
-    /** Прямой потомок container, внутри которого лежит v (или сам v). */
-    static View directChild(ViewGroup container, View v) {
-        View cur = v;
-        for (int i = 0; cur != null && i < 6; i++) {
-            ViewParent p = cur.getParent();
-            if (p == container) return cur;
-            cur = p instanceof View ? (View) p : null;
-        }
-        return null;
-    }
-
     static void syncVisibility(Activity a, boolean home) {
         ViewGroup pages = pages(a);
         if (pages == null) return;
@@ -558,7 +570,7 @@ public final class IvaSearchPatch {
         if (!home) closePanel(a, false);
         if (handle != null) {
             handle.setVisibility(home ? View.VISIBLE : View.GONE);
-            if (home) { handle.setTranslationX(0f); handle.bringToFront(); }
+            if (home) handle.bringToFront();
         }
     }
 
@@ -571,8 +583,27 @@ public final class IvaSearchPatch {
         return j.optString(k, "");
     }
 
+    // Город и состояние объявления считаются регулярными выражениями — запоминаем на объект каталога
+    // (каталог меняется целиком: новый список — кеш очищается в allTools).
+    static final java.util.IdentityHashMap<Object, String> cityCache = new java.util.IdentityHashMap<Object, String>();
+    static final java.util.IdentityHashMap<Object, Integer> condCache = new java.util.IdentityHashMap<Object, Integer>();
+
     static String toolCityOf(JSONObject j) {
-        return toolCity(js(j, "pickup_city"), js(j, "pickup_address"), js(j, "terms"));
+        String c = cityCache.get(j);
+        if (c == null) {
+            c = toolCity(js(j, "pickup_city"), js(j, "pickup_address"), js(j, "terms"));
+            cityCache.put(j, c);
+        }
+        return c;
+    }
+
+    static int condOf(JSONObject j) {
+        Integer c = condCache.get(j);
+        if (c == null) {
+            c = condFromTerms(js(j, "terms"));
+            condCache.put(j, c);
+        }
+        return c;
     }
 
     static List<String> catsOf(JSONObject j) {
@@ -584,12 +615,14 @@ public final class IvaSearchPatch {
     }
 
     static boolean nativeMatch(JSONObject j, String catMode, String curCat, String curSub, String query) {
-        return nativeMatch(js(j, "t_status"), js(j, "cat"), catsOf(j), js(j, "sub"), js(j, "name"), js(j, "descr"),
-            catMode, curCat, curSub, query);
+        // Поля читаются ровно как в штатном renderFeed/inCat: optString(k, "") — у Android для JSON null это "null",
+        // и штатный поиск ищет по «Название null»; иначе «Показать N» разошлось бы с лентой на латинском запросе.
+        return nativeMatch(j.optString("t_status", ""), j.optString("cat", ""), catsOf(j), j.optString("sub", ""),
+            j.optString("name", ""), j.optString("descr", ""), catMode, curCat, curSub, query);
     }
 
     static boolean extraMatch(JSONObject j, String city, Filter f) {
-        return extraMatch(toolCityOf(j), j.optDouble("price", 0), j.optBoolean("delivery", false), condFromTerms(js(j, "terms")),
+        return extraMatch(toolCityOf(j), j.optDouble("price", 0), j.optBoolean("delivery", false), condOf(j),
             city, f.from, f.to, f.delivery, f.conds);
     }
 
@@ -598,7 +631,11 @@ public final class IvaSearchPatch {
     /** Полный каталог: если штатный код положил в tools новый список — он и есть свежий полный. */
     static ArrayList allTools(Activity a) {
         Object t = IvaClientPatch.get(a, "tools");
-        if (t instanceof ArrayList && t != appliedTools) fullTools = (ArrayList) t;
+        if (t instanceof ArrayList && t != appliedTools && t != fullTools) {
+            fullTools = (ArrayList) t;
+            cityCache.clear();
+            condCache.clear();
+        }
         return fullTools == null ? new ArrayList() : fullTools;
     }
 
@@ -1194,10 +1231,10 @@ public final class IvaSearchPatch {
     static LinearLayout sheet;
     static float progress = 0f;          // 0 — закрыта, 1 — открыта
     static ValueAnimator anim;
-    static int sheetWidth = 0;
+    static int sheetSize = 0;            // высота шторки, px
 
     static FrameLayout buildPanelRoot(final Activity a) {
-        FrameLayout root = new FrameLayout(a);
+        final FrameLayout root = new FrameLayout(a);
         root.setTag(PANEL_TAG);
         root.setVisibility(View.GONE);
         View s = new View(a);
@@ -1205,26 +1242,52 @@ public final class IvaSearchPatch {
         s.setAlpha(0f);
         s.setClickable(true);   // пока панель открыта, карточки под затемнением не нажимаются
         s.setContentDescription("Закрыть фильтры");
-        s.setOnTouchListener(new DragListener(a, false));
+        s.setOnTouchListener(new DragListener(a, DragListener.SCRIM));
         s.setOnClickListener(new View.OnClickListener() { @Override public void onClick(View v) { closePanel(a, true); } });
         root.addView(s, new FrameLayout.LayoutParams(-1, -1));
         scrim = s;
         LinearLayout sh = new LinearLayout(a);
         sh.setOrientation(LinearLayout.VERTICAL);
-        sh.setBackgroundColor(color(a, "bg", 0xff101217));
+        GradientDrawable sbg = new GradientDrawable();
+        sbg.setColor(color(a, "bg", 0xff101217));
+        float r = dp(a, 18);
+        sbg.setCornerRadii(new float[] {r, r, r, r, 0, 0, 0, 0});
+        sh.setBackground(sbg);
         sh.setClickable(true);
         sh.setFocusableInTouchMode(true);   // фокус на панели — системная «Назад» приходит сюда (см. backKeys)
         if (android.os.Build.VERSION.SDK_INT >= 21) sh.setElevation(dp(a, 12));
-        root.addView(sh, new FrameLayout.LayoutParams(dp(a, 320), -1, Gravity.LEFT));
+        root.addView(sh, new FrameLayout.LayoutParams(-1, dp(a, 400), Gravity.BOTTOM));
         sheet = sh;
         panelRoot = root;
+        // Высота шторки — 85% области страниц; с клавиатурой (adjustResize) область меньше — шторка тоже,
+        // кнопки внизу остаются над клавиатурой.
+        root.addOnLayoutChangeListener(new View.OnLayoutChangeListener() {
+            @Override public void onLayoutChange(View v, int l, int t, int rr, int b, int ol, int ot, int orr, int ob) {
+                if (b - t == ob - ot) return;
+                v.post(new Runnable() { @Override public void run() { fitSheet(a); } });
+            }
+        });
         return root;
     }
 
-    static int computeSheetWidth(Activity a) {
-        ViewGroup pages = pages(a);
-        int w = pages != null && pages.getWidth() > 0 ? pages.getWidth() : a.getResources().getDisplayMetrics().widthPixels;
-        return Math.max(dp(a, 240), Math.min(dp(a, 340), w - dp(a, 56)));
+    static int computeSheetHeight(Activity a) {
+        int h = panelRoot != null && panelRoot.getHeight() > 0 ? panelRoot.getHeight() : 0;
+        if (h <= 0) {
+            ViewGroup pages = pages(a);
+            h = pages != null && pages.getHeight() > 0 ? pages.getHeight() : a.getResources().getDisplayMetrics().heightPixels / 2;
+        }
+        return Math.max(dp(a, 200), Math.round(h * SHEET_MAX));
+    }
+
+    static void fitSheet(Activity a) {
+        if (sheet == null || panelRoot == null || panelRoot.getVisibility() != View.VISIBLE) return;
+        int h = computeSheetHeight(a);
+        if (h == sheetSize) return;
+        sheetSize = h;
+        FrameLayout.LayoutParams lp = (FrameLayout.LayoutParams) sheet.getLayoutParams();
+        lp.height = h;
+        sheet.setLayoutParams(lp);
+        setProgress(a, progress);
     }
 
     static boolean panelOpen() { return panelRoot != null && panelRoot.getVisibility() == View.VISIBLE && progress > 0f; }
@@ -1234,15 +1297,13 @@ public final class IvaSearchPatch {
         if (panelRoot == null || sheet == null) return;
         if (panelRoot.getVisibility() != View.VISIBLE) {
             draft = current(a);
-            sheetWidth = computeSheetWidth(a);
+            sheetSize = computeSheetHeight(a);
             FrameLayout.LayoutParams lp = (FrameLayout.LayoutParams) sheet.getLayoutParams();
-            lp.width = sheetWidth;
+            lp.height = sheetSize;
             sheet.setLayoutParams(lp);
             buildSheet(a);
             panelRoot.setVisibility(View.VISIBLE);
-            panelRoot.bringToFront();
-            View h = handleView(a);
-            if (h != null) h.bringToFront();
+            panelRoot.bringToFront();   // шторка поверх полосы с ручкой
             hideKeyboard(a, panelRoot);
             setProgress(a, 0f);
         }
@@ -1255,10 +1316,8 @@ public final class IvaSearchPatch {
 
     static void setProgress(Activity a, float p) {
         progress = Math.max(0f, Math.min(1f, p));
-        if (sheet != null) sheet.setTranslationX(-(1f - progress) * sheetWidth);
+        if (sheet != null) sheet.setTranslationY((1f - progress) * sheetSize);
         if (scrim != null) scrim.setAlpha(0.55f * progress);
-        View h = handleView(a);
-        if (h != null) h.setTranslationX(progress * sheetWidth);   // ручка едет вместе с краем панели
     }
 
     static void openPanel(Activity a) {
@@ -1320,73 +1379,58 @@ public final class IvaSearchPatch {
         }
     }
 
-    /** Тонкая ручка: видимая полоска 4dp, область нажатия — вся полоса 24×120dp. */
+    /** Полоса над нижним меню с «язычком» по центру: видимая полоска 36×4dp, нажимается вся полоса. */
     static final class HandleView extends View {
         final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
         final RectF r = new RectF();
         final Activity a;
         boolean active = false, open = false;
 
-        HandleView(Activity a) {
+        HandleView(final Activity a) {
             super(a);
             this.a = a;
             setClickable(true);
             setFocusable(false);
+            setBackgroundColor(color(a, "bg", 0xff101217));
             setContentDescription("Открыть фильтры");
-            setOnTouchListener(new DragListener(a, true));
+            setOnTouchListener(new DragListener(a, DragListener.HANDLE));
             // TalkBack и другие службы нажимают через performClick — тот же переключатель, что и касание.
             setOnClickListener(new View.OnClickListener() {
-                @Override public void onClick(View v) { if (panelOpen()) closePanel(HandleView.this.a, true); else openPanel(HandleView.this.a); }
-            });
-            addOnLayoutChangeListener(new View.OnLayoutChangeListener() {
-                @Override public void onLayoutChange(View v, int l, int t, int rr, int b, int ol, int ot, int or, int ob) {
-                    excludeSystemGesture(v);
-                }
+                @Override public void onClick(View v) { if (panelOpen()) closePanel(a, true); else openPanel(a); }
             });
         }
 
         @Override protected void onDraw(Canvas c) {
             float d = getResources().getDisplayMetrics().density;
-            float w = 4 * d, h = 56 * d;
-            float cx = open ? 8 * d : getWidth() / 2f;
-            r.set(cx - w / 2, (getHeight() - h) / 2, cx + w / 2, (getHeight() + h) / 2);
-            paint.setColor(active || open ? color(a, "orange", 0xffff8f1f) : 0xb3ff8f1f);
-            c.drawRoundRect(r, w / 2, w / 2, paint);
-            if (active && !open) {   // точка — условия поиска включены
+            float w = 36 * d, h = 4 * d;
+            float cx = getWidth() / 2f, cy = getHeight() / 2f;
+            r.set(cx - w / 2, cy - h / 2, cx + w / 2, cy + h / 2);
+            paint.setColor(active ? color(a, "orange", 0xffff8f1f) : color(a, "gray2", 0xff6b7080));
+            c.drawRoundRect(r, h / 2, h / 2, paint);
+            if (active) {   // точка — условия поиска включены
                 paint.setColor(color(a, "orange", 0xffff8f1f));
-                c.drawCircle(cx, r.top - 7 * d, 3 * d, paint);
+                c.drawCircle(r.right + 9 * d, cy, 3 * d, paint);
             }
         }
     }
 
-    /** Навигация жестами: у ручки системный жест «назад» от края не перехватывает перетаскивание. */
-    static void excludeSystemGesture(View v) {
-        try {
-            if (android.os.Build.VERSION.SDK_INT >= 29) {
-                List<Rect> rects = new ArrayList<Rect>();
-                rects.add(new Rect(0, 0, v.getWidth(), v.getHeight()));
-                v.setSystemGestureExclusionRects(rects);
-            }
-        } catch (Throwable ignore) {}
-    }
-
     /**
-     * Перетаскивание: по горизонтали — панель, по вертикали — прокрутка ленты (события передаются странице),
-     * короткое нажатие — открыть/закрыть (ручка) или закрыть (затемнение).
+     * Перетаскивание по вертикали: вверх — шторка выезжает за пальцем, вниз — уезжает.
+     * Короткое нажатие: ручка — открыть/закрыть, затемнение — закрыть, шапка шторки — ничего.
      */
     static final class DragListener implements View.OnTouchListener {
-        static final int NONE = 0, DRAG = 1, SCROLL = 2;
+        static final int HANDLE = 0, SCRIM = 1, SHEET = 2;
+        static final int NONE = 0, DRAG = 1, IGNORE = 2;
         final Activity a;
-        final boolean isHandle;
+        final int kind;
         final int slop;
         int mode = NONE;
         float x0, y0, p0;
         VelocityTracker vt;
-        MotionEvent downCopy;
 
-        DragListener(Activity a, boolean isHandle) {
+        DragListener(Activity a, int kind) {
             this.a = a;
-            this.isHandle = isHandle;
+            this.kind = kind;
             this.slop = ViewConfiguration.get(a).getScaledTouchSlop();
         }
 
@@ -1404,46 +1448,40 @@ public final class IvaSearchPatch {
                     if (vt != null) vt.recycle();
                     vt = VelocityTracker.obtain();
                     vt.addMovement(e);
-                    if (downCopy != null) downCopy.recycle();
-                    downCopy = MotionEvent.obtain(e);
                     return true;
                 case MotionEvent.ACTION_MOVE: {
                     if (vt != null) vt.addMovement(e);
                     float dx = e.getRawX() - x0, dy = e.getRawY() - y0;
                     if (mode == NONE) {
-                        if (Math.abs(dx) > slop && Math.abs(dx) > Math.abs(dy)) {
+                        if (Math.abs(dy) > slop && Math.abs(dy) >= Math.abs(dx)) {
+                            if (kind == HANDLE && !homeVisible) { mode = IGNORE; return true; }
                             mode = DRAG;
                             if (v.getParent() != null) v.getParent().requestDisallowInterceptTouchEvent(true);
-                            preparePanel(a);
-                        } else if (isHandle && p0 == 0f && Math.abs(dy) > slop && Math.abs(dy) > Math.abs(dx)) {
-                            mode = SCROLL;
-                            forward(v, downCopy);
+                            if (kind == HANDLE) preparePanel(a);
+                        } else if (Math.abs(dx) > slop) {
+                            mode = IGNORE;   // вбок — не жест шторки (и не нажатие)
                         }
                     }
-                    if (mode == DRAG && sheetWidth > 0) setProgress(a, p0 + dx / sheetWidth);
-                    else if (mode == SCROLL) forward(v, e);
+                    if (mode == DRAG && sheetSize > 0) setProgress(a, p0 - dy / sheetSize);
                     return true;
                 }
                 case MotionEvent.ACTION_UP:
                 case MotionEvent.ACTION_CANCEL: {
                     boolean up = e.getActionMasked() == MotionEvent.ACTION_UP;
                     if (mode == DRAG) {
-                        float vx = 0;
-                        if (vt != null) { vt.addMovement(e); vt.computeCurrentVelocity(1000); vx = vt.getXVelocity(); }
+                        float vy = 0;
+                        if (vt != null) { vt.addMovement(e); vt.computeCurrentVelocity(1000); vy = vt.getYVelocity(); }
                         float fling = 600 * density(a);
-                        boolean open = vx > fling || (vx > -fling && progress > 0.5f);
+                        boolean open = vy < -fling || (vy < fling && progress > 0.5f);
                         animateTo(a, open ? 1f : 0f);
-                    } else if (mode == SCROLL) {
-                        forward(v, e);
-                    } else if (!up) {
-                        // Касание отменили сразу после того, как оно остановило анимацию, — не оставляем панель на полпути.
-                        if (panelRoot != null && panelRoot.getVisibility() == View.VISIBLE) animateTo(a, progress > 0.5f ? 1f : 0f);
-                    } else {
-                        if (isHandle) {
-                            if (panelOpen()) closePanel(a, true); else openPanel(a);
-                        } else {
-                            closePanel(a, true);
-                        }
+                    } else if (!up || mode == IGNORE) {
+                        // Касание отменили (или увели вбок) после того, как оно остановило анимацию, — не оставляем на полпути.
+                        if (panelRoot != null && panelRoot.getVisibility() == View.VISIBLE && progress > 0f && progress < 1f)
+                            animateTo(a, progress > 0.5f ? 1f : 0f);
+                    } else if (kind == HANDLE) {
+                        if (panelOpen()) closePanel(a, true); else openPanel(a);
+                    } else if (kind == SCRIM) {
+                        closePanel(a, true);
                     }
                     mode = NONE;
                     if (vt != null) { vt.recycle(); vt = null; }
@@ -1452,18 +1490,6 @@ public final class IvaSearchPatch {
                 default:
                     return true;
             }
-        }
-
-        /** Событие ручки → странице главной в её координатах (ручка лежит поверх неё в том же контейнере). */
-        void forward(View v, MotionEvent e) {
-            if (e == null) return;
-            Object ph = IvaClientPatch.get(a, "pageHome");
-            if (!(ph instanceof View)) return;
-            View page = (View) ph;
-            MotionEvent c = MotionEvent.obtain(e);
-            c.offsetLocation(v.getLeft() + v.getTranslationX() - page.getLeft(), v.getTop() + v.getTranslationY() - page.getTop());
-            page.dispatchTouchEvent(c);
-            c.recycle();
         }
     }
 
@@ -1502,11 +1528,20 @@ public final class IvaSearchPatch {
             cGray2 = color(a, "gray2", 0xff6b7080), cLine = color(a, "line", 0xff262b35), cOrange = color(a, "orange", 0xffff8f1f);
         backKeys(a, sh);
 
-        // Шапка
+        // Шапка: «язычок» сверху; за шапку шторку можно утянуть вниз
+        LinearLayout headBox = new LinearLayout(a);
+        headBox.setOrientation(LinearLayout.VERTICAL);
+        headBox.setOnTouchListener(new DragListener(a, DragListener.SHEET));
+        View grab = new View(a);
+        grab.setBackground(pill(a, cGray2, 0));
+        LinearLayout.LayoutParams gl = new LinearLayout.LayoutParams(dp(a, 36), dp(a, 4));
+        gl.gravity = Gravity.CENTER_HORIZONTAL;
+        gl.topMargin = dp(a, 8);
+        headBox.addView(grab, gl);
         LinearLayout head = new LinearLayout(a);
         head.setOrientation(LinearLayout.HORIZONTAL);
         head.setGravity(Gravity.CENTER_VERTICAL);
-        head.setPadding(dp(a, 16), dp(a, 4), dp(a, 4), 0);
+        head.setPadding(dp(a, 16), 0, dp(a, 4), 0);
         TextView title = new TextView(a);
         title.setText("Фильтры");
         title.setTextSize(19f);
@@ -1522,7 +1557,8 @@ public final class IvaSearchPatch {
         feedback(a, close);
         close.setOnClickListener(new View.OnClickListener() { @Override public void onClick(View v) { closePanel(a, true); } });
         head.addView(close, new LinearLayout.LayoutParams(dp(a, 48), dp(a, 48)));
-        sh.addView(head, new LinearLayout.LayoutParams(-1, -2));
+        headBox.addView(head, new LinearLayout.LayoutParams(-1, -2));
+        sh.addView(headBox, new LinearLayout.LayoutParams(-1, -2));
 
         // Город — тот же выбор, что в верхней строке (второго независимого выбора нет)
         TextView cl = new TextView(a);
@@ -1602,6 +1638,26 @@ public final class IvaSearchPatch {
         condNote.setPadding(0, dp(a, 6), 0, 0);
         body.addView(condNote);
 
+        // Радиус — заготовка (решение владельца, 10.46): виден, но неактивен и на выдачу не влияет.
+        // Ни геолокации, ни разрешений, ни расстояний: координат для настоящего радиуса у приложения пока нет.
+        body.addView(sectionTitle(a, "Радиус \u00b7 скоро"));
+        Flow rb = new Flow(a, dp(a, 6));
+        for (int i = 0; i < RADIUS_TITLES.length; i++) {
+            TextView rc = chip(a, RADIUS_TITLES[i], i == 0, false);
+            rc.setEnabled(false);
+            rc.setClickable(false);
+            rc.setAlpha(0.45f);
+            rb.addView(rc);
+        }
+        rb.setContentDescription("Радиус поиска появится позже, сейчас недоступен");
+        body.addView(rb, new LinearLayout.LayoutParams(-1, -2));
+        TextView rn = new TextView(a);
+        rn.setText("Поиск по расстоянию появится позже. Сейчас выбор радиуса недоступен и на выдачу не влияет.");
+        rn.setTextSize(12f);
+        rn.setTextColor(cGray2);
+        rn.setPadding(0, dp(a, 6), 0, 0);
+        body.addView(rn);
+
         // Закреплённые действия
         View line2 = new View(a);
         line2.setBackgroundColor(cLine);
@@ -1659,6 +1715,7 @@ public final class IvaSearchPatch {
         e.setTextColor(color(a, "text", 0xfff2f4f8));
         e.setHintTextColor(color(a, "gray2", 0xff6b7080));
         e.setInputType(InputType.TYPE_CLASS_NUMBER);
+        e.setFilters(new android.text.InputFilter[] {new android.text.InputFilter.LengthFilter(7)});
         e.setImeOptions(EditorInfo.IME_ACTION_DONE);
         e.setPadding(dp(a, 12), 0, dp(a, 12), 0);
         Drawable fb = drawable(a, "bg_field");
@@ -1712,26 +1769,64 @@ public final class IvaSearchPatch {
             });
             panelChips.setVisibility(panelChips.getChildCount() > 0 ? View.VISIBLE : View.GONE);
 
-            // Категории (штатный справочник cats; «Все» — без категории)
-            catBox.removeAllViews();
-            addOption(a, catBox, "Все", draft.cat.isEmpty(), new Runnable() { @Override public void run() { draft.cat = ""; draft.sub = ""; } });
+            String query = str(IvaClientPatch.get(a, "query"));
+
+            // Категории и подкатегории — штатные справочники cats/subcats (как в сетке на главной), но только те,
+            // где при остальных условиях (город, поиск, цена, доставка, состояние) есть хоть один инструмент.
+            Filter noCat = draft.copy();
+            noCat.cat = ""; noCat.sub = "";
+            List<String> catKeys = new ArrayList<String>();
+            LinkedHashMap<String, String> catTitles = new LinkedHashMap<String, String>();
             Object cats = IvaClientPatch.get(a, "cats");
             if (cats instanceof ArrayList) for (Object o : (ArrayList) cats) {
                 if (!(o instanceof JSONObject)) continue;
-                final String key = ((JSONObject) o).optString("key", "");
-                if (key.isEmpty()) continue;
-                addOption(a, catBox, ((JSONObject) o).optString("title", key), key.equals(draft.cat),
+                String key = ((JSONObject) o).optString("key", "");
+                if (key.isEmpty() || catTitles.containsKey(key)) continue;
+                catKeys.add(key);
+                catTitles.put(key, ((JSONObject) o).optString("title", key));
+            }
+            // Один проход по каталогу: то же правило, что countFor/лента (штатный inCat: cat или список cats).
+            LinkedHashMap<String, Integer> catCounts = new LinkedHashMap<String, Integer>();
+            LinkedHashMap<String, Integer> subCounts = new LinkedHashMap<String, Integer>();
+            int allCount = 0;
+            for (Object o : allTools(a)) {
+                if (!(o instanceof JSONObject)) continue;
+                JSONObject j = (JSONObject) o;
+                if (!nativeMatch(j, "root", "", "", query) || !extraMatch(j, city, noCat)) continue;
+                allCount++;
+                HashSet<String> in = new HashSet<String>();
+                in.add(j.optString("cat", ""));
+                List<String> cl2 = catsOf(j);
+                if (cl2 != null) in.addAll(cl2);
+                for (String k : in) if (catTitles.containsKey(k)) catCounts.put(k, (catCounts.containsKey(k) ? catCounts.get(k) : 0) + 1);
+                if (!draft.cat.isEmpty() && in.contains(draft.cat)) {
+                    String sk = j.optString("sub", "");
+                    subCounts.put(sk, (subCounts.containsKey(sk) ? subCounts.get(sk) : 0) + 1);
+                }
+            }
+            catBox.removeAllViews();
+            addOption(a, catBox, "Все \u00b7 " + allCount, draft.cat.isEmpty(),
+                new Runnable() { @Override public void run() { draft.cat = ""; draft.sub = ""; } });
+            for (final String key : facetVisible(catKeys, catCounts, draft.cat)) {
+                Integer cn = catCounts.get(key);
+                addOption(a, catBox, catTitles.get(key) + " \u00b7 " + (cn == null ? 0 : cn), key.equals(draft.cat),
                     new Runnable() { @Override public void run() { draft.cat = key; draft.sub = ""; } });
             }
-            // Подкатегории выбранной категории
             subBox.removeAllViews();
             Object subs = IvaClientPatch.get(a, "subcats");
             if (!draft.cat.isEmpty() && subs instanceof ArrayList) {
+                List<String> subKeys = new ArrayList<String>();
+                LinkedHashMap<String, String> subTitles = new LinkedHashMap<String, String>();
                 for (Object o : (ArrayList) subs) {
                     if (!(o instanceof JSONObject) || !draft.cat.equals(((JSONObject) o).optString("cat"))) continue;
-                    final String key = ((JSONObject) o).optString("key", "");
-                    if (key.isEmpty()) continue;
-                    addOption(a, subBox, ((JSONObject) o).optString("title", key), key.equals(draft.sub),
+                    String key = ((JSONObject) o).optString("key", "");
+                    if (key.isEmpty() || subTitles.containsKey(key)) continue;
+                    subKeys.add(key);
+                    subTitles.put(key, ((JSONObject) o).optString("title", key));
+                }
+                for (final String key : facetVisible(subKeys, subCounts, draft.sub)) {
+                    Integer sn = subCounts.get(key);
+                    addOption(a, subBox, subTitles.get(key) + " \u00b7 " + (sn == null ? 0 : sn), key.equals(draft.sub),
                         new Runnable() { @Override public void run() { draft.sub = key.equals(draft.sub) ? "" : key; } });
                 }
             }
@@ -1739,30 +1834,39 @@ public final class IvaSearchPatch {
             subTitleView.setVisibility(hasSubs ? View.VISIBLE : View.GONE);
             subBox.setVisibility(hasSubs ? View.VISIBLE : View.GONE);
 
-            // Подсказка цены и числа по доставке/состоянию — по каталогу выбранного города
+            // Подсказка цены и числа по доставке/состоянию — по выдаче при остальных условиях
             long min = -1, max = -1;
+            int noPrice = 0;
             int withDelivery = 0;
             int[] condCounts = new int[COND_BITS.length];
             int withCond = 0;
             Filter base = draft.copy();
             base.from = -1; base.to = -1; base.delivery = false; base.conds = 0;
             String catMode = base.cat.isEmpty() ? "root" : "cat";
-            String query = str(IvaClientPatch.get(a, "query"));
             for (Object o : allTools(a)) {
                 if (!(o instanceof JSONObject)) continue;
                 JSONObject j = (JSONObject) o;
                 if (!nativeMatch(j, catMode, base.cat, base.sub, query) || !extraMatch(j, city, base)) continue;
-                long p = Math.round(j.optDouble("price", 0));
-                if (min < 0 || p < min) min = p;
-                if (max < 0 || p > max) max = p;
+                double pd = j.optDouble("price", 0);
+                if (!(pd > 0)) noPrice++;
+                else {
+                    long pr = Math.round(pd);
+                    if (min < 0 || pr < min) min = pr;
+                    if (max < 0 || pr > max) max = pr;
+                }
                 if (j.optBoolean("delivery", false)) withDelivery++;
-                int c = condFromTerms(js(j, "terms"));
+                int c = condOf(j);
                 if (c != 0) withCond++;
                 for (int i = 0; i < COND_BITS.length; i++) if (c == COND_BITS[i]) condCounts[i]++;
             }
-            priceHint.setText(min < 0 ? "Подходящих инструментов нет — границы цены подсказать нечем."
-                : (min == max ? "Сейчас все подходящие — по " + money(min) + NB + "\u20bd в сутки."
+            StringBuilder ph = new StringBuilder();
+            if (draft.from >= 0 && draft.to >= 0 && draft.from > draft.to)
+                ph.append("«От» больше «до» — ищем от ").append(money(draft.to)).append(" до ").append(money(draft.from)).append(NB).append("\u20bd. ");
+            ph.append(min < 0 ? "Цены у подходящих инструментов не указаны."
+                : (min == max ? "Сейчас все с ценой — по " + money(min) + NB + "\u20bd в сутки."
                 : "Сейчас в выдаче: от " + money(min) + " до " + money(max) + NB + "\u20bd в сутки."));
+            if (noPrice > 0) ph.append(" Без цены — ").append(noPrice).append(": при выборе цены они не показываются.");
+            priceHint.setText(ph.toString());
             syncing = true;
             try { deliveryBox.setText("Только с доставкой (" + withDelivery + ")"); } finally { syncing = false; }
 

@@ -34,6 +34,25 @@ jobs:
         run: |
           set -o pipefail
           bash tools/check.sh 2>&1 | tee /tmp/check.log
+      # 10.46: фильтры приложения на настоящем каталоге — только чтение (те же GET-запросы, что делает
+      # приложение при запуске; публичный ключ сайта). Не роняет проверку: сеть к базе может пропасть,
+      # результат — в пометках «Каталог · …». Код: tools/catalog-audit/.
+      - name: Фильтры приложения на настоящем каталоге (только чтение)
+        continue-on-error: true
+        run: |
+          set -euo pipefail
+          JAR="$ANDROID_HOME/platforms/$(ls "$ANDROID_HOME/platforms" | grep -E '^android-[0-9]+$' | sort -t- -k2 -n | tail -1)/android.jar"
+          C="$RUNNER_TEMP/audit-cls"; D="$RUNNER_TEMP/catalog"
+          mkdir -p "$C"
+          javac -encoding UTF-8 -source 8 -target 8 -nowarn -bootclasspath "$JAR" -d "$C" \
+            android/patches/IvaPatch.java android/patches/IvaClientPatch.java android/patches/IvaSearchPatch.java \
+            tools/catalog-audit/IvaCatalogAudit.java
+          python3 tools/catalog-audit/fetch.py "$D" | tee "$RUNNER_TEMP/fetch.log"
+          echo "::notice title=Каталог · Выгрузка::$(tr '\n' ' ' < "$RUNNER_TEMP/fetch.log" | cut -c1-900)"
+          rc=0
+          java -Dfile.encoding=UTF-8 -cp "$C:$JAR" ru.prokatnvsk.app.IvaCatalogAudit "$D" || rc=1
+          node tools/catalog-audit/site-compare.cjs "$D" || rc=1
+          exit $rc
       - name: Итог одной строкой (видно в списке проверок PR)
         if: always()
         run: |

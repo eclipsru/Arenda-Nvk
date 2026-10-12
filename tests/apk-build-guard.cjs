@@ -149,10 +149,28 @@ try {
   const webCities = cities(R('assets/data.js').match(/const CITIES = \[([\s\S]*?)\];/)[1]);
   const appCities = cities(js45.match(/static final String\[\] CITIES = \{([\s\S]*?)\};/)[1]);
   assert.deepEqual(appCities, webCities, 'IvaSearchPatch.CITIES должен совпадать с CITIES в assets/data.js');
-  for (const k of ['"Ваш город"', '"Выберите город"', '"Сбросить"', '"Фильтры"', 'showLabel(n)', 'KeyEvent.KEYCODE_BACK', 'setSystemGestureExclusionRects',
-    'requestDisallowInterceptTouchEvent(true)', 'page.dispatchTouchEvent(c)', 'STRIP_DP = 24', 'OnHierarchyChangeListener', 'K_CITY', 'K_SEEN',
+  for (const k of ['"Ваш город"', '"Выберите город"', '"Сбросить"', '"Фильтры"', 'showLabel(n)', 'KeyEvent.KEYCODE_BACK',
+    'requestDisallowInterceptTouchEvent(true)', 'OnHierarchyChangeListener', 'K_CITY', 'K_SEEN',
     '"/auth/v1/user"', '"/rest/v1/rpc/get_my_customer_profile"', 'Город в профиле не меняется'])
     assert.ok(js45.includes(k), `IvaSearchPatch.java: нет ${k}`);
+  // 10.46: ручка внизу над нижним меню, шторка снизу (не выше 85%), левой полосы нет
+  for (const k of ['BAR_DP = 22', 'SHEET_MAX = 0.85f', 'new FrameLayout.LayoutParams(-1, dp(a, BAR_DP), Gravity.BOTTOM)', 'hlp.bottomMargin = dp(a, BAR_DP)',
+    'sheet.setTranslationY((1f - progress) * sheetSize)', 'setProgress(a, p0 - dy / sheetSize)', 'DragListener.HANDLE', 'DragListener.SHEET', 'DragListener.SCRIM',
+    'Gravity.BOTTOM));', 'fitSheet(a)', 'LengthFilter(7)', 'facetVisible(catKeys, catCounts, draft.cat)', 'facetVisible(subKeys, subCounts, draft.sub)',
+    'normRange(from, to)', '"Радиус \\u00b7 скоро"', 'rc.setEnabled(false)'])
+    assert.ok(js45.includes(k), `IvaSearchPatch.java (10.46): нет ${k}`);
+  assert.ok(!/STRIP_DP|RIGHT_DP|Gravity\.LEFT \| Gravity\.CENTER_VERTICAL|content\.setPadding\(/.test(js45), 'IvaSearchPatch: левая полоса с ручкой должна быть убрана (10.46)');
+  // радиус — только вид: варианты встречаются лишь в объявлении и в шторке, на фильтр/подсчёт не влияют
+  assert.equal((js45.match(/RADIUS_TITLES/g) || []).length, 3, 'IvaSearchPatch: радиус не должен участвовать в фильтре (только заготовка в шторке)');
+  assert.ok(!/radius|радиус/i.test(js45.slice(js45.indexOf('static boolean extraMatch('), js45.indexOf('static long[] normRange('))), 'IvaSearchPatch: радиус попал в extraMatch');
+  // проверка каталога: только чтение, в CI не роняет проверку, сверка с сайтом сама себя проверяет
+  const chk = R('.github/workflows/check.yml'), fetchPy = R('tools/catalog-audit/fetch.py');
+  assert.match(chk, /- name: Фильтры приложения на настоящем каталоге \(только чтение\)\n\s+continue-on-error: true/, 'check.yml: нет шага проверки фильтров на каталоге');
+  assert.ok(!/method=|data=/.test(fetchPy) && /urllib\.request\.Request\(url \+ path, headers=/.test(fetchPy)
+    && (fetchPy.match(/urlopen\(/g) || []).length === 1 && fetchPy.includes('urlopen(req, timeout=30)'), 'tools/catalog-audit/fetch.py: только GET-запросы');
+  for (const q of ['/rest/v1/tools?select=*&active=eq.true&order=sort.asc.nullslast,name.asc', '/rest/v1/cats?select=*&active=eq.true&order=sort.asc.nullslast', '/rest/v1/subcats?select=*&active=eq.true&order=sort.asc.nullslast'])
+    assert.ok(fetchPy.includes(q) && has(dex14, q), `fetch.py и приложение 10.14 должны брать каталог одинаково: ${q}`);
+  execFileSync('node', [path.join(ROOT, 'tools/catalog-audit/site-compare.cjs')], { stdio: 'pipe' });
   // профиль из поиска не сохраняется: ни PUT в /auth/v1/user, ни save_customer_profile
   assert.ok(!/"PUT"|save_customer_profile|upsert_my_customer_profile/.test(js45), 'IvaSearchPatch: выбор города не должен менять профиль');
   // геолокация автоматически не запрашивается, карт и «рядом» нет
