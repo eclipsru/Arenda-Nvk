@@ -86,9 +86,11 @@ public final class IvaSearchPatch {
 
     // ── Разметка ──
     static final int BAR_DP = 22;            // 10.46: полоса с ручкой внизу, над нижним меню; лента кончается над ней
-    static final int CITY_ROW_DP = 34;       // 10.49: строка «Ваш город» (была 40dp)
-    static final int CITY_BTN_DP = 30;       // 10.49: кнопки города и «Фильтр» (кнопка города была 36dp)
-    static final int SEARCH_DP = 37;         // 10.50: строка поиска 37dp (10.49 — 36dp, штатно 44dp)
+    static final int CITY_ROW_DP = 35;       // 10.51: строка «Ваш город» 35dp (10.49 — 34, до того 40)
+    static final int CITY_BTN_DP = 31;       // 10.51: кнопки города и «Фильтр» 31dp (10.49 — 30)
+    static final int SEARCH_DP = 38;         // 10.51: строка поиска 38dp (10.50 — 37, 10.49 — 36, штатно 44)
+    static final int SHEET_BTN_DP = 48;      // 10.51: «Сбросить» и «Показать N» в шторке 48dp (было 50)
+    static final int PRICE_FIELD_DP = 46;    // 10.51: поля цены «от» / «до» 46dp (было 48)
     static final float SHEET_MAX = 0.85f;    // шторка — 85% области страниц (10.48: вернули как в 10.46 по решению владельца)
     static final String CITY_ROW_TAG = "iva_search_city_row";
     static final String CHIPS_TAG = "iva_search_chips";
@@ -556,7 +558,7 @@ public final class IvaSearchPatch {
         // 2) 10.50: строка поиска — на своём штатном месте поверх картинки-шапки (отступ штатный, картинка не двигается),
         //    строка «Ваш город · Фильтр» — под ней, после подсказок поиска (подсказки остаются прямо под строкой поиска).
         LinearLayout.LayoutParams slp = (LinearLayout.LayoutParams) searchFrame.getLayoutParams();
-        slp.height = dp(a, SEARCH_DP);   // 10.49–10.50: строка поиска тоньше штатных 44dp
+        slp.height = dp(a, SEARCH_DP);   // 10.49–10.51: строка поиска тоньше штатных 44dp
         searchFrame.setLayoutParams(slp);
         View row = buildCityRow(a);
         LinearLayout.LayoutParams rlp = new LinearLayout.LayoutParams(-1, dp(a, CITY_ROW_DP));
@@ -1739,10 +1741,10 @@ public final class IvaSearchPatch {
         prices.setOrientation(LinearLayout.HORIZONTAL);
         fromEdit = priceField(a, "от", draft.from);
         toEdit = priceField(a, "до", draft.to);
-        LinearLayout.LayoutParams fl = new LinearLayout.LayoutParams(0, dp(a, 48), 1f);
+        LinearLayout.LayoutParams fl = new LinearLayout.LayoutParams(0, dp(a, PRICE_FIELD_DP), 1f);
         fl.rightMargin = dp(a, 8);
         prices.addView(fromEdit, fl);
-        prices.addView(toEdit, new LinearLayout.LayoutParams(0, dp(a, 48), 1f));
+        prices.addView(toEdit, new LinearLayout.LayoutParams(0, dp(a, PRICE_FIELD_DP), 1f));
         body.addView(prices, new LinearLayout.LayoutParams(-1, -2));
         priceHint = new TextView(a);
         priceHint.setTextSize(12f);
@@ -1821,7 +1823,7 @@ public final class IvaSearchPatch {
                 refreshPanel(a);
             }
         });
-        LinearLayout.LayoutParams rl = new LinearLayout.LayoutParams(0, dp(a, 50), 1f);
+        LinearLayout.LayoutParams rl = new LinearLayout.LayoutParams(0, dp(a, SHEET_BTN_DP), 1f);
         rl.rightMargin = dp(a, 8);
         foot.addView(reset, rl);
         resetBtn = reset;
@@ -1838,7 +1840,7 @@ public final class IvaSearchPatch {
         else show.setBackground(pill(a, cOrange, 0));
         show.setClickable(true);
         show.setOnClickListener(new View.OnClickListener() { @Override public void onClick(View v) { applyDraft(a); } });
-        foot.addView(show, new LinearLayout.LayoutParams(0, dp(a, 50), 2f));
+        foot.addView(show, new LinearLayout.LayoutParams(0, dp(a, SHEET_BTN_DP), 2f));
         showBtn = show;
         sh.addView(foot, new LinearLayout.LayoutParams(-1, -2));
 

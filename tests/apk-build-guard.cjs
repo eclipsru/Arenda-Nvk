@@ -199,8 +199,13 @@ try {
     assert.ok(row.includes('fb.setOnClickListener(new View.OnClickListener() { @Override public void onClick(View v) { openPanel(a); } });')
       && row.includes('row.addView(fb, flp);') && row.indexOf('row.addView(cityBox, blp);') < row.indexOf('row.addView(fb, flp);'),
       'IvaSearchPatch: кнопка «Фильтр» справа от города должна открывать шторку');
-    assert.ok(js45.includes('SEARCH_DP = 37;') && js45.includes('slp.height = dp(a, SEARCH_DP);') && js45.includes('CITY_BTN_DP = 30;'),
-      'IvaSearchPatch: строка поиска 37dp (10.50), кнопки города и «Фильтр» 30dp');
+    assert.ok(js45.includes('SEARCH_DP = 38;') && js45.includes('slp.height = dp(a, SEARCH_DP);') && js45.includes('CITY_BTN_DP = 31;')
+      && js45.includes('CITY_ROW_DP = 35;') && (js45.match(/dp\(a, CITY_BTN_DP\)/g) || []).length === 3,
+      'IvaSearchPatch: строка поиска 38dp, строка города 35dp, кнопки города и «Фильтр» 31dp (10.51)');
+    // 10.51: в шторке «Сбросить» / «Показать N» — 48dp, поля цены — 46dp (обе кнопки и оба поля)
+    assert.ok(js45.includes('SHEET_BTN_DP = 48;') && js45.includes('PRICE_FIELD_DP = 46;')
+      && (js45.match(/dp\(a, SHEET_BTN_DP\)/g) || []).length === 2 && (js45.match(/dp\(a, PRICE_FIELD_DP\)/g) || []).length === 2,
+      'IvaSearchPatch: кнопки шторки 48dp и поля цены 46dp (10.51)');
     // 10.50: поиск — сверху на штатном месте (его отступ поверх картинки не трогаем), город — под подсказками, ряд условий — под городом
     const ins = js45.slice(js45.indexOf('static void install('), js45.indexOf('static void syncVisibility('));
     assert.ok(!/slp\.topMargin\s*=/.test(ins) && !ins.includes('rlp.topMargin = slp.topMargin'), 'IvaSearchPatch.install: отступ строки поиска (поверх картинки-шапки) должен остаться штатным');
