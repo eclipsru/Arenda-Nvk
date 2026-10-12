@@ -420,7 +420,7 @@ var KEY='sb_publishable_dtRaEHNNPBFbHFvg8hw9iA_FqJSz9BE';
 var SKLAD={lat:47.4526182,lon:40.1008652};
 var OWNER_EMAIL='eclips.ru@mail.ru';
 var DELIV_PER_KM=40;
-var S={city:'',tok:null,ref:null,exp:0,me:'',uname:'',uphone:'',admin:null,tools:[],cats:[],subs:[],limited:[],likes:{},cart:{},screen:'home',cat:'',sub:'',q:'',chatWith:null,chatTool:null,chatDraftImg:'',pollT:null,days:1,delivery:false,daddr:'',dkm:0,dsum:0,cabTab:'tools',ordTab:'act'};
+var S={city:'',tok:null,ref:null,exp:0,me:'',uname:'',uphone:'',admin:null,tools:[],cats:[],subs:[],limited:[],likes:{},cart:{},screen:'home',cat:'',sub:'',q:'',chatWith:null,chatTool:null,chatDraftImg:'',chatSub:null,pollT:null,days:1,delivery:false,daddr:'',dkm:0,dsum:0,cabTab:'tools',ordTab:'act'};
 function $(id){return document.getElementById(id)}
 function esc(s){return (s==null?'':''+s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;')}
 function m(x){x=Math.round(x||0);return String(x).replace(/\B(?=(\d{3})+(?!\d))/g,'\u00A0')+' \u20BD'}
@@ -668,7 +668,9 @@ function plusBtn(){
 }
 function navOn(n){var b=document.querySelectorAll('#nav button,#tophead .tlinks button');for(var i=0;i<b.length;i++){var d=b[i].getAttribute('data-n');b[i].classList.toggle('on',d===n||(n==='home'&&S.favOnly&&d==='fav'))}}
 function go(n){
-  S.screen=n;if(S.pollT){clearInterval(S.pollT);S.pollT=null}
+  S.screen=n;
+  if(n!=='chat'&&S.chatSub){S.chatSub.close();S.chatSub=null}
+  if(S.pollT){clearInterval(S.pollT);S.pollT=null}
   if(n==='home')vHome();
   else if(n==='chat')vChat();
   else if(n==='orders')vOrders();
@@ -979,7 +981,15 @@ function whoName(em){
   return em.split('@')[0];
 }
 function isWide(){return window.matchMedia('(min-width:800px)').matches}
+function onCabinetMessage(m){
+  var f=(m&&m.from_email||'').toLowerCase(),t=(m&&m.to_email||'').toLowerCase();
+  if(!S.me|| (f!==S.me&&t!==S.me))return;
+  loadUnread();
+  if(S.chatWith && (f===S.chatWith||t===S.chatWith)) drawMsgs();
+  else if(S.screen==='chat'&&!S.chatWith) vChat();
+}
 async function vChat(){
+  if(S.chatSub){S.chatSub.close();S.chatSub=null}
   navOn('chat');
   if(isWide()){
     $('view').innerHTML='<div class="chatwrap"><div class="clist" id="thr"><div class="empt">Загрузка…</div></div><div class="cpane" id="cpane"><div class="empt" style="margin:auto">Выберите чат слева</div></div></div>';
@@ -1010,6 +1020,7 @@ async function vChat(){
     $('thr').innerHTML=h||'<div class="empt">Сообщений пока нет</div>';
     $('thr').onclick=function(ev){var d=ev.target.closest('[data-e]');if(d)openChatWith(d.getAttribute('data-e'),'')};
     loadUnread();
+    S.chatSub=subscribeMessages(onCabinetMessage);
   }catch(e){$('thr').innerHTML='<div class="empt">Ошибка: '+esc(e.message)+'</div>'}
 }
 async function loadUnread(){

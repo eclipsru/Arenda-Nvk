@@ -495,13 +495,13 @@
     poll = setInterval(async function(){
       try {
         const fresh = await loadMessages();
-        if (fresh.length !== MSGS.length){
-          const known = {};
-          MSGS.forEach(function(m){ known[String(m.id)] = 1; });
-          fresh.forEach(function(m){ if (!known[String(m.id)]) onIncoming(m); });
-        }
+        // Не сравниваем только количество: при лимите выдачи 400 новая запись
+        // может заменить старую, и длина массива останется прежней.
+        const known = {};
+        MSGS.forEach(function(m){ known[String(m.id)] = 1; });
+        fresh.forEach(function(m){ if (!known[String(m.id)]) onIncoming(m); });
       } catch(e){}
-    }, 20000);
+    }, 5000);
 
     window.addEventListener('beforeunload', function(){
       if (sub) sub.close();

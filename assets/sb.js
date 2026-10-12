@@ -771,48 +771,76 @@ async function uploadVoice(blob, ext){
    Подписка на новые сообщения через websocket. Если не выйдет —
    вызывающий код продолжит работать на опросе. */
 function subscribeMessages(onInsert){
-  if (!A.tok) return null;
+  if (!A.tok || typeof WebSocket === 'undefined') return null;
+
   let ws = null, ref = 0, hb = null, closed = false;
+  let retry = null, attempts = 0;
+  const endpoint = SB.replace('https://','wss://') +
+                   '/realtime/v1/websocket?apikey=' + encodeURIComponent(KEY) + '&vsn=1.0.0';
 
-  try {
-    ws = new WebSocket(SB.replace('https://','wss://') +
-                       '/realtime/v1/websocket?apikey=' + KEY + '&vsn=1.0.0');
-  } catch(e){ return null; }
+  function stopHeartbeat(){
+    if (hb){ clearInterval(hb); hb = null; }
+  }
+  function reconnect(){
+    if (closed || retry) return;
+    const delay = Math.min(30000, 1000 * Math.pow(2, attempts++));
+    retry = setTimeout(function(){ retry = null; connect(); }, delay);
+  }
+  function connect(){
+    if (closed) return;
+    try { ws = new WebSocket(endpoint); }
+    catch(e){ reconnect(); return; }
 
-  ws.onopen = function(){
-    ws.send(JSON.stringify({
-      topic:'realtime:public:app_messages',
-      event:'phx_join',
-      payload:{ config:{ postgres_changes:[
-        { event:'INSERT', schema:'public', table:'app_messages' }
-      ]}, access_token: A.tok },
-      ref: String(++ref)
-    }));
-    hb = setInterval(function(){
-      if (ws.readyState === 1){
-        ws.send(JSON.stringify({ topic:'phoenix', event:'heartbeat', payload:{}, ref:String(++ref) }));
-      }
-    }, 25000);
-  };
+    ws.onopen = function(){
+      attempts = 0;
+      ws.send(JSON.stringify({
+        topic:'realtime:public:app_messages',
+        event:'phx_join',
+        payload:{
+          config:{
+            broadcast:{ ack:false, self:false },
+            presence:{ key:'' },
+            postgres_changes:[{ event:'INSERT', schema:'public', table:'app_messages' }]
+          },
+          access_token: A.tok
+        },
+        ref: String(++ref)
+      }));
+      stopHeartbeat();
+      hb = setInterval(function(){
+        if (ws && ws.readyState === 1){
+          ws.send(JSON.stringify({ topic:'phoenix', event:'heartbeat', payload:{}, ref:String(++ref) }));
+        }
+      }, 25000);
+    };
 
-  ws.onmessage = function(ev){
-    try {
-      const d = JSON.parse(ev.data);
-      if (d.event === 'postgres_changes' && d.payload && d.payload.data &&
-          d.payload.data.type === 'INSERT'){
-        onInsert(d.payload.data.record);
-      }
-    } catch(e){}
-  };
+    ws.onmessage = function(ev){
+      try {
+        const d = JSON.parse(ev.data);
+        const data = d && d.payload && d.payload.data;
+        if (d && d.event === 'postgres_changes' && data && data.type === 'INSERT' && data.record){
+          onInsert(data.record);
+        }
+      } catch(e){}
+    };
 
-  ws.onclose = function(){ if (hb) clearInterval(hb); };
-  ws.onerror = function(){ if (hb) clearInterval(hb); };
+    ws.onerror = function(){
+      stopHeartbeat();
+      try { ws.close(); } catch(e){}
+    };
+    ws.onclose = function(){
+      stopHeartbeat();
+      if (!closed) reconnect();
+    };
+  }
+  connect();
 
   return {
     close: function(){
       closed = true;
-      if (hb) clearInterval(hb);
-      try { ws.close(); } catch(e){}
+      if (retry){ clearTimeout(retry); retry = null; }
+      stopHeartbeat();
+      try { if (ws) ws.close(); } catch(e){}
     }
   };
 }

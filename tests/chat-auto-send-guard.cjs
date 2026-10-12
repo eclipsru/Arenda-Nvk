@@ -8,6 +8,7 @@ const root = path.join(__dirname, '..');
 const read = name => fs.readFileSync(path.join(root, name), 'utf8');
 const cabinet = read('cabinet.html');
 const chat = read('chat.html');
+const sb = read('assets/sb.js');
 const tool = read('tool.html');
 
 assert.ok(!cabinet.includes('Вопрос по инструменту'), 'cabinet: preset question must not be sent or prefilled');
@@ -29,4 +30,11 @@ assert.doesNotMatch(chat, /TOOL = null;\s*\/\* привязка только к 
 const chatPhoto = chat.slice(chat.indexOf("$('thFile').addEventListener"), chat.indexOf('async function doSend'));
 assert.doesNotMatch(chatPhoto, /pushMessage/, 'chat: selecting a photo must not send it automatically');
 
-console.log('Чат: автоматическая отправка при открытии инструмента и выборе фото отключена; контекст инструмента сохраняется');
+assert.match(sb, /function subscribeMessages\(onInsert\)/, 'sb: realtime subscription is missing');
+assert.match(sb, /function reconnect\(\)/, 'sb: realtime subscription has no reconnect');
+assert.match(sb, /access_token: A\.tok/, 'sb: realtime join has no current access token');
+assert.match(chat, /\}, 5000\);/, 'chat: REST fallback must refresh messages every 5 seconds');
+assert.match(cabinet, /S\.chatSub=subscribeMessages\(onCabinetMessage\)/,
+  'cabinet: realtime subscription is missing');
+
+console.log('Чат: автоотправка отключена, контекст инструмента сохраняется, realtime и 5-секундный fallback включены');
