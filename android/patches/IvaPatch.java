@@ -287,7 +287,7 @@ public final class IvaPatch {
 
     // Клиентский профиль не смешивается с admins. Состояние формы живёт только
     // пока открыто окно и очищается при выходе из аккаунта.
-    static JSONObject clientProfile = new JSONObject();
+    static JSONObject clientProfile;
     static String clientProfileEmail = "";
     static String clientProfileUid = "";
     static AlertDialog clientProfileDialog;
@@ -488,6 +488,10 @@ public final class IvaPatch {
     }
 
     // ── 16. Профиль обычного клиента (отдельно от admins) ──
+    static void ensureClientProfile() {
+        if (clientProfile == null) clientProfile = new JSONObject();
+    }
+
     static boolean isClient(Activity a) {
         Object token = get(a, "accessToken");
         if (!(token instanceof String) || ((String) token).trim().isEmpty()) return false;
@@ -572,6 +576,7 @@ public final class IvaPatch {
     }
 
     static void loadClientProfile(final Activity a) {
+        ensureClientProfile();
         if (!isClient(a)) return;
         final String email = String.valueOf(get(a, "userEmail"));
         if (email.equalsIgnoreCase(clientProfileEmail) && clientProfile.length() > 0) return;
@@ -595,6 +600,7 @@ public final class IvaPatch {
     }
 
     static void fillClientProfileFields() {
+        ensureClientProfile();
         if (clientProfileFields == null || clientProfileFields.length < 9) return;
         String[] v = new String[] {
             clientProfile.optString("surname", ""), clientProfile.optString("given_name", ""),
@@ -612,6 +618,7 @@ public final class IvaPatch {
     }
 
     static void showClientProfile(final Activity a) {
+        ensureClientProfile();
         if (!isClient(a)) return;
         loadClientProfile(a);
         final LinearLayout box = new LinearLayout(a);
@@ -662,6 +669,7 @@ public final class IvaPatch {
     }
 
     static void saveClientProfile(final Activity a, final AlertDialog d) {
+        ensureClientProfile();
         if (clientProfileFields == null || clientProfileFields.length < 9) return;
         final String given = clientProfileFields[1].getText().toString().trim();
         if (given.isEmpty()) { clientProfileFields[1].setError("Укажите имя"); return; }
@@ -705,6 +713,7 @@ public final class IvaPatch {
 
     /** 9) Профиль подмешивается в native после штатного renderProfile. */
     public static void onProfile(Activity a) {
+        ensureClientProfile();
         try { installClientProfile(a); loadClientProfile(a); } catch (Throwable ignore) {}
     }
 
@@ -1311,6 +1320,7 @@ public final class IvaPatch {
     }
 
     static void loadNativeClientCoords(final Activity a) {
+        ensureClientProfile();
         if (!isClient(a) || clientCoordsLoading || clientCoords != null) return;
         clientCoordsLoading=true;
         new Thread(new Runnable(){@Override public void run(){
