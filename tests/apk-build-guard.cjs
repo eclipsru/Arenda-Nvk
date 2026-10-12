@@ -153,8 +153,8 @@ try {
     'requestDisallowInterceptTouchEvent(true)', 'OnHierarchyChangeListener', 'K_CITY', 'K_SEEN',
     '"/auth/v1/user"', '"/rest/v1/rpc/get_my_customer_profile"', 'Город в профиле не меняется'])
     assert.ok(js45.includes(k), `IvaSearchPatch.java: нет ${k}`);
-  // 10.46: ручка внизу над нижним меню, шторка снизу (не выше 85%), левой полосы нет
-  for (const k of ['BAR_DP = 22', 'SHEET_MAX = 0.85f', 'new FrameLayout.LayoutParams(-1, dp(a, BAR_DP), Gravity.BOTTOM)', 'hlp.bottomMargin = dp(a, BAR_DP)',
+  // 10.46: ручка внизу над нижним меню, шторка снизу, левой полосы нет; 10.47: шторка до шапки приложения (вся область страниц)
+  for (const k of ['BAR_DP = 22', 'SHEET_MAX = 1.0f', 'new FrameLayout.LayoutParams(-1, dp(a, BAR_DP), Gravity.BOTTOM)', 'hlp.bottomMargin = dp(a, BAR_DP)',
     'sheet.setTranslationY((1f - progress) * sheetSize)', 'setProgress(a, p0 - dy / sheetSize)', 'DragListener.HANDLE', 'DragListener.SHEET', 'DragListener.SCRIM',
     'Gravity.BOTTOM));', 'fitSheet(a)', 'LengthFilter(7)', 'facetVisible(catKeys, catCounts, draft.cat)', 'facetVisible(subKeys, subCounts, draft.sub)',
     'normRange(from, to)', '"Радиус \\u00b7 скоро"', 'rc.setEnabled(false)',
@@ -162,6 +162,20 @@ try {
     'return nativeMatch(j.optString("t_status", ""), j.optString("cat", ""), catsOf(j), j.optString("sub", ""),\n            j.optString("name", ""), j.optString("descr", ""), catMode, curCat, curSub, query);'])
     assert.ok(js45.includes(k), `IvaSearchPatch.java (10.46): нет ${k}`);
   assert.ok(!/STRIP_DP|RIGHT_DP|Gravity\.LEFT \| Gravity\.CENTER_VERTICAL|content\.setPadding\(/.test(js45), 'IvaSearchPatch: левая полоса с ручкой должна быть убрана (10.46)');
+  // 10.47: панель становится видимой ДО заполнения — иначе refreshPanel молчит и шторка открывается пустой
+  // (10.46: категории, числа и надписи кнопок появлялись только после нажатия на «доставку»)
+  {
+    const pp = js45.slice(js45.indexOf('static void preparePanel('), js45.indexOf('static View handleView('));
+    const vis = pp.indexOf('panelRoot.setVisibility(View.VISIBLE);'), build = pp.indexOf('buildSheet(a);');
+    assert.ok(vis > 0 && build > vis, 'IvaSearchPatch.preparePanel: панель должна стать видимой до buildSheet (иначе шторка пустая)');
+    assert.ok(js45.includes('if (draft == null || sheet == null || panelRoot == null || panelRoot.getVisibility() != View.VISIBLE) return;')
+      && /refreshPanel\(a\);\n    \}\n\n    static EditText priceField/.test(js45), 'IvaSearchPatch.buildSheet должен заканчиваться refreshPanel');
+    // выбранные условия в шапке шторки — текстом с ✕, в ленте под поиском — как раньше
+    assert.ok(js45.includes('@Override public void run() { syncInputs(a); refreshPanel(a); }\n            }, true);')
+      && js45.includes('TextView c = plain ? plainChip(a, text) : chip(a, text, true, true);'), 'IvaSearchPatch: выбранное в шапке шторки — простым текстом с ✕');
+    const pc = js45.slice(js45.indexOf('static TextView plainChip('), js45.indexOf('static void addActiveChips('));
+    assert.ok(!/setBackground\(|bg_chip/.test(pc), 'IvaSearchPatch.plainChip: без фона-«пузыря»');
+  }
   // радиус — только вид: варианты встречаются лишь в объявлении и в шторке, на фильтр/подсчёт не влияют
   assert.equal((js45.match(/RADIUS_TITLES/g) || []).length, 3, 'IvaSearchPatch: радиус не должен участвовать в фильтре (только заготовка в шторке)');
   assert.ok(!/radius|радиус/i.test(js45.slice(js45.indexOf('static boolean extraMatch('), js45.indexOf('static long[] normRange('))), 'IvaSearchPatch: радиус попал в extraMatch');

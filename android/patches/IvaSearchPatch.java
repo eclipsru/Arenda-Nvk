@@ -85,7 +85,7 @@ public final class IvaSearchPatch {
 
     // ── Разметка ──
     static final int BAR_DP = 22;            // 10.46: полоса с ручкой внизу, над нижним меню; лента кончается над ней
-    static final float SHEET_MAX = 0.85f;    // шторка — не выше 85% области страниц
+    static final float SHEET_MAX = 1.0f;     // 10.47: шторка — во всю область страниц, до шапки приложения (решение владельца)
     static final String CITY_ROW_TAG = "iva_search_city_row";
     static final String CHIPS_TAG = "iva_search_chips";
     static final String HANDLE_TAG = "iva_search_handle";
@@ -1167,26 +1167,48 @@ public final class IvaSearchPatch {
         return c;
     }
 
+    /** 10.47: выбранное условие в шапке шторки — текст и серый ✕, без фона; высота 32dp (удобно нажать). */
+    static TextView plainChip(Activity a, String text) {
+        TextView c = new TextView(a);
+        android.text.SpannableString s = new android.text.SpannableString(text + "  \u2715");
+        s.setSpan(new android.text.style.ForegroundColorSpan(color(a, "gray", 0xff9aa1b0)), text.length(), s.length(), 0);
+        c.setText(s);
+        c.setTextSize(13f);
+        c.setTextColor(color(a, "text", 0xfff2f4f8));
+        c.setSingleLine(true);
+        c.setEllipsize(TextUtils.TruncateAt.END);
+        c.setGravity(Gravity.CENTER_VERTICAL);
+        c.setMinHeight(dp(a, 32));
+        c.setClickable(true);
+        c.setContentDescription(text + ". Убрать фильтр");
+        feedback(a, c);
+        return c;
+    }
+
     /** Подписи и действия активных условий для данного набора (категория, подкатегория, цена, доставка, состояние). */
     static void addActiveChips(final Activity a, Flow box, final Filter f, final Runnable changed) {
+        addActiveChips(a, box, f, changed, false);
+    }
+
+    static void addActiveChips(final Activity a, Flow box, final Filter f, final Runnable changed, final boolean plain) {
         if (!f.cat.isEmpty()) {
             final boolean hasSub = !f.sub.isEmpty();
-            addChip(a, box, catTitle(a, f.cat), new ChipAction() { @Override public void remove() { f.cat = ""; f.sub = ""; } }, changed);
-            if (hasSub) addChip(a, box, subTitle(a, f.cat, f.sub), new ChipAction() { @Override public void remove() { f.sub = ""; } }, changed);
+            addChip(a, box, catTitle(a, f.cat), new ChipAction() { @Override public void remove() { f.cat = ""; f.sub = ""; } }, changed, plain);
+            if (hasSub) addChip(a, box, subTitle(a, f.cat, f.sub), new ChipAction() { @Override public void remove() { f.sub = ""; } }, changed, plain);
         }
         if (f.from >= 0 || f.to >= 0)
-            addChip(a, box, priceChip(f.from, f.to), new ChipAction() { @Override public void remove() { f.from = -1; f.to = -1; } }, changed);
+            addChip(a, box, priceChip(f.from, f.to), new ChipAction() { @Override public void remove() { f.from = -1; f.to = -1; } }, changed, plain);
         if (f.delivery)
-            addChip(a, box, "С доставкой", new ChipAction() { @Override public void remove() { f.delivery = false; } }, changed);
+            addChip(a, box, "С доставкой", new ChipAction() { @Override public void remove() { f.delivery = false; } }, changed, plain);
         for (int i = 0; i < COND_BITS.length; i++) {
             final int bit = COND_BITS[i];
             if ((f.conds & bit) != 0)
-                addChip(a, box, "Состояние: " + lower(COND_TITLES[i]), new ChipAction() { @Override public void remove() { f.conds &= ~bit; } }, changed);
+                addChip(a, box, "Состояние: " + lower(COND_TITLES[i]), new ChipAction() { @Override public void remove() { f.conds &= ~bit; } }, changed, plain);
         }
     }
 
-    static void addChip(Activity a, Flow box, String text, final ChipAction action, final Runnable changed) {
-        TextView c = chip(a, text, true, true);
+    static void addChip(Activity a, Flow box, String text, final ChipAction action, final Runnable changed, boolean plain) {
+        TextView c = plain ? plainChip(a, text) : chip(a, text, true, true);
         c.setOnClickListener(new View.OnClickListener() {
             @Override public void onClick(View v) { action.remove(); changed.run(); }
         });
@@ -1259,7 +1281,7 @@ public final class IvaSearchPatch {
         root.addView(sh, new FrameLayout.LayoutParams(-1, dp(a, 400), Gravity.BOTTOM));
         sheet = sh;
         panelRoot = root;
-        // Высота шторки — 85% области страниц; с клавиатурой (adjustResize) область меньше — шторка тоже,
+        // Высота шторки — вся область страниц (до шапки приложения); с клавиатурой (adjustResize) область меньше — шторка тоже,
         // кнопки внизу остаются над клавиатурой.
         root.addOnLayoutChangeListener(new View.OnLayoutChangeListener() {
             @Override public void onLayoutChange(View v, int l, int t, int rr, int b, int ol, int ot, int orr, int ob) {
@@ -1301,11 +1323,13 @@ public final class IvaSearchPatch {
             FrameLayout.LayoutParams lp = (FrameLayout.LayoutParams) sheet.getLayoutParams();
             lp.height = sheetSize;
             sheet.setLayoutParams(lp);
-            buildSheet(a);
+            setProgress(a, 0f);         // шторка внизу, за краем — показ панели не мелькнёт
+            // 10.47: сначала панель видима, потом заполнение. В 10.46 было наоборот: refreshPanel (в конце buildSheet)
+            // молчит у скрытой панели — категории, числа и надписи кнопок появлялись только после нажатия на «доставку».
             panelRoot.setVisibility(View.VISIBLE);
             panelRoot.bringToFront();   // шторка поверх полосы с ручкой
+            buildSheet(a);
             hideKeyboard(a, panelRoot);
-            setProgress(a, 0f);
         }
     }
 
@@ -1528,7 +1552,8 @@ public final class IvaSearchPatch {
             cGray2 = color(a, "gray2", 0xff6b7080), cLine = color(a, "line", 0xff262b35), cOrange = color(a, "orange", 0xffff8f1f);
         backKeys(a, sh);
 
-        // Шапка: «язычок» сверху; за шапку шторку можно утянуть вниз
+        // Шапка (10.47 — компактная): «язычок», одна строка «Фильтры · город ▾ · ✕», под ней выбранное — текстом с ✕.
+        // За шапку шторку можно утянуть вниз.
         LinearLayout headBox = new LinearLayout(a);
         headBox.setOrientation(LinearLayout.VERTICAL);
         headBox.setOnTouchListener(new DragListener(a, DragListener.SHEET));
@@ -1536,42 +1561,45 @@ public final class IvaSearchPatch {
         grab.setBackground(pill(a, cGray2, 0));
         LinearLayout.LayoutParams gl = new LinearLayout.LayoutParams(dp(a, 36), dp(a, 4));
         gl.gravity = Gravity.CENTER_HORIZONTAL;
-        gl.topMargin = dp(a, 8);
+        gl.topMargin = dp(a, 6);
         headBox.addView(grab, gl);
         LinearLayout head = new LinearLayout(a);
         head.setOrientation(LinearLayout.HORIZONTAL);
         head.setGravity(Gravity.CENTER_VERTICAL);
-        head.setPadding(dp(a, 16), 0, dp(a, 4), 0);
+        head.setPadding(dp(a, 16), 0, dp(a, 2), 0);
         TextView title = new TextView(a);
         title.setText("Фильтры");
-        title.setTextSize(19f);
+        title.setTextSize(16f);
         title.setTypeface(null, android.graphics.Typeface.BOLD);
         title.setTextColor(cText);
-        head.addView(title, new LinearLayout.LayoutParams(0, -2, 1f));
+        head.addView(title, new LinearLayout.LayoutParams(-2, -2));
+        // Город — тот же выбор, что в верхней строке (второго независимого выбора нет)
+        TextView cl = new TextView(a);
+        cl.setTextSize(13f);
+        cl.setTextColor(cGray);
+        cl.setSingleLine(true);
+        cl.setEllipsize(TextUtils.TruncateAt.END);
+        cl.setGravity(Gravity.CENTER_VERTICAL | Gravity.RIGHT);
+        cl.setMinHeight(dp(a, 40));
+        cl.setPadding(dp(a, 12), 0, dp(a, 6), 0);
+        feedback(a, cl);
+        cl.setOnClickListener(new View.OnClickListener() { @Override public void onClick(View v) { openCityPicker(a); } });
+        head.addView(cl, new LinearLayout.LayoutParams(0, -2, 1f));
+        cityLine = cl;
         TextView close = new TextView(a);
         close.setText("\u2715");
-        close.setTextSize(20f);
+        close.setTextSize(18f);
         close.setTextColor(cText);
         close.setGravity(Gravity.CENTER);
         close.setContentDescription("Закрыть фильтры");
         feedback(a, close);
         close.setOnClickListener(new View.OnClickListener() { @Override public void onClick(View v) { closePanel(a, true); } });
-        head.addView(close, new LinearLayout.LayoutParams(dp(a, 48), dp(a, 48)));
+        head.addView(close, new LinearLayout.LayoutParams(dp(a, 44), dp(a, 44)));
         headBox.addView(head, new LinearLayout.LayoutParams(-1, -2));
         sh.addView(headBox, new LinearLayout.LayoutParams(-1, -2));
 
-        // Город — тот же выбор, что в верхней строке (второго независимого выбора нет)
-        TextView cl = new TextView(a);
-        cl.setTextSize(13f);
-        cl.setTextColor(cGray);
-        cl.setPadding(dp(a, 16), dp(a, 2), dp(a, 16), dp(a, 8));
-        feedback(a, cl);
-        cl.setOnClickListener(new View.OnClickListener() { @Override public void onClick(View v) { openCityPicker(a); } });
-        sh.addView(cl, new LinearLayout.LayoutParams(-1, -2));
-        cityLine = cl;
-
-        // Активные условия — каждое убирается отдельно
-        Flow pc = new Flow(a, dp(a, 6));
+        // Выбранные условия — простым текстом с ✕ (без оранжевых «пузырей»), каждое убирается отдельно
+        Flow pc = new Flow(a, dp(a, 14));
         pc.setPadding(dp(a, 16), 0, dp(a, 16), dp(a, 4));
         sh.addView(pc, new LinearLayout.LayoutParams(-1, -2));
         panelChips = pc;
@@ -1759,14 +1787,14 @@ public final class IvaSearchPatch {
             if (draft == null || sheet == null || panelRoot == null || panelRoot.getVisibility() != View.VISIBLE) return;
             final String city = cityChosen ? selCity : "";
             if (cityLine != null) {
-                cityLine.setText("Город: " + cityButtonText(selCity, cityChosen) + " \u00b7 изменить");
+                cityLine.setText(cityButtonText(selCity, cityChosen) + " \u25be");
                 cityLine.setContentDescription("Город поиска: " + cityButtonText(selCity, cityChosen) + ". Изменить");
             }
             // Активные условия
             panelChips.removeAllViews();
             addActiveChips(a, panelChips, draft, new Runnable() {
                 @Override public void run() { syncInputs(a); refreshPanel(a); }
-            });
+            }, true);
             panelChips.setVisibility(panelChips.getChildCount() > 0 ? View.VISIBLE : View.GONE);
 
             String query = str(IvaClientPatch.get(a, "query"));
