@@ -16,6 +16,7 @@ import json
 import os
 import re
 import sys
+import urllib.error
 import urllib.request
 
 ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..')
@@ -87,6 +88,19 @@ def main():
         for c in subs:
             f.write(enc(c, 'cat') + '\t' + enc(c, 'key') + '\t' + enc(c, 'title') + '\n')
     print('каталог: объявлений %d, категорий %d, подкатегорий %d' % (len(tools), len(cats), len(subs)))
+    # Есть ли таблица профилей клиентов (миграция 20261012_customer_profiles_and_pickup_coords): анониму доступ
+    # закрыт, поэтому ответ «нет прав» = таблица есть, «не найдена» = миграция не применена. Данные не читаются.
+    try:
+        get(url, key, '/rest/v1/customer_profiles?select=user_id&limit=0')
+        print('customer_profiles: таблица есть (анониму видна — проверить права!)')
+    except urllib.error.HTTPError as e:
+        body = e.read().decode('utf-8', 'replace')
+        if 'PGRST205' in body or 'Could not find the table' in body:
+            print('customer_profiles: таблицы нет (миграция профилей не применена)')
+        elif e.code in (401, 403) or '42501' in body:
+            print('customer_profiles: таблица есть, анониму закрыта (миграция применена)')
+        else:
+            print('customer_profiles: ответ %d — %s' % (e.code, body[:120]))
     # поля, которые есть в выгрузке (для отчёта: есть ли координаты для радиуса)
     keys = sorted({k for t in tools for k in t.keys()})
     print('поля tools: ' + ', '.join(keys))

@@ -157,7 +157,9 @@ try {
   for (const k of ['BAR_DP = 22', 'SHEET_MAX = 0.85f', 'new FrameLayout.LayoutParams(-1, dp(a, BAR_DP), Gravity.BOTTOM)', 'hlp.bottomMargin = dp(a, BAR_DP)',
     'sheet.setTranslationY((1f - progress) * sheetSize)', 'setProgress(a, p0 - dy / sheetSize)', 'DragListener.HANDLE', 'DragListener.SHEET', 'DragListener.SCRIM',
     'Gravity.BOTTOM));', 'fitSheet(a)', 'LengthFilter(7)', 'facetVisible(catKeys, catCounts, draft.cat)', 'facetVisible(subKeys, subCounts, draft.sub)',
-    'normRange(from, to)', '"Радиус \\u00b7 скоро"', 'rc.setEnabled(false)'])
+    'normRange(from, to)', '"Радиус \\u00b7 скоро"', 'rc.setEnabled(false)',
+    // поля для «Показать N» читаются как в штатной ленте (optString: null → "null"), не через js()
+    'return nativeMatch(j.optString("t_status", ""), j.optString("cat", ""), catsOf(j), j.optString("sub", ""),\n            j.optString("name", ""), j.optString("descr", ""), catMode, curCat, curSub, query);'])
     assert.ok(js45.includes(k), `IvaSearchPatch.java (10.46): нет ${k}`);
   assert.ok(!/STRIP_DP|RIGHT_DP|Gravity\.LEFT \| Gravity\.CENTER_VERTICAL|content\.setPadding\(/.test(js45), 'IvaSearchPatch: левая полоса с ручкой должна быть убрана (10.46)');
   // радиус — только вид: варианты встречаются лишь в объявлении и в шторке, на фильтр/подсчёт не влияют
