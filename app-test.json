@@ -1,8 +1,8 @@
 {
-  "versionCode": 102,
-  "versionName": "10.28",
-  "apk": "ProkatInstrumenta-10.28.apk",
+  "versionCode": 103,
+  "versionName": "10.29",
+  "apk": "ProkatInstrumenta-10.29.apk",
   "built": "12.10.2026",
   "reinstall": false,
-  "notes": "Диагностика: база 10.14 плюс проверенный IvaPatch из 10.21; новые клиентские hooks, chat polling и разрешения геолокации отключены."
+  "notes": "Диагностика: к рабочей базе 10.28 добавлен только класс IvaClientPatch без hooks и вызовов; polling и разрешения геолокации отключены."
 }
