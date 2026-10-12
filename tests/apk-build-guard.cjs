@@ -43,14 +43,14 @@ try {
   for (const k of [...insertions, ...anchors]) assert.ok(ap.includes(k), `apply.py: нет ${k}`);
   const jp = R('android/patches/IvaPatch.java');
   const jpc = R('android/patches/IvaClientPatch.java');
-  // 10.34 — штатная строка «Клиент» остаётся единственной точкой входа в тёмную форму;
-  // выбор аватарки доходит до уже существующего uploader через onActivityResult.
+  // 10.39 recovery — штатная строка «Клиент» остаётся единственной точкой входа
+  // в тёмную форму; потенциально проблемный lifecycle-hook аватарки отключён.
   assert.match(code, /android\/patches\/IvaPatch\.java android\/patches\/IvaClientPatch\.java 2>&1/,
     `${f}: шаг 10.30 не компилирует IvaClientPatch`);
   assert.match(ap, /IvaClientPatch;->onProfile\(Landroid\/app\/Activity;\)V/,
     `${f}: hook onProfile не подключён`);
-  assert.match(ap, /IvaClientPatch;->onActivityResult\(Landroid\/app\/Activity;IILandroid\/content\/Intent;\)V/,
-    `${f}: hook onActivityResult для аватарки не подключён`);
+  assert.doesNotMatch(ap, /IvaClientPatch;->onActivityResult\(Landroid\/app\/Activity;IILandroid\/content\/Intent;\)V/,
+    `${f}: recovery-сборка не должна вызывать потенциально проблемный hook onActivityResult`);
   for (const call of ['onFeed', 'onCatalogLoaded', 'onLocationPermission', 'onDetail'])
     assert.doesNotMatch(ap, new RegExp(`IvaClientPatch;->${call}\\(`),
       `${f}: hook ${call} должен оставаться выключенным`);
