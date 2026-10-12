@@ -1,6 +1,10 @@
 // Ива — доработки приложения поверх 10.14 (исходников 10.14 нет, только APK). Сборки: 10.15 (п. 1–5), 10.16 (+ п. 6),
-// 10.17 (+ п. 7–10: нижнее меню). Этот класс компилируется в GitHub Actions (build-apk.yml) и добавляется в APK отдельным classes3.dex.
-// Точки вызова вставляет android/patches/apply.py в smali-код MainActivity (10 мест, см. там).
+// 10.17 (+ п. 7–10: нижнее меню), 10.18 (+ п. 11: выбранный раздел нижнего меню),
+// 10.19 (+ п. 12: окантовка аватарки в открытом «Кабинете»), 10.20 (+ п. 13: виньетка фоновой картинки главной),
+// 10.21 (+ п. 14: скруглённые углы фоновой картинки главной).
+// Этот класс компилируется в GitHub Actions
+// (build-apk.yml) и добавляется в APK отдельным classes3.dex. Точки вызова вставляет android/patches/apply.py
+// в smali-код MainActivity (11 мест, 13 вызовов IvaPatch, потому что onPrice вызывается 4 раза).
 // Поля MainActivity читаются через reflection: класс не зависит от исходников приложения.
 //
 // Что делает (баг 1 от владельца, 04.10.2026):
@@ -16,6 +20,13 @@
 //  8) (10.17) вход и запуск: профиль админа подгружается сразу, чтобы аватарка появилась в меню без захода в «Кабинет».
 //  9) (10.17) «Кабинет» в нижнем меню: загруженная аватарка кружком 40dp вместо иконки.
 // 10) (10.17) выход: аватарка убирается, иконка «Кабинета» снова на месте.
+// 11) (10.18) выбранный раздел нижнего меню получает оранжевую окантовку, значок и подпись —
+//     оранжевые; заливки оранжевого круга больше нет. Логотип и аватарка не перекрашиваются.
+// 12) (10.19) когда открыт «Кабинет», на самой аватарке появляется такая же оранжевая окантовка,
+//     как на логотипе и остальных вкладках; при переходе в другой раздел окантовка исчезает.
+// 13) (10.20) на изображении pageBg главной страницы появляется настоящая виньетка:
+//     центр остаётся светлее, края темнее; слой стоит под поиском и категориями и не перехватывает их касания.
+// 14) (10.21) у этой фоновой картинки скруглены все четыре угла, не затрагивая поиск и категории.
 package ru.prokatnvsk.app;
 
 import android.app.Activity;
@@ -25,18 +36,25 @@ import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.graphics.BitmapShader;
 import android.graphics.Canvas;
+import android.graphics.Color;
+import android.graphics.Outline;
 import android.graphics.Matrix;
 import android.graphics.Paint;
+import android.graphics.RadialGradient;
 import android.graphics.Shader;
+import android.graphics.drawable.GradientDrawable;
 import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.ViewOutlineProvider;
 import android.view.ViewParent;
 import android.widget.CheckBox;
 import android.widget.CompoundButton;
 import android.widget.FrameLayout;
 import android.widget.ImageView;
+import android.widget.LinearLayout;
 import android.widget.RadioButton;
+import android.widget.TextView;
 
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
@@ -232,13 +250,124 @@ public final class IvaPatch {
     // loadPhoto приложения (кэш, фоновый поток; при ошибке остаётся иконка). Иконку navProfIc не трогаем:
     // поверх неё кладём круглый вид CircleImageView 40dp, при выходе он убирается и иконка видна снова.
     static final String AV_TAG = "iva_nav_avatar";
+    static final String AV_RING_TAG = "iva_nav_avatar_ring";
+    static final String HOME_VIGNETTE_TAG = "iva_home_vignette";
+
+    /**
+     * 13–14) Фоновая картинка главной страницы уже лежит в вертикальном контейнере pageHome:
+     * searchBox и динамические catGrid/feedGrid идут следующими детьми. Оборачиваем только
+     * pageBg и виньетку в FrameLayout: картинка получает скруглённые углы, а поиск и плитки
+     * остаются соседями снаружи и не затемняются, не сдвигаются и не теряют касания.
+     */
+    static void installHomeVignette(Activity a) {
+        LinearLayout parent = null;
+        ImageView bg = null;
+        int index = -1;
+        ViewGroup.LayoutParams source = null;
+        FrameLayout frame = null;
+        try {
+            Object raw = get(a, "pageBg");
+            if (!(raw instanceof ImageView)) return;
+            bg = (ImageView) raw;
+            ViewParent rawParent = bg.getParent();
+            if (!(rawParent instanceof LinearLayout)) return;
+            parent = (LinearLayout) rawParent;
+            if (parent.findViewWithTag(HOME_VIGNETTE_TAG) != null) return;
+            index = parent.indexOfChild(bg);
+            if (index < 0) return;
+
+            float density = a.getResources().getDisplayMetrics().density;
+            source = bg.getLayoutParams();
+            if (source == null) source = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, px(141, density));
+
+            frame = new FrameLayout(a);
+            frame.setTag(HOME_VIGNETTE_TAG);
+            frame.setClipChildren(true);
+            if (android.os.Build.VERSION.SDK_INT >= 16) {
+                frame.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
+            }
+            if (android.os.Build.VERSION.SDK_INT >= 21) {
+                final float radius = px(16, density);
+                frame.setClipToOutline(true);
+                frame.setOutlineProvider(new ViewOutlineProvider() {
+                    @Override public void getOutline(View view, Outline outline) {
+                        outline.setRoundRect(0, 0, view.getWidth(), view.getHeight(), radius);
+                    }
+                });
+            }
+
+            // The wrapper replaces pageBg in the same slot, so the vertical layout and
+            // the intentionally negative margin before the search box stay unchanged.
+            parent.removeViewAt(index);
+            frame.addView(bg, new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+
+            HomeVignette overlay = new HomeVignette(a);
+            overlay.setClickable(false);
+            overlay.setFocusable(false);
+            if (android.os.Build.VERSION.SDK_INT >= 16) {
+                overlay.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
+            }
+            frame.addView(overlay, new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+            parent.addView(frame, index, source);
+        } catch (Throwable ignore) {
+            // Restore the original image if a device rejects an unusual layout parameter.
+            try {
+                if (parent != null && bg != null && bg.getParent() != parent) {
+                    if (frame != null && frame.getParent() == parent) parent.removeView(frame);
+                    if (bg.getParent() instanceof ViewGroup) {
+                        ((ViewGroup) bg.getParent()).removeView(bg);
+                    }
+                    parent.addView(bg, Math.max(0, Math.min(index, parent.getChildCount())), source);
+                }
+            } catch (Throwable ignored) {}
+        }
+    }
+
+    /** Transparent in the centre, progressively black towards the image edges. */
+    static final class HomeVignette extends View {
+        private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
+        private RadialGradient gradient;
+
+        HomeVignette(Context context) {
+            super(context);
+            setWillNotDraw(false);
+            paint.setDither(true);
+        }
+
+        @Override protected void onSizeChanged(int w, int h, int oldW, int oldH) {
+            super.onSizeChanged(w, h, oldW, oldH);
+            if (w <= 0 || h <= 0) {
+                gradient = null;
+                return;
+            }
+            float radius = (float) Math.hypot(w / 2f, h / 2f) * 0.82f;
+            gradient = new RadialGradient(
+                w / 2f, h / 2f, radius,
+                new int[] { 0x00000000, 0x16000000, 0x58000000, 0xb8000000 },
+                new float[] { 0f, 0.38f, 0.72f, 1f },
+                Shader.TileMode.CLAMP);
+        }
+
+        @Override protected void onDraw(Canvas canvas) {
+            if (gradient == null) return;
+            paint.setShader(gradient);
+            canvas.drawRect(0, 0, getWidth(), getHeight(), paint);
+            paint.setShader(null);
+        }
+    }
 
     /** 7) Конец onCreate: «+» → логотип. Затем профиль (аватарка), если уже вошли. */
     public static void onCreated(Activity a) {
         try {
             logoOnPlus(a, a.getResources().getDisplayMetrics().density);
+            // restoreSession() мог выбрать вкладку до этого вызова; повторяем её стиль после замены «+».
+            onTab(a, (String) get(a, "curTab"));
+            installHomeVignette(a);
         } catch (Throwable ignore) {
-            // логотип — только внешний вид: без него меню работает как раньше
+            // логотип и подсветка — только внешний вид: без них меню работает как раньше
         }
         reloadProfile(a);
     }
@@ -255,6 +384,126 @@ public final class IvaPatch {
         });
     }
 
+    // ── 11–12. Выбранный раздел нижнего меню и окантовка аватарки (10.18–10.19) ──
+    // Штатный setCircle() вызывается в showTab() и рисует оранжевую заливку с белым значком.
+    // Этот вызов стоит после всех четырёх setCircle: заливка убирается, а выбранный пункт получает
+    // прозрачный круг с оранжевой окантовкой и оранжевые текст/значок.
+    public static void onTab(Activity a, String tab) {
+        try {
+            String t = tab == null ? "" : tab;
+            int orange = navColor(a, "orange", 0xffff9800);
+            int gray = navColor(a, "gray", 0xff9aa0a6);
+            styleNavItem(a, get(a, "circHome"), get(a, "navHomeIc"), get(a, "navHomeTxt"),
+                navSelected(t, "home"), orange, gray);
+            styleNavItem(a, get(a, "circChat"), get(a, "navChatIc"), get(a, "navChatTxt"),
+                navSelected(t, "chat"), orange, gray);
+            styleNavItem(a, get(a, "circOrders"), get(a, "navOrdersIc"), get(a, "navOrdersTxt"),
+                navSelected(t, "orders"), orange, gray);
+            boolean profile = navSelected(t, "profile");
+            styleNavItem(a, get(a, "circProfile"), get(a, "navProfIc"), get(a, "navProfTxt"),
+                profile, orange, gray);
+            styleAvatarOutline(a, profile, orange);
+            styleLogoNav(a, isLogoTab(t), orange);
+            // Аватарка — фотография, а не иконка нижнего меню. Никогда не накладываем на неё tint.
+            clearAvatarFilter(a);
+        } catch (Throwable ignore) {
+            // подсветка — только внешний вид: переход между разделами не должен ломаться
+        }
+    }
+
+    /** Чистая проверка выбора пункта — вынесена отдельно, чтобы её можно было проверить без Activity. */
+    static boolean navSelected(String current, String item) {
+        return current != null && item != null && item.equals(current);
+    }
+
+    /** Центральный логотип ведёт в заявку или в раздел добавления инструментов. */
+    static boolean isLogoTab(String tab) {
+        return "order".equals(tab) || "admhub".equals(tab) || "addtool".equals(tab);
+    }
+
+    static int navColor(Activity a, String name, int fallback) {
+        try {
+            int rid = a.getResources().getIdentifier(name, "color", a.getPackageName());
+            return rid == 0 ? fallback : a.getResources().getColor(rid);
+        } catch (Throwable ignore) {
+            return fallback;
+        }
+    }
+
+    static void styleNavItem(Activity a, Object circle, Object icon, Object label,
+                             boolean selected, int orange, int gray) {
+        if (circle instanceof View) {
+            outline((View) circle, selected, a.getResources().getDisplayMetrics().density, orange);
+        }
+        if (icon instanceof ImageView) {
+            ((ImageView) icon).setColorFilter(selected ? orange : gray);
+        }
+        if (label instanceof TextView) {
+            ((TextView) label).setTextColor(selected ? orange : gray);
+        }
+    }
+
+    /** Прозрачный круг без заливки; окантовка появляется только у выбранного раздела. */
+    static void outline(View view, boolean selected, float density, int orange) {
+        if (view == null) return;
+        if (!selected) {
+            view.setBackgroundColor(Color.TRANSPARENT);
+            return;
+        }
+        GradientDrawable bg = new GradientDrawable();
+        bg.setShape(GradientDrawable.OVAL);
+        bg.setColor(Color.TRANSPARENT);
+        bg.setStroke(px(2, density), orange);
+        view.setBackground(bg);
+    }
+
+    /** Центральный логотип не перекрашиваем; меняем только его внешний круг. */
+    static void styleLogoNav(Activity a, boolean selected, int orange) {
+        View plus = a.findViewById(id(a, "navPlus"));
+        View col = plus instanceof ViewGroup ? ((ViewGroup) plus).getChildAt(0) : null;
+        View circle = col instanceof ViewGroup ? ((ViewGroup) col).getChildAt(0) : null;
+        View icon = circle instanceof ViewGroup ? ((ViewGroup) circle).getChildAt(0) : null;
+        if (circle != null) outline(circle, selected, a.getResources().getDisplayMetrics().density, orange);
+        if (icon instanceof ImageView) ((ImageView) icon).clearColorFilter();
+    }
+
+    static void clearAvatarFilter(Activity a) {
+        ViewGroup box = navBox(a);
+        View avatar = box == null ? null : box.findViewWithTag(AV_TAG);
+        if (avatar instanceof ImageView) ((ImageView) avatar).clearColorFilter();
+    }
+
+    /** Окантовка поверх фотографии: родительский круг убираем, чтобы не получить двойной ободок. */
+    static void styleAvatarOutline(Activity a, boolean selected, int orange) {
+        ViewGroup box = navBox(a);
+        View avatar = box == null ? null : box.findViewWithTag(AV_TAG);
+        View ring = box == null ? null : box.findViewWithTag(AV_RING_TAG);
+        float density = a.getResources().getDisplayMetrics().density;
+        View profileCircle = get(a, "circProfile") instanceof View ? (View) get(a, "circProfile") : null;
+
+        if (!(avatar instanceof ImageView)) {
+            if (ring != null && box != null) box.removeView(ring);
+            if (profileCircle != null) outline(profileCircle, selected, density, orange);
+            return;
+        }
+
+        // Фотография закрывает фон circProfile, поэтому рисуем прозрачный слой-кольцо
+        // поверх самой аватарки. Логотип и остальные пункты по-прежнему используют свой круг.
+        if (profileCircle != null) outline(profileCircle, false, density, orange);
+        int size = px(40, density);
+        if (selected) {
+            if (ring == null) {
+                ring = new View(a);
+                ring.setTag(AV_RING_TAG);
+                ring.setClickable(false);
+                box.addView(ring, new FrameLayout.LayoutParams(size, size, Gravity.CENTER));
+            }
+            outline(ring, true, density, orange);
+        } else if (ring != null) {
+            box.removeView(ring);
+        }
+    }
+
     /** 10) Конец logoutLocal: аватарку убираем, иконка «Кабинета» снова видна. */
     public static void onLogout(final Activity a) {
         a.runOnUiThread(new Runnable() {
@@ -262,7 +511,10 @@ public final class IvaPatch {
                 try {
                     ViewGroup box = navBox(a);
                     View av = box == null ? null : box.findViewWithTag(AV_TAG);
+                    View ring = box == null ? null : box.findViewWithTag(AV_RING_TAG);
                     if (av != null) box.removeView(av);
+                    if (ring != null) box.removeView(ring);
+                    onTab(a, (String) get(a, "curTab"));
                 } catch (Throwable ignore) {
                     // иконка остаётся на месте
                 }
@@ -270,7 +522,8 @@ public final class IvaPatch {
         });
     }
 
-    /** «+» (navPlus) → круглый логотип: тот же ic_logo, что на заставке, в оранжевом ободке 50dp. */
+    /** «+» (navPlus) → круглый логотип: тот же ic_logo, что на заставке, размером 50dp.
+     * Оранжевая окантовка рисуется только styleLogoNav() для активного раздела. */
     static void logoOnPlus(Activity a, float d) {
         View plus = a.findViewById(id(a, "navPlus"));
         View col = plus instanceof ViewGroup ? ((ViewGroup) plus).getChildAt(0) : null;      // столбик кнопки
@@ -285,7 +538,8 @@ public final class IvaPatch {
         ((ImageView) ic).clearColorFilter();
     }
 
-    /** Логотип из ресурсов приложения (ic_logo) → круг size×size; inset — отступ от края (виден ободок). */
+    /** Логотип из ресурсов приложения (ic_logo) → круг size×size; inset — прозрачный отступ,
+     * в который при активном разделе попадает оранжевая окантовка родительского круга. */
     static Bitmap roundLogo(Activity a, int size, int inset) {
         int rid = a.getResources().getIdentifier("ic_logo", "drawable", a.getPackageName());
         if (rid == 0) return null;
@@ -320,6 +574,8 @@ public final class IvaPatch {
             // ответ сервера может прийти уже после выхода — тогда аватарку не возвращаем
             if (!wantsAvatar(url) || get(a, "accessToken") == null) {
                 if (av != null) box.removeView(av);
+                int orange = navColor(a, "orange", 0xffff9800);
+                styleAvatarOutline(a, navSelected((String) get(a, "curTab"), "profile"), orange);
                 return;
             }
             if (av == null) {
@@ -329,6 +585,8 @@ public final class IvaPatch {
                 box.addView(av, new FrameLayout.LayoutParams(s, s, Gravity.CENTER));
             }
             loadPhoto(a, (ImageView) av, url.trim());
+            int orange = navColor(a, "orange", 0xffff9800);
+            styleAvatarOutline(a, navSelected((String) get(a, "curTab"), "profile"), orange);
         } catch (Throwable ignore) {
             // аватарка не должна ломать меню: останется иконка
         }

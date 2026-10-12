@@ -2,7 +2,7 @@
 // Ловит: вывод ключа/пароля (set -x, echo, пароль в командной строке), запуск из Pull Request,
 // подпись без сверки сертификата с эталоном ключа №6, эталон ≠ памятке, коммит APK не в ветку агента,
 // поломку смены версии в двоичном манифесте (проверяется на настоящем манифесте 10.14),
-// пропажу любой из 10 точек apply.py (9 вызовов IvaPatch и замена текста кнопки доставки), кандидата без нужной версии,
+// пропажу любой из 11 точек apply.py (10 видов вызовов IvaPatch и замена текста кнопки доставки), кандидата без нужной версии,
 // и что фраза «Нет связи с сервером…» в classes.dex 10.14 одна (точка 6 однозначна).
 // Запуск: node tests/apk-build-guard.cjs
 const fs = require('node:fs'), path = require('node:path'), os = require('node:os'), assert = require('node:assert/strict');
@@ -31,19 +31,42 @@ try {
   assert.ok(exp && exp === doc, `${f}: эталон ${exp} ≠ памятке ${doc}`);
   assert.match(R('.github/workflows/keystore-check.yml'), new RegExp('EXPECTED=' + exp));
   const ap = R('android/patches/apply.py');
-  // вставки: вызов IvaPatch в smali (их ровно 10)
+  // вставки: вызов IvaPatch в smali (их ровно 10); виньетка добавляется внутри уже имеющейся точки onCreated
   const insertions = ['->onPrice(Ljava/lang/String;)Ljava/lang/String;', '->onSummary(Landroid/app/Activity;)V',
     '->onHub(Landroid/app/Activity;)V', '->publishError(Ljava/lang/String;)Ljava/lang/String;',
     '->netError(Ljava/lang/String;)Ljava/lang/String;', '->onCreated(Landroid/app/Activity;)V',
     '->onSession(Landroid/app/Activity;)V', '->onAvatar(Landroid/app/Activity;Ljava/lang/String;)V',
-    '->onLogout(Landroid/app/Activity;)V'];
+    '->onLogout(Landroid/app/Activity;)V', '->onTab(Landroid/app/Activity;Ljava/lang/String;)V'];
   // якоря: по ним apply.py находит место вставки (метод, поле «avatar», тело updateSummary-подобных методов)
   const anchors = ["one_method(lines, r' paintDelToggle\\(Z\\)V$')", "one_method(lines, r' logoutLocal\\(\\)V$')",
-    'lambda\\$loadAdminProfile\\$201', '"avatar"'];
+    "one_method(lines, r' showTab\\(Ljava/lang/String;\\)V$')", 'lambda\\$loadAdminProfile\\$201', '"avatar"'];
   for (const k of [...insertions, ...anchors]) assert.ok(ap.includes(k), `apply.py: нет ${k}`);
   const jp = R('android/patches/IvaPatch.java');
+  const jpc = R('android/patches/IvaClientPatch.java');
+  // 10.39 recovery — штатная строка «Клиент» остаётся единственной точкой входа
+  // в тёмную форму; потенциально проблемный lifecycle-hook аватарки отключён.
+  assert.match(code, /android\/patches\/IvaPatch\.java android\/patches\/IvaClientPatch\.java 2>&1/,
+    `${f}: шаг 10.30 не компилирует IvaClientPatch`);
+  assert.match(ap, /IvaClientPatch;->onProfile\(Landroid\/app\/Activity;\)V/,
+    `${f}: hook onProfile не подключён`);
+  assert.doesNotMatch(ap, /IvaClientPatch;->onActivityResult\(Landroid\/app\/Activity;IILandroid\/content\/Intent;\)V/,
+    `${f}: recovery-сборка не должна вызывать потенциально проблемный hook onActivityResult`);
+  for (const call of ['onFeed', 'onCatalogLoaded', 'onLocationPermission', 'onDetail'])
+    assert.doesNotMatch(ap, new RegExp(`IvaClientPatch;->${call}\\(`),
+      `${f}: hook ${call} должен оставаться выключенным`);
+  for (const k of ['onProfile(Activity', 'onActivityResult(final Activity', 'onFeed(Activity', 'onDetail(Activity', 'installHomeFilter(final Activity', 'loadNativeClientCoords(final Activity'])
+    assert.ok(jpc.includes(k), `IvaClientPatch.java: нет метода ${k}`);
+  assert.doesNotMatch(jpc, /host\.addView\(card, 0, lp\)/, 'IvaClientPatch: белая верхняя карточка клиента не должна добавляться');
+  assert.match(jpc, /Настройки профиля клиента/, 'IvaClientPatch: нет заголовка тёмной формы клиента');
+  assert.match(jpc, /profileHead/, 'IvaClientPatch: строка «Клиент» не подключена к профилю');
+  assert.match(jpc, /installClientProfileHead\(a\)/, 'IvaClientPatch: обработчик строки «Клиент» не устанавливается');
+  assert.match(jpc, /depth < 3/, 'IvaClientPatch: оболочки строки «Клиент» не подключены');
+  for (const k of ['clientAvatarPreview', 'Добавить аватарку', 'CLIENT_AVATAR_REQUEST', 'image/*', 'CATEGORY_OPENABLE', 'BitmapFactory.decodeByteArray', 'clientProfile.put("avatar_path"'])
+    assert.ok(jpc.includes(k), `IvaClientPatch.java: нет функции аватарки ${k}`);
   for (const k of ['onPrice(String', 'onSummary(final Activity', 'onHub(Activity', 'publishError(String', 'netError(String',
-    'onCreated(Activity', 'onSession(Activity', 'onAvatar(final Activity', 'onLogout(final Activity', 'wantsAvatar(String', 'px(float'])
+    'onCreated(Activity', 'onSession(Activity', 'onAvatar(final Activity', 'onLogout(final Activity', 'onTab(Activity',
+    'navSelected(String', 'isLogoTab(String', 'styleAvatarOutline(Activity', 'wantsAvatar(String', 'installHomeVignette(Activity',
+    'HomeVignette extends View', 'new RadialGradient', 'HOME_VIGNETTE_TAG', 'ViewOutlineProvider', 'setClipToOutline(true)', 'setRoundRect', 'px(float'])
     assert.ok(jp.includes('static ') && jp.includes(k), `IvaPatch.java: нет метода ${k}`);
   // точка 6 есть в настоящем APK: фраза «Нет связи с сервером…» лежит в classes.dex 10.14 ровно один раз —
   // значит вставка однозначна и владелец увидит причину именно там, где раньше была общая фраза (07.10.2026)
@@ -55,7 +78,7 @@ try {
   while ((from = dex.indexOf(needle, from)) !== -1) { n++; from += needle.length; }
   assert.equal(n, 1, `в classes.dex 10.14 фраза «Нет связи с сервером…» встречается ${n} раз, нужно ровно 1`);
   assert.ok(/catch \(Throwable ignore\)/.test(jp), 'IvaPatch: доработка должна молча отступать при сбое, не ломая заявку');
-  // 10.17: то, на что опирается патч, есть в настоящем APK 10.14 (иначе на телефоне вставка молча не сработает)
+  // 10.21: то, на что опирается патч, есть в настоящем APK 10.14 (иначе на телефоне вставка молча не сработает)
   const zip14 = entry => execFileSync('python3', ['-c',
     'import zipfile,sys;sys.stdout.buffer.write(zipfile.ZipFile(sys.argv[1]).read(sys.argv[2]))',
     path.join(ROOT, 'ProkatInstrumenta-10.14.apk'), entry], { maxBuffer: 64 * 1024 * 1024 });
@@ -91,5 +114,5 @@ try {
     assert.ok(i >= 0, 'кандидат: нет versionCode');
   }
   fs.rmSync(tmp, { recursive: true, force: true });
-  console.log(`Сборка приложения: секреты не выводятся, сертификат сверяется с эталоном ${exp.slice(0, 8)}…, версия ${name} (${vcode}) пишется в манифест 10.14, ${insertions.length} вызовов IvaPatch и замена текста кнопки доставки на месте, методы и ресурсы 10.14 на месте, фраза «Нет связи с сервером…» в classes.dex 10.14 одна`);
+  console.log(`Сборка приложения: секреты не выводятся, сертификат сверяется с эталоном ${exp.slice(0, 8)}…, версия ${name} (${vcode}) пишется в манифест 10.14, ${insertions.length} видов вызовов IvaPatch и замена текста кнопки доставки на месте, методы и ресурсы 10.14 на месте, фраза «Нет связи с сервером…» в classes.dex 10.14 одна`);
 } catch (e) { console.error('✘ ' + e.message); process.exit(1); }
