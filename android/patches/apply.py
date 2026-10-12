@@ -183,7 +183,7 @@ def patch(lines):
     # 12. штатный renderProfile: обычный клиент получает безопасную кнопку
     #     профиля, а landlord/admin остаётся на своём существующем экране.
     s, e = one_method(lines, r' renderProfile\(\)V$')
-    before_return(lines, s, e, f'invoke-static {{p0}}, {P}->onProfile(Landroid/app/Activity;)V', 'renderProfile')
+    before_return(lines, s, e, f'invoke-static/range {{p0 .. p0}}, {P}->onProfile(Landroid/app/Activity;)V', 'renderProfile')
     done.append('12 onProfile')
 
     # 13. native home: расстояние до пункта выдачи и компактный фильтр.
@@ -192,7 +192,7 @@ def patch(lines):
     if len(rets) < 2:
         die(f'renderFeed: return-void найдено {len(rets)}, нужно минимум 2')
     for i in reversed(rets):
-        lines[i:i] = ['', f'    invoke-static {{p0}}, {P}->onFeed(Landroid/app/Activity;)V']
+        lines[i:i] = ['', f'    invoke-static/range {{p0 .. p0}}, {P}->onFeed(Landroid/app/Activity;)V']
     done.append(f'13 onFeed ×{len(rets)}')
 
     # 14. После загрузки каталога сохраняем полный список: фильтр можно
@@ -201,7 +201,7 @@ def patch(lines):
     loc = [i for i in range(s, e) if lines[i].strip().startswith('.locals')]
     if len(loc) != 1:
         die('loadCatalog UI: нет .locals')
-    lines[loc[0] + 1:loc[0] + 1] = ['', f'    invoke-static {{p0}}, {P}->onCatalogLoaded(Landroid/app/Activity;)V']
+    lines[loc[0] + 1:loc[0] + 1] = ['', f'    invoke-static/range {{p0 .. p0}}, {P}->onCatalogLoaded(Landroid/app/Activity;)V']
     done.append('14 onCatalogLoaded')
 
     # 15. Выбор файла аватарки клиента. Штатные request-коды 5401–5403
@@ -219,7 +219,7 @@ def patch(lines):
     # 17. Карточка инструмента: штатный экран уже показывает тариф объявления,
     #     а IvaPatch дописывает автоматическую сумму до выбранной точки клиента.
     s, e = one_method(lines, r' openDetail\(Lorg/json/JSONObject;Z\)V$')
-    before_return(lines, s, e, f'invoke-static {{p0, p1, p2}}, {P}->onDetail(Landroid/app/Activity;Lorg/json/JSONObject;Z)V', 'openDetail')
+    before_return(lines, s, e, f'invoke-static/range {{p0 .. p2}}, {P}->onDetail(Landroid/app/Activity;Lorg/json/JSONObject;Z)V', 'openDetail')
     done.append('17 onDetail')
     return done
 
