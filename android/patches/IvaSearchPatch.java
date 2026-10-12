@@ -35,6 +35,7 @@ import android.content.Context;
 import android.content.DialogInterface;
 import android.content.SharedPreferences;
 import android.graphics.Canvas;
+import android.graphics.Matrix;
 import android.graphics.Paint;
 import android.graphics.Rect;
 import android.graphics.RectF;
@@ -55,6 +56,7 @@ import android.view.View;
 import android.view.ViewConfiguration;
 import android.view.ViewGroup;
 import android.view.ViewParent;
+import android.view.ViewTreeObserver;
 import android.view.inputmethod.EditorInfo;
 import android.view.inputmethod.InputMethodManager;
 import android.widget.CheckBox;
@@ -62,6 +64,7 @@ import android.widget.CompoundButton;
 import android.widget.EditText;
 import android.widget.FrameLayout;
 import android.widget.HorizontalScrollView;
+import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.TextView;
@@ -89,8 +92,10 @@ public final class IvaSearchPatch {
     static final int CITY_ROW_DP = 35;       // 10.51: строка «Ваш город» 35dp (10.49 — 34, до того 40)
     static final int CITY_BTN_DP = 31;       // 10.51: кнопки города и «Фильтр» 31dp (10.49 — 30)
     static final int SEARCH_DP = 38;         // 10.51: строка поиска 38dp (10.50 — 37, 10.49 — 36, штатно 44)
-    static final int SHEET_BTN_DP = 48;      // 10.51: «Сбросить» и «Показать N» в шторке 48dp (было 50)
-    static final int PRICE_FIELD_DP = 46;    // 10.51: поля цены «от» / «до» 46dp (было 48)
+    static final int SHEET_BTN_DP = SEARCH_DP;    // 10.53: «Сбросить» и «Показать N» — толщиной со строку поиска (10.51 — 48dp)
+    static final int PRICE_FIELD_DP = SEARCH_DP;  // 10.53: поля цены «от» / «до» — толщиной со строку поиска (10.51 — 46dp)
+    static final int BG_GAP_DP = 8;          // 10.53: картинка-шапка кончается на 8dp ниже строки города / ряда условий (лента — через 12dp)
+    static int bgNativeH;                    // 10.53: штатная высота картинки-шапки (141dp, px) — по ней масштаб, обрезка только снизу
     static final int BG_RADIUS_DP = 16;      // 10.52: нижние углы картинки-шапки (как штатная виньетка 10.20); верхние — прямые
     static final float SHEET_MAX = 0.85f;    // шторка — 85% области страниц (10.48: вернули как в 10.46 по решению владельца)
     static final String CITY_ROW_TAG = "iva_search_city_row";
@@ -534,6 +539,92 @@ public final class IvaSearchPatch {
         }
     }
 
+    // ── 10.53: высота картинки-шапки по содержимому ──────────────────────────────────────────────
+
+    /** Чистый расчёт: высота картинки (px) — до низа последнего видимого ряда (строка города или ряд условий) + зазор. */
+    static int bgHeight(int bgTop, int rowBottom, int chipsBottom, boolean chipsShown, int gap) {
+        int bottom = chipsShown && chipsBottom > rowBottom ? chipsBottom : rowBottom;
+        return Math.max(0, bottom - bgTop + gap);
+    }
+
+    /** Чистый расчёт: масштаб и сдвиг картинки {s, dx, dy}. Масштаб и верх — как у штатного centerCrop при штатной
+     *  высоте refH, поэтому при укорачивании картинка обрезается только снизу и не «прыгает»; выше штатной — заполняет. */
+    static float[] topCrop(int vw, int vh, int iw, int ih, int refH) {
+        if (vw <= 0 || vh <= 0 || iw <= 0 || ih <= 0) return null;
+        int h = Math.max(vh, refH);
+        float s = Math.max((float) vw / iw, (float) h / ih);
+        return new float[] { s, Math.round((vw - iw * s) / 2f), Math.round((h - ih * s) / 2f) };
+    }
+
+    /** Картинка (или её рамка с виньеткой 10.20) — прямой ребёнок контейнера главной; иначе null. */
+    static View bgTop(LinearLayout content, View bg) {
+        View top = bg;
+        ViewParent vp = bg.getParent();
+        if (vp instanceof FrameLayout && IvaClientPatch.HOME_VIGNETTE_TAG.equals(((View) vp).getTag())) top = (View) vp;
+        if (top.getParent() != content || !(top.getLayoutParams() instanceof LinearLayout.LayoutParams)) return null;
+        return top;
+    }
+
+    /** Один раз на окно (из install): следим за раскладкой главной и подгоняем высоту картинки. */
+    static void installBgFit(final Activity a, final ScrollView home, final LinearLayout content, final View searchFrame,
+                             final View row, final View chipsScroll) {
+        Object bgo = IvaClientPatch.get(a, "pageBg");
+        if (!(bgo instanceof ImageView)) return;
+        final ImageView bg = (ImageView) bgo;
+        View top = bgTop(content, bg);
+        if (top == null || top.getLayoutParams().height <= 0) return;
+        bgNativeH = top.getLayoutParams().height;
+        bg.addOnLayoutChangeListener(new View.OnLayoutChangeListener() {
+            @Override public void onLayoutChange(View v, int l, int t, int r, int b, int ol, int ot, int orr, int ob) {
+                if (r - l != orr - ol || b - t != ob - ot) {
+                    try { cropFromTop(bg); } catch (Throwable ignore) {}
+                }
+            }
+        });
+        content.getViewTreeObserver().addOnGlobalLayoutListener(new ViewTreeObserver.OnGlobalLayoutListener() {
+            @Override public void onGlobalLayout() {
+                try { fitHeaderBg(a, home, content, bg, searchFrame, row, chipsScroll); } catch (Throwable ignore) {}
+            }
+        });
+        cropFromTop(bg);
+    }
+
+    /** После каждой раскладки: высота картинки = до низа строки города / ряда условий. Строка поиска остаётся на месте:
+     *  её верх (высота картинки + её отрицательный отступ, штатно 141 − 131 = 10dp) не меняется. Ничего не меняет,
+     *  если высота уже верная (±1px), поэтому повторной раскладки не бывает больше одной. */
+    static void fitHeaderBg(Activity a, ScrollView home, LinearLayout content, ImageView bg, View searchFrame,
+                            View row, View chipsScroll) {
+        if (home.getVisibility() != View.VISIBLE || content.getWidth() <= 0 || row.getHeight() <= 0) return;
+        View top = bgTop(content, bg);
+        if (top == null || searchFrame.getParent() != content || row.getParent() != content) return;
+        if (!(searchFrame.getLayoutParams() instanceof LinearLayout.LayoutParams)) return;
+        LinearLayout.LayoutParams blp = (LinearLayout.LayoutParams) top.getLayoutParams();
+        LinearLayout.LayoutParams slp = (LinearLayout.LayoutParams) searchFrame.getLayoutParams();
+        if (blp.height <= 0) return;
+        boolean shown = chipsScroll != null && chipsScroll.getParent() == content
+            && chipsScroll.getVisibility() == View.VISIBLE && chipsScroll.getHeight() > 0;
+        int target = bgHeight(top.getTop(), row.getBottom(), shown ? chipsScroll.getBottom() : 0, shown, dp(a, BG_GAP_DP));
+        if (target <= 0 || Math.abs(target - blp.height) <= 1) return;
+        int searchTop = blp.height + slp.topMargin;
+        blp.height = target;
+        slp.topMargin = searchTop - target;
+        top.setLayoutParams(blp);
+        searchFrame.setLayoutParams(slp);
+    }
+
+    /** Масштаб и верх картинки — штатные (при 141dp), обрезка — только снизу. Нет картинки/размера — штатный centerCrop. */
+    static void cropFromTop(ImageView bg) {
+        Drawable d = bg.getDrawable();
+        if (d == null || bgNativeH <= 0) return;
+        float[] m = topCrop(bg.getWidth(), bg.getHeight(), d.getIntrinsicWidth(), d.getIntrinsicHeight(), bgNativeH);
+        if (m == null) return;
+        Matrix mx = new Matrix();
+        mx.setScale(m[0], m[0]);
+        mx.postTranslate(m[1], m[2]);
+        bg.setScaleType(ImageView.ScaleType.MATRIX);
+        bg.setImageMatrix(mx);
+    }
+
     static void onHomeShown(Activity a) {
         hideCatGrid(a);
         fullBleedHome(a);
@@ -638,6 +729,9 @@ public final class IvaSearchPatch {
         clp.leftMargin = -edge;
         clp.rightMargin = -content.getPaddingRight();
         content.addView(chipsScroll, content.indexOfChild(row) + 1, clp);   // 10.50: под строкой города
+
+        // 3а) 10.53: картинка-шапка по высоте — до строки города (условий нет) или до низа ряда условий (есть).
+        installBgFit(a, home, content, searchFrame, row, chipsScroll);
 
         // 4) Панель и ручка — поверх страниц (под нижним меню приложения), только пока открыта главная.
         FrameLayout panel = buildPanelRoot(a);

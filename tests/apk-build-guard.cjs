@@ -218,10 +218,26 @@ try {
     assert.ok((js45.match(/setClipToPadding\(/g) || []).length === 1 && !js45.includes('setClipToOutline(false)')
       && (fb.match(/setClip\w*\(/g) || []).length === 2 && fb.includes('top.setClipToOutline(true);'),
       'IvaSearchPatch: обрезка по полям снимается только у контейнера главной (и больше нигде)');
-    // 10.51: в шторке «Сбросить» / «Показать N» — 48dp, поля цены — 46dp (обе кнопки и оба поля)
-    assert.ok(js45.includes('SHEET_BTN_DP = 48;') && js45.includes('PRICE_FIELD_DP = 46;')
+    // 10.53: в шторке «Сбросить» / «Показать N» и поля цены — толщиной со строку поиска (обе кнопки и оба поля)
+    assert.ok(js45.includes('SHEET_BTN_DP = SEARCH_DP;') && js45.includes('PRICE_FIELD_DP = SEARCH_DP;')
       && (js45.match(/dp\(a, SHEET_BTN_DP\)/g) || []).length === 2 && (js45.match(/dp\(a, PRICE_FIELD_DP\)/g) || []).length === 2,
-      'IvaSearchPatch: кнопки шторки 48dp и поля цены 46dp (10.51)');
+      'IvaSearchPatch: кнопки шторки и поля цены — толщиной со строку поиска (10.53)');
+    // 10.53: картинка-шапка — до строки города (условий нет) или до низа ряда условий; строка поиска на месте; обрезка снизу
+    const fit = js45.slice(js45.indexOf('static void fitHeaderBg('), js45.indexOf('static void cropFromTop('));
+    assert.ok(fit.includes('int searchTop = blp.height + slp.topMargin;') && fit.includes('slp.topMargin = searchTop - target;')
+      && fit.includes('blp.height = target;') && fit.includes('Math.abs(target - blp.height) <= 1')
+      && fit.includes('chipsScroll.getVisibility() == View.VISIBLE') && fit.includes('bgHeight(top.getTop(), row.getBottom(), shown ? chipsScroll.getBottom() : 0, shown, dp(a, BG_GAP_DP))')
+      && fit.includes('home.getVisibility() != View.VISIBLE'),
+      'IvaSearchPatch.fitHeaderBg: высота картинки по строке города / ряду условий, верх строки поиска не меняется, без зацикливания');
+    assert.ok(js45.includes('BG_GAP_DP = 8;') && js45.includes('int bottom = chipsShown && chipsBottom > rowBottom ? chipsBottom : rowBottom;')
+      && js45.includes('int h = Math.max(vh, refH);') && js45.includes('bgNativeH = top.getLayoutParams().height;')
+      && js45.includes('bg.setScaleType(ImageView.ScaleType.MATRIX);')
+      && js45.includes('installBgFit(a, home, content, searchFrame, row, chipsScroll);')
+      && js45.indexOf('installBgFit(a, home, content, searchFrame, row, chipsScroll);') > js45.indexOf('content.addView(chipsScroll, content.indexOfChild(row) + 1, clp);')
+      && (js45.match(/addOnGlobalLayoutListener\(/g) || []).length === 1,
+      'IvaSearchPatch: подгонка картинки ставится один раз после ряда условий, обрезка только снизу (штатный масштаб)');
+    assert.ok(/eq\("шапка 10\.53: ниже штатной — тот же масштаб и верх \(обрезка снизу\)"/.test(R('android/patches/test/IvaPatchTest.java')),
+      'IvaPatchTest: проверки высоты и обрезки картинки-шапки 10.53');
     // 10.50: поиск — сверху на штатном месте (его отступ поверх картинки не трогаем), город — под подсказками, ряд условий — под городом
     const ins = js45.slice(js45.indexOf('static void install('), js45.indexOf('static void syncVisibility('));
     assert.ok(!/slp\.topMargin\s*=/.test(ins) && !ins.includes('rlp.topMargin = slp.topMargin'), 'IvaSearchPatch.install: отступ строки поиска (поверх картинки-шапки) должен остаться штатным');
