@@ -206,6 +206,20 @@ jobs:
             || bad "не удалось склонировать боевой сайт (main)"
           # Скрипт пишет только имя APK в app-test.json, сохраняет предыдущий тестовый APK
           # в app-keep-apks.txt и отказывается перезаписывать существующий файл.
+          # Повторный запуск той же сборки идемпотентен: уже проверенный файл и feed оставляем как есть.
+          if git -C "$D" cat-file -e "HEAD:$F" 2>/dev/null; then
+            if python3 - "$D/app-test.json" "$NEW_CODE" "$NEW_NAME" "$F" <<'PY'
+import json, sys
+with open(sys.argv[1], encoding='utf-8') as f:
+    feed = json.load(f)
+raise SystemExit(0 if feed.get('versionCode') == int(sys.argv[2]) and feed.get('versionName') == sys.argv[3] and feed.get('apk') == sys.argv[4] else 1)
+PY
+            then
+              echo "::notice title=Сборка::тестовая сборка $F уже опубликована на main — не перезаписываю"
+              exit 0
+            fi
+            bad "$F уже есть на main, но app-test.json не соответствует $NEW_NAME/$NEW_CODE"
+          fi
           python3 "$GITHUB_WORKSPACE/tools/publish-test-apk.py" --site "$D" --apk "$GITHUB_WORKSPACE/out/$F" \
             --code "$NEW_CODE" --name "$NEW_NAME" --notes "$TEST_NOTES" --reinstall "$TEST_REINSTALL" \
             || bad "публикация тестовой сборки на сайт"
