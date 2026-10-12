@@ -293,6 +293,7 @@ public final class IvaClientPatch {
     static AlertDialog clientProfileDialog;
     static EditText[] clientProfileFields;
     static TextView clientAvatarStatus;
+    static View clientProfileCard;
     static TextView clientProfileCardName;
     static TextView clientProfileCardInfo;
     static String clientAvatarPath = "";
