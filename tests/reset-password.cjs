@@ -9,7 +9,7 @@ const fs = require('fs'), vm = require('vm'), assert = require('node:assert/stri
 const R = p => fs.readFileSync(require('path').join(__dirname, '..', p), 'utf8');
 
 // 1. Подключение
-for (const f of ['index.html', 'cabinet.html', 'account.html', 'kabinet.html', 'app.html', 'catalog.html', '404.html'])
+for (const f of ['index.html', 'cabinet.html', 'account.html', 'profile.html', 'kabinet.html', 'app.html', 'catalog.html', '404.html'])
   assert.match(R(f), /<script src="[^"]*assets\/recovery\.js[^"]*"><\/script>/, f + ': нет перехватчика recovery.js');
 assert.match(R('404.html'), /src="\/Arenda-Nvk\/assets\/recovery\.js/, '404.html: путь к перехватчику должен быть абсолютным');
 
@@ -74,5 +74,5 @@ function page(hash) {
   assert.equal(p.el('rpForm').hidden, true); assert.match(p.el('rpMsg').textContent, /Забыли пароль/);
 
   assert.doesNotMatch(html, /service_role|localStorage\.setItem/, 'ключ не сохраняем, service_role не используем');
-  console.log('OK reset-password: перехват на 7 страницах, 5 адресов, страница — 8 сценариев');
+  console.log('OK reset-password: перехват на 8 страницах, 5 адресов, страница — 8 сценариев');
 })().catch(e => { console.error('FAIL reset-password:', e.message); process.exit(1); });

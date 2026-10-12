@@ -795,6 +795,9 @@
   }
 
   /* ---------- Профиль ---------- */
+  /* Вкладка «Профиль» здесь — только для арендодателя: данные проката,
+     город поиска и карточки приложения. Настройки профиля клиента
+     (арендатора) вынесены на отдельную страницу profile.html. */
   function viewProf(){
     const a = A.admin || {};
     return '<div class="box profile-account" style="max-width:1000px">' +
@@ -820,16 +823,21 @@
         '<p id="profileCityError" role="alert" style="color:var(--red);margin-top:8px"></p>' +
       '</form>' +
       '<div style="display:flex;gap:10px;margin-top:20px;flex-wrap:wrap">' +
-        (isAdmin() ? '<a class="btn sec sm" href="#rentalProfile" id="jumpRental">Данные проката ↓</a>' : '<button class="btn sec sm" id="editPersonal">Редактировать данные</button>') +
+        '<a class="btn sec sm" href="#rentalProfile" id="jumpRental">Данные проката ↓</a>' +
+        '<a class="btn sec sm" href="profile.html">Личные настройки</a>' +
         '<button class="btn ghost sm" id="bOut">Выйти</button>' +
       '</div>' +
       // Карточки приложения (assets/app.js → mountAppCards): у всех — выпущенная версия; у создателя на телефоне — ещё новая с «Подтвердить релиз»
       '<div class="apk-cards" id="apkCards"></div>' +
-    '</div>' + (isAdmin() ? '<div id="rentalProfile"></div>' : '<div id="personalEditor"></div>');
+    '</div><div id="rentalProfile"></div>';
   }
 
   /* ---------- Рендер ---------- */
   function render(){
+    /* Настройки профиля клиента — отдельная страница profile.html:
+       старые ссылки account.html#prof у клиента тоже ведут туда.
+       Вкладка «Профиль» в кабинете остаётся для арендодателя. */
+    if (TAB === 'prof' && !isAdmin()){ location.replace('profile.html'); return; }
     let inner;
     if (TAB === 'fee')           inner = viewFee();
     else if (TAB === 'orders')   inner = viewOrders();
@@ -851,10 +859,6 @@
     if($('apkCards'))mountAppCards($('apkCards'));
     if($('rentalProfile'))RentalProfile.mount($('rentalProfile'));
     const jump=$('jumpRental');if(jump)jump.onclick=function(e){e.preventDefault();$('rentalProfile').scrollIntoView({behavior:'smooth'});};
-    const editPersonal=$('editPersonal');if(editPersonal)editPersonal.onclick=function(){
-      const host=$('personalEditor');host.innerHTML='<form class="box" id="personalForm" style="max-width:640px;margin-top:18px"><label class="rp-field">Имя<input class="inp" name="name" required maxlength="150" value="'+esc(A.userMeta.full_name||A.uname||'')+'"></label><label class="rp-field" style="margin-top:14px">Телефон<input class="inp" type="tel" name="phone" maxlength="100" value="'+esc(A.userMeta.phone||'')+'"></label><p class="rp-error" role="alert"></p><button class="btn sm" style="margin-top:14px">Сохранить</button></form>';
-      host.querySelector('form').onsubmit=async function(e){e.preventDefault();const form=e.currentTarget,btn=form.querySelector('button');btn.disabled=true;try{const name=form.elements.name.value.trim();if(!name)throw new Error('Укажите имя');const user=await api('/auth/v1/user','PUT',{data:Object.assign({},A.userMeta,{name:name,full_name:name,phone:form.elements.phone.value.trim()})});applyAuthUser(user);saveSess();toast('Данные сохранены');render();}catch(err){form.querySelector('[role=alert]').textContent=err.message;btn.disabled=false;}};
-    };
     const cityForm=$('profileCityForm');
     if(cityForm)cityForm.addEventListener('submit',async function(e){
       e.preventDefault();const btn=cityForm.querySelector('button');btn.disabled=true;$('profileCityError').textContent='';
