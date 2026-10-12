@@ -17,7 +17,13 @@
   9. lambda$loadAdminProfile$201(String)     : после чтения поля avatar → IvaPatch.onAvatar(this, адрес) (аватарка в «Кабинете»)
  10. logoutLocal()                           : в конце → IvaPatch.onLogout(this) (выход: иконка «Кабинета» снова на месте)
  11. showTab(String)                         : после штатного выбора вкладки → IvaPatch.onTab(this, имя) (оранжевая окантовка без заливки)
-Плюс versionCode/versionName в apktool.yml.
+ 12. renderProfile()                         : профиль обычного клиента (аватарка, ФИО, телефон, адрес, паспорт)
+ 13. renderFeed()                            : расстояние до пункта выдачи с fallback по адресу/геолокации
+ 14. lambda$loadCatalog$70$…                 : повторное применение компактного фильтра после обновления каталога
+ 15. onActivityResult(I,I,Intent)            : загрузка клиентской аватарки из приватного bucket
+ 16. onRequestPermissionsResult(I,String[],int[]): повторный расчёт после разрешения геолокации
+ 17. openDetail(JSONObject,boolean)          : автоматическая оценка стоимости доставки по тарифу объявления
+Плюс versionCode/versionName в apktool.yml и runtime permissions в binary manifest.
 """
 import os
 import re
@@ -173,6 +179,48 @@ def patch(lines):
     # invoke form only encodes v0..v15, so use the range form deliberately.
     lines[rets[0]:rets[0]] = ['', f'    invoke-static/range {{p0 .. p1}}, {P}->onTab(Landroid/app/Activity;Ljava/lang/String;)V']
     done.append('11 onTab')
+
+    # 12. штатный renderProfile: обычный клиент получает безопасную кнопку
+    #     профиля, а landlord/admin остаётся на своём существующем экране.
+    s, e = one_method(lines, r' renderProfile\(\)V$')
+    before_return(lines, s, e, f'invoke-static {{p0}}, {P}->onProfile(Landroid/app/Activity;)V', 'renderProfile')
+    done.append('12 onProfile')
+
+    # 13. native home: расстояние до пункта выдачи и компактный фильтр.
+    s, e = one_method(lines, r' renderFeed\(\)V$')
+    rets = [i for i in range(s, e) if lines[i].strip() == 'return-void']
+    if len(rets) < 2:
+        die(f'renderFeed: return-void найдено {len(rets)}, нужно минимум 2')
+    for i in reversed(rets):
+        lines[i:i] = ['', f'    invoke-static {{p0}}, {P}->onFeed(Landroid/app/Activity;)V']
+    done.append(f'13 onFeed ×{len(rets)}')
+
+    # 14. После загрузки каталога сохраняем полный список: фильтр можно
+    #     применять повторно после ручного обновления главной.
+    s, e = one_method(lines, r'lambda\$loadCatalog\$70\$')
+    loc = [i for i in range(s, e) if lines[i].strip().startswith('.locals')]
+    if len(loc) != 1:
+        die('loadCatalog UI: нет .locals')
+    lines[loc[0] + 1:loc[0] + 1] = ['', f'    invoke-static {{p0}}, {P}->onCatalogLoaded(Landroid/app/Activity;)V']
+    done.append('14 onCatalogLoaded')
+
+    # 15. Выбор файла аватарки клиента. Штатные request-коды 5401–5403
+    #     не трогаем: собственный код 6403 обрабатывается только IvaPatch.
+    s, e = one_method(lines, r' onActivityResult\(IILandroid/content/Intent;\)V$')
+    before_return(lines, s, e, f'invoke-static/range {{p0 .. p3}}, {P}->onActivityResult(Landroid/app/Activity;IILandroid/content/Intent;)V', 'onActivityResult')
+    done.append('15 client avatar result')
+
+    # 16. После системного диалога разрешений повторяем fallback: GPS имеет
+    #     приоритет, адрес клиента используется без разрешения геолокации.
+    s, e = one_method(lines, r' onRequestPermissionsResult\(I\[Ljava/lang/String;\[I\)V$')
+    before_return(lines, s, e, f'invoke-static/range {{p0 .. p3}}, {P}->onLocationPermission(Landroid/app/Activity;[I)V', 'onRequestPermissionsResult')
+    done.append('16 location permission')
+
+    # 17. Карточка инструмента: штатный экран уже показывает тариф объявления,
+    #     а IvaPatch дописывает автоматическую сумму до выбранной точки клиента.
+    s, e = one_method(lines, r' openDetail\(Lorg/json/JSONObject;Z\)V$')
+    before_return(lines, s, e, f'invoke-static {{p0, p1, p2}}, {P}->onDetail(Landroid/app/Activity;Lorg/json/JSONObject;Z)V', 'openDetail')
+    done.append('17 onDetail')
     return done
 
 

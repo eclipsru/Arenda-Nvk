@@ -11,23 +11,100 @@ const A = {
   tok:   null,   // access_token
   rtok:  null,   // refresh_token
   me:    '',     // email в нижнем регистре
-  uname: '',     // имя
-  uid: null, userMeta: {}, profileCity: '',
+  uname: '',     // отображаемое имя
+  uid: null, userMeta: {}, customerProfile: {}, profileCity: '',
   admin: null    // запись из admins, если есть
 };
 
 const TOK_KEY = 'iva_sess';
 
+function customerDisplayName(profile, meta, fallback){
+  profile = profile || {};
+  meta = meta || {};
+  const parts = [profile.surname, profile.given_name, profile.patronymic]
+    .map(function(x){ return String(x || '').trim(); }).filter(Boolean);
+  return parts.join(' ') || meta.name || meta.full_name || fallback || '';
+}
 function applyAuthUser(user){
   if (!user) return;
   A.uid = user.id || A.uid;
   A.me = (user.email || A.me || '').toLowerCase();
   A.userMeta = user.user_metadata || {};
-  A.uname = A.userMeta.name || A.userMeta.full_name || A.uname || A.me.split('@')[0];
+  A.uname = customerDisplayName(A.customerProfile, A.userMeta, A.uname || A.me.split('@')[0]);
 }
 function cityFromProfileAddress(address){ return IvaGeo.addressCity(address); }
+
+/* Клиентские ПД лежат отдельно от admins и никогда не запрашиваются публичной
+   витриной. Если миграция ещё не применена, вход продолжает работать с
+   безопасным legacy-fallback из user_metadata (без паспортных данных). */
+async function loadCustomerProfile(){
+  if (!A.tok) return {};
+  try {
+    const rows = await api('/rest/v1/rpc/get_my_customer_profile', 'POST', {});
+    A.customerProfile = Array.isArray(rows) ? (rows[0] || {}) : (rows || {});
+  } catch(e){
+    A.customerProfile = {
+      surname: A.userMeta.surname || '',
+      given_name: A.userMeta.given_name || A.userMeta.name || A.userMeta.full_name || '',
+      patronymic: A.userMeta.patronymic || '',
+      phone: A.userMeta.phone || '',
+      city: A.userMeta.city || '',
+      address: A.userMeta.address || '',
+      passport_data: {},
+      avatar_path: ''
+    };
+  }
+  A.uname = customerDisplayName(A.customerProfile, A.userMeta, A.uname || A.me.split('@')[0]);
+  return A.customerProfile;
+}
+async function saveCustomerProfile(data){
+  data = data || {};
+  const passport = data.passport_data && typeof data.passport_data === 'object' ? data.passport_data : {};
+  const rawRow = await api('/rest/v1/rpc/save_my_customer_profile', 'POST', {
+    p_surname: String(data.surname || '').trim(),
+    p_given_name: String(data.given_name || '').trim(),
+    p_patronymic: String(data.patronymic || '').trim(),
+    p_phone: String(data.phone || '').trim(),
+    p_city: String(data.city || '').trim(),
+    p_address: String(data.address || '').trim(),
+    p_passport_data: passport,
+    p_avatar_path: String(data.avatar_path || (A.customerProfile && A.customerProfile.avatar_path) || '').trim()
+  });
+  const row = Array.isArray(rawRow) ? (rawRow[0] || null) : rawRow;
+  A.customerProfile = row || Object.assign({}, A.customerProfile, data, {passport_data: passport});
+  /* Совместимость со старой native-сессией: в Auth metadata дублируются
+     только имя и телефон. Паспорт, адрес и путь приватного файла здесь не
+     сохраняются и тем более не читаются публичными карточками. */
+  try {
+    const display = customerDisplayName(A.customerProfile, A.userMeta, A.me.split('@')[0]);
+    const user = await api('/auth/v1/user', 'PUT', {data:Object.assign({}, A.userMeta, {
+      name: display, full_name: display, phone: A.customerProfile.phone || ''
+    })});
+    applyAuthUser(user); saveSess();
+  } catch(e){}
+  return A.customerProfile;
+}
+function customerPassport(){
+  return (A.customerProfile && A.customerProfile.passport_data && typeof A.customerProfile.passport_data === 'object')
+    ? A.customerProfile.passport_data : {};
+}
+async function getCustomerAvatarUrl(){
+  const path = A.customerProfile && A.customerProfile.avatar_path;
+  if (!path || !A.tok) return '';
+  try {
+    const r = await fetch(SB + '/storage/v1/object/sign/customer-avatars/' + path.replace(/^\/+/, ''), {
+      method:'POST', headers:{apikey:KEY, Authorization:'Bearer ' + A.tok, 'Content-Type':'application/json'},
+      body: JSON.stringify({expiresIn: 3600})
+    });
+    if (!r.ok) return '';
+    const j = await r.json();
+    const signed = j.signedURL || j.signedUrl || j.path || '';
+    return signed ? (signed.indexOf('http') === 0 ? signed : SB + '/storage/v1' + signed) : '';
+  } catch(e){ return ''; }
+}
 async function loadProfileCity(){
-  let city = typeof A.userMeta.city === 'string' ? A.userMeta.city.trim() : '';
+  let city = (A.customerProfile && A.customerProfile.city) || (typeof A.userMeta.city === 'string' ? A.userMeta.city.trim() : '');
+  if (!city && A.customerProfile && A.customerProfile.address) city = cityFromProfileAddress(A.customerProfile.address);
   if (!city && A.admin) city = cityFromProfileAddress(A.admin.address);
   if (!city && A.uid){
     try {
@@ -42,9 +119,14 @@ async function loadProfileCity(){
 async function saveProfileCity(city){
   city=IvaGeo.city(city);
   if (city.length<2 || city.length>100) throw new Error('Укажите город от 2 до 100 символов');
+  /* Город поиска остаётся совместимым с прежней metadata-схемой; если
+     приватная таблица уже есть — синхронизируем только несекретное поле. */
   const user=await api('/auth/v1/user','PUT',{data:Object.assign({},A.userMeta,{city:city})});
   applyAuthUser(user);
   A.userMeta.city=city; A.profileCity=city;
+  if (A.customerProfile && A.customerProfile.given_name){
+    try { await saveCustomerProfile(Object.assign({}, A.customerProfile, {city:city})); } catch(e) {}
+  }
   saveSess();
   if (typeof applyProfileCity === 'function') applyProfileCity(city,true);
 }
@@ -98,7 +180,7 @@ function saveSess(){
 }
 function clearSess(){
   A.tok = A.rtok = null; A.me = A.uname = ''; A.admin = null;
-  A.uid=null; A.userMeta={}; A.profileCity='';
+  A.uid=null; A.userMeta={}; A.customerProfile={}; A.profileCity='';
   try { localStorage.removeItem(TOK_KEY); localStorage.removeItem('iva_auth'); } catch(e){}
 }
 
@@ -216,6 +298,7 @@ async function loadAdmin(){
                           '&email=eq.' + encodeURIComponent(A.me));
     A.admin = (arr && arr.length) ? arr[0] : null;
   } catch(e){ A.admin = null; }
+  await loadCustomerProfile();
   await loadProfileCity();
   return A.admin;
 }
@@ -231,7 +314,8 @@ async function loadCats(){
 
 /* ---------- Объявления ---------- */
 const TOOL_FIELDS = 'id,name,cat,sub,descr,price,deposit,imgs,img,delivery,' +
-                    'delivery_price,terms,pickup_city,owner_email,status,active,rating,reviews_count,created_at';
+                    'delivery_price,terms,pickup_city,pickup_address,pickup_lat,pickup_lng,' +
+                    'owner_email,status,active,rating,reviews_count,created_at';
 
 /* Публичная витрина — только активные */
 async function loadPublicTools(){
@@ -267,6 +351,9 @@ async function createTool(data){
     delivery_price: data.delivery ? (Number(data.delivery_price) || 0) : 0,
     terms:          data.terms || '',
     pickup_city:    IvaGeo.city(data.pickup_city),
+    pickup_address: String(data.pickup_address || '').trim(),
+    pickup_lat:     data.pickup_lat !== '' && data.pickup_lat != null && Number.isFinite(Number(data.pickup_lat)) ? Number(data.pickup_lat) : null,
+    pickup_lng:     data.pickup_lng !== '' && data.pickup_lng != null && Number.isFinite(Number(data.pickup_lng)) ? Number(data.pickup_lng) : null,
     owner_email:    A.me,
     status:         data.status || 'active',
     active:         (data.status || 'active') === 'active'
@@ -322,6 +409,34 @@ async function uploadPhoto(file){
   return SB + '/storage/v1/object/public/tool-photos/' + path;
 }
 
+/* Приватная аватарка клиента: файл лежит в customer-avatars/<uid>/avatar.jpg,
+   а в профиле хранится только путь. Публичной ссылки на объект нет. */
+async function uploadCustomerAvatar(file){
+  if (!file || !/^image\//.test(file.type)) throw new Error('Выберите изображение');
+  if (!A.tok || !A.uid) throw new Error('Нужно войти');
+  const img = await new Promise(function(res, rej){
+    const i = new Image();
+    i.onload = function(){ URL.revokeObjectURL(i.src); res(i); };
+    i.onerror = function(){ URL.revokeObjectURL(i.src); rej(new Error('файл не читается')); };
+    i.src = URL.createObjectURL(file);
+  });
+  const mx = 640, sc = Math.min(1, mx / Math.max(img.width, img.height));
+  const cv = document.createElement('canvas');
+  cv.width = Math.max(1, Math.round(img.width * sc));
+  cv.height = Math.max(1, Math.round(img.height * sc));
+  cv.getContext('2d').drawImage(img, 0, 0, cv.width, cv.height);
+  const blob = await new Promise(function(res){ cv.toBlob(res, 'image/jpeg', 0.84); });
+  if (!blob) throw new Error('не удалось обработать изображение');
+  const path = A.uid + '/avatar.jpg';
+  const r = await fetch(SB + '/storage/v1/object/customer-avatars/' + path, {
+    method:'PUT',
+    headers:{apikey:KEY, Authorization:'Bearer ' + A.tok, 'Content-Type':'image/jpeg', 'x-upsert':'true'},
+    body: blob
+  });
+  if (!r.ok) throw new Error(sbErr(await r.text()));
+  return path;
+}
+
 /* ---------- Статусы ---------- */
 const STATUSES = {
   active:     { title:'Активно',      cls:'act' },
@@ -344,13 +459,15 @@ function toolToAd(t){
   const oe   = (t.owner_email || '').toLowerCase();
   const o    = OWNER_CACHE[oe];
 
-  /* Состояние и адрес лежат в terms — вытаскиваем для карточки */
+  /* Старые объявления хранят адрес в terms; новые — в нормализованных
+     pickup_* полях. Сохраняем обратную совместимость. */
   const terms = t.terms || '';
   let cond = 'good';
   if (/Состояние:\s*Новый/i.test(terms)) cond = 'new';
   else if (/Состояние:\s*Рабочее/i.test(terms)) cond = 'work';
-  const mAddr = terms.match(/Адрес выдачи:\s*(.+)/);
-  const city = IvaGeo.city(t.pickup_city) || (mAddr ? IvaGeo.addressCity(mAddr[1]) : 'Новочеркасск');
+  const mAddr = terms.match(/Адрес выдачи:\s*(.+)/i);
+  const pickupAddress = String(t.pickup_address || (mAddr ? mAddr[1] : '') || '').trim();
+  const city = IvaGeo.city(t.pickup_city) || (pickupAddress ? IvaGeo.addressCity(pickupAddress) : 'Новочеркасск');
 
   return {
     id:        t.id,
@@ -377,6 +494,9 @@ function toolToAd(t){
     delivery:  !!t.delivery,
     delivery_price: Number(t.delivery_price) || 0,
     pickup_city: t.pickup_city || '',
+    pickup_address: pickupAddress,
+    pickup_lat: t.pickup_lat == null ? null : Number(t.pickup_lat),
+    pickup_lng: t.pickup_lng == null ? null : Number(t.pickup_lng),
     photos:    Math.max(imgs.length, 1),
     photoList: imgs,
     status:    t.status || 'active',

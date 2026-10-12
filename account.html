@@ -44,6 +44,11 @@
 .prof-row:last-child{border-bottom:none}
 .prof-row dt{color:var(--g2);min-width:170px;flex-shrink:0}
 .prof-row dd{font-weight:500;word-break:break-word}
+.profile-form-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.customer-profile-form .rp-field{display:flex;flex-direction:column;gap:6px;font-size:13px;font-weight:600}
+.customer-profile-form .rp-field .small{font-weight:400}
+#customerAvatarPreview{overflow:hidden;display:flex;align-items:center;justify-content:center;background:var(--field)}
+#customerAvatarPreview img{width:100%;height:100%;object-fit:cover}
 
 /* Вход */
 .auth-box{max-width:390px;margin:50px auto;background:var(--card);
@@ -101,6 +106,7 @@
   .row-ad .rph{width:76px;height:60px}
   .prof-row{flex-direction:column;gap:3px}
   .prof-row dt{min-width:0;font-size:12.5px}
+  .profile-form-grid{grid-template-columns:1fr}
   .kpi .vl{font-size:20px}
   .tbl th:nth-child(n+4),.tbl td:nth-child(n+4){display:none}
 }
@@ -794,6 +800,39 @@
       '<a class="btn" href="chat.html">Открыть сообщения</a></div>';
   }
 
+  /* ---------- Профиль клиента ---------- */
+  function customerProfileHTML(){
+    const p = A.customerProfile || {};
+    const pass = customerPassport();
+    const avatarText = initials(customerDisplayName(p, A.userMeta, A.uname || A.me));
+    return '<form id="customerProfileForm" class="box customer-profile-form" style="max-width:680px;margin-top:20px">' +
+      '<div class="sect-h" style="margin-bottom:14px"><div><h3 style="margin:0">Настройки профиля клиента</h3><p class="small muted" style="margin-top:4px">Эти данные видны только вам и используются для оформления заявки и расчёта доставки.</p></div></div>' +
+      '<div style="display:flex;align-items:center;gap:14px;margin-bottom:18px">' +
+        '<div id="customerAvatarPreview" class="ava" style="width:64px;height:64px;font-size:22px">' + esc(avatarText || '?') + '</div>' +
+        '<div><label class="btn sec sm" for="customerAvatarFile" style="cursor:pointer">Загрузить аватарку</label><input id="customerAvatarFile" type="file" accept="image/*" class="hide"><div id="customerAvatarStatus" class="small muted" style="margin-top:6px">JPG или PNG, до 640 px</div></div>' +
+      '</div>' +
+      '<div class="profile-form-grid">' +
+        '<label class="rp-field">Фамилия<input class="inp" name="surname" maxlength="100" autocomplete="family-name" value="' + esc(p.surname || '') + '"></label>' +
+        '<label class="rp-field">Имя *<input class="inp" name="given_name" maxlength="100" required autocomplete="given-name" value="' + esc(p.given_name || A.userMeta.name || A.uname || '') + '"></label>' +
+        '<label class="rp-field">Отчество<input class="inp" name="patronymic" maxlength="100" autocomplete="additional-name" value="' + esc(p.patronymic || '') + '"></label>' +
+        '<label class="rp-field">Номер телефона<input class="inp" type="tel" name="phone" maxlength="50" autocomplete="tel" value="' + esc(p.phone || A.userMeta.phone || '') + '"></label>' +
+      '</div>' +
+      '<label class="rp-field" style="margin-top:14px">Адрес клиента<input class="inp" name="address" maxlength="500" autocomplete="street-address" placeholder="Город, улица, дом, квартира" value="' + esc(p.address || '') + '"><span class="small muted">На ПК по этому адресу рассчитывается расстояние до пункта выдачи. Адрес не показывается арендодателю в карточке.</span></label>' +
+      '<div class="passport-block" style="margin-top:18px;padding:14px;border:1px solid var(--line);border-radius:10px;background:var(--field)">' +
+        '<b style="font-size:14px">Паспортные данные <span class="muted" style="font-weight:400">— необязательно</span></b>' +
+        '<p class="small muted" style="line-height:1.5;margin:5px 0 12px">Паспортные данные помогают ускорить оформление договора аренды. Они хранятся в защищённой записи клиента и не публикуются в карточке инструмента или профиле арендодателя.</p>' +
+        '<div class="profile-form-grid">' +
+          '<label class="rp-field">Серия<input class="inp" name="passport_series" maxlength="20" autocomplete="off" value="' + esc(pass.series || '') + '"></label>' +
+          '<label class="rp-field">Номер<input class="inp" name="passport_number" maxlength="30" autocomplete="off" value="' + esc(pass.number || '') + '"></label>' +
+          '<label class="rp-field">Дата выдачи<input class="inp" type="date" name="passport_issued_at" maxlength="20" autocomplete="off" value="' + esc(pass.issued_at || '') + '"></label>' +
+          '<label class="rp-field">Кем выдан<input class="inp" name="passport_issued_by" maxlength="200" autocomplete="off" value="' + esc(pass.issued_by || '') + '"></label>' +
+        '</div>' +
+      '</div>' +
+      '<p class="rp-error" id="customerProfileError" role="alert" style="margin-top:10px"></p>' +
+      '<div style="display:flex;gap:10px;align-items:center;margin-top:14px;flex-wrap:wrap"><button class="btn" type="submit">Сохранить профиль</button><span class="small muted">Паспортные поля можно оставить пустыми.</span></div>' +
+    '</form>';
+  }
+
   /* ---------- Профиль ---------- */
   function viewProf(){
     const a = A.admin || {};
@@ -819,13 +858,14 @@
         '<button class="btn sec sm" type="submit">Сохранить город</button>' +
         '<p id="profileCityError" role="alert" style="color:var(--red);margin-top:8px"></p>' +
       '</form>' +
+      (isAdmin() ? '' : customerProfileHTML()) +
       '<div style="display:flex;gap:10px;margin-top:20px;flex-wrap:wrap">' +
-        (isAdmin() ? '<a class="btn sec sm" href="#rentalProfile" id="jumpRental">Данные проката ↓</a>' : '<button class="btn sec sm" id="editPersonal">Редактировать данные</button>') +
+        (isAdmin() ? '<a class="btn sec sm" href="#rentalProfile" id="jumpRental">Данные проката ↓</a>' : '') +
         '<button class="btn ghost sm" id="bOut">Выйти</button>' +
       '</div>' +
       // Карточки приложения (assets/app.js → mountAppCards): у всех — выпущенная версия; у создателя на телефоне — ещё новая с «Подтвердить релиз»
       '<div class="apk-cards" id="apkCards"></div>' +
-    '</div>' + (isAdmin() ? '<div id="rentalProfile"></div>' : '<div id="personalEditor"></div>');
+    '</div>' + (isAdmin() ? '<div id="rentalProfile"></div>' : '');
   }
 
   /* ---------- Рендер ---------- */
@@ -851,10 +891,44 @@
     if($('apkCards'))mountAppCards($('apkCards'));
     if($('rentalProfile'))RentalProfile.mount($('rentalProfile'));
     const jump=$('jumpRental');if(jump)jump.onclick=function(e){e.preventDefault();$('rentalProfile').scrollIntoView({behavior:'smooth'});};
-    const editPersonal=$('editPersonal');if(editPersonal)editPersonal.onclick=function(){
-      const host=$('personalEditor');host.innerHTML='<form class="box" id="personalForm" style="max-width:640px;margin-top:18px"><label class="rp-field">Имя<input class="inp" name="name" required maxlength="150" value="'+esc(A.userMeta.full_name||A.uname||'')+'"></label><label class="rp-field" style="margin-top:14px">Телефон<input class="inp" type="tel" name="phone" maxlength="100" value="'+esc(A.userMeta.phone||'')+'"></label><p class="rp-error" role="alert"></p><button class="btn sm" style="margin-top:14px">Сохранить</button></form>';
-      host.querySelector('form').onsubmit=async function(e){e.preventDefault();const form=e.currentTarget,btn=form.querySelector('button');btn.disabled=true;try{const name=form.elements.name.value.trim();if(!name)throw new Error('Укажите имя');const user=await api('/auth/v1/user','PUT',{data:Object.assign({},A.userMeta,{name:name,full_name:name,phone:form.elements.phone.value.trim()})});applyAuthUser(user);saveSess();toast('Данные сохранены');render();}catch(err){form.querySelector('[role=alert]').textContent=err.message;btn.disabled=false;}};
-    };
+    const customerForm=$('customerProfileForm');
+    if(customerForm){
+      let avatarFile=null;
+      const avatarInput=$('customerAvatarFile');
+      if(avatarInput)avatarInput.onchange=function(){avatarFile=this.files&&this.files[0]||null;if(avatarFile){const st=$('customerAvatarStatus');if(st)st.textContent='Файл выбран: '+avatarFile.name;}};
+      customerForm.onsubmit=async function(e){
+        e.preventDefault();
+        const form=e.currentTarget,btn=form.querySelector('button[type="submit"]'),errEl=$('customerProfileError');
+        if(errEl)errEl.textContent='';btn.disabled=true;btn.textContent='Сохраняем…';
+        try{
+          const given=form.elements.given_name.value.trim();
+          if(!given)throw new Error('Укажите имя');
+          let avatarPath=(A.customerProfile&&A.customerProfile.avatar_path)||'';
+          if(avatarFile){
+            const st=$('customerAvatarStatus');if(st)st.textContent='Загружаем аватарку…';
+            avatarPath=await uploadCustomerAvatar(avatarFile);
+          }
+          const row=await saveCustomerProfile({
+            surname:form.elements.surname.value,
+            given_name:given,
+            patronymic:form.elements.patronymic.value,
+            phone:form.elements.phone.value,
+            city:A.profileCity||((A.customerProfile||{}).city||''),
+            address:form.elements.address.value,
+            passport_data:{series:form.elements.passport_series.value,number:form.elements.passport_number.value,issued_by:form.elements.passport_issued_by.value,issued_at:form.elements.passport_issued_at.value},
+            avatar_path:avatarPath
+          });
+          if(row&&row.city)A.profileCity=row.city;
+          toast('Профиль клиента сохранён');render();
+        }catch(err){if(errEl)errEl.textContent=err.message||'Не удалось сохранить профиль';btn.disabled=false;btn.textContent='Сохранить профиль';}
+      };
+      (async function(){
+        try{
+          const url=await getCustomerAvatarUrl(),box=$('customerAvatarPreview');
+          if(url&&box)box.innerHTML='<img src="'+esc(url)+'" alt="Аватарка">';
+        }catch(e){}
+      })();
+    }
     const cityForm=$('profileCityForm');
     if(cityForm)cityForm.addEventListener('submit',async function(e){
       e.preventDefault();const btn=cityForm.querySelector('button');btn.disabled=true;$('profileCityError').textContent='';

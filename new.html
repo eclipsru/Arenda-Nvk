@@ -115,7 +115,7 @@ textarea.inp{resize:vertical;min-height:110px;font-family:inherit;line-height:1.
   /* Состояние формы */
   let F = {
     cat:'', sub:'', imgs:[], name:'', descr:'', cond:'good',
-    price:'', deposit:'', terms:'', delivery:false, delivery_price:40, address:'', city:''
+    price:'', deposit:'', terms:'', delivery:false, delivery_price:40, address:'', city:'', pickup_lat:null, pickup_lng:null
   };
 
   /* ---------- Черновик ---------- */
@@ -387,7 +387,8 @@ textarea.inp{resize:vertical;min-height:110px;font-family:inherit;line-height:1.
     if (dpr) dpr.addEventListener('input', function(){ F.delivery_price = this.value; livePreview(); saveDraft(); });
     const ad = $('iAddr');
     if (ad) ad.addEventListener('input', function(){
-      F.address=this.value;const inferred=IvaGeo.addressCity(this.value);
+      F.address=this.value; F.pickup_lat=null; F.pickup_lng=null;
+      const inferred=IvaGeo.addressCity(this.value);
       if(inferred){F.city=inferred;if($('iCity'))$('iCity').value=inferred;}saveDraft();
     });
     const ci=$('iCity');
@@ -519,6 +520,20 @@ textarea.inp{resize:vertical;min-height:110px;font-family:inherit;line-height:1.
       'Состояние: ' + condTitle(F.cond)
     ].filter(Boolean).join('\n');
 
+    /* Новые объявления сохраняют координаты отдельно. Если Photon временно
+       недоступен, адрес всё равно сохранится и будет геокодирован позже;
+       публикация не блокируется внешним справочником. */
+    let pickupLat = F.pickup_lat, pickupLng = F.pickup_lng;
+    if (F.address && window.IvaGeo){
+      try {
+        const rows = await IvaGeo.search(F.address, 'address');
+        const point = rows && rows[0] && rows[0].coordinates;
+        if (point && isFinite(Number(point[0])) && isFinite(Number(point[1]))){
+          pickupLng = Number(point[0]); pickupLat = Number(point[1]);
+        }
+      } catch(e){}
+    }
+
     const payload = {
       name: F.name.trim(),
       cat: F.cat,
@@ -530,7 +545,10 @@ textarea.inp{resize:vertical;min-height:110px;font-family:inherit;line-height:1.
       delivery: F.delivery,
       delivery_price: Number(F.delivery_price) || 0,
       terms: terms,
-      pickup_city: F.city
+      pickup_city: F.city,
+      pickup_address: F.address.trim(),
+      pickup_lat: pickupLat,
+      pickup_lng: pickupLng
     };
 
     if (EDIT_ID){
@@ -626,7 +644,9 @@ textarea.inp{resize:vertical;min-height:110px;font-family:inherit;line-height:1.
           deposit:EDIT_SOURCE.deposit == null ? '' : EDIT_SOURCE.deposit,
           terms:lines.filter(line=>!/^\s*(?:Адрес выдачи|Состояние):/i.test(line)).join('\n').trim(),
           city:parsed.city || '',
-          address:addressLine ? addressLine.trim().replace(/^Адрес выдачи:\s*/i,'') : '',
+          address:EDIT_SOURCE.pickup_address || (addressLine ? addressLine.trim().replace(/^Адрес выдачи:\s*/i,'') : ''),
+          pickup_lat:EDIT_SOURCE.pickup_lat == null ? null : EDIT_SOURCE.pickup_lat,
+          pickup_lng:EDIT_SOURCE.pickup_lng == null ? null : EDIT_SOURCE.pickup_lng,
           delivery:!!EDIT_SOURCE.delivery,delivery_price:EDIT_SOURCE.delivery_price == null ? 40 : EDIT_SOURCE.delivery_price
         };
         // Старую категорию не теряем, даже если её убрали из активного справочника.
