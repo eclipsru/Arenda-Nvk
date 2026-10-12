@@ -91,6 +91,7 @@ public final class IvaSearchPatch {
     static final int SEARCH_DP = 38;         // 10.51: строка поиска 38dp (10.50 — 37, 10.49 — 36, штатно 44)
     static final int SHEET_BTN_DP = 48;      // 10.51: «Сбросить» и «Показать N» в шторке 48dp (было 50)
     static final int PRICE_FIELD_DP = 46;    // 10.51: поля цены «от» / «до» 46dp (было 48)
+    static final int BG_RADIUS_DP = 16;      // 10.52: нижние углы картинки-шапки (как штатная виньетка 10.20); верхние — прямые
     static final float SHEET_MAX = 0.85f;    // шторка — 85% области страниц (10.48: вернули как в 10.46 по решению владельца)
     static final String CITY_ROW_TAG = "iva_search_city_row";
     static final String CHIPS_TAG = "iva_search_chips";
@@ -489,8 +490,53 @@ public final class IvaSearchPatch {
         if (cg instanceof View && ((View) cg).getVisibility() != View.GONE) ((View) cg).setVisibility(View.GONE);
     }
 
+    /**
+     * 10.52: картинка-шапка и ряд выбранных условий — на всю ширину экрана, на любом телефоне.
+     * В штатной разметке у картинки уже стоят боковые отступы −14dp (во всю ширину), а у ряда условий — минус
+     * боковые поля контейнера, но контейнер главной (поля 14dp) обрезал всё по своим полям. Снимаем обрезку только
+     * у этого контейнера; отступы берём из его настоящих полей (а не числом) — так ширина совпадает с экраном
+     * при любой плотности и ширине. Верхние углы картинки — прямые (она примыкает к шапке приложения и краям экрана),
+     * нижние — скруглены, как в штатной виньетке. Повторный вызов ничего не меняет.
+     */
+    static void fullBleedHome(Activity a) {
+        Object ph = IvaClientPatch.get(a, "pageHome");
+        if (!(ph instanceof ScrollView) || ((ScrollView) ph).getChildCount() != 1) return;
+        if (!(((ScrollView) ph).getChildAt(0) instanceof LinearLayout)) return;
+        LinearLayout content = (LinearLayout) ((ScrollView) ph).getChildAt(0);
+        content.setClipToPadding(false);
+        Object bg = IvaClientPatch.get(a, "pageBg");
+        if (!(bg instanceof View)) return;
+        View top = (View) bg;
+        ViewParent vp = top.getParent();
+        boolean framed = vp instanceof FrameLayout && IvaClientPatch.HOME_VIGNETTE_TAG.equals(((View) vp).getTag());
+        if (framed) top = (View) vp;   // картинка в рамке виньетки (IvaPatch.installHomeVignette) — двигаем рамку
+        if (top.getParent() != content || !(top.getLayoutParams() instanceof LinearLayout.LayoutParams)) return;
+        LinearLayout.LayoutParams lp = (LinearLayout.LayoutParams) top.getLayoutParams();
+        int l = -content.getPaddingLeft(), r = -content.getPaddingRight();
+        if (lp.leftMargin != l || lp.rightMargin != r) {
+            lp.leftMargin = l;
+            lp.rightMargin = r;
+            top.setLayoutParams(lp);
+        }
+        if (framed && android.os.Build.VERSION.SDK_INT >= 21 && !(top.getOutlineProvider() instanceof BottomRound)) {
+            top.setOutlineProvider(new BottomRound(dp(a, BG_RADIUS_DP)));
+            top.setClipToOutline(true);
+            top.invalidateOutline();
+        }
+    }
+
+    /** 10.52: скругление только снизу — прямоугольник продлён вверх на радиус, верхние углы уходят за край. */
+    static final class BottomRound extends android.view.ViewOutlineProvider {
+        final int radius;
+        BottomRound(int radius) { this.radius = radius; }
+        @Override public void getOutline(View view, android.graphics.Outline outline) {
+            outline.setRoundRect(0, -radius, view.getWidth(), view.getHeight(), radius);
+        }
+    }
+
     static void onHomeShown(Activity a) {
         hideCatGrid(a);
+        fullBleedHome(a);
         checkAccount(a);
         refreshCityRow(a);
         refreshChips(a);
@@ -570,8 +616,12 @@ public final class IvaSearchPatch {
         //     заполняется (штатные поля catMode/curCat/curSub работают), но не видна; категория — в шторке фильтров.
         hideCatGrid(a);
 
+        // 2б) 10.52: картинка-шапка — от края до края экрана (остаётся фоном под поиском и строкой города).
+        fullBleedHome(a);
+
         // 3) Ряд активных фильтров — сразу под подсказками поиска (подсказки остаются прямо под строкой поиска).
-        //    10.49: один ряд, листается вбок свайпом, без полосы прокрутки; ряд — от края до края экрана.
+        //    10.49: один ряд, листается вбок свайпом, без полосы прокрутки; ряд — от края до края экрана
+        //    (10.52: виден от края до края — контейнер больше не обрезает по полям, см. fullBleedHome).
         HorizontalScrollView chipsScroll = new HorizontalScrollView(a);
         chipsScroll.setHorizontalScrollBarEnabled(false);
         chipsScroll.setOverScrollMode(View.OVER_SCROLL_NEVER);

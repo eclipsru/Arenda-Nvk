@@ -202,6 +202,22 @@ try {
     assert.ok(js45.includes('SEARCH_DP = 38;') && js45.includes('slp.height = dp(a, SEARCH_DP);') && js45.includes('CITY_BTN_DP = 31;')
       && js45.includes('CITY_ROW_DP = 35;') && (js45.match(/dp\(a, CITY_BTN_DP\)/g) || []).length === 3,
       'IvaSearchPatch: строка поиска 38dp, строка города 35dp, кнопки города и «Фильтр» 31dp (10.51)');
+    // 10.52: картинка-шапка и ряд условий — от края до края на любом телефоне: контейнер главной не обрезает по полям,
+    // отступы — из настоящих полей контейнера (не числом), верх картинки прямой, низ скруглён; виньетка 10.20 не тронута
+    const fb = js45.slice(js45.indexOf('static void fullBleedHome('), js45.indexOf('static final class BottomRound'));
+    const ins52 = js45.slice(js45.indexOf('static void install('), js45.indexOf('static void syncVisibility('));
+    assert.ok(fb.includes('content.setClipToPadding(false);') && fb.includes('int l = -content.getPaddingLeft(), r = -content.getPaddingRight();')
+      && fb.includes('lp.leftMargin = l;') && fb.includes('lp.rightMargin = r;') && fb.includes('IvaClientPatch.HOME_VIGNETTE_TAG.equals(')
+      && fb.includes('top.setOutlineProvider(new BottomRound(dp(a, BG_RADIUS_DP)));') && fb.includes('android.os.Build.VERSION.SDK_INT >= 21')
+      && js45.includes('outline.setRoundRect(0, -radius, view.getWidth(), view.getHeight(), radius);'),
+      'IvaSearchPatch.fullBleedHome: картинка-шапка во всю ширину экрана по полям контейнера, верх прямой, низ скруглён');
+    assert.ok(ins52.includes('fullBleedHome(a);') && /static void onHomeShown\(Activity a\) \{\n        hideCatGrid\(a\);\n        fullBleedHome\(a\);/.test(js45)
+      && ins52.includes('clp.leftMargin = -edge;') && ins52.includes('clp.rightMargin = -content.getPaddingRight();')
+      && ins52.includes('chips.setPadding(edge, 0, content.getPaddingRight(), 0);') && !/setClipToPadding\(false\)/.test(ins52),
+      'IvaSearchPatch: «во всю ширину» включается при установке и при каждом показе главной; ряд условий — от края до края, первый «пузырь» по полю');
+    assert.ok((js45.match(/setClipToPadding\(/g) || []).length === 1 && !js45.includes('setClipToOutline(false)')
+      && (fb.match(/setClip\w*\(/g) || []).length === 2 && fb.includes('top.setClipToOutline(true);'),
+      'IvaSearchPatch: обрезка по полям снимается только у контейнера главной (и больше нигде)');
     // 10.51: в шторке «Сбросить» / «Показать N» — 48dp, поля цены — 46dp (обе кнопки и оба поля)
     assert.ok(js45.includes('SHEET_BTN_DP = 48;') && js45.includes('PRICE_FIELD_DP = 46;')
       && (js45.match(/dp\(a, SHEET_BTN_DP\)/g) || []).length === 2 && (js45.match(/dp\(a, PRICE_FIELD_DP\)/g) || []).length === 2,
