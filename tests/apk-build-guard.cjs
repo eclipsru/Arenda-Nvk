@@ -46,7 +46,7 @@ try {
   // 10.40 — штатная строка «Клиент» остаётся единственной точкой входа, но открывает
   // отдельный полноэкранный экран настроек (не AlertDialog-форму); hook onActivityResult
   // в MainActivity по-прежнему отключён (с 10.39), фото возвращается во вспомогательный Fragment.
-  assert.match(code, /android\/patches\/IvaPatch\.java android\/patches\/IvaClientPatch\.java android\/patches\/IvaSearchPatch\.java android\/patches\/IvaChatPatch\.java 2>&1/,
+  assert.match(code, /android\/patches\/IvaPatch\.java android\/patches\/IvaClientPatch\.java android\/patches\/IvaSearchPatch\.java android\/patches\/IvaChatPatch\.java android\/patches\/IvaOrderPatch\.java 2>&1/,
     `${f}: шаг 10.30 не компилирует IvaClientPatch`);
   assert.match(ap, /IvaClientPatch;->onProfile\(Landroid\/app\/Activity;\)V/,
     `${f}: hook onProfile не подключён`);
@@ -93,7 +93,7 @@ try {
   assert.match(jpc, /View plus = a\.findViewById\(id\(a, "navPlus"\)\);/, 'IvaClientPatch: обработчик логотипа не ставится на navPlus');
   assert.match(jpc, /if \(toHub && openClientHub\(a\)\) return;\n\s*callNativeTab\(a, "home"\);/, 'IvaClientPatch: «Назад» в карточке инструмента должна вести на главную, как штатная');
   assert.match(jpc, /try \{ installClientNav\(a\); \} catch \(Throwable ignore\) \{\}\n\s*try \{ if \(hubVisible && !isClient\(a\)\) callNativeTab\(a, "home"\); \}/, 'IvaClientPatch: onProfile не ставит логотип клиента или не прячет раздел при выходе');
-  assert.match(jp, /try \{ IvaClientPatch\.onShowTab\(a, tab\); \} catch \(Throwable ignore\) \{\}\n(?:\s*\/\/[^\n]*\n)?\s*try \{ IvaSearchPatch\.onShowTab\(a, tab\); \} catch \(Throwable ignore\) \{\}\n(?:\s*\/\/[^\n]*\n)?\s*try \{ IvaChatPatch\.onShowTab\(a, tab\); \} catch \(Throwable ignore\) \{\}\n    \}/, 'IvaPatch.onTab: штатный переход должен прятать раздел клиента, включать/прятать поиск 10.45 и чат 10.54');
+  assert.match(jp, /try \{ IvaClientPatch\.onShowTab\(a, tab\); \} catch \(Throwable ignore\) \{\}\n(?:\s*\/\/[^\n]*\n)?\s*try \{ IvaSearchPatch\.onShowTab\(a, tab\); \} catch \(Throwable ignore\) \{\}\n(?:\s*\/\/[^\n]*\n)?\s*try \{ IvaChatPatch\.onShowTab\(a, tab\); \} catch \(Throwable ignore\) \{\}\n(?:\s*\/\/[^\n]*\n)?\s*try \{ IvaOrderPatch\.onShowTab\(a, tab\); \} catch \(Throwable ignore\) \{\}\n    \}/, 'IvaPatch.onTab: штатный переход должен прятать раздел клиента, включать/прятать поиск 10.45, чат 10.54 и заявку 10.55');
   assert.match(jpc, /if \(hubVisible\) \{\n\s*detailFromHub = "detail"\.equals\(t\);\n\s*hideClientHub\(a\);/, 'IvaClientPatch: раздел клиента не прячется при штатном переходе');
   assert.match(jpc, /hubStyling = true;\n\s*try \{ IvaPatch\.onTab\(a, HUB_PAGE\); \}[^\n]*finally \{ hubStyling = false; \}/, 'IvaClientPatch: подсветка логотипа не должна прятать сам раздел');
   assert.match(jpc, /favs\.contains\("t" \+ tid\)/, 'IvaClientPatch: «Избранное» должно брать штатный набор favs (ключ t+id)');
@@ -258,8 +258,8 @@ try {
   // 10.54: чат по инструментам — новый файл компилируется и в сборке, и в проверке; вход только через IvaPatch.onTab
   {
     const chat = R('android/patches/IvaChatPatch.java'), chk54 = R('.github/workflows/check.yml'), ip = R('android/patches/IvaPatch.java');
-    assert.ok(/javac [^\n]*android\/patches\/IvaSearchPatch\.java android\/patches\/IvaChatPatch\.java 2>&1/.test(code), 'build-apk.yml: IvaChatPatch.java не компилируется в сборку');
-    assert.ok(chk54.includes('android/patches/IvaSearchPatch.java android/patches/IvaChatPatch.java \\'), 'check.yml: IvaChatPatch.java не компилируется в проверке');
+    assert.ok(/javac [^\n]*android\/patches\/IvaSearchPatch\.java android\/patches\/IvaChatPatch\.java android\/patches\/IvaOrderPatch\.java 2>&1/.test(code), 'build-apk.yml: IvaChatPatch.java не компилируется в сборку');
+    assert.ok(chk54.includes('android/patches/IvaSearchPatch.java android/patches/IvaChatPatch.java android/patches/IvaOrderPatch.java \\'), 'check.yml: IvaChatPatch.java не компилируется в проверке');
     const onTab = ip.slice(ip.indexOf('public static void onTab('), ip.indexOf('static boolean navSelected('));
     assert.ok(onTab.includes('try { IvaChatPatch.onShowTab(a, tab); } catch (Throwable ignore) {}'), 'IvaPatch.onTab: нет безопасного вызова IvaChatPatch');
     assert.ok(!R('android/patches/apply.py').includes('IvaChatPatch'), 'IvaChatPatch: новые smali-хуки не нужны (вход — IvaPatch.onTab)');
@@ -305,6 +305,61 @@ try {
       && !/passport|phone|surname|given_name/.test(sql.replace(/^--.*$/gm, '')),
       'supabase/migrations/20261012_chat_tools_avatars.sql: функции без лишних данных и без доступа anon');
     assert.ok(/eq\("чат 10\.54: строки списка — по инструменту/.test(R('android/patches/test/IvaPatchTest.java')), 'IvaPatchTest: проверки чата 10.54');
+  }
+  // 10.55: заявка — ФИО по полям, свой срок у инструмента, «+ Добавить инструмент», средняя доставка, один прокат.
+  // Вход только через IvaPatch.onTab / onSummary / onPrice; штатные строки и счётчик срока только прячутся.
+  {
+    const op = R('android/patches/IvaOrderPatch.java'), ip = R('android/patches/IvaPatch.java');
+    assert.ok(!R('android/patches/apply.py').includes('IvaOrderPatch'), 'IvaOrderPatch: новые smali-хуки не нужны (вход — IvaPatch)');
+    const onTab = ip.slice(ip.indexOf('public static void onTab('), ip.indexOf('static boolean navSelected('));
+    assert.ok(onTab.includes('try { IvaOrderPatch.onShowTab(a, tab); } catch (Throwable ignore) {}'), 'IvaPatch.onTab: нет безопасного вызова IvaOrderPatch');
+    assert.ok(ip.includes('    public static void onSummary(final Activity a) {\n        // 10.55: свои строки заявки (срок у каждого инструмента) и итог — сразу после штатного updateSummary\n        try { IvaOrderPatch.onSummary(a); } catch (Throwable ignore) {}\n'),
+      'IvaPatch.onSummary: IvaOrderPatch.onSummary должен вызываться первым и в try');
+    assert.ok(ip.includes('String one = normalize(IvaOrderPatch.onPrice(s));') && op.includes('return averaged(s, rateCount(lines(a)));')
+      && op.includes('if (s == null || n <= 1) return s;'), 'доставка 10.55: средняя (сумма штатного расчёта / число цен за км), до «туда и обратно»');
+    for (const str of ['selected', 'orderLines', 'dMinus', 'rbDelivery', 'rbPickup', 'rgMethod', 'ordSum', 'oLast', 'oName', 'oPatr', 'oPhone',
+      'oAddr', 'oCmt', 'btnSend', 'delivTxt', 'admAddr', 'detItem', 'detIsSrv', 'feedCard', 'calcDelivery', 'renderOrderLines', 'updateSummary',
+      'sendOrder', 'humanError', 'showScreen', 'scrSuccess', 'userName', 'lambda$setupOrder$122$ru-prokatnvsk-app-MainActivity',
+      'lambda$sendOrder$126$ru-prokatnvsk-app-MainActivity', '/rest/v1/rpc/submit_order', 'p_days', 'p_get_method'])
+      assert.ok(has(dex14, str), `classes.dex 10.14: нет «${str}» — заявка 10.55 не найдёт штатное поле или метод`);
+    for (const str of ['detOrder', 'bg_card', 'bg_stepper'])
+      assert.ok(has(arsc14, str), `resources.arsc 10.14: нет «${str}» — заявка 10.55 потеряет штатный вид`);
+    // отправка: только нажатием, одна заявка, те же 8 полей, что у штатной; пустая заявка / без входа — штатный sendOrder
+    const snd = op.slice(op.indexOf('static void send(final Activity a)'), op.indexOf('static void sent(Activity a)'));
+    const keys = (snd.match(/body\.put\("(p_[a-z_]+)"/g) || []).map(x => x.slice(10, -1));
+    assert.deepEqual(keys, ['p_name', 'p_phone', 'p_tools', 'p_get_method', 'p_address', 'p_comment', 'p_user_email', 'p_days'], 'IvaOrderPatch.send: поля submit_order как у штатной заявки');
+    assert.ok(snd.includes('IvaClientPatch.apiCall(a, "/rest/v1/rpc/submit_order", "POST", body.toString(), true)') && (op.match(/apiCall\(/g) || []).length === 1
+      && snd.includes('body.put("p_days", maxDays(ls));') && snd.includes('body.put("p_tools", toolsText(ls));')
+      && snd.includes('callNative(a, "sendOrder");                       // штатные') && snd.includes('if (sending) return;'),
+      'IvaOrderPatch.send: одна заявка submit_order, p_days — самый длинный срок, без повторной отправки');
+    assert.ok(op.includes('((View) send).setOnClickListener(new View.OnClickListener() {\n                @Override public void onClick(View v) { send(a); }')
+      && !/setOnLongClickListener|setOnTouchListener|postDelayed\([^)]*send/.test(op), 'IvaOrderPatch: заявка уходит только по нажатию «Отправить заявку»');
+    assert.ok(!/passport|birth|паспорт/i.test(op), 'IvaOrderPatch: лишние персональные данные');
+    // один прокат: другой прокат — вопрос «Заменить?», очистка только по согласию
+    const det = op.slice(op.indexOf('static void onDetOrder('), op.indexOf('static void nativeAdd('));
+    assert.ok(det.includes('if (conflict(cartOwner(ls), owner)) {') && det.includes('.setPositiveButton("Заменить", new DialogInterface.OnClickListener() {')
+      && det.includes('.setNegativeButton("Отмена", null)') && (det.match(/\.clear\(\)/g) || []).length === 1
+      && det.indexOf('.clear()') > det.indexOf('setPositiveButton("Заменить"'), 'IvaOrderPatch: в заявке один прокат, замена — только после «Заменить»');
+    // «+ Добавить инструмент»: только этот прокат, без сданных, без уже выбранных; при доставке — только с доставкой и подсказка
+    const pick = op.slice(op.indexOf('static void openPicker('), op.indexOf('static void showPicker('));
+    assert.ok(pick.includes('!owner.equalsIgnoreCase(t.optString("owner_email", DEFAULT_OWNER))') && pick.includes('"rented".equals(t.optString("t_status", ""))')
+      && pick.includes('if (deliv && !t.optBoolean("delivery", false)) { hidden++; continue; }') && pick.includes('showPicker(a, list, deliv && hidden > 0, defaultDays(ls));')
+      && op.includes('static final String PICK_HINT = "Показаны только инструменты с доставкой. Если выбрать самовывоз, инструментов в списке может стать больше.";')
+      && op.includes('View card = (View) fc.invoke(a, t, Boolean.FALSE);'), 'IvaOrderPatch.openPicker: карточки (штатный feedCard) этого же проката; при доставке — только с доставкой и подсказка');
+    // доставка только если она у всех; штатные строки и общий срок — только скрыты; количество всегда 1
+    const enf = op.slice(op.indexOf('static void enforceDelivery('), op.indexOf('static void render('));
+    assert.ok(enf.includes('if (d.isChecked() && rp instanceof RadioButton) ((RadioButton) rp).setChecked(true);') && op.includes('if (!l.deliv) return false;'),
+      'IvaOrderPatch: инструмент без доставки — только самовывоз');
+    assert.ok(!/removeView\(|\.removeViewAt\(/.test(op) && (op.match(/removeAllViews\(\)/g) || []).length === 1 && op.includes('box.removeAllViews();')
+      && op.includes('((View) ol).setVisibility(View.GONE);') && op.includes('dr.setVisibility(View.GONE);') && op.includes('if (j.optInt("qty", 1) != 1) j.put("qty", 1);'),
+      'IvaOrderPatch: штатные строки заявки и общий срок только скрыты (не удаляются), количество — 1');
+    assert.ok(op.includes('static final int MIN_DAYS = 1, MAX_DAYS = 90;'), 'IvaOrderPatch: срок 1…90 как штатный счётчик');
+    // ФИО: из профиля по полям, правки клиента не перезаписываются
+    const fio = op.slice(op.indexOf('static void fillFio('), op.indexOf('static void toast('));
+    assert.ok(fio.includes('if (!pristine(text(last), text(name), text(patr), userName, lastFill)) return;')
+      && fio.includes('fio(p.optString("surname", ""), p.optString("given_name", ""), p.optString("patronymic", ""), userName)')
+      && !/apiCall|\"POST\"/.test(fio), 'IvaOrderPatch.fillFio: ФИО из профиля по полям, без записи в профиль и без затирания правок клиента');
+    assert.ok(/eq\("заявка 10\.55: ФИО из профиля по полям/.test(R('android/patches/test/IvaPatchTest.java')), 'IvaPatchTest: проверки заявки 10.55');
   }
   // радиус — только вид: варианты встречаются лишь в объявлении и в шторке, на фильтр/подсчёт не влияют
   assert.equal((js45.match(/RADIUS_TITLES/g) || []).length, 3, 'IvaSearchPatch: радиус не должен участвовать в фильтре (только заготовка в шторке)');

@@ -78,7 +78,8 @@ public final class IvaPatch {
     // ── 1. Расчёт доставки готов (вызывается из lambda$calcDelivery перед записью delivTxt) ──
     public static String onPrice(String s) {
         if (s == null) return null;
-        String one = normalize(s);
+        // 10.55: доставка — средняя по ценам за км инструментов заявки (штатно — сумма)
+        String one = normalize(IvaOrderPatch.onPrice(s));
         base = one;
         String out = round ? doubled(one) : one;
         shown = out;
@@ -124,6 +125,8 @@ public final class IvaPatch {
 
     // ── 2. Перерисовка итога заявки (начало updateSummary) ──
     public static void onSummary(final Activity a) {
+        // 10.55: свои строки заявки (срок у каждого инструмента) и итог — сразу после штатного updateSummary
+        try { IvaOrderPatch.onSummary(a); } catch (Throwable ignore) {}
         try {
             RadioButton rb = (RadioButton) get(a, "rbDelivery");
             View rg = (View) get(a, "rgMethod");
@@ -415,6 +418,8 @@ public final class IvaPatch {
         try { IvaSearchPatch.onShowTab(a, tab); } catch (Throwable ignore) {}
         // 10.54: чат — список переписок по инструментам, закреплённая карточка, аватарки, без автосообщения.
         try { IvaChatPatch.onShowTab(a, tab); } catch (Throwable ignore) {}
+        // 10.55: заявка — ФИО по полям, без количества, свой срок у инструмента, «+ Добавить инструмент», один прокат.
+        try { IvaOrderPatch.onShowTab(a, tab); } catch (Throwable ignore) {}
     }
 
     /** Чистая проверка выбора пункта — вынесена отдельно, чтобы её можно было проверить без Activity. */
