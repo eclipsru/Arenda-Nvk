@@ -61,6 +61,7 @@ import android.widget.CheckBox;
 import android.widget.CompoundButton;
 import android.widget.EditText;
 import android.widget.FrameLayout;
+import android.widget.HorizontalScrollView;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.TextView;
@@ -85,7 +86,7 @@ public final class IvaSearchPatch {
 
     // ── Разметка ──
     static final int BAR_DP = 22;            // 10.46: полоса с ручкой внизу, над нижним меню; лента кончается над ней
-    static final float SHEET_MAX = 1.0f;     // 10.47: шторка — во всю область страниц, до шапки приложения (решение владельца)
+    static final float SHEET_MAX = 0.85f;    // шторка — 85% области страниц (10.48: вернули как в 10.46 по решению владельца)
     static final String CITY_ROW_TAG = "iva_search_city_row";
     static final String CHIPS_TAG = "iva_search_chips";
     static final String HANDLE_TAG = "iva_search_handle";
@@ -1186,11 +1187,11 @@ public final class IvaSearchPatch {
     }
 
     /** Подписи и действия активных условий для данного набора (категория, подкатегория, цена, доставка, состояние). */
-    static void addActiveChips(final Activity a, Flow box, final Filter f, final Runnable changed) {
+    static void addActiveChips(final Activity a, ViewGroup box, final Filter f, final Runnable changed) {
         addActiveChips(a, box, f, changed, false);
     }
 
-    static void addActiveChips(final Activity a, Flow box, final Filter f, final Runnable changed, final boolean plain) {
+    static void addActiveChips(final Activity a, ViewGroup box, final Filter f, final Runnable changed, final boolean plain) {
         if (!f.cat.isEmpty()) {
             final boolean hasSub = !f.sub.isEmpty();
             addChip(a, box, catTitle(a, f.cat), new ChipAction() { @Override public void remove() { f.cat = ""; f.sub = ""; } }, changed, plain);
@@ -1207,12 +1208,16 @@ public final class IvaSearchPatch {
         }
     }
 
-    static void addChip(Activity a, Flow box, String text, final ChipAction action, final Runnable changed, boolean plain) {
+    static void addChip(Activity a, ViewGroup box, String text, final ChipAction action, final Runnable changed, boolean plain) {
         TextView c = plain ? plainChip(a, text) : chip(a, text, true, true);
         c.setOnClickListener(new View.OnClickListener() {
             @Override public void onClick(View v) { action.remove(); changed.run(); }
         });
-        box.addView(c);
+        if (plain) {   // 10.48: шапка шторки — один ряд, прокрутка вбок свайпом
+            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-2, -2);
+            if (box.getChildCount() > 0) lp.leftMargin = dp(a, 16);
+            box.addView(c, lp);
+        } else box.addView(c);
     }
 
     /** Ряд под строкой поиска: применённые условия, нажатие убирает одно и сразу обновляет ленту. */
@@ -1281,7 +1286,7 @@ public final class IvaSearchPatch {
         root.addView(sh, new FrameLayout.LayoutParams(-1, dp(a, 400), Gravity.BOTTOM));
         sheet = sh;
         panelRoot = root;
-        // Высота шторки — вся область страниц (до шапки приложения); с клавиатурой (adjustResize) область меньше — шторка тоже,
+        // Высота шторки — 85% области страниц; с клавиатурой (adjustResize) область меньше — шторка тоже,
         // кнопки внизу остаются над клавиатурой.
         root.addOnLayoutChangeListener(new View.OnLayoutChangeListener() {
             @Override public void onLayoutChange(View v, int l, int t, int rr, int b, int ol, int ot, int orr, int ob) {
@@ -1440,10 +1445,10 @@ public final class IvaSearchPatch {
 
     /**
      * Перетаскивание по вертикали: вверх — шторка выезжает за пальцем, вниз — уезжает.
-     * Короткое нажатие: ручка — открыть/закрыть, затемнение — закрыть, шапка шторки — ничего.
+     * Короткое нажатие: ручка — открыть/закрыть, затемнение и полоса с «язычком» вверху шторки — закрыть, остальная шапка — ничего.
      */
     static final class DragListener implements View.OnTouchListener {
-        static final int HANDLE = 0, SCRIM = 1, SHEET = 2;
+        static final int HANDLE = 0, SCRIM = 1, SHEET = 2, GRAB = 3;   // GRAB — полоса с «язычком» вверху шторки
         static final int NONE = 0, DRAG = 1, IGNORE = 2;
         final Activity a;
         final int kind;
@@ -1504,7 +1509,7 @@ public final class IvaSearchPatch {
                             animateTo(a, progress > 0.5f ? 1f : 0f);
                     } else if (kind == HANDLE) {
                         if (panelOpen()) closePanel(a, true); else openPanel(a);
-                    } else if (kind == SCRIM) {
+                    } else if (kind == SCRIM || kind == GRAB) {
                         closePanel(a, true);
                     }
                     mode = NONE;
@@ -1518,7 +1523,9 @@ public final class IvaSearchPatch {
     }
 
     // ── Содержимое панели ──
-    static Flow panelChips, catBox, subBox, condBox;
+    static Flow catBox, subBox, condBox;
+    static LinearLayout panelChips;              // 10.48: ряд выбранных условий в шапке шторки
+    static HorizontalScrollView panelChipsScroll;
     static TextView subTitleView, condTitleView, condNote, priceHint, cityLine, showBtn, resetBtn;
     static CheckBox deliveryBox;
     static EditText fromEdit, toEdit;
@@ -1557,12 +1564,16 @@ public final class IvaSearchPatch {
         LinearLayout headBox = new LinearLayout(a);
         headBox.setOrientation(LinearLayout.VERTICAL);
         headBox.setOnTouchListener(new DragListener(a, DragListener.SHEET));
+        // 10.48: полоса с «язычком» во всю ширину (22dp): нажатие закрывает шторку, потянуть вниз — тоже
+        FrameLayout grabBar = new FrameLayout(a);
+        grabBar.setContentDescription("Закрыть фильтры");
+        grabBar.setClickable(true);
+        grabBar.setOnTouchListener(new DragListener(a, DragListener.GRAB));
+        grabBar.setOnClickListener(new View.OnClickListener() { @Override public void onClick(View v) { closePanel(a, true); } });
         View grab = new View(a);
         grab.setBackground(pill(a, cGray2, 0));
-        LinearLayout.LayoutParams gl = new LinearLayout.LayoutParams(dp(a, 36), dp(a, 4));
-        gl.gravity = Gravity.CENTER_HORIZONTAL;
-        gl.topMargin = dp(a, 6);
-        headBox.addView(grab, gl);
+        grabBar.addView(grab, new FrameLayout.LayoutParams(dp(a, 36), dp(a, 4), Gravity.CENTER));
+        headBox.addView(grabBar, new LinearLayout.LayoutParams(-1, dp(a, 22)));
         LinearLayout head = new LinearLayout(a);
         head.setOrientation(LinearLayout.HORIZONTAL);
         head.setGravity(Gravity.CENTER_VERTICAL);
@@ -1598,11 +1609,20 @@ public final class IvaSearchPatch {
         headBox.addView(head, new LinearLayout.LayoutParams(-1, -2));
         sh.addView(headBox, new LinearLayout.LayoutParams(-1, -2));
 
-        // Выбранные условия — простым текстом с ✕ (без оранжевых «пузырей»), каждое убирается отдельно
-        Flow pc = new Flow(a, dp(a, 14));
+        // Выбранные условия — простым текстом с ✕, каждое убирается отдельно.
+        // 10.48: в один ряд, прокрутка вбок свайпом, без полосы прокрутки (шапка не растёт вниз).
+        HorizontalScrollView hs = new HorizontalScrollView(a);
+        hs.setHorizontalScrollBarEnabled(false);
+        hs.setOverScrollMode(View.OVER_SCROLL_NEVER);
+        hs.setFillViewport(false);
+        LinearLayout pc = new LinearLayout(a);
+        pc.setOrientation(LinearLayout.HORIZONTAL);
+        pc.setGravity(Gravity.CENTER_VERTICAL);
         pc.setPadding(dp(a, 16), 0, dp(a, 16), dp(a, 4));
-        sh.addView(pc, new LinearLayout.LayoutParams(-1, -2));
+        hs.addView(pc, new FrameLayout.LayoutParams(-2, -2));
+        sh.addView(hs, new LinearLayout.LayoutParams(-1, -2));
         panelChips = pc;
+        panelChipsScroll = hs;
 
         View line = new View(a);
         line.setBackgroundColor(cLine);
@@ -1795,7 +1815,7 @@ public final class IvaSearchPatch {
             addActiveChips(a, panelChips, draft, new Runnable() {
                 @Override public void run() { syncInputs(a); refreshPanel(a); }
             }, true);
-            panelChips.setVisibility(panelChips.getChildCount() > 0 ? View.VISIBLE : View.GONE);
+            if (panelChipsScroll != null) panelChipsScroll.setVisibility(panelChips.getChildCount() > 0 ? View.VISIBLE : View.GONE);
 
             String query = str(IvaClientPatch.get(a, "query"));
 

@@ -153,8 +153,8 @@ try {
     'requestDisallowInterceptTouchEvent(true)', 'OnHierarchyChangeListener', 'K_CITY', 'K_SEEN',
     '"/auth/v1/user"', '"/rest/v1/rpc/get_my_customer_profile"', 'Город в профиле не меняется'])
     assert.ok(js45.includes(k), `IvaSearchPatch.java: нет ${k}`);
-  // 10.46: ручка внизу над нижним меню, шторка снизу, левой полосы нет; 10.47: шторка до шапки приложения (вся область страниц)
-  for (const k of ['BAR_DP = 22', 'SHEET_MAX = 1.0f', 'new FrameLayout.LayoutParams(-1, dp(a, BAR_DP), Gravity.BOTTOM)', 'hlp.bottomMargin = dp(a, BAR_DP)',
+  // 10.46: ручка внизу над нижним меню, шторка снизу (85%), левой полосы нет; 10.47 — до шапки, 10.48 — снова 85% (решение владельца)
+  for (const k of ['BAR_DP = 22', 'SHEET_MAX = 0.85f', 'new FrameLayout.LayoutParams(-1, dp(a, BAR_DP), Gravity.BOTTOM)', 'hlp.bottomMargin = dp(a, BAR_DP)',
     'sheet.setTranslationY((1f - progress) * sheetSize)', 'setProgress(a, p0 - dy / sheetSize)', 'DragListener.HANDLE', 'DragListener.SHEET', 'DragListener.SCRIM',
     'Gravity.BOTTOM));', 'fitSheet(a)', 'LengthFilter(7)', 'facetVisible(catKeys, catCounts, draft.cat)', 'facetVisible(subKeys, subCounts, draft.sub)',
     'normRange(from, to)', '"Радиус \\u00b7 скоро"', 'rc.setEnabled(false)',
@@ -173,6 +173,15 @@ try {
     // выбранные условия в шапке шторки — текстом с ✕, в ленте под поиском — как раньше
     assert.ok(js45.includes('@Override public void run() { syncInputs(a); refreshPanel(a); }\n            }, true);')
       && js45.includes('TextView c = plain ? plainChip(a, text) : chip(a, text, true, true);'), 'IvaSearchPatch: выбранное в шапке шторки — простым текстом с ✕');
+    // 10.48: выбранное в шапке — один ряд с прокруткой вбок свайпом, без полосы прокрутки
+    assert.ok(js45.includes('HorizontalScrollView hs = new HorizontalScrollView(a);\n        hs.setHorizontalScrollBarEnabled(false);')
+      && js45.includes('pc.setOrientation(LinearLayout.HORIZONTAL);') && js45.includes('hs.addView(pc, new FrameLayout.LayoutParams(-2, -2));')
+      && !/static Flow panelChips/.test(js45), 'IvaSearchPatch: выбранное в шапке шторки — один ряд, прокрутка вбок без полосы');
+    // 10.48: нажатие на полосу с «язычком» вверху шторки закрывает её (и касанием, и через TalkBack)
+    assert.ok(js45.includes('grabBar.setOnTouchListener(new DragListener(a, DragListener.GRAB));')
+      && js45.includes('} else if (kind == SCRIM || kind == GRAB) {')
+      && js45.includes('grabBar.setOnClickListener(new View.OnClickListener() { @Override public void onClick(View v) { closePanel(a, true); } });'),
+      'IvaSearchPatch: нажатие на полосу вверху шторки должно закрывать её');
     const pc = js45.slice(js45.indexOf('static TextView plainChip('), js45.indexOf('static void addActiveChips('));
     assert.ok(!/setBackground\(|bg_chip/.test(pc), 'IvaSearchPatch.plainChip: без фона-«пузыря»');
   }
