@@ -1,8 +1,8 @@
 {
-  "versionCode": 104,
-  "versionName": "10.30",
-  "apk": "ProkatInstrumenta-10.30.apk",
+  "versionCode": 105,
+  "versionName": "10.31",
+  "apk": "ProkatInstrumenta-10.31.apk",
   "built": "12.10.2026",
   "reinstall": false,
-  "notes": "Диагностика: к рабочей базе 10.29 подключён только hook профиля клиента onProfile; остальные client hooks, polling и разрешения геолокации отключены."
+  "notes": "Клиентский профиль: карточка с данными вставлена первым блоком в верх кабинета; открываются настройки клиента. Остальные client hooks, polling и геолокация отключены."
 }
