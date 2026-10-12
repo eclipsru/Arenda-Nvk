@@ -208,13 +208,7 @@ jobs:
           # в app-keep-apks.txt и отказывается перезаписывать существующий файл.
           # Повторный запуск той же сборки идемпотентен: уже проверенный файл и feed оставляем как есть.
           if git -C "$D" cat-file -e "HEAD:$F" 2>/dev/null; then
-            if python3 - "$D/app-test.json" "$NEW_CODE" "$NEW_NAME" "$F" <<'PY'
-import json, sys
-with open(sys.argv[1], encoding='utf-8') as f:
-    feed = json.load(f)
-raise SystemExit(0 if feed.get('versionCode') == int(sys.argv[2]) and feed.get('versionName') == sys.argv[3] and feed.get('apk') == sys.argv[4] else 1)
-PY
-            then
+            if python3 -c 'import json,sys; f=json.load(open(sys.argv[1], encoding="utf-8")); raise SystemExit(not (f.get("versionCode") == int(sys.argv[2]) and f.get("versionName") == sys.argv[3] and f.get("apk") == sys.argv[4]))' "$D/app-test.json" "$NEW_CODE" "$NEW_NAME" "$F"; then
               echo "::notice title=Сборка::тестовая сборка $F уже опубликована на main — не перезаписываю"
               exit 0
             fi
