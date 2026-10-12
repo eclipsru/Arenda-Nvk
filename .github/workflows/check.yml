@@ -53,6 +53,13 @@ jobs:
           java -Dfile.encoding=UTF-8 -cp "$C:$JAR" ru.prokatnvsk.app.IvaCatalogAudit "$D" || rc=1
           node tools/catalog-audit/site-compare.cjs "$D" || rc=1
           exit $rc
+      - name: Схема базы для фильтров разделов (только чтение, строки не читаются)
+        continue-on-error: true
+        run: |
+          set -euo pipefail
+          out=$(python3 tools/catalog-audit/probe-columns.py)
+          echo "$out"
+          echo "::notice title=Схема · колонки::$(printf '%s' "$out" | sed ':a;N;$!ba;s/%/%25/g;s/\r//g;s/\n/%0A/g' | cut -c1-1500)"
       - name: Итог одной строкой (видно в списке проверок PR)
         if: always()
         run: |

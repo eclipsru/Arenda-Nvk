@@ -173,6 +173,11 @@ try {
   for (const q of ['/rest/v1/tools?select=*&active=eq.true&order=sort.asc.nullslast,name.asc', '/rest/v1/cats?select=*&active=eq.true&order=sort.asc.nullslast', '/rest/v1/subcats?select=*&active=eq.true&order=sort.asc.nullslast'])
     assert.ok(fetchPy.includes(q) && has(dex14, q), `fetch.py и приложение 10.14 должны брать каталог одинаково: ${q}`);
   execFileSync('node', [path.join(ROOT, 'tools/catalog-audit/site-compare.cjs')], { stdio: 'pipe' });
+  // схема для 10.47: только GET и только limit=0 — строки из базы не читаются; шаг не роняет CI
+  const probePy = R('tools/catalog-audit/probe-columns.py');
+  assert.ok(!/method=|data=/.test(probePy) && (probePy.match(/urlopen\(/g) || []).length === 1
+    && probePy.includes("path = '/rest/v1/' + table + '?select=' + col + '&limit=0'"), 'probe-columns.py: только GET с limit=0');
+  assert.ok(chk.includes('      - name: Схема базы для фильтров разделов (только чтение, строки не читаются)\n        continue-on-error: true'), 'check.yml: шаг схемы должен быть и не ронять проверку');
   // профиль из поиска не сохраняется: ни PUT в /auth/v1/user, ни save_customer_profile
   assert.ok(!/"PUT"|save_customer_profile|upsert_my_customer_profile/.test(js45), 'IvaSearchPatch: выбор города не должен менять профиль');
   // геолокация автоматически не запрашивается, карт и «рядом» нет
