@@ -56,6 +56,28 @@ public class IvaPatchTest {
         eq("логотип для заявки", IvaPatch.isLogoTab("order"), true);
         eq("логотип для раздела админа", IvaPatch.isLogoTab("admhub"), true);
         eq("логотип не для каталога", IvaPatch.isLogoTab("home"), false);
+        // 10.40. Экран настроек профиля клиента: чистая логика (без телефона).
+        eq("дата ISO читается", java.util.Arrays.toString(IvaClientPatch.dateParts("2015-03-07")), "[2015, 3, 7]");
+        eq("дата ДД.ММ.ГГГГ (как вводили в 10.34–10.39) читается", java.util.Arrays.toString(IvaClientPatch.dateParts("07.03.2015")), "[2015, 3, 7]");
+        eq("мусор вместо даты — null", IvaClientPatch.dateParts("вчера"), null);
+        eq("13-й месяц — null", IvaClientPatch.dateParts("2015-13-01"), null);
+        eq("пустая дата — null", IvaClientPatch.dateParts(null), null);
+        eq("дата в базу — ГГГГ-ММ-ДД, как у поля type=date на сайте", IvaClientPatch.isoDate(2015, 3, 7), "2015-03-07");
+        eq("дата на экране — ДД.ММ.ГГГГ", IvaClientPatch.dateForDisplay("2015-03-07"), "07.03.2015");
+        eq("нераспознанный старый текст показывается как есть", IvaClientPatch.dateForDisplay(" весной "), "весной");
+        eq("пустая дата на экране — пусто", IvaClientPatch.dateForDisplay(""), "");
+        eq("ошибка сервера: поле message", IvaClientPatch.serverMessage("400", "{\"code\":\"P0001\",\"message\":\"Укажите имя\"}"), "Укажите имя");
+        eq("нет функции на сервере — понятная причина",
+            IvaClientPatch.serverMessage("404", "{\"code\":\"PGRST202\",\"message\":\"Could not find the function public.get_my_customer_profile\"}").contains("миграция"), true);
+        eq("пустой ответ — код HTTP", IvaClientPatch.serverMessage("502", ""), "ошибка сервера (HTTP 502)");
+        eq("кнопка до загрузки", IvaClientPatch.saveButtonText(false, false, false), "Загружаем профиль…");
+        eq("кнопка готова", IvaClientPatch.saveButtonText(true, false, false), "Сохранить");
+        eq("кнопка при сохранении", IvaClientPatch.saveButtonText(true, true, false), "Сохраняем…");
+        eq("кнопка при загрузке фото", IvaClientPatch.saveButtonText(true, false, true), "Загружаем фото…");
+        eq("фото 4000 px → чтение с шагом 4 (≥ 640 px)", IvaClientPatch.avatarSample(4000, 3000, 640), 4);
+        eq("маленькое фото не уменьшается", IvaClientPatch.avatarSample(500, 400, 640), 1);
+        eq("буквы: имя и фамилия", IvaClientPatch.initialsOf("иван петров"), "ИП");
+        eq("буквы: пусто — вопрос", IvaClientPatch.initialsOf("  "), "?");
         if (fail > 0) { System.out.println("ошибок: " + fail); System.exit(1); }
         System.out.println("все проверки IvaPatch пройдены");
     }

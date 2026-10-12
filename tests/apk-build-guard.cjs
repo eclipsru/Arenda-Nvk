@@ -43,8 +43,9 @@ try {
   for (const k of [...insertions, ...anchors]) assert.ok(ap.includes(k), `apply.py: нет ${k}`);
   const jp = R('android/patches/IvaPatch.java');
   const jpc = R('android/patches/IvaClientPatch.java');
-  // 10.39 recovery — штатная строка «Клиент» остаётся единственной точкой входа
-  // в тёмную форму; потенциально проблемный lifecycle-hook аватарки отключён.
+  // 10.40 — штатная строка «Клиент» остаётся единственной точкой входа, но открывает
+  // отдельный полноэкранный экран настроек (не AlertDialog-форму); hook onActivityResult
+  // в MainActivity по-прежнему отключён (с 10.39), фото возвращается во вспомогательный Fragment.
   assert.match(code, /android\/patches\/IvaPatch\.java android\/patches\/IvaClientPatch\.java 2>&1/,
     `${f}: шаг 10.30 не компилирует IvaClientPatch`);
   assert.match(ap, /IvaClientPatch;->onProfile\(Landroid\/app\/Activity;\)V/,
@@ -57,11 +58,28 @@ try {
   for (const k of ['onProfile(Activity', 'onActivityResult(final Activity', 'onFeed(Activity', 'onDetail(Activity', 'installHomeFilter(final Activity', 'loadNativeClientCoords(final Activity'])
     assert.ok(jpc.includes(k), `IvaClientPatch.java: нет метода ${k}`);
   assert.doesNotMatch(jpc, /host\.addView\(card, 0, lp\)/, 'IvaClientPatch: белая верхняя карточка клиента не должна добавляться');
-  assert.match(jpc, /Настройки профиля клиента/, 'IvaClientPatch: нет заголовка тёмной формы клиента');
+  assert.match(jpc, /title\.setText\("Настройки профиля"\)/, 'IvaClientPatch: нет заголовка экрана настроек профиля');
+  // Экран, а не форма-диалог: полноэкранная тема, своя шапка «←», системная «Назад» закрывает экран.
+  assert.match(jpc, /static final class ProfileScreen/, 'IvaClientPatch: нет экрана настроек профиля ProfileScreen');
+  assert.match(jpc, /new Dialog\(a, android\.R\.style\.Theme_Material_NoActionBar\)/,
+    'IvaClientPatch: экран настроек должен открываться полноэкранным окном (Theme_Material_NoActionBar)');
+  assert.match(jpc, /public void onBackPressed\(\) \{ requestClose\(\); \}/, 'IvaClientPatch: «Назад» должна закрывать экран через requestClose');
+  assert.match(jpc, /back\.setText\("\\u2190"\)/, 'IvaClientPatch: в шапке экрана нет стрелки «←»');
+  assert.doesNotMatch(jpc, /\.setView\(scroll\)/, 'IvaClientPatch: форма профиля снова открывается диалогом AlertDialog');
+  assert.doesNotMatch(jpc, /setTitle\("Настройки профиля клиента"\)/, 'IvaClientPatch: форма профиля снова открывается диалогом AlertDialog');
+  assert.match(jpc, /onClick\(View v\) \{ openClientProfileScreen\(a\); \}/, 'IvaClientPatch: строка «Клиент» не открывает экран настроек');
+  // Сохранение — только после загрузки записи с сервера: иначе пустая форма затёрла бы паспорт, город и фото.
+  assert.match(jpc, /boolean enabled = loaded && !saving && !uploading;/, 'IvaClientPatch: «Сохранить» доступна до загрузки профиля');
+  assert.match(jpc, /body\.put\("p_city", clientProfile\.optString\("city", ""\)\)/, 'IvaClientPatch: город профиля не сохраняется как был');
+  // Фото: результат выбора — во вспомогательный Fragment, без hook в MainActivity.
+  assert.match(jpc, /public static final class AvatarPicker extends android\.app\.Fragment/, 'IvaClientPatch: нет помощника AvatarPicker для выбора фото');
+  assert.match(jpc, /public AvatarPicker\(\) \{\}/, 'IvaClientPatch: AvatarPicker должен иметь публичный конструктор без параметров (восстановление после смерти процесса)');
+  assert.match(jpc, /f\.startActivityForResult\(/, 'IvaClientPatch: выбор фото должен запускаться от имени AvatarPicker');
   assert.match(jpc, /profileHead/, 'IvaClientPatch: строка «Клиент» не подключена к профилю');
   assert.match(jpc, /installClientProfileHead\(a\)/, 'IvaClientPatch: обработчик строки «Клиент» не устанавливается');
   assert.match(jpc, /depth < 3/, 'IvaClientPatch: оболочки строки «Клиент» не подключены');
-  for (const k of ['clientAvatarPreview', 'Добавить аватарку', 'CLIENT_AVATAR_REQUEST', 'image/*', 'CATEGORY_OPENABLE', 'BitmapFactory.decodeByteArray', 'clientProfile.put("avatar_path"'])
+  for (const k of ['avatarImage', 'Изменить фото', 'CLIENT_AVATAR_REQUEST', 'image/*', 'CATEGORY_OPENABLE', 'BitmapFactory.decodeByteArray',
+    'prepareAvatar(byte[]', 'uploadClientAvatar(Activity', 'downloadClientAvatar(Activity', 'customer-avatars'])
     assert.ok(jpc.includes(k), `IvaClientPatch.java: нет функции аватарки ${k}`);
   for (const k of ['onPrice(String', 'onSummary(final Activity', 'onHub(Activity', 'publishError(String', 'netError(String',
     'onCreated(Activity', 'onSession(Activity', 'onAvatar(final Activity', 'onLogout(final Activity', 'onTab(Activity',

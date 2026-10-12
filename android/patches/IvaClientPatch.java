@@ -30,11 +30,18 @@
 // 14) (10.21) у этой фоновой картинки скруглены все четыре угла, не затрагивая поиск и категории.
 // 15) (10.22) пока открыт раздел «Сообщения», чат приложения перечитывается каждые 5 секунд:
 //     ответ собеседника появляется сам, без выхода из чата и ручного обновления страницы.
+// 16) (10.30–10.39) профиль обычного клиента: штатная строка «Клиент» в кабинете открывает настройки
+//     (ФИО, телефон, адрес, необязательные паспортные данные, фото) — тогда формой-диалогом AlertDialog.
+//     (10.40) настройки — отдельный полноэкранный экран ProfileScreen: шапка «←» и заголовок, прокрутка,
+//     закреплённая кнопка «Сохранить» (доступна только после загрузки записи с сервера), выбор даты выдачи,
+//     подтверждение при выходе с несохранёнными изменениями; фото уменьшается до 640 px и возвращается
+//     через вспомогательный Fragment AvatarPicker. Новых точек вставки в MainActivity нет (только onProfile).
 package ru.prokatnvsk.app;
 
 import android.Manifest;
 import android.app.Activity;
 import android.app.AlertDialog;
+import android.app.Dialog;
 import android.content.Context;
 import android.content.DialogInterface;
 import android.content.Intent;
@@ -80,7 +87,6 @@ import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.net.HttpURLConnection;
 import java.net.URL;
-import java.net.URLEncoder;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Locale;
@@ -284,15 +290,15 @@ public final class IvaClientPatch {
     static final int CLIENT_LOCATION_REQUEST = 6404;
     static final long CHAT_REFRESH_MS = 5000L;
 
-    // Клиентский профиль не смешивается с admins. Состояние формы живёт только
-    // пока открыто окно и очищается при выходе из аккаунта.
+    // Клиентский профиль не смешивается с admins. Состояние экрана живёт только,
+    // пока экран открыт; кэш профиля сбрасывается при смене аккаунта или выходе.
     static JSONObject clientProfile;
     static String clientProfileEmail = "";
     static String clientProfileUid = "";
-    static AlertDialog clientProfileDialog;
-    static EditText[] clientProfileFields;
-    static TextView clientAvatarStatus;
-    static ImageView clientAvatarPreview;
+    static volatile boolean clientProfileLoaded = false;    // кэш clientProfile относится к clientProfileEmail
+    static volatile boolean clientProfileLoading = false;
+    static ProfileScreen clientScreen;                      // открытый экран настроек (null — закрыт)
+    static final String AVATAR_PICKER_TAG = "iva_client_avatar_picker";
     static View clientProfileHead;
     static String clientAvatarPath = "";
 
@@ -490,6 +496,13 @@ public final class IvaClientPatch {
     }
 
     // ── 16. Профиль обычного клиента (отдельно от admins) ──
+    // 10.40: настройки открываются отдельным полноэкранным экраном (своя шапка «←»,
+    // прокрутка, закреплённая кнопка «Сохранить», системная «Назад» закрывает экран),
+    // а не формой-диалогом AlertDialog поверх кабинета, как в 10.33–10.39.
+    // Новых точек вставки в MainActivity нет: экран — окно Dialog с полноэкранной
+    // темой, которое открывается из уже подключённого hook onProfile (строка «Клиент»).
+    // Выбор фото возвращается во вспомогательный Fragment (AvatarPicker), поэтому
+    // hook onActivityResult в MainActivity по-прежнему не нужен (он отключён с 10.39).
     static void ensureClientProfile() {
         if (clientProfile == null) clientProfile = new JSONObject();
     }
@@ -527,12 +540,12 @@ public final class IvaClientPatch {
         if (!isClient(a)) return;
         try {
             installClientProfileHead(a);
-            loadClientProfile(a);
+            loadClientProfile(a, false);
         } catch (Throwable ignore) {}
     }
 
     /** Штатная тёмная строка «Клиент» в верхней части кабинета становится
-     * входом в ту же карточку данных и настроек. Кнопка «Выйти» внутри строки
+     * входом в экран настроек профиля. Кнопка «Выйти» внутри строки
      * остаётся штатной: её обработчик у дочерней кнопки имеет приоритет. */
     static void installClientProfileHead(final Activity a) {
         try {
@@ -553,7 +566,7 @@ public final class IvaClientPatch {
                 final View clickable = current;
                 clickable.setClickable(true);
                 clickable.setOnClickListener(new View.OnClickListener() {
-                    @Override public void onClick(View v) { showClientProfile(a); }
+                    @Override public void onClick(View v) { openClientProfileScreen(a); }
                 });
                 clientProfileHead = clickable;
                 ViewParent p = current.getParent();
@@ -561,43 +574,6 @@ public final class IvaClientPatch {
                 depth++;
             }
         } catch (Throwable ignore) {}
-    }
-
-    static EditText profileEdit(Activity a, LinearLayout box, String label, String value, int inputType) {
-        float d = a.getResources().getDisplayMetrics().density;
-        TextView l = new TextView(a);
-        l.setText(label);
-        l.setTextSize(13f);
-        l.setTextColor(0xffb8bbc5);
-        l.setPadding(0, px(9, d), 0, px(4, d));
-        box.addView(l);
-        EditText e = new EditText(a);
-        e.setSingleLine(false);
-        e.setText(value == null ? "" : value);
-        e.setTextSize(15f);
-        e.setTextColor(0xfff5f5f7);
-        e.setHintTextColor(0xff777b87);
-        e.setInputType(inputType);
-        e.setPadding(px(12, d), px(8, d), px(12, d), px(8, d));
-        GradientDrawable fieldBg = new GradientDrawable();
-        fieldBg.setColor(0xff1b1e26);
-        fieldBg.setCornerRadius(px(8, d));
-        fieldBg.setStroke(px(1, d), 0xff3a3e49);
-        e.setBackground(fieldBg);
-        box.addView(e, new LinearLayout.LayoutParams(-1, -2));
-        return e;
-    }
-
-    static void styleProfileButton(Button b, Activity a) {
-        float d = a.getResources().getDisplayMetrics().density;
-        b.setAllCaps(false);
-        b.setTextSize(14f);
-        b.setTextColor(Color.WHITE);
-        b.setPadding(px(14, d), px(8, d), px(14, d), px(8, d));
-        GradientDrawable bg = new GradientDrawable();
-        bg.setColor(0xffff9518);
-        bg.setCornerRadius(px(9, d));
-        b.setBackground(bg);
     }
 
     static String activityText(Activity a, String name) {
@@ -617,203 +593,847 @@ public final class IvaClientPatch {
         return all;
     }
 
-    static void loadClientProfile(final Activity a) {
+    /** Профиль клиента из приватной записи customer_profiles (RPC берёт пользователя из JWT).
+     * Кэш — до смены аккаунта; force — перечитать с сервера. Итог сообщается открытому экрану. */
+    static void loadClientProfile(final Activity a, boolean force) {
         ensureClientProfile();
         if (!isClient(a)) return;
         final String email = String.valueOf(get(a, "userEmail"));
-        if (email.equalsIgnoreCase(clientProfileEmail) && clientProfile.length() > 0) return;
-        clientProfileEmail = email;
+        if (!email.equalsIgnoreCase(clientProfileEmail)) {
+            // Другой аккаунт: чужие данные не показываем и не сохраняем поверх.
+            clientProfile = new JSONObject();
+            clientProfileLoaded = false;
+            clientProfileUid = "";
+            clientAvatarPath = "";
+            clientProfileEmail = email;
+        }
+        if (clientProfileLoading || (clientProfileLoaded && !force)) return;
+        clientProfileLoading = true;
         new Thread(new Runnable() {
             @Override public void run() {
+                String error = null;
                 try {
                     String[] r = apiCall(a, "/rest/v1/rpc/get_my_customer_profile", "POST", "{}", true);
-                    if (r == null || !r[0].startsWith("2")) return;
-                    final JSONObject p = rpcFirst(r[1]);
-                    clientProfile = p;
-                    clientProfileUid = p.optString("user_id", "");
-                    clientAvatarPath = p.optString("avatar_path", "");
-                    a.runOnUiThread(new Runnable() { @Override public void run() {
-                        Object dialog = clientProfileDialog;
-                        if (dialog instanceof AlertDialog && ((AlertDialog) dialog).isShowing()) fillClientProfileFields();
-                    }});
-                } catch (Throwable ignore) {}
+                    if (r == null) throw new Exception("нет ответа сервера");
+                    if (!r[0].startsWith("2")) throw new Exception(serverMessage(r[0], r[1]));
+                    JSONObject p = rpcFirst(r[1]);
+                    if (email.equalsIgnoreCase(clientProfileEmail)) {
+                        clientProfile = p;
+                        clientProfileUid = p.optString("user_id", clientProfileUid);
+                        clientAvatarPath = p.optString("avatar_path", "");
+                        clientProfileLoaded = true;
+                    } else {
+                        throw new Exception("аккаунт сменился, откройте профиль ещё раз");
+                    }
+                } catch (Throwable e) {
+                    error = brief(e.getMessage());
+                    if (error.isEmpty()) error = "нет связи с сервером";
+                } finally {
+                    clientProfileLoading = false;
+                }
+                final String err = error;
+                a.runOnUiThread(new Runnable() { @Override public void run() {
+                    ProfileScreen s = clientScreen;
+                    if (s != null) s.onProfileLoaded(err);
+                }});
             }
         }).start();
     }
 
-    static void fillClientProfileFields() {
-        ensureClientProfile();
-        if (clientProfileFields == null || clientProfileFields.length < 9) return;
-        String[] v = new String[] {
-            clientProfile.optString("surname", ""), clientProfile.optString("given_name", ""),
-            clientProfile.optString("patronymic", ""), clientProfile.optString("phone", ""),
-            clientProfile.optString("address", "")
-        };
-        for (int i = 0; i < v.length && i < clientProfileFields.length; i++) clientProfileFields[i].setText(v[i]);
-        JSONObject pp = clientProfile.optJSONObject("passport_data");
-        if (pp == null) pp = new JSONObject();
-        clientProfileFields[5].setText(pp.optString("series", ""));
-        clientProfileFields[6].setText(pp.optString("number", ""));
-        clientProfileFields[7].setText(pp.optString("issued_by", ""));
-        clientProfileFields[8].setText(pp.optString("issued_at", ""));
-        if (clientAvatarStatus != null) clientAvatarStatus.setText(clientProfile.optString("avatar_path", "").isEmpty() ? "Аватарка ещё не загружена" : "Аватарка загружена");
+    /** Открыть экран настроек профиля клиента (повторное нажатие не плодит экраны). */
+    static void openClientProfileScreen(final Activity a) {
+        try {
+            ensureClientProfile();
+            if (!isClient(a) || a.isFinishing()) return;
+            ProfileScreen open = clientScreen;
+            // Экран, оставшийся от пересозданной Activity, не мешает открыть новый.
+            if (open != null && open.a == a && open.isShowing()) return;
+            ProfileScreen s = new ProfileScreen(a);
+            clientScreen = s;
+            // Сначала — сверка аккаунта (кэш другого клиента сбрасывается) и загрузка при необходимости.
+            loadClientProfile(a, false);
+            s.show();
+            if (clientProfileLoaded && !clientProfileLoading) s.onProfileLoaded(null);
+        } catch (Throwable t) {
+            clientScreen = null;
+            try { Toast.makeText(a, "Не удалось открыть настройки профиля", Toast.LENGTH_SHORT).show(); } catch (Throwable ignore) {}
+        }
     }
 
-    static void showClientProfile(final Activity a) {
-        ensureClientProfile();
-        if (!isClient(a)) return;
-        loadClientProfile(a);
-        final float dpx = a.getResources().getDisplayMetrics().density;
-        final ScrollView scroll = new ScrollView(a);
-        scroll.setFillViewport(true);
-        scroll.setBackgroundColor(0xff111318);
-        final LinearLayout box = new LinearLayout(a);
-        box.setOrientation(LinearLayout.VERTICAL);
-        box.setPadding(px(20, dpx), px(4, dpx), px(20, dpx), px(12, dpx));
-        scroll.addView(box, new ScrollView.LayoutParams(-1, -2));
+    // ── 16.1. Чистая логика экрана (проверяется IvaPatchTest без телефона) ──
 
-        TextView privacy = new TextView(a);
-        privacy.setText("Данные нужны для оформления аренды. Паспортные данные необязательны, хранятся в защищённой записи клиента и не показываются арендодателю.");
-        privacy.setTextSize(12.5f);
-        privacy.setTextColor(0xffaeb2bd);
-        privacy.setLineSpacing(0, 1.15f);
-        box.addView(privacy, new LinearLayout.LayoutParams(-1, -2));
+    /** Текст ошибки сервера: поле message из ответа PostgREST; отдельно — «функции нет» (не применена миграция). */
+    static String serverMessage(String code, String body) {
+        String c = code == null ? "" : code.trim();
+        String b = body == null ? "" : body;
+        if (b.contains("PGRST202") || b.contains("Could not find the function"))
+            return "на сервере ещё не включены настройки профиля клиента (нужна миграция базы)";
+        String msg = "";
+        try {
+            msg = new JSONObject(b).optString("message", "");
+        } catch (Throwable ignore) {
+            // в JVM-тесте org.json — заглушка; разбираем простое поле вручную
+            java.util.regex.Matcher m = java.util.regex.Pattern
+                .compile("\"message\"\\s*:\\s*\"((?:[^\"\\\\]|\\\\.)*)\"").matcher(b);
+            if (m.find()) msg = m.group(1).replace("\\\"", "\"");
+        }
+        msg = brief(msg.isEmpty() ? b : msg);
+        if (msg.isEmpty()) return "ошибка сервера" + (c.isEmpty() ? "" : " (HTTP " + c + ")");
+        return msg;
+    }
 
-        TextView avatarTitle = new TextView(a);
-        avatarTitle.setText("Фотография профиля");
-        avatarTitle.setTextSize(13f);
-        avatarTitle.setTextColor(0xffb8bbc5);
-        avatarTitle.setPadding(0, px(15, dpx), 0, px(5, dpx));
-        box.addView(avatarTitle);
-        LinearLayout avatarRow = new LinearLayout(a);
-        avatarRow.setGravity(Gravity.CENTER_VERTICAL);
-        clientAvatarPreview = new ImageView(a);
-        clientAvatarPreview.setScaleType(ImageView.ScaleType.CENTER_CROP);
-        GradientDrawable avatarBg = new GradientDrawable();
-        avatarBg.setColor(0xffff9518);
-        avatarBg.setShape(GradientDrawable.OVAL);
-        clientAvatarPreview.setBackground(avatarBg);
-        avatarRow.addView(clientAvatarPreview, new LinearLayout.LayoutParams(px(56, dpx), px(56, dpx)));
-        LinearLayout avatarActions = new LinearLayout(a);
-        avatarActions.setOrientation(LinearLayout.VERTICAL);
-        avatarActions.setPadding(px(12, dpx), 0, 0, 0);
-        Button av = new Button(a);
-        av.setText("Добавить аватарку");
-        styleProfileButton(av, a);
-        avatarActions.addView(av, new LinearLayout.LayoutParams(-2, -2));
-        clientAvatarStatus = new TextView(a);
-        clientAvatarStatus.setTextSize(12f);
-        clientAvatarStatus.setTextColor(0xffaeb2bd);
-        clientAvatarStatus.setText(clientProfile.optString("avatar_path", "").isEmpty() ? "JPG или PNG" : "Аватарка загружена");
-        avatarActions.addView(clientAvatarStatus, new LinearLayout.LayoutParams(-2, -2));
-        avatarRow.addView(avatarActions, new LinearLayout.LayoutParams(-1, -2));
-        box.addView(avatarRow, new LinearLayout.LayoutParams(-1, -2));
-        av.setOnClickListener(new View.OnClickListener() { @Override public void onClick(View v) {
+    /** «2015-03-07» → {2015, 3, 7}; «07.03.2015» (так вводили в 10.34–10.39) — тоже. Иначе null. */
+    static int[] dateParts(String v) {
+        String s = v == null ? "" : v.trim();
+        java.util.regex.Matcher iso = java.util.regex.Pattern.compile("^(\\d{4})-(\\d{1,2})-(\\d{1,2})$").matcher(s);
+        java.util.regex.Matcher ru = java.util.regex.Pattern.compile("^(\\d{1,2})[./](\\d{1,2})[./](\\d{4})$").matcher(s);
+        int y, m, d;
+        if (iso.find()) { y = Integer.parseInt(iso.group(1)); m = Integer.parseInt(iso.group(2)); d = Integer.parseInt(iso.group(3)); }
+        else if (ru.find()) { y = Integer.parseInt(ru.group(3)); m = Integer.parseInt(ru.group(2)); d = Integer.parseInt(ru.group(1)); }
+        else return null;
+        if (y < 1900 || y > 2100 || m < 1 || m > 12 || d < 1 || d > 31) return null;
+        return new int[] {y, m, d};
+    }
+
+    /** Дата для базы — в том же виде, что и у поля type=date на сайте: ГГГГ-ММ-ДД. */
+    static String isoDate(int y, int month1, int d) {
+        return String.format(Locale.US, "%04d-%02d-%02d", y, month1, d);
+    }
+
+    /** Дата для экрана: ДД.ММ.ГГГГ; нераспознанный старый текст показываем как есть. */
+    static String dateForDisplay(String v) {
+        int[] p = dateParts(v);
+        if (p == null) return v == null ? "" : v.trim();
+        return String.format(Locale.US, "%02d.%02d.%04d", p[2], p[1], p[0]);
+    }
+
+    /** Подпись кнопки внизу экрана. */
+    static String saveButtonText(boolean loaded, boolean saving, boolean uploading) {
+        if (saving) return "Сохраняем…";
+        if (uploading) return "Загружаем фото…";
+        if (!loaded) return "Загружаем профиль…";
+        return "Сохранить";
+    }
+
+    /** Во сколько раз уменьшить фото при чтении, чтобы большая сторона осталась ≥ max (степень двойки). */
+    static int avatarSample(int w, int h, int max) {
+        int side = Math.max(w, h), sample = 1;
+        if (max <= 0) return 1;
+        while (side / (sample * 2) >= max) sample *= 2;
+        return sample;
+    }
+
+    /** Буквы в кружке, пока фото нет. */
+    static String initialsOf(String name) {
+        String[] parts = (name == null ? "" : name.trim()).split("\\s+");
+        StringBuilder sb = new StringBuilder();
+        for (String p : parts) {
+            if (p.isEmpty()) continue;
+            sb.appendCodePoint(Character.toUpperCase(p.codePointAt(0)));
+            if (sb.length() >= 2) break;
+        }
+        return sb.length() == 0 ? "?" : sb.toString();
+    }
+
+    // ── 16.2. Экран настроек профиля клиента ──
+    static final class ProfileScreen {
+        // Индексы значений формы (порядок важен для values()/baseline).
+        static final int SURNAME = 0, GIVEN = 1, PATRONYMIC = 2, PHONE = 3, ADDRESS = 4,
+            SERIES = 5, NUMBER = 6, ISSUED_BY = 7, ISSUED_AT = 8, COUNT = 9;
+
+        final Activity a;
+        final float d;
+        final int cBg, cCard, cField, cFieldLine, cGray, cGray2, cLine, cOrange, cRed, cText;
+        Dialog dialog;
+        LinearLayout root;
+        ScrollView scroll;
+        final EditText[] edits = new EditText[COUNT];   // ISSUED_AT — не EditText, а выбор даты
+        TextView issuedAtView;
+        String issuedAt = "";
+        String[] baseline = new String[COUNT];
+        TextView loadText, retryText, errorText, avatarStatus, avatarInitials;
+        ImageView avatarImage;
+        Button saveBtn, avatarBtn;
+        boolean loaded = false, saving = false, uploading = false, avatarChanged = false;
+        int avatarVersion = 0;
+
+        ProfileScreen(Activity a) {
+            this.a = a;
+            this.d = a.getResources().getDisplayMetrics().density;
+            // Цвета — из ресурсов самого приложения (тот же тёмный стиль, что в кабинете).
+            cBg = navColor(a, "bg", 0xff101217);
+            cCard = navColor(a, "card", 0xff1a1d24);
+            cField = navColor(a, "field", 0xff171a21);
+            cFieldLine = navColor(a, "fieldline", 0xff3a4050);
+            cGray = navColor(a, "gray", 0xff9aa1b0);
+            cGray2 = navColor(a, "gray2", 0xff6b7080);
+            cLine = navColor(a, "line", 0xff262b35);
+            cOrange = navColor(a, "orange", 0xffff8f1f);
+            cRed = navColor(a, "red", 0xffff8a80);
+            cText = navColor(a, "text", 0xfff2f4f8);
+        }
+
+        int dp(float v) { return px(v, d); }
+
+        boolean isShowing() {
+            try { return dialog != null && dialog.isShowing(); } catch (Throwable ignore) { return false; }
+        }
+
+        void show() {
+            build();
+            dialog = new Dialog(a, android.R.style.Theme_Material_NoActionBar) {
+                @Override public void onBackPressed() { requestClose(); }
+            };
+            dialog.setContentView(root, new ViewGroup.LayoutParams(-1, -1));
+            dialog.setCancelable(true);
+            android.view.Window w = dialog.getWindow();
+            if (w != null) {
+                w.setLayout(-1, -1);
+                w.setBackgroundDrawable(new android.graphics.drawable.ColorDrawable(cBg));
+                w.setSoftInputMode(android.view.WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE
+                    | android.view.WindowManager.LayoutParams.SOFT_INPUT_STATE_HIDDEN);
+                try {
+                    w.addFlags(android.view.WindowManager.LayoutParams.FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS);
+                    w.setStatusBarColor(cBg);
+                    w.setNavigationBarColor(cBg);
+                } catch (Throwable ignore) {}
+            }
+            dialog.setOnDismissListener(new DialogInterface.OnDismissListener() {
+                @Override public void onDismiss(DialogInterface x) {
+                    if (clientScreen == ProfileScreen.this) clientScreen = null;
+                }
+            });
+            dialog.setOnShowListener(new DialogInterface.OnShowListener() {
+                @Override public void onShow(DialogInterface x) {
+                    try {
+                        // Экран «въезжает» справа, как переход на новую страницу.
+                        root.setAlpha(0f);
+                        root.setTranslationX(dp(36));
+                        root.animate().alpha(1f).translationX(0f).setDuration(180).start();
+                    } catch (Throwable ignore) {}
+                }
+            });
+            dialog.show();
+        }
+
+        void build() {
+            root = new LinearLayout(a);
+            root.setOrientation(LinearLayout.VERTICAL);
+            root.setBackgroundColor(cBg);
+            root.setFocusableInTouchMode(true);   // фокус не прыгает в первое поле при открытии
+
+            // Шапка: «←» + заголовок + почта аккаунта.
+            LinearLayout bar = new LinearLayout(a);
+            bar.setOrientation(LinearLayout.HORIZONTAL);
+            bar.setGravity(Gravity.CENTER_VERTICAL);
+            bar.setPadding(dp(4), 0, dp(16), 0);
+            TextView back = new TextView(a);
+            back.setText("\u2190");
+            back.setTextSize(24f);
+            back.setTextColor(cText);
+            back.setGravity(Gravity.CENTER);
+            back.setContentDescription("Назад");
+            back.setClickable(true);
+            touchFeedback(back, true);
+            back.setOnClickListener(new View.OnClickListener() { @Override public void onClick(View v) { requestClose(); } });
+            bar.addView(back, new LinearLayout.LayoutParams(dp(48), dp(48)));
+            LinearLayout titles = new LinearLayout(a);
+            titles.setOrientation(LinearLayout.VERTICAL);
+            titles.setPadding(dp(4), 0, 0, 0);
+            TextView title = new TextView(a);
+            title.setText("Настройки профиля");
+            title.setTextSize(18f);
+            title.setTextColor(cText);
+            title.setTypeface(null, android.graphics.Typeface.BOLD);
+            title.setSingleLine(true);
+            titles.addView(title);
+            String email = activityText(a, "userEmail").trim();
+            if (!email.isEmpty() && !"null".equals(email)) {
+                TextView sub = new TextView(a);
+                sub.setText(email);
+                sub.setTextSize(12.5f);
+                sub.setTextColor(cGray);
+                sub.setSingleLine(true);
+                sub.setEllipsize(android.text.TextUtils.TruncateAt.END);
+                titles.addView(sub);
+            }
+            bar.addView(titles, new LinearLayout.LayoutParams(0, -2, 1f));
+            root.addView(bar, new LinearLayout.LayoutParams(-1, dp(60)));
+            root.addView(divider(), new LinearLayout.LayoutParams(-1, Math.max(1, dp(1))));
+
+            // Строка состояния загрузки (и «Повторить» при ошибке).
+            LinearLayout loadRow = new LinearLayout(a);
+            loadRow.setGravity(Gravity.CENTER_VERTICAL);
+            loadRow.setPadding(dp(16), dp(8), dp(16), dp(8));
+            loadRow.setBackgroundColor(cCard);
+            loadText = new TextView(a);
+            loadText.setTextSize(13f);
+            loadText.setTextColor(cGray);
+            loadText.setText("Загружаем профиль…");
+            loadRow.addView(loadText, new LinearLayout.LayoutParams(0, -2, 1f));
+            retryText = new TextView(a);
+            retryText.setText("Повторить");
+            retryText.setTextSize(14f);
+            retryText.setTextColor(cOrange);
+            retryText.setTypeface(null, android.graphics.Typeface.BOLD);
+            retryText.setPadding(dp(12), dp(6), 0, dp(6));
+            retryText.setVisibility(View.GONE);
+            touchFeedback(retryText, false);
+            retryText.setOnClickListener(new View.OnClickListener() { @Override public void onClick(View v) {
+                retryText.setVisibility(View.GONE);
+                loadText.setTextColor(cGray);
+                loadText.setText("Загружаем профиль…");
+                loadClientProfile(a, true);
+            }});
+            loadRow.addView(retryText, new LinearLayout.LayoutParams(-2, -2));
+            root.addView(loadRow, new LinearLayout.LayoutParams(-1, -2));
+
+            scroll = new ScrollView(a);
+            scroll.setFillViewport(true);
+            scroll.setClipToPadding(false);
+            LinearLayout content = new LinearLayout(a);
+            content.setOrientation(LinearLayout.VERTICAL);
+            content.setPadding(dp(16), dp(18), dp(16), dp(24));
+            scroll.addView(content, new ScrollView.LayoutParams(-1, -2));
+            root.addView(scroll, new LinearLayout.LayoutParams(-1, 0, 1f));
+
+            buildAvatar(content);
+
+            LinearLayout personal = card(content, "Личные данные", null);
+            edits[SURNAME] = field(personal, "Фамилия", 100, InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_CAP_WORDS | InputType.TYPE_TEXT_VARIATION_PERSON_NAME);
+            edits[GIVEN] = field(personal, "Имя *", 100, InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_CAP_WORDS | InputType.TYPE_TEXT_VARIATION_PERSON_NAME);
+            edits[PATRONYMIC] = field(personal, "Отчество", 100, InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_CAP_WORDS | InputType.TYPE_TEXT_VARIATION_PERSON_NAME);
+            edits[PHONE] = field(personal, "Номер телефона", 50, InputType.TYPE_CLASS_PHONE);
+            edits[ADDRESS] = field(personal, "Адрес", 500, InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_CAP_SENTENCES | InputType.TYPE_TEXT_VARIATION_POSTAL_ADDRESS);
+            edits[ADDRESS].setHint("Город, улица, дом, квартира");
+            note(personal, "По адресу считается расстояние до пункта выдачи. Арендодателю в карточке адрес не показывается.");
+
+            LinearLayout passport = card(content, "Паспортные данные", "необязательно");
+            note(passport, "Помогают быстрее оформить договор аренды. Хранятся в защищённой записи клиента и не показываются арендодателю. Поля можно оставить пустыми.");
+            LinearLayout pair = new LinearLayout(a);
+            pair.setOrientation(LinearLayout.HORIZONTAL);
+            LinearLayout left = new LinearLayout(a);
+            left.setOrientation(LinearLayout.VERTICAL);
+            LinearLayout right = new LinearLayout(a);
+            right.setOrientation(LinearLayout.VERTICAL);
+            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(0, -2, 1f);
+            lp.rightMargin = dp(6);
+            pair.addView(left, lp);
+            LinearLayout.LayoutParams rp = new LinearLayout.LayoutParams(0, -2, 1.4f);
+            rp.leftMargin = dp(6);
+            pair.addView(right, rp);
+            passport.addView(pair, new LinearLayout.LayoutParams(-1, -2));
+            edits[SERIES] = field(left, "Серия", 20, InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_CAP_CHARACTERS | InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS);
+            edits[NUMBER] = field(right, "Номер", 30, InputType.TYPE_CLASS_NUMBER);
+            edits[ISSUED_BY] = field(passport, "Кем выдан", 200, InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_CAP_SENTENCES | InputType.TYPE_TEXT_FLAG_MULTI_LINE);
+            issuedAtView = dateField(passport, "Дата выдачи");
+            android.text.TextWatcher nameWatcher = new android.text.TextWatcher() {
+                @Override public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
+                @Override public void onTextChanged(CharSequence s, int start, int before, int count) {}
+                @Override public void afterTextChanged(android.text.Editable s) { updateInitials(); }
+            };
+            edits[GIVEN].addTextChangedListener(nameWatcher);
+            edits[SURNAME].addTextChangedListener(nameWatcher);
+
+            // Низ экрана: ошибка сохранения + закреплённая кнопка.
+            root.addView(divider(), new LinearLayout.LayoutParams(-1, Math.max(1, dp(1))));
+            LinearLayout bottom = new LinearLayout(a);
+            bottom.setOrientation(LinearLayout.VERTICAL);
+            bottom.setPadding(dp(16), dp(10), dp(16), dp(12));
+            errorText = new TextView(a);
+            errorText.setTextSize(13f);
+            errorText.setTextColor(cRed);
+            errorText.setPadding(0, 0, 0, dp(8));
+            errorText.setVisibility(View.GONE);
+            bottom.addView(errorText, new LinearLayout.LayoutParams(-1, -2));
+            saveBtn = new Button(a);
+            saveBtn.setAllCaps(false);
+            saveBtn.setTextSize(15.5f);
+            saveBtn.setTypeface(null, android.graphics.Typeface.BOLD);
+            saveBtn.setTextColor(Color.WHITE);
+            saveBtn.setOnClickListener(new View.OnClickListener() { @Override public void onClick(View v) { save(); } });
+            bottom.addView(saveBtn, new LinearLayout.LayoutParams(-1, dp(50)));
+            root.addView(bottom, new LinearLayout.LayoutParams(-1, -2));
+
+            fill(currentValuesFromCache(), false);
+            refreshSave();
+        }
+
+        /** Штатная «волна» касания из темы приложения (если тема её даёт). */
+        void touchFeedback(View v, boolean borderless) {
             try {
-                Intent i = new Intent("android.intent.action.GET_CONTENT");
+                android.util.TypedValue tv = new android.util.TypedValue();
+                int attr = borderless ? android.R.attr.selectableItemBackgroundBorderless : android.R.attr.selectableItemBackground;
+                if (a.getTheme().resolveAttribute(attr, tv, true) && tv.resourceId != 0)
+                    v.setBackgroundResource(tv.resourceId);
+            } catch (Throwable ignore) {}
+        }
+
+        View divider() {
+            View v = new View(a);
+            v.setBackgroundColor(cLine);
+            return v;
+        }
+
+        GradientDrawable rounded(int fill, int stroke, float radius) {
+            GradientDrawable g = new GradientDrawable();
+            g.setColor(fill);
+            g.setCornerRadius(dp(radius));
+            if (stroke != 0) g.setStroke(Math.max(1, dp(1)), stroke);
+            return g;
+        }
+
+        void buildAvatar(LinearLayout content) {
+            LinearLayout box = new LinearLayout(a);
+            box.setOrientation(LinearLayout.VERTICAL);
+            box.setGravity(Gravity.CENTER_HORIZONTAL);
+            box.setPadding(0, dp(4), 0, dp(18));
+            FrameLayout circleBox = new FrameLayout(a);
+            GradientDrawable bg = new GradientDrawable();
+            bg.setShape(GradientDrawable.OVAL);
+            bg.setColor(cOrange);
+            circleBox.setBackground(bg);
+            avatarInitials = new TextView(a);
+            avatarInitials.setTextSize(32f);
+            avatarInitials.setTextColor(Color.WHITE);
+            avatarInitials.setTypeface(null, android.graphics.Typeface.BOLD);
+            avatarInitials.setGravity(Gravity.CENTER);
+            circleBox.addView(avatarInitials, new FrameLayout.LayoutParams(-1, -1));
+            avatarImage = new ImageView(a);
+            avatarImage.setScaleType(ImageView.ScaleType.CENTER_CROP);
+            circleBox.addView(avatarImage, new FrameLayout.LayoutParams(-1, -1));
+            box.addView(circleBox, new LinearLayout.LayoutParams(dp(96), dp(96)));
+            avatarBtn = new Button(a);
+            avatarBtn.setText("Изменить фото");
+            avatarBtn.setAllCaps(false);
+            avatarBtn.setTextSize(14f);
+            avatarBtn.setTextColor(cOrange);
+            avatarBtn.setBackground(rounded(Color.TRANSPARENT, cOrange, 20));
+            avatarBtn.setPadding(dp(18), 0, dp(18), 0);
+            avatarBtn.setOnClickListener(new View.OnClickListener() { @Override public void onClick(View v) { pickAvatar(); } });
+            LinearLayout.LayoutParams bp = new LinearLayout.LayoutParams(-2, dp(40));
+            bp.topMargin = dp(12);
+            box.addView(avatarBtn, bp);
+            avatarStatus = new TextView(a);
+            avatarStatus.setTextSize(12.5f);
+            avatarStatus.setTextColor(cGray);
+            avatarStatus.setGravity(Gravity.CENTER);
+            avatarStatus.setPadding(0, dp(6), 0, 0);
+            avatarStatus.setText("JPG или PNG");
+            box.addView(avatarStatus, new LinearLayout.LayoutParams(-1, -2));
+            content.addView(box, new LinearLayout.LayoutParams(-1, -2));
+        }
+
+        LinearLayout card(LinearLayout content, String title, String badge) {
+            LinearLayout c = new LinearLayout(a);
+            c.setOrientation(LinearLayout.VERTICAL);
+            c.setPadding(dp(16), dp(14), dp(16), dp(16));
+            c.setBackground(rounded(cCard, cLine, 14));
+            LinearLayout head = new LinearLayout(a);
+            head.setGravity(Gravity.CENTER_VERTICAL);
+            TextView t = new TextView(a);
+            t.setText(title);
+            t.setTextSize(16f);
+            t.setTextColor(cText);
+            t.setTypeface(null, android.graphics.Typeface.BOLD);
+            head.addView(t);
+            if (badge != null) {
+                TextView b = new TextView(a);
+                b.setText(badge);
+                b.setTextSize(11.5f);
+                b.setTextColor(cGray);
+                b.setPadding(dp(8), dp(2), dp(8), dp(2));
+                b.setBackground(rounded(cField, cFieldLine, 10));
+                LinearLayout.LayoutParams blp = new LinearLayout.LayoutParams(-2, -2);
+                blp.leftMargin = dp(8);
+                head.addView(b, blp);
+            }
+            c.addView(head);
+            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2);
+            lp.bottomMargin = dp(14);
+            content.addView(c, lp);
+            return c;
+        }
+
+        void note(LinearLayout box, String text) {
+            TextView n = new TextView(a);
+            n.setText(text);
+            n.setTextSize(12.5f);
+            n.setTextColor(cGray);
+            n.setLineSpacing(0, 1.15f);
+            n.setPadding(0, dp(8), 0, 0);
+            box.addView(n, new LinearLayout.LayoutParams(-1, -2));
+        }
+
+        TextView label(LinearLayout box, String text) {
+            TextView l = new TextView(a);
+            l.setText(text);
+            l.setTextSize(13f);
+            l.setTextColor(cGray);
+            l.setPadding(0, dp(12), 0, dp(5));
+            box.addView(l);
+            return l;
+        }
+
+        android.graphics.drawable.Drawable fieldBg() {
+            android.graphics.drawable.StateListDrawable s = new android.graphics.drawable.StateListDrawable();
+            s.addState(new int[] {android.R.attr.state_focused}, rounded(cField, cOrange, 10));
+            s.addState(new int[] {}, rounded(cField, cFieldLine, 10));
+            return s;
+        }
+
+        EditText field(LinearLayout box, String labelText, int max, int inputType) {
+            label(box, labelText);
+            EditText e = new EditText(a);
+            e.setInputType(inputType);
+            e.setTextSize(15.5f);
+            e.setTextColor(cText);
+            e.setHintTextColor(cGray2);
+            e.setPadding(dp(12), dp(11), dp(12), dp(11));
+            e.setBackground(fieldBg());
+            e.setFilters(new android.text.InputFilter[] {new android.text.InputFilter.LengthFilter(max)});
+            if ((inputType & InputType.TYPE_TEXT_FLAG_MULTI_LINE) == 0) e.setSingleLine(true);
+            else { e.setMinLines(1); e.setMaxLines(4); }
+            box.addView(e, new LinearLayout.LayoutParams(-1, -2));
+            return e;
+        }
+
+        TextView dateField(LinearLayout box, String labelText) {
+            label(box, labelText);
+            TextView v = new TextView(a);
+            v.setTextSize(15.5f);
+            v.setTextColor(cText);
+            v.setHintTextColor(cGray2);
+            v.setHint("Выберите дату");
+            v.setPadding(dp(12), dp(11), dp(12), dp(11));
+            v.setBackground(fieldBg());
+            v.setClickable(true);
+            v.setFocusable(false);
+            v.setOnClickListener(new View.OnClickListener() { @Override public void onClick(View x) { pickDate(); } });
+            box.addView(v, new LinearLayout.LayoutParams(-1, -2));
+            return v;
+        }
+
+        void setIssuedAt(String v) {
+            issuedAt = v == null ? "" : v.trim();
+            if (issuedAtView != null) issuedAtView.setText(dateForDisplay(issuedAt));
+        }
+
+        void pickDate() {
+            try {
+                int[] p = dateParts(issuedAt);
+                java.util.Calendar now = java.util.Calendar.getInstance();
+                int y = p != null ? p[0] : now.get(java.util.Calendar.YEAR) - 5;
+                int m0 = p != null ? p[1] - 1 : now.get(java.util.Calendar.MONTH);
+                int dd = p != null ? p[2] : now.get(java.util.Calendar.DAY_OF_MONTH);
+                android.app.DatePickerDialog picker = new android.app.DatePickerDialog(a, android.R.style.Theme_Material_Dialog,
+                    new android.app.DatePickerDialog.OnDateSetListener() {
+                        @Override public void onDateSet(android.widget.DatePicker view, int year, int month, int day) {
+                            setIssuedAt(isoDate(year, month + 1, day));
+                        }
+                    }, y, m0, dd);
+                try { picker.getDatePicker().setMaxDate(System.currentTimeMillis()); } catch (Throwable ignore) {}
+                picker.setButton(DialogInterface.BUTTON_NEUTRAL, "Очистить", new DialogInterface.OnClickListener() {
+                    @Override public void onClick(DialogInterface x, int which) { setIssuedAt(""); }
+                });
+                picker.show();
+            } catch (Throwable t) {
+                Toast.makeText(a, "Не удалось открыть выбор даты", Toast.LENGTH_SHORT).show();
+            }
+        }
+
+        /** Значения формы в порядке индексов (дата — в виде для базы). */
+        String[] values() {
+            String[] v = new String[COUNT];
+            for (int i = 0; i < COUNT; i++)
+                v[i] = i == ISSUED_AT ? issuedAt : (edits[i] == null ? "" : edits[i].getText().toString().trim());
+            return v;
+        }
+
+        /** Что показать до/после загрузки: запись с сервера, а пока её нет — имя и телефон из аккаунта. */
+        String[] currentValuesFromCache() {
+            ensureClientProfile();
+            JSONObject p = clientProfile;
+            JSONObject pp = p.optJSONObject("passport_data");
+            if (pp == null) pp = new JSONObject();
+            String[] v = new String[COUNT];
+            boolean have = clientProfileLoaded && p.length() > 0;
+            v[SURNAME] = p.optString("surname", "");
+            v[GIVEN] = p.optString("given_name", "");
+            if (v[GIVEN].trim().isEmpty() && !have) v[GIVEN] = cleanAccountValue(activityText(a, "userName"));
+            v[PATRONYMIC] = p.optString("patronymic", "");
+            v[PHONE] = p.optString("phone", "");
+            if (v[PHONE].trim().isEmpty() && !have) v[PHONE] = cleanAccountValue(activityText(a, "userPhone"));
+            v[ADDRESS] = p.optString("address", "");
+            v[SERIES] = pp.optString("series", "");
+            v[NUMBER] = pp.optString("number", "");
+            v[ISSUED_BY] = pp.optString("issued_by", "");
+            v[ISSUED_AT] = pp.optString("issued_at", "");
+            for (int i = 0; i < COUNT; i++) v[i] = v[i] == null ? "" : v[i].trim();
+            return v;
+        }
+
+        String cleanAccountValue(String s) {
+            String v = s == null ? "" : s.trim();
+            return "null".equals(v) ? "" : v;
+        }
+
+        /** Заполнить поля. onlyUntouched — не трогать то, что клиент уже успел изменить. */
+        void fill(String[] v, boolean onlyUntouched) {
+            String[] cur = values();
+            for (int i = 0; i < COUNT; i++) {
+                boolean untouched = baseline[i] == null || cur[i].equals(baseline[i]);
+                if (!onlyUntouched || untouched) {
+                    if (i == ISSUED_AT) setIssuedAt(v[i]);
+                    else if (edits[i] != null) edits[i].setText(v[i]);
+                }
+                baseline[i] = v[i];
+            }
+            updateInitials();
+        }
+
+        void updateInitials() {
+            String[] v = values();
+            String name = (v[GIVEN] + " " + v[SURNAME]).trim();
+            if (avatarInitials != null) avatarInitials.setText(initialsOf(name));
+        }
+
+        boolean dirty() {
+            return avatarChanged || !java.util.Arrays.equals(values(), baseline);
+        }
+
+        void refreshSave() {
+            if (saveBtn == null) return;
+            boolean enabled = loaded && !saving && !uploading;
+            saveBtn.setEnabled(enabled);
+            saveBtn.setText(saveButtonText(loaded, saving, uploading));
+            saveBtn.setBackground(rounded(enabled ? cOrange : cFieldLine, 0, 12));
+            if (avatarBtn != null) avatarBtn.setEnabled(loaded && !uploading && !saving);
+        }
+
+        /** Итог загрузки профиля: null — успешно. */
+        void onProfileLoaded(String error) {
+            if (clientScreen != this) return;
+            if (error != null) {
+                if (!loaded) {
+                    loadText.setTextColor(cRed);
+                    loadText.setText("Не удалось загрузить профиль: " + error);
+                    retryText.setVisibility(View.VISIBLE);
+                }
+                return;
+            }
+            boolean first = !loaded;
+            loaded = true;
+            if (first) fill(currentValuesFromCache(), true);
+            View row = (View) loadText.getParent();
+            if (row != null) row.setVisibility(View.GONE);
+            if (first) loadAvatarPreview();
+            refreshSave();
+        }
+
+        void showError(String msg) {
+            if (errorText == null) return;
+            if (msg == null || msg.isEmpty()) { errorText.setVisibility(View.GONE); return; }
+            errorText.setText(msg);
+            errorText.setVisibility(View.VISIBLE);
+        }
+
+        void requestClose() {
+            try {
+                if (saving) { Toast.makeText(a, "Подождите, профиль сохраняется", Toast.LENGTH_SHORT).show(); return; }
+                if (!dirty()) { close(); return; }
+                new AlertDialog.Builder(a, android.R.style.Theme_Material_Dialog_Alert)
+                    .setTitle("Выйти без сохранения?")
+                    .setMessage("Изменения в профиле не сохранены.")
+                    .setPositiveButton("Остаться", null)
+                    .setNegativeButton("Выйти", new DialogInterface.OnClickListener() {
+                        @Override public void onClick(DialogInterface x, int which) { close(); }
+                    })
+                    .show();
+            } catch (Throwable t) {
+                close();
+            }
+        }
+
+        void close() {
+            try {
+                View f = dialog == null ? null : dialog.getCurrentFocus();
+                if (f != null) {
+                    android.view.inputmethod.InputMethodManager imm = (android.view.inputmethod.InputMethodManager)
+                        a.getSystemService(Context.INPUT_METHOD_SERVICE);
+                    if (imm != null) imm.hideSoftInputFromWindow(f.getWindowToken(), 0);
+                }
+            } catch (Throwable ignore) {}
+            try { if (dialog != null) dialog.dismiss(); } catch (Throwable ignore) {}
+            if (clientScreen == this) clientScreen = null;
+        }
+
+        void save() {
+            if (!loaded || saving || uploading) return;
+            showError(null);
+            final String[] v = values();
+            if (v[GIVEN].isEmpty()) {
+                edits[GIVEN].setError("Укажите имя");
+                edits[GIVEN].requestFocus();
+                try { scroll.smoothScrollTo(0, Math.max(0, ((View) edits[GIVEN].getParent()).getTop() + edits[GIVEN].getTop() - dp(60))); } catch (Throwable ignore) {}
+                return;
+            }
+            final JSONObject body = new JSONObject();
+            try {
+                JSONObject pp = new JSONObject();
+                pp.put("series", v[SERIES]);
+                pp.put("number", v[NUMBER]);
+                pp.put("issued_by", v[ISSUED_BY]);
+                pp.put("issued_at", v[ISSUED_AT]);
+                body.put("p_surname", v[SURNAME]);
+                body.put("p_given_name", v[GIVEN]);
+                body.put("p_patronymic", v[PATRONYMIC]);
+                body.put("p_phone", v[PHONE]);
+                // Город на этом экране не редактируется — сохраняем тот, что уже в записи.
+                body.put("p_city", clientProfile.optString("city", ""));
+                body.put("p_address", v[ADDRESS]);
+                body.put("p_passport_data", pp);
+                body.put("p_avatar_path", clientAvatarPath == null ? "" : clientAvatarPath);
+            } catch (Throwable e) {
+                showError("Не удалось подготовить данные профиля");
+                return;
+            }
+            saving = true;
+            refreshSave();
+            new Thread(new Runnable() { @Override public void run() {
+                try {
+                    String[] r = apiCall(a, "/rest/v1/rpc/save_my_customer_profile", "POST", body.toString(), true);
+                    if (r == null) throw new Exception("нет ответа сервера");
+                    if (!r[0].startsWith("2")) throw new Exception(serverMessage(r[0], r[1]));
+                    final JSONObject saved = rpcFirst(r[1]);
+                    clientProfile = saved.length() > 0 ? saved : clientProfile;
+                    clientProfileUid = clientProfile.optString("user_id", clientProfileUid);
+                    clientAvatarPath = clientProfile.optString("avatar_path", clientAvatarPath);
+                    clientProfileLoaded = true;
+                    a.runOnUiThread(new Runnable() { @Override public void run() {
+                        saving = false;
+                        try {
+                            set(a, "userName", profileName(clientProfile));
+                            set(a, "userPhone", clientProfile.optString("phone", ""));
+                        } catch (Throwable ignore) {}
+                        clientCoords = null; clientCoordsLoading = false;
+                        synchronized (nativeDistanceCache) { nativeDistanceCache.clear(); }
+                        avatarChanged = false;
+                        close();
+                        try { Method m = a.getClass().getDeclaredMethod("renderProfile"); m.setAccessible(true); m.invoke(a); } catch (Throwable ignore) {}
+                        Toast.makeText(a, "Профиль сохранён", Toast.LENGTH_SHORT).show();
+                    }});
+                } catch (final Throwable e) {
+                    a.runOnUiThread(new Runnable() { @Override public void run() {
+                        saving = false;
+                        String msg = brief(e.getMessage());
+                        showError("Не удалось сохранить профиль: " + (msg.isEmpty() ? "нет связи с сервером" : msg));
+                        refreshSave();
+                    }});
+                }
+            }}).start();
+        }
+
+        // ── фото профиля ──
+        void pickAvatar() {
+            if (!loaded || uploading || saving) return;
+            try {
+                android.app.FragmentManager fm = a.getFragmentManager();
+                android.app.Fragment f = fm.findFragmentByTag(AVATAR_PICKER_TAG);
+                if (!(f instanceof AvatarPicker)) {
+                    f = new AvatarPicker();
+                    fm.beginTransaction().add(f, AVATAR_PICKER_TAG).commitAllowingStateLoss();
+                    fm.executePendingTransactions();
+                }
+                Intent i = new Intent(Intent.ACTION_GET_CONTENT);
                 i.setType("image/*");
                 i.addCategory(Intent.CATEGORY_OPENABLE);
-                a.startActivityForResult(Intent.createChooser(i, "Аватарка профиля"), CLIENT_AVATAR_REQUEST);
+                f.startActivityForResult(Intent.createChooser(i, "Фото профиля"), CLIENT_AVATAR_REQUEST);
             } catch (Throwable t) {
-                Toast.makeText(a, "Не удалось открыть выбор файла", Toast.LENGTH_SHORT).show();
+                Toast.makeText(a, "Не удалось открыть выбор фото", Toast.LENGTH_SHORT).show();
             }
-        }});
+        }
 
-        TextView personalTitle = new TextView(a);
-        personalTitle.setText("Личные данные");
-        personalTitle.setTextSize(15f);
-        personalTitle.setTextColor(0xffffa12a);
-        personalTitle.setTypeface(null, android.graphics.Typeface.BOLD);
-        personalTitle.setPadding(0, px(18, dpx), 0, 0);
-        box.addView(personalTitle);
-        EditText surname = profileEdit(a, box, "Фамилия", clientProfile.optString("surname", ""), InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_CAP_WORDS);
-        EditText given = profileEdit(a, box, "Имя *", clientProfile.optString("given_name", activityText(a, "userName")), InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_CAP_WORDS);
-        EditText patronymic = profileEdit(a, box, "Отчество", clientProfile.optString("patronymic", ""), InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_CAP_WORDS);
-        EditText phone = profileEdit(a, box, "Номер телефона", clientProfile.optString("phone", activityText(a, "userPhone")), InputType.TYPE_CLASS_PHONE);
-        EditText address = profileEdit(a, box, "Адрес", clientProfile.optString("address", ""), InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_CAP_SENTENCES);
-        clientProfileFields = new EditText[] {surname, given, patronymic, phone, address, null, null, null, null};
+        void uploadAvatar(final android.net.Uri uri) {
+            if (uri == null || uploading) return;
+            uploading = true;
+            final int version = ++avatarVersion;
+            avatarStatus.setTextColor(cGray);
+            avatarStatus.setText("Загружаем фото…");
+            refreshSave();
+            final String before = clientAvatarPath == null ? "" : clientAvatarPath;
+            new Thread(new Runnable() { @Override public void run() {
+                try {
+                    byte[] raw = readUri(a, uri);
+                    final byte[] jpeg = prepareAvatar(raw);
+                    final String path = uploadClientAvatar(a, jpeg);
+                    final Bitmap preview = decodeAvatar(jpeg, dp(96));
+                    a.runOnUiThread(new Runnable() { @Override public void run() {
+                        uploading = false;
+                        clientAvatarPath = path;
+                        if (version == avatarVersion && preview != null) showAvatar(preview);
+                        // Файл на сервере уже заменён. Если путь в записи тот же — фото обновилось сразу;
+                        // если фото первое — путь закрепится в записи кнопкой «Сохранить».
+                        avatarChanged = !path.equals(before);
+                        avatarStatus.setTextColor(cGray);
+                        avatarStatus.setText(avatarChanged ? "Фото загружено — нажмите «Сохранить»" : "Фото обновлено");
+                        refreshSave();
+                    }});
+                } catch (final Throwable e) {
+                    a.runOnUiThread(new Runnable() { @Override public void run() {
+                        uploading = false;
+                        String msg = brief(e.getMessage());
+                        avatarStatus.setTextColor(cRed);
+                        avatarStatus.setText("Не удалось загрузить фото" + (msg.isEmpty() ? "" : ": " + msg));
+                        refreshSave();
+                    }});
+                }
+            }}).start();
+        }
 
-        TextView passportTitle = new TextView(a);
-        passportTitle.setText("Паспортные данные — необязательно");
-        passportTitle.setTextSize(15f);
-        passportTitle.setTextColor(0xffffa12a);
-        passportTitle.setTypeface(null, android.graphics.Typeface.BOLD);
-        passportTitle.setPadding(0, px(18, dpx), 0, 0);
-        box.addView(passportTitle);
-        EditText passportSeries = profileEdit(a, box, "Серия", "", InputType.TYPE_CLASS_TEXT);
-        EditText passportNumber = profileEdit(a, box, "Номер", "", InputType.TYPE_CLASS_NUMBER);
-        EditText passportIssuedBy = profileEdit(a, box, "Кем выдан", "", InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_CAP_SENTENCES);
-        EditText passportIssuedAt = profileEdit(a, box, "Дата выдачи", "", InputType.TYPE_CLASS_DATETIME);
-        clientProfileFields[5] = passportSeries;
-        clientProfileFields[6] = passportNumber;
-        clientProfileFields[7] = passportIssuedBy;
-        clientProfileFields[8] = passportIssuedAt;
-        fillClientProfileFields();
+        void showAvatar(Bitmap b) {
+            if (avatarImage == null || b == null) return;
+            Bitmap round = circle(b, dp(96), 0);
+            avatarImage.setImageBitmap(round != null ? round : b);
+            if (avatarInitials != null) avatarInitials.setVisibility(View.INVISIBLE);
+        }
 
-        AlertDialog d = new AlertDialog.Builder(a)
-            .setTitle("Настройки профиля клиента")
-            .setView(scroll)
-            .setNegativeButton("Отмена", null)
-            .setPositiveButton("Сохранить", null)
-            .create();
-        clientProfileDialog = d;
-        d.setOnShowListener(new DialogInterface.OnShowListener() { @Override public void onShow(DialogInterface x) {
-            d.getButton(AlertDialog.BUTTON_POSITIVE).setTextColor(0xffff9518);
-            d.getButton(AlertDialog.BUTTON_NEGATIVE).setTextColor(0xffff9518);
-            d.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(new View.OnClickListener() { @Override public void onClick(View v) {
-                saveClientProfile(a, d);
-            }});
-        }});
-        d.setOnDismissListener(new DialogInterface.OnDismissListener() { @Override public void onDismiss(DialogInterface x) {
-            clientProfileDialog = null;
-            clientProfileFields = null;
-            clientAvatarStatus = null;
-            clientAvatarPreview = null;
-        }});
-        d.show();
+        /** Уже загруженное фото — из приватного хранилища по токену клиента. */
+        void loadAvatarPreview() {
+            final String path = clientAvatarPath == null ? "" : clientAvatarPath.trim();
+            if (path.isEmpty()) { avatarStatus.setText("Фото ещё не добавлено"); return; }
+            avatarStatus.setText("Фото загружено");
+            final int version = avatarVersion;
+            new Thread(new Runnable() { @Override public void run() {
+                try {
+                    byte[] bytes = downloadClientAvatar(a, path);
+                    final Bitmap b = decodeAvatar(bytes, dp(96));
+                    a.runOnUiThread(new Runnable() { @Override public void run() {
+                        if (clientScreen == ProfileScreen.this && version == avatarVersion && b != null) showAvatar(b);
+                    }});
+                } catch (Throwable ignore) {
+                    // без предпросмотра остаются буквы в кружке
+                }
+            }}).start();
+        }
     }
 
-    static void saveClientProfile(final Activity a, final AlertDialog d) {
-        ensureClientProfile();
-        if (clientProfileFields == null || clientProfileFields.length < 9) return;
-        final String given = clientProfileFields[1].getText().toString().trim();
-        if (given.isEmpty()) { clientProfileFields[1].setError("Укажите имя"); return; }
-        final JSONObject body = new JSONObject();
-        try {
-            JSONObject pp = new JSONObject();
-            pp.put("series", clientProfileFields[5].getText().toString().trim());
-            pp.put("number", clientProfileFields[6].getText().toString().trim());
-            pp.put("issued_by", clientProfileFields[7].getText().toString().trim());
-            pp.put("issued_at", clientProfileFields[8].getText().toString().trim());
-            body.put("p_surname", clientProfileFields[0].getText().toString().trim());
-            body.put("p_given_name", given);
-            body.put("p_patronymic", clientProfileFields[2].getText().toString().trim());
-            body.put("p_phone", clientProfileFields[3].getText().toString().trim());
-            body.put("p_city", clientProfile.optString("city", "")); body.put("p_address", clientProfileFields[4].getText().toString().trim());
-            body.put("p_passport_data", pp); body.put("p_avatar_path", clientAvatarPath);
-        } catch (Throwable e) { return; }
-        d.getButton(AlertDialog.BUTTON_POSITIVE).setEnabled(false);
-        new Thread(new Runnable() { @Override public void run() {
-            try {
-                String[] r = apiCall(a, "/rest/v1/rpc/save_my_customer_profile", "POST", body.toString(), true);
-                if (r == null || !r[0].startsWith("2")) throw new Exception(r == null ? "Нет ответа" : r[1]);
-                clientProfile = rpcFirst(r[1]);
-                clientProfileUid = clientProfile.optString("user_id", clientProfileUid);
-                a.runOnUiThread(new Runnable() { @Override public void run() {
-                    set(a, "userName", profileName(clientProfile));
-                    set(a, "userPhone", clientProfile.optString("phone", ""));
-                    clientCoords = null; clientCoordsLoading = false; synchronized (nativeDistanceCache) { nativeDistanceCache.clear(); }
-                    d.dismiss();
-                    try { Method m = a.getClass().getDeclaredMethod("renderProfile"); m.setAccessible(true); m.invoke(a); } catch (Throwable ignore) {}
-                    Toast.makeText(a, "Профиль клиента сохранён", Toast.LENGTH_SHORT).show();
-                }});
-            } catch (final Throwable e) {
-                a.runOnUiThread(new Runnable() { @Override public void run() {
-                    d.getButton(AlertDialog.BUTTON_POSITIVE).setEnabled(true);
-                    Toast.makeText(a, "Не удалось сохранить профиль: " + brief(e.getMessage()), Toast.LENGTH_LONG).show();
-                }});
-            }
-        }}).start();
+    /** Невидимый помощник: результат системного выбора фото приходит сюда
+     * (Activity.dispatchActivityResult → Fragment.onActivityResult), минуя MainActivity.onActivityResult. */
+    public static final class AvatarPicker extends android.app.Fragment {
+        public AvatarPicker() {}
+
+        @Override public void onActivityResult(int request, int result, Intent data) {
+            try { onAvatarPicked(request, result, data); } catch (Throwable ignore) {}
+            try { getFragmentManager().beginTransaction().remove(this).commitAllowingStateLoss(); } catch (Throwable ignore) {}
+        }
+    }
+
+    static void onAvatarPicked(int request, int result, Intent data) {
+        if (request != CLIENT_AVATAR_REQUEST || result != Activity.RESULT_OK || data == null || data.getData() == null) return;
+        ProfileScreen s = clientScreen;
+        if (s == null || !s.isShowing()) return;   // экран уже закрыт — фото не загружаем
+        s.uploadAvatar(data.getData());
     }
 
     /** 9) Профиль подмешивается в native после штатного renderProfile. */
@@ -821,7 +1441,6 @@ public final class IvaClientPatch {
         try {
             ensureClientProfile();
             installClientProfile(a);
-            loadClientProfile(a);
         } catch (Throwable ignore) {}
     }
 
@@ -957,7 +1576,7 @@ public final class IvaClientPatch {
                     if (av != null) box.removeView(av);
                     if (ring != null) box.removeView(ring);
                     clientProfileHead = null;
-                    clientProfile = new JSONObject(); clientProfileEmail = ""; clientProfileUid = ""; clientAvatarPath = ""; clientCoords = null; clientCoordsLoading = false; activeDetail = null; synchronized (nativeDistanceCache) { nativeDistanceCache.clear(); } synchronized (nativeGeoCache) { nativeGeoCache.clear(); } allNativeTools = null; nativeFilterActive = false; nativeFilterQuery = nativeFilterCat = nativeFilterSub = nativeFilterCity = nativeFilterFrom = nativeFilterTo = nativeFilterConds = ""; nativeFilterDelivery = false;
+                    clientProfile = new JSONObject(); clientProfileLoaded = false; clientProfileEmail = ""; clientProfileUid = ""; clientAvatarPath = ""; clientCoords = null; clientCoordsLoading = false; activeDetail = null; synchronized (nativeDistanceCache) { nativeDistanceCache.clear(); } synchronized (nativeGeoCache) { nativeGeoCache.clear(); } allNativeTools = null; nativeFilterActive = false; nativeFilterQuery = nativeFilterCat = nativeFilterSub = nativeFilterCity = nativeFilterFrom = nativeFilterTo = nativeFilterConds = ""; nativeFilterDelivery = false;
                     onTab(a, (String) get(a, "curTab"));
                 } catch (Throwable ignore) {
                     // иконка остаётся на месте
@@ -1142,30 +1761,98 @@ public final class IvaClientPatch {
         return path;
     }
 
+    /** Совместимость: прежняя точка входа 10.34–10.38. В MainActivity больше не вызывается
+     * (hook onActivityResult отключён с 10.39); результат выбора фото принимает AvatarPicker. */
     public static void onActivityResult(final Activity a, final int request, final int result, final Intent data) {
-        if (request != CLIENT_AVATAR_REQUEST || result != Activity.RESULT_OK || data == null || data.getData() == null) return;
-        if (!isClient(a)) return;
-        if (clientAvatarStatus != null) clientAvatarStatus.setText("Загружаем аватарку…");
-        new Thread(new Runnable() { @Override public void run() {
-            try {
-                final byte[] bytes = readUri(a, data.getData());
-                final Bitmap preview = BitmapFactory.decodeByteArray(bytes, 0, bytes.length);
-                a.runOnUiThread(new Runnable() { @Override public void run() {
-                    if (clientAvatarPreview != null && preview != null) clientAvatarPreview.setImageBitmap(preview);
-                }});
-                final String path = uploadClientAvatar(a, bytes);
-                clientAvatarPath = path; clientProfileUid = authUid(a);
-                try { clientProfile.put("avatar_path", path); } catch (Throwable ignore) {}
-                a.runOnUiThread(new Runnable() { @Override public void run() {
-                    if (clientAvatarStatus != null) clientAvatarStatus.setText("Аватарка загружена");
-                }});
-            } catch (final Throwable e) {
-                a.runOnUiThread(new Runnable() { @Override public void run() {
-                    if (clientAvatarStatus != null) clientAvatarStatus.setText("Не удалось загрузить аватарку");
-                    Toast.makeText(a, "Аватарка: " + brief(e.getMessage()), Toast.LENGTH_LONG).show();
-                }});
+        try { onAvatarPicked(request, result, data); } catch (Throwable ignore) {}
+    }
+
+    static final int AVATAR_MAX = 640;   // как на сайте: «JPG или PNG, до 640 px»
+
+    /** Фото из галереи → JPEG не больше 640 px по большей стороне, с учётом поворота камеры. */
+    static byte[] prepareAvatar(byte[] raw) throws Exception {
+        BitmapFactory.Options o = new BitmapFactory.Options();
+        o.inJustDecodeBounds = true;
+        BitmapFactory.decodeByteArray(raw, 0, raw.length, o);
+        if (o.outWidth <= 0 || o.outHeight <= 0) throw new Exception("файл не похож на изображение");
+        BitmapFactory.Options o2 = new BitmapFactory.Options();
+        o2.inSampleSize = avatarSample(o.outWidth, o.outHeight, AVATAR_MAX);
+        Bitmap src = BitmapFactory.decodeByteArray(raw, 0, raw.length, o2);
+        if (src == null) throw new Exception("изображение не читается");
+        int deg = exifDegrees(raw);
+        int w = src.getWidth(), h = src.getHeight();
+        float s = Math.min(1f, AVATAR_MAX / (float) Math.max(w, h));
+        int sw = Math.max(1, Math.round(w * s)), sh = Math.max(1, Math.round(h * s));
+        boolean swap = deg == 90 || deg == 270;
+        int ow = swap ? sh : sw, oh = swap ? sw : sh;
+        Bitmap out = Bitmap.createBitmap(ow, oh, Bitmap.Config.ARGB_8888);
+        Canvas c = new Canvas(out);
+        c.drawColor(Color.WHITE);   // прозрачный PNG → белый фон, а не чёрный
+        Matrix m = new Matrix();
+        m.postScale(s, s);
+        m.postTranslate(-sw / 2f, -sh / 2f);
+        m.postRotate(deg);
+        m.postTranslate(ow / 2f, oh / 2f);
+        c.drawBitmap(src, m, new Paint(Paint.ANTI_ALIAS_FLAG | Paint.FILTER_BITMAP_FLAG));
+        ByteArrayOutputStream bytes = new ByteArrayOutputStream();
+        out.compress(Bitmap.CompressFormat.JPEG, 85, bytes);
+        src.recycle();
+        out.recycle();
+        return bytes.toByteArray();
+    }
+
+    /** Поворот из EXIF (камера часто пишет фото «боком»). Android 7+; на старых — без поворота. */
+    static int exifDegrees(byte[] raw) {
+        if (android.os.Build.VERSION.SDK_INT < 24) return 0;
+        try {
+            android.media.ExifInterface e = new android.media.ExifInterface(new java.io.ByteArrayInputStream(raw));
+            int o = e.getAttributeInt(android.media.ExifInterface.TAG_ORIENTATION, android.media.ExifInterface.ORIENTATION_NORMAL);
+            if (o == android.media.ExifInterface.ORIENTATION_ROTATE_90) return 90;
+            if (o == android.media.ExifInterface.ORIENTATION_ROTATE_180) return 180;
+            if (o == android.media.ExifInterface.ORIENTATION_ROTATE_270) return 270;
+        } catch (Throwable ignore) {}
+        return 0;
+    }
+
+    /** Предпросмотр: картинка, уменьшенная примерно до size px. */
+    static Bitmap decodeAvatar(byte[] bytes, int size) {
+        try {
+            BitmapFactory.Options o = new BitmapFactory.Options();
+            o.inJustDecodeBounds = true;
+            BitmapFactory.decodeByteArray(bytes, 0, bytes.length, o);
+            BitmapFactory.Options o2 = new BitmapFactory.Options();
+            o2.inSampleSize = avatarSample(o.outWidth, o.outHeight, Math.max(1, size));
+            return BitmapFactory.decodeByteArray(bytes, 0, bytes.length, o2);
+        } catch (Throwable ignore) {
+            return null;
+        }
+    }
+
+    /** Фото клиента из приватного bucket customer-avatars (читать может только он сам — политика RLS). */
+    static byte[] downloadClientAvatar(Activity a, String path) throws Exception {
+        String clean = path.startsWith("/") ? path.substring(1) : path;
+        HttpURLConnection c = (HttpURLConnection) new URL(SB_URL + "/storage/v1/object/authenticated/customer-avatars/" + clean).openConnection();
+        c.setConnectTimeout(12000);
+        c.setReadTimeout(15000);
+        c.setRequestProperty("apikey", SB_KEY);
+        c.setRequestProperty("Authorization", "Bearer " + String.valueOf(get(a, "accessToken")));
+        int code = c.getResponseCode();
+        if (code < 200 || code >= 300) throw new Exception("HTTP " + code);
+        InputStream in = c.getInputStream();
+        try {
+            ByteArrayOutputStream out = new ByteArrayOutputStream();
+            byte[] buf = new byte[8192];
+            int n, total = 0;
+            while ((n = in.read(buf)) > 0) {
+                total += n;
+                if (total > 8 * 1024 * 1024) throw new Exception("файл больше 8 МБ");
+                out.write(buf, 0, n);
             }
-        }}).start();
+            return out.toByteArray();
+        } finally {
+            try { in.close(); } catch (Throwable ignore) {}
+            c.disconnect();
+        }
     }
 
     // ── 18. Компактный фильтр native на главной ──
