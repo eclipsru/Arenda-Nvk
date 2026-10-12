@@ -294,6 +294,7 @@ public final class IvaClientPatch {
     static EditText[] clientProfileFields;
     static TextView clientAvatarStatus;
     static View clientProfileCard;
+    static View clientProfileHead;
     static TextView clientProfileCardName;
     static TextView clientProfileCardInfo;
     static String clientAvatarPath = "";
@@ -533,6 +534,7 @@ public final class IvaClientPatch {
             View old = host.findViewWithTag(PROFILE_BUTTON_TAG);
             if (old != null) {
                 if (old == clientProfileCard) {
+                    installClientProfileHead(a);
                     updateClientProfileCard(a);
                     loadClientProfile(a);
                     return;
@@ -591,8 +593,34 @@ public final class IvaClientPatch {
             }
             clientProfileCard = card;
             host.addView(card, 0, lp);
+            installClientProfileHead(a);
             updateClientProfileCard(a);
             loadClientProfile(a);
+        } catch (Throwable ignore) {}
+    }
+
+    /** Штатная тёмная строка «Клиент» в верхней части кабинета становится
+     * входом в ту же карточку данных и настроек. Кнопка «Выйти» внутри строки
+     * остаётся штатной: её обработчик у дочерней кнопки имеет приоритет. */
+    static void installClientProfileHead(final Activity a) {
+        try {
+            Object raw = get(a, "profileHead");
+            if (!(raw instanceof View)) {
+                int rid = id(a, "profileHead");
+                if (rid != 0) raw = a.findViewById(rid);
+            }
+            if (!(raw instanceof View)) return;
+            View head = (View) raw;
+            View target = head;
+            ViewParent parent = head.getParent();
+            ViewGroup host = profileHost(a);
+            if (parent instanceof ViewGroup && parent != host) target = (View) parent;
+            if (target == clientProfileHead) return;
+            target.setClickable(true);
+            target.setOnClickListener(new View.OnClickListener() {
+                @Override public void onClick(View v) { showClientProfile(a); }
+            });
+            clientProfileHead = target;
         } catch (Throwable ignore) {}
     }
 
@@ -927,7 +955,7 @@ public final class IvaClientPatch {
                     if (ring != null) box.removeView(ring);
                     ViewGroup ph = profileHost(a);
                     if (ph != null) { View pb = ph.findViewWithTag(PROFILE_BUTTON_TAG); if (pb != null) ph.removeView(pb); }
-                    clientProfileCard = null; clientProfileCardName = null; clientProfileCardInfo = null;
+                    clientProfileCard = null; clientProfileHead = null; clientProfileCardName = null; clientProfileCardInfo = null;
                     clientProfile = new JSONObject(); clientProfileEmail = ""; clientProfileUid = ""; clientAvatarPath = ""; clientCoords = null; clientCoordsLoading = false; activeDetail = null; synchronized (nativeDistanceCache) { nativeDistanceCache.clear(); } synchronized (nativeGeoCache) { nativeGeoCache.clear(); } allNativeTools = null; nativeFilterActive = false; nativeFilterQuery = nativeFilterCat = nativeFilterSub = nativeFilterCity = nativeFilterFrom = nativeFilterTo = nativeFilterConds = ""; nativeFilterDelivery = false;
                     onTab(a, (String) get(a, "curTab"));
                 } catch (Throwable ignore) {
