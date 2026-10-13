@@ -514,6 +514,45 @@ try {
     assert.ok(!cp.includes('ic_mic') && !cp.includes('"Голосовое", 14') && !cp.includes('VOICE_TRACK_BG'), 'голосовые 10.60: старого вида v9.8 не осталось');
     assert.ok(/eq\("голосовые 10\.60: /.test(tp), 'IvaPatchTest: проверки 10.60');
   }
+  // 10.61: «удалить чат» — только у себя, с подтверждением (решение владельца 14.10.2026: в базе, долгое нажатие в списке,
+  // написали снова — чат появляется только с новыми). Сообщения не удаляются, собеседник ничего не замечает.
+  {
+    const cp = R('android/patches/IvaChatPatch.java'), tp = R('android/patches/test/IvaPatchTest.java');
+    const sql = R('supabase/migrations/20261014_chat_hidden.sql'), body = sql.replace(/^--.*$/gm, '');
+    assert.ok(body.includes('primary key (user_email, partner, tool_id)') && body.includes('alter table public.app_chat_hidden enable row level security;')
+      && body.includes('revoke all on public.app_chat_hidden from anon;') && body.includes('revoke all on public.app_chat_hidden from authenticated;')
+      && body.includes('grant select on public.app_chat_hidden to authenticated;')
+      && body.includes("using (user_email = lower(coalesce(auth.jwt() ->> 'email', '')));")
+      && !/grant\s+(insert|update|delete|all)[^;]*app_chat_hidden/i.test(body) && !/for\s+(insert|update|delete|all)\b/i.test(body),
+      '20261014_chat_hidden.sql: каждый видит только свои строки; писать напрямую нельзя');
+    assert.ok(body.includes("me text := lower(coalesce(auth.jwt() ->> 'email', ''));") && body.includes('values (me, who, t, p_until)')
+      && body.includes('set hidden_until = greatest(public.app_chat_hidden.hidden_until, excluded.hidden_until),')
+      && body.includes('if p_until > now() then') && /security definer\s+set search_path = public/.test(body)
+      && body.includes('revoke all on function public.iva_hide_chat(text, text, timestamptz) from public, anon;')
+      && !/app_messages|delete\s+from|\bupdate\s+public\.app_messages/i.test(body),
+      '20261014_chat_hidden.sql: iva_hide_chat — только за себя (почта из входа), граница только вперёд и не из будущего; app_messages не трогает');
+    assert.ok(sql.includes('--   drop function if exists public.iva_hide_chat(text, text, timestamptz);') && sql.includes('--   drop table if exists public.app_chat_hidden;'),
+      '20261014_chat_hidden.sql: откат записан');
+    const row = cp.slice(cp.indexOf('static View chatRow('), cp.indexOf('static LinearLayout rowBase('));
+    assert.ok(row.includes('@Override public boolean onLongClick(View v) { confirmHideChat(a, c); return true; }')
+      && row.includes('.setTitle(HIDE_TITLE)') && row.includes('.setNegativeButton("Отмена", null)')
+      && row.includes('@Override public void onClick(DialogInterface d, int w) { hideChat(a, c); }'),
+      'чат 10.61: долгое нажатие на чат в списке → «Удалить чат?» → только после «Удалить»');
+    assert.ok(row.includes('"/rest/v1/rpc/iva_hide_chat", "POST", hideBody(c), true)') && !/app_messages|"DELETE"|"PATCH"/.test(row)
+      && row.includes('if ("ok".equals(fc)) {') && row.includes('} else if ("404".equals(fc)) {'),
+      'чат 10.61: удаление — только отметка в app_chat_hidden; сообщения не удаляются и не помечаются прочитанными; скрываем только после ответа базы');
+    assert.ok(cp.includes('b.put("p_until", c.last == null ? "" : c.last.created);') && cp.includes('long at = parseIso(o.optString("hidden_until", ""));')
+      && cp.includes('"/rest/v1/app_chat_hidden?select=partner,tool_id,hidden_until&limit=1000", "GET", null, true)'),
+      'чат 10.61: граница — время последнего сообщения из базы (не часы телефона); список удалённого — свой');
+    assert.ok(cp.includes('if (hiddenMsg(hid, p, t, m.at)) continue;') && cp.includes('&& !hiddenMsg(hid, p, t, m.at)) out.add(m);')
+      && cp.includes('Map<String, String> tools = assignTools(asc, me, admins, sup, localTags);   // по всем сообщениям — как до удаления')
+      && cp.includes('.append(hiddenVer).append(\'|\');'),
+      'чат 10.61: скрытое не в списке и не в переписке; инструменты переписок считаются по всем сообщениям (новые попадают в тот же чат)');
+    assert.ok(cp.includes('} else hiddenAt = 0;') && cp.includes('saveHidden(a, my);') && cp.includes('saveHidden(a, me);')
+      && cp.includes('hidden.clear(); hiddenLocal.clear(); hiddenAt = 0; hiddenFor = ""; hiddenVer++;'),
+      'чат 10.61: копия на телефоне (без интернета удалённое не возвращается), при смене аккаунта — сброс');
+    assert.ok(/eq\("чат 10\.61: /.test(tp), 'IvaPatchTest: проверки 10.61');
+  }
   // радиус — только вид: варианты встречаются лишь в объявлении и в шторке, на фильтр/подсчёт не влияют
   assert.equal((js45.match(/RADIUS_TITLES/g) || []).length, 3, 'IvaSearchPatch: радиус не должен участвовать в фильтре (только заготовка в шторке)');
   assert.ok(!/radius|радиус/i.test(js45.slice(js45.indexOf('static boolean extraMatch('), js45.indexOf('static long[] normRange('))), 'IvaSearchPatch: радиус попал в extraMatch');

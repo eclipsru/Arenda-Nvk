@@ -497,6 +497,47 @@ public class IvaPatchTest {
                 + "|" + IvaNotifyPatch.shortcutLabel(IvaNotifyPatch.CH_ORD) + "|" + IvaNotifyPatch.shortcutLabel(IvaNotifyPatch.CH_UPD), "iva_note_iva_msg|Сообщения|Заявки|Обновления");
             eq("уведомления 10.58: ярлык убирается через 5 с", IvaNotifyPatch.SHORTCUT_DROP_MS, 5000L);
             // голосовые 10.58 — размеры как у штатного пузыря v9.8
+            // 10.61: «удалить чат» — только у себя
+            {
+                String hme = "client@x.ru", h1 = "adm@x.ru", h2 = "adm2@x.ru";
+                java.util.Set<String> hads = new java.util.HashSet<String>(java.util.Arrays.asList(h1, h2));
+                java.util.Map<String, String> hnt = new java.util.HashMap<String, String>();
+                java.util.List<IvaChatPatch.Msg> hm = new java.util.ArrayList<IvaChatPatch.Msg>();
+                hm.add(IvaChatPatch.msg("1", hme, h1, "Есть дрель?", "", "", 0, true, "2026-10-14T09:00:00+00:00", "T1"));
+                hm.add(IvaChatPatch.msg("2", h1, hme, "Да", "", "", 0, false, "2026-10-14T09:01:00.123456+00:00", "T1"));
+                hm.add(IvaChatPatch.msg("3", h2, hme, "Добрый день", "", "", 0, false, "2026-10-14T09:02:00+00:00", ""));
+                long cut = IvaChatPatch.parseIso("2026-10-14T09:01:00.123456+00:00");
+                java.util.Map<String, Long> hid = new java.util.HashMap<String, Long>();
+                hid.put(IvaChatPatch.chatKey("Adm@X.ru", "T1"), cut);
+                eq("чат 10.61: до удаления — два чата", IvaChatPatch.buildChats(hm, hme, hads, false, hnt, new java.util.HashMap<String, Long>()).size(), 2);
+                java.util.List<IvaChatPatch.Chat> hc = IvaChatPatch.buildChats(hm, hme, hads, false, hnt, hid);
+                eq("чат 10.61: удалённый у себя пропал, другой остался", hc.size() + "|" + hc.get(0).partner, "1|adm2@x.ru");
+                eq("чат 10.61: в переписке удалённого — пусто", IvaChatPatch.thread(hm, hme, hads, false, hnt, h1, "T1", hid).size(), 0);
+                hm.add(IvaChatPatch.msg("4", h1, hme, "Вы тут?", "", "", 0, false, "2026-10-14T10:00:00+00:00", "T1"));
+                hm.add(IvaChatPatch.msg("5", h1, hme, "", "", "https://x/voice/v5.m4a", 3, false, "2026-10-14T10:01:00+00:00", ""));
+                hc = IvaChatPatch.buildChats(hm, hme, hads, false, hnt, hid);
+                IvaChatPatch.Chat back = null;
+                for (IvaChatPatch.Chat c : hc) if (c.partner.equals(h1)) back = c;
+                eq("чат 10.61: написали снова — чат вернулся только с новыми (непрочитанные — тоже только новые)",
+                    back == null ? "нет" : back.count + "|" + back.unread + "|" + back.last.id + "|" + back.tool, "2|2|5|T1");
+                java.util.List<IvaChatPatch.Msg> ht = IvaChatPatch.thread(hm, hme, hads, false, hnt, h1, "T1", hid);
+                eq("чат 10.61: в переписке — только после удаления (голосовое без tool_id — по прежним правилам)", ht.size() + "|" + ht.get(0).id + "|" + ht.get(1).id, "2|4|5");
+                eq("чат 10.61: граница включительно, время не разобрано — скрыто",
+                    IvaChatPatch.hiddenMsg(hid, h1, "T1", cut) + "|" + IvaChatPatch.hiddenMsg(hid, h1, "T1", cut + 1) + "|" + IvaChatPatch.hiddenMsg(hid, h1, "T1", -1)
+                    + "|" + IvaChatPatch.hiddenMsg(hid, h1, "", 0) + "|" + IvaChatPatch.hiddenMsg(null, h1, "T1", 0), "true|false|true|false|false");
+                java.util.Map<String, Long> hsrv = new java.util.HashMap<String, Long>(), hloc = new java.util.HashMap<String, Long>();
+                hsrv.put("a|", 100L); hsrv.put("b|T", 50L); hloc.put("b|T", 70L); hloc.put("c|", 5L); hloc.put("a|", 10L);
+                eq("чат 10.61: сервер + удалённое за этот запуск — позднее", new java.util.TreeMap<String, Long>(IvaChatPatch.mergeHidden(hsrv, hloc)).toString(), "{a|=100, b|T=70, c|=5}");
+                eq("чат 10.61: слияние с пустым", IvaChatPatch.mergeHidden(null, null).size() + "|" + IvaChatPatch.mergeHidden(hsrv, null).size(), "0|2");
+                IvaChatPatch.hidden.put(IvaChatPatch.chatKey(h1, "T1"), cut);
+                eq("чат 10.61: уведомление о скрытом сообщении — список, о новом — переписка",
+                    (IvaChatPatch.locate(hm, hme, hads, false, hnt, "2") == null) + "|" + String.join("|", IvaChatPatch.locate(hm, hme, hads, false, hnt, "4")), "true|adm@x.ru|adm@x.ru|T1");
+                eq("чат 10.61: buildChats без карты — по общей", IvaChatPatch.buildChats(hm, hme, hads, false, hnt).size(), 2);
+                IvaChatPatch.hidden.clear();
+                eq("чат 10.61: тексты подтверждения", IvaChatPatch.HIDE_TITLE + " " + IvaChatPatch.HIDE_TEXT,
+                    "Удалить чат? Переписка пропадёт только у вас — у собеседника она останется. Если вам напишут снова, чат появится с новыми сообщениями.");
+                eq("чат 10.61: без SQL — понятная подсказка, проверка раз в 10 мин", IvaChatPatch.HIDE_NO_DB + "|" + IvaChatPatch.HIDDEN_RETRY_MS, "Удаление чатов заработает после обновления базы|600000");
+            }
             // 10.60: голосовые как в ВК — кнопка, волна по громкости, длительность; цвета приложения
             eq("голосовые 10.60: волна растёт с длительностью (1080 px, 2.75)", IvaChatPatch.voiceWavePx(0, 1080, 2.75f) + "|" + IvaChatPatch.voiceWavePx(10, 1080, 2.75f) + "|" + IvaChatPatch.voiceWavePx(120, 1080, 2.75f), "198|281|454");
             eq("голосовые 10.60: волна не шире 190dp и 42% экрана, не уже 72dp", IvaChatPatch.voiceWavePx(600, 3000, 1f) + "|" + IvaChatPatch.voiceWavePx(600, 300, 1f) + "|" + IvaChatPatch.voiceWavePx(-5, 100, 1f), "190|126|72");

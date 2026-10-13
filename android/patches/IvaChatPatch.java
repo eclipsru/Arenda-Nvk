@@ -164,16 +164,108 @@ final class IvaChatPatch {
         return low(partner) + "|" + clean(tool);
     }
 
-    /** Список переписок: по паре «собеседник + инструмент», свежие сверху. */
+    // ── 10.61: «удалить чат» — только у себя (решение владельца 14.10.2026) ──
+    // Таблица app_chat_hidden: (кто, собеседник, инструмент) → hidden_until = время последнего сообщения на момент
+    // удаления (из базы, а не часы телефона). Сообщения не позже него не показываются; новое — чат появляется,
+    // только с новыми сообщениями. У собеседника ничего не меняется, сообщения в базе не удаляются.
+    static final Map<String, Long> hidden = Collections.synchronizedMap(new HashMap<String, Long>());       // ключ чата → мс
+    static final Map<String, Long> hiddenLocal = Collections.synchronizedMap(new HashMap<String, Long>());  // удалённые за этот запуск
+    static long hiddenAt;
+    static boolean hiddenMissing;        // таблицы ещё нет (SQL не применён) — удаление недоступно
+    static final long HIDDEN_RETRY_MS = 600000L;
+    static String hiddenFor = "";         // для какого аккаунта подхвачена копия с телефона
+    static final String HIDDEN_PREFS = "iva_chat_hidden";
+
+    /** Копия на телефоне (чтобы без интернета удалённые чаты не возвращались): {ключ чата: мс}. */
+    static String hiddenToJson(Map<String, Long> h) {
+        JSONObject o = new JSONObject();
+        try { if (h != null) for (Map.Entry<String, Long> e : h.entrySet()) o.put(e.getKey(), e.getValue().longValue()); } catch (Throwable ignore) {}
+        return o.toString();
+    }
+
+    static Map<String, Long> hiddenFromJson(String s) {
+        HashMap<String, Long> out = new HashMap<String, Long>();
+        try {
+            JSONObject o = new JSONObject(clean(s).isEmpty() ? "{}" : s);
+            java.util.Iterator<String> it = o.keys();
+            while (it.hasNext()) {
+                String k = it.next();
+                long v = o.optLong(k, -1);
+                if (k.indexOf('|') > 0 && v >= 0) out.put(k, v);
+            }
+        } catch (Throwable ignore) {}
+        return out;
+    }
+
+    static void saveHidden(Activity a, String my) {
+        try {
+            String js;
+            synchronized (hidden) { js = hiddenToJson(hidden); }
+            a.getSharedPreferences(HIDDEN_PREFS, 0).edit().putString(low(my), js).apply();
+        } catch (Throwable ignore) {}
+    }
+    static volatile int hiddenVer;       // меняется при каждом изменении — для перерисовки
+
+    /** Сообщение удалённого у себя чата: время не позже «удалено до». Время не разобрано — тоже скрываем. */
+    static boolean hiddenMsg(Map<String, Long> hid, String partner, String tool, long at) {
+        if (hid == null || hid.isEmpty()) return false;
+        Long u = hid.get(chatKey(partner, tool));
+        return u != null && at <= u;
+    }
+
+    /** Ответ app_chat_hidden → ключ чата → мс (позднее из повторов). */
+    static Map<String, Long> parseHidden(JSONArray arr) {
+        HashMap<String, Long> out = new HashMap<String, Long>();
+        if (arr == null) return out;
+        for (int i = 0; i < arr.length(); i++) {
+            JSONObject o = arr.optJSONObject(i);
+            if (o == null) continue;
+            String p = low(o.optString("partner", ""));
+            long at = parseIso(o.optString("hidden_until", ""));
+            if (p.isEmpty() || at < 0) continue;
+            String k = chatKey(p, o.isNull("tool_id") ? "" : o.optString("tool_id", ""));
+            Long was = out.get(k);
+            if (was == null || at > was) out.put(k, at);
+        }
+        return out;
+    }
+
+    /** С сервера + удалённые за этот запуск (если сервер ещё не успел вернуть) — берём позднее. */
+    static Map<String, Long> mergeHidden(Map<String, Long> server, Map<String, Long> local) {
+        HashMap<String, Long> out = new HashMap<String, Long>();
+        if (server != null) out.putAll(server);
+        if (local != null) for (Map.Entry<String, Long> e : local.entrySet()) {
+            Long was = out.get(e.getKey());
+            if (was == null || e.getValue() > was) out.put(e.getKey(), e.getValue());
+        }
+        return out;
+    }
+
+    /** Тело iva_hide_chat: собеседник, инструмент, «удалено до» = время последнего сообщения, как в базе. */
+    static String hideBody(Chat c) throws Exception {
+        JSONObject b = new JSONObject();
+        b.put("p_partner", c.partner);
+        b.put("p_tool", c.tool);
+        b.put("p_until", c.last == null ? "" : c.last.created);
+        return b.toString();
+    }
+
     static List<Chat> buildChats(List<Msg> asc, String me, Set<String> admins, boolean sup,
                                  Map<String, String> localTags) {
-        Map<String, String> tools = assignTools(asc, me, admins, sup, localTags);
+        return buildChats(asc, me, admins, sup, localTags, hidden);
+    }
+
+    /** Список переписок: по паре «собеседник + инструмент», свежие сверху; удалённое у себя — не показываем. */
+    static List<Chat> buildChats(List<Msg> asc, String me, Set<String> admins, boolean sup,
+                                 Map<String, String> localTags, Map<String, Long> hid) {
+        Map<String, String> tools = assignTools(asc, me, admins, sup, localTags);   // по всем сообщениям — как до удаления
         LinkedHashMap<String, Chat> map = new LinkedHashMap<String, Chat>();
         String my = low(me);
         for (Msg m : asc) {
             if (!tools.containsKey(m.id)) continue;
             String p = partnerOf(m, me, admins, sup);
             String t = tools.get(m.id);
+            if (hiddenMsg(hid, p, t, m.at)) continue;
             String k = chatKey(p, t);
             Chat c = map.get(k);
             if (c == null) { c = new Chat(); c.partner = p; c.tool = t; map.put(k, c); }
@@ -196,12 +288,17 @@ final class IvaChatPatch {
     /** Сообщения одной переписки (по возрастанию времени). */
     static List<Msg> thread(List<Msg> asc, String me, Set<String> admins, boolean sup,
                             Map<String, String> localTags, String partner, String tool) {
+        return thread(asc, me, admins, sup, localTags, partner, tool, hidden);
+    }
+
+    static List<Msg> thread(List<Msg> asc, String me, Set<String> admins, boolean sup,
+                            Map<String, String> localTags, String partner, String tool, Map<String, Long> hid) {
         Map<String, String> tools = assignTools(asc, me, admins, sup, localTags);
         ArrayList<Msg> out = new ArrayList<Msg>();
         String p = low(partner), t = clean(tool);
         for (Msg m : asc) {
             if (!tools.containsKey(m.id)) continue;
-            if (partnerOf(m, me, admins, sup).equals(p) && t.equals(tools.get(m.id))) out.add(m);
+            if (partnerOf(m, me, admins, sup).equals(p) && t.equals(tools.get(m.id)) && !hiddenMsg(hid, p, t, m.at)) out.add(m);
         }
         return out;
     }
@@ -581,7 +678,7 @@ final class IvaChatPatch {
         for (Msg m : asc) {
             if (!m.id.equals(id) || !tools.containsKey(m.id)) continue;
             String p = partnerOf(m, me, admins, sup);
-            if (p.isEmpty()) return null;
+            if (p.isEmpty() || hiddenMsg(hidden, p, tools.get(m.id), m.at)) return null;
             return new String[]{p, partnerRawOf(m, p), tools.get(m.id)};
         }
         return null;
@@ -834,6 +931,7 @@ final class IvaChatPatch {
             // другой аккаунт — всё с нуля
             msgs = new ArrayList<Msg>(); msgsReady = false; seenIds.clear(); seenReady = false;
             clientNames.clear(); ordersAt = 0; peerPaths.clear(); peerBitmaps.clear(); peersAt = 0;
+            hidden.clear(); hiddenLocal.clear(); hiddenAt = 0; hiddenFor = ""; hiddenVer++;
             renderedSig = "";
         }
         if (now - adminsAt > CACHE_MS || admins.isEmpty()) {
@@ -852,6 +950,30 @@ final class IvaChatPatch {
             }
             synchronized (admins) { admins.clear(); admins.putAll(next); }
             adminsAt = now;
+        }
+        if (!my.equals(hiddenFor)) {                                          // первая загрузка аккаунта — копия с телефона
+            hiddenFor = my;
+            try {
+                Map<String, Long> cached = hiddenFromJson(a.getSharedPreferences(HIDDEN_PREFS, 0).getString(my, ""));
+                if (!cached.isEmpty()) { synchronized (hidden) { hidden.putAll(mergeHidden(hidden, cached)); } hiddenVer++; }
+            } catch (Throwable ignore) {}
+        }
+        if (now - hiddenAt > (hiddenMissing ? HIDDEN_RETRY_MS : CACHE_MS)) {      // нет таблицы — проверяем реже: SQL могут применить в любой момент
+            hiddenAt = now;
+            try {
+                String[] r = IvaClientPatch.apiCall(a, "/rest/v1/app_chat_hidden?select=partner,tool_id,hidden_until&limit=1000", "GET", null, true);
+                if (r != null && "404".equals(r[0])) hiddenMissing = true;          // SQL ещё не применён
+                else if (ok(r)) {
+                    hiddenMissing = false;
+                    String t = r.length > 1 && r[1] != null ? r[1].trim() : "";
+                    Map<String, Long> next;
+                    synchronized (hiddenLocal) { next = mergeHidden(parseHidden(t.startsWith("[") ? new JSONArray(t) : new JSONArray()), hiddenLocal); }
+                    synchronized (hidden) {
+                        if (!hidden.equals(next)) { hidden.clear(); hidden.putAll(next); hiddenVer++; }
+                    }
+                    saveHidden(a, my);
+                } else hiddenAt = 0;                                            // не ответил — спросим при следующей загрузке
+            } catch (Throwable e) { hiddenAt = 0; }
         }
         boolean sup = superView(my);
         String filter = msgFilter(my, sup);
@@ -969,7 +1091,7 @@ final class IvaChatPatch {
         s.append(loggedIn(a)).append('|').append(openPartner).append('|').append(openTool).append('|')
             .append(ready(str(IvaClientPatch.get(a, "userEmail")))).append('|').append(lastError).append('|').append(toolCache.size()).append('|')
             .append(admins.size()).append('|').append(clientNames.size()).append('|').append(peerBitmaps.size())
-            .append('|').append(localTags.size()).append('|');
+            .append('|').append(localTags.size()).append('|').append(hiddenVer).append('|');
         for (Msg m : msgs) s.append(m.id).append(m.read ? '+' : '-').append(m.tool).append(',');
         return s.toString();
     }
@@ -1996,7 +2118,65 @@ final class IvaChatPatch {
                 } catch (Throwable e) { fallback(a); }
             }
         });
+        row.setOnLongClickListener(new View.OnLongClickListener() {
+            @Override public boolean onLongClick(View v) { confirmHideChat(a, c); return true; }
+        });
         return row;
+    }
+
+    static final String HIDE_TITLE = "Удалить чат?";
+    static final String HIDE_TEXT = "Переписка пропадёт только у вас — у собеседника она останется. "
+        + "Если вам напишут снова, чат появится с новыми сообщениями.";
+    static final String HIDE_NO_DB = "Удаление чатов заработает после обновления базы";
+
+    /** Долгое нажатие на чат в списке: только после подтверждения, только у себя. */
+    static void confirmHideChat(final Activity a, final Chat c) {
+        if (c == null || c.last == null || c.partner.isEmpty()) return;
+        if (hiddenMissing) { Toast.makeText(a, HIDE_NO_DB, Toast.LENGTH_LONG).show(); return; }
+        try {
+            new AlertDialog.Builder(a)
+                .setTitle(HIDE_TITLE)
+                .setMessage(HIDE_TEXT)
+                .setNegativeButton("Отмена", null)
+                .setPositiveButton("Удалить", new DialogInterface.OnClickListener() {
+                    @Override public void onClick(DialogInterface d, int w) { hideChat(a, c); }
+                })
+                .show();
+        } catch (Throwable ignore) {}
+    }
+
+    static void hideChat(final Activity a, final Chat c) {
+        final String key = chatKey(c.partner, c.tool);
+        final long until = c.last.at;
+        new Thread(new Runnable() {
+            @Override public void run() {
+                String code = "";
+                try {
+                    String[] r = IvaClientPatch.apiCall(a, "/rest/v1/rpc/iva_hide_chat", "POST", hideBody(c), true);
+                    code = r == null ? "" : String.valueOf(r[0]);
+                    if (ok(r) && r.length > 1 && r[1] != null && r[1].trim().equals("1")) code = "ok";
+                } catch (Throwable ignore) {}
+                final String fc = code;
+                a.runOnUiThread(new Runnable() {
+                    @Override public void run() {
+                        if ("ok".equals(fc)) {
+                            synchronized (hiddenLocal) { Long was = hiddenLocal.get(key); if (was == null || until > was) hiddenLocal.put(key, until); }
+                            synchronized (hidden) { Long was = hidden.get(key); if (was == null || until > was) hidden.put(key, until); }
+                            hiddenVer++;
+                            saveHidden(a, me);
+                            renderedSig = "";
+                            render(a);
+                            Toast.makeText(a, "Чат удалён", Toast.LENGTH_SHORT).show();
+                        } else if ("404".equals(fc)) {
+                            hiddenMissing = true;
+                            Toast.makeText(a, HIDE_NO_DB, Toast.LENGTH_LONG).show();
+                        } else {
+                            Toast.makeText(a, "Не удалось удалить чат — проверьте интернет", Toast.LENGTH_LONG).show();
+                        }
+                    }
+                });
+            }
+        }).start();
     }
 
     static LinearLayout rowBase(Activity a) {
