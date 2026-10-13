@@ -46,7 +46,7 @@ try {
   // 10.40 — штатная строка «Клиент» остаётся единственной точкой входа, но открывает
   // отдельный полноэкранный экран настроек (не AlertDialog-форму); hook onActivityResult
   // в MainActivity по-прежнему отключён (с 10.39), фото возвращается во вспомогательный Fragment.
-  assert.match(code, /android\/patches\/IvaPatch\.java android\/patches\/IvaClientPatch\.java android\/patches\/IvaSearchPatch\.java android\/patches\/IvaChatPatch\.java android\/patches\/IvaOrderPatch\.java 2>&1/,
+  assert.match(code, /android\/patches\/IvaPatch\.java android\/patches\/IvaClientPatch\.java android\/patches\/IvaSearchPatch\.java android\/patches\/IvaChatPatch\.java android\/patches\/IvaOrderPatch\.java android\/patches\/IvaNotifyPatch\.java 2>&1/,
     `${f}: шаг 10.30 не компилирует IvaClientPatch`);
   assert.match(ap, /IvaClientPatch;->onProfile\(Landroid\/app\/Activity;\)V/,
     `${f}: hook onProfile не подключён`);
@@ -93,7 +93,7 @@ try {
   assert.match(jpc, /View plus = a\.findViewById\(id\(a, "navPlus"\)\);/, 'IvaClientPatch: обработчик логотипа не ставится на navPlus');
   assert.match(jpc, /if \(toHub && openClientHub\(a\)\) return;\n\s*callNativeTab\(a, "home"\);/, 'IvaClientPatch: «Назад» в карточке инструмента должна вести на главную, как штатная');
   assert.match(jpc, /try \{ installClientNav\(a\); \} catch \(Throwable ignore\) \{\}\n\s*try \{ if \(hubVisible && !isClient\(a\)\) callNativeTab\(a, "home"\); \}/, 'IvaClientPatch: onProfile не ставит логотип клиента или не прячет раздел при выходе');
-  assert.match(jp, /try \{ IvaClientPatch\.onShowTab\(a, tab\); \} catch \(Throwable ignore\) \{\}\n(?:\s*\/\/[^\n]*\n)?\s*try \{ IvaSearchPatch\.onShowTab\(a, tab\); \} catch \(Throwable ignore\) \{\}\n(?:\s*\/\/[^\n]*\n)?\s*try \{ IvaChatPatch\.onShowTab\(a, tab\); \} catch \(Throwable ignore\) \{\}\n(?:\s*\/\/[^\n]*\n)?\s*try \{ IvaOrderPatch\.onShowTab\(a, tab\); \} catch \(Throwable ignore\) \{\}\n    \}/, 'IvaPatch.onTab: штатный переход должен прятать раздел клиента, включать/прятать поиск 10.45, чат 10.54 и заявку 10.55');
+  assert.match(jp, /try \{ IvaClientPatch\.onShowTab\(a, tab\); \} catch \(Throwable ignore\) \{\}\n(?:\s*\/\/[^\n]*\n)?\s*try \{ IvaSearchPatch\.onShowTab\(a, tab\); \} catch \(Throwable ignore\) \{\}\n(?:\s*\/\/[^\n]*\n)?\s*try \{ IvaChatPatch\.onShowTab\(a, tab\); \} catch \(Throwable ignore\) \{\}\n(?:\s*\/\/[^\n]*\n)?\s*try \{ IvaOrderPatch\.onShowTab\(a, tab\); \} catch \(Throwable ignore\) \{\}\n(?:\s*\/\/[^\n]*\n)?\s*try \{ IvaNotifyPatch\.onShowTab\(a, tab\); \} catch \(Throwable ignore\) \{\}\n    \}/, 'IvaPatch.onTab: штатный переход должен прятать раздел клиента, включать/прятать поиск 10.45, чат 10.54, заявку 10.55 и уведомления 10.56');
   assert.match(jpc, /if \(hubVisible\) \{\n\s*detailFromHub = "detail"\.equals\(t\);\n\s*hideClientHub\(a\);/, 'IvaClientPatch: раздел клиента не прячется при штатном переходе');
   assert.match(jpc, /hubStyling = true;\n\s*try \{ IvaPatch\.onTab\(a, HUB_PAGE\); \}[^\n]*finally \{ hubStyling = false; \}/, 'IvaClientPatch: подсветка логотипа не должна прятать сам раздел');
   assert.match(jpc, /favs\.contains\("t" \+ tid\)/, 'IvaClientPatch: «Избранное» должно брать штатный набор favs (ключ t+id)');
@@ -258,8 +258,8 @@ try {
   // 10.54: чат по инструментам — новый файл компилируется и в сборке, и в проверке; вход только через IvaPatch.onTab
   {
     const chat = R('android/patches/IvaChatPatch.java'), chk54 = R('.github/workflows/check.yml'), ip = R('android/patches/IvaPatch.java');
-    assert.ok(/javac [^\n]*android\/patches\/IvaSearchPatch\.java android\/patches\/IvaChatPatch\.java android\/patches\/IvaOrderPatch\.java 2>&1/.test(code), 'build-apk.yml: IvaChatPatch.java не компилируется в сборку');
-    assert.ok(chk54.includes('android/patches/IvaSearchPatch.java android/patches/IvaChatPatch.java android/patches/IvaOrderPatch.java \\'), 'check.yml: IvaChatPatch.java не компилируется в проверке');
+    assert.ok(/javac [^\n]*android\/patches\/IvaSearchPatch\.java android\/patches\/IvaChatPatch\.java android\/patches\/IvaOrderPatch\.java android\/patches\/IvaNotifyPatch\.java 2>&1/.test(code), 'build-apk.yml: IvaChatPatch.java не компилируется в сборку');
+    assert.ok(chk54.includes('android/patches/IvaSearchPatch.java android/patches/IvaChatPatch.java android/patches/IvaOrderPatch.java android/patches/IvaNotifyPatch.java \\'), 'check.yml: IvaChatPatch.java не компилируется в проверке');
     const onTab = ip.slice(ip.indexOf('public static void onTab('), ip.indexOf('static boolean navSelected('));
     assert.ok(onTab.includes('try { IvaChatPatch.onShowTab(a, tab); } catch (Throwable ignore) {}'), 'IvaPatch.onTab: нет безопасного вызова IvaChatPatch');
     assert.ok(!R('android/patches/apply.py').includes('IvaChatPatch'), 'IvaChatPatch: новые smali-хуки не нужны (вход — IvaPatch.onTab)');
@@ -360,6 +360,44 @@ try {
       && fio.includes('fio(p.optString("surname", ""), p.optString("given_name", ""), p.optString("patronymic", ""), userName)')
       && !/apiCall|\"POST\"/.test(fio), 'IvaOrderPatch.fillFio: ФИО из профиля по полям, без записи в профиль и без затирания правок клиента');
     assert.ok(/eq\("заявка 10\.55: ФИО из профиля по полям/.test(R('android/patches/test/IvaPatchTest.java')), 'IvaPatchTest: проверки заявки 10.55');
+  }
+  // 10.56: «Настройки» в кабинете → уведомления с переключателями; свой опрос вместо штатного; без Firebase и новых разрешений.
+  {
+    const np = R('android/patches/IvaNotifyPatch.java'), chk56 = R('.github/workflows/check.yml');
+    assert.ok(code.includes('android/patches/IvaOrderPatch.java android/patches/IvaNotifyPatch.java 2>&1') && chk56.includes('android/patches/IvaNotifyPatch.java \\'),
+      'IvaNotifyPatch.java не компилируется в сборке или в проверке');
+    assert.ok(!R('android/patches/apply.py').includes('IvaNotifyPatch'), 'IvaNotifyPatch: новые smali-хуки не нужны (вход — IvaPatch.onTab)');
+    assert.ok(!/firebase|com\.google\.android\.gms|JobScheduler|AlarmManager|WorkManager/i.test(np), 'IvaNotifyPatch: этап 1 — без Firebase и фоновых служб');
+    assert.ok(!/customer_profiles|passport|phone|surname/.test(np), 'IvaNotifyPatch: лишние персональные данные');
+    assert.ok(np.includes('static boolean pref(Context c, String k) { return prefs(c).getBoolean(k, true); }'), 'уведомления 10.56: по умолчанию всё включено');
+    assert.ok(np.includes('if (!all || !own) return false;\n        return !K_ORD.equals(kind) || admin;')
+      && np.includes('if (admin) kids.add(switchRow(a, card, "Новые заявки"') && np.includes('if (logged && admin && !email.isEmpty()) checkOrders(a, email);'),
+      'уведомления 10.56: «Новые заявки» — только админам, общий переключатель выключает всё');
+    assert.ok(np.includes('static final String CH_MSG = "iva_msg", CH_ORD = "iva_orders", CH_UPD = "iva_update";')
+      && np.includes('int imp = CH_UPD.equals(id) ? NotificationManager.IMPORTANCE_DEFAULT : NotificationManager.IMPORTANCE_HIGH;'),
+      'уведомления 10.56: три канала; сообщения и заявки — всплывающие (HIGH)');
+    const stop = np.slice(np.indexOf('static void stopNative(Activity a)'), np.indexOf('static void startPoll()'));
+    assert.ok(stop.includes('Object h = get(a, "pollHandler"), r = get(a, "pollRun");') && stop.includes('removeCallbacks((Runnable) r)')
+      && stop.includes('IvaClientPatch.set(a, "lastNewCnt", Integer.valueOf(-1));') && stop.includes('IvaClientPatch.set(a, "lastUnread", Integer.valueOf(-1));'),
+      'уведомления 10.56: штатный опрос (без настроек) должен выключаться');
+    assert.ok(np.includes('static final long POLL_MS = 30000L;') && np.includes('poll.postDelayed(TICK, POLL_MS);') && !/postDelayed\(TICK, [0-9]{1,3}\)/.test(np),
+      'уведомления 10.56: опрос раз в 30 с, как штатный');
+    assert.ok(np.includes('if (t instanceof TextView) ((TextView) t).setText(n > 0 ? "Заявки •" : "Заявки");'), 'уведомления 10.56: отметка «Заявки •» в меню осталась');
+    assert.ok(np.includes('if (nw.isEmpty() || inChat || !on(a, K_MSG, admin)) return;') && np.includes('b.setVisibility(Notification.VISIBILITY_PRIVATE);'),
+      'уведомления 10.56: в открытом чате без уведомления; на экране блокировки без текста сообщения');
+    assert.ok(np.includes('(Build.VERSION.SDK_INT >= 23 ? PendingIntent.FLAG_IMMUTABLE : 0)'), 'уведомления 10.56: PendingIntent без FLAG_IMMUTABLE упадёт на Android 12+');
+    assert.ok(np.includes('static final long UPDATE_EVERY_MS = 6L * 60 * 60 * 1000;') && np.includes('static final String UPDATE_URL = "https://eclipsru.github.io/Arenda-Nvk/app-update.json";')
+      && has(dex14, 'https://eclipsru.github.io/Arenda-Nvk/app-update.json'), 'уведомления 10.56: обновления — тот же app-update.json, что у штатной кнопки, не чаще раза в 6 часов');
+    for (const str of ['pollHandler', 'pollRun', 'lastNewCnt', 'lastUnread', 'navOrdersTxt', 'isAdminEmail', 'curTab', 'accessToken', 'userEmail', 'showTab',
+      '/rest/v1/order_parts?select=id&status=eq.new&archived=eq.false&owner_email=eq.', 'app_messages'])
+      assert.ok(has(dex14, str), `classes.dex 10.14: нет «${str}» — уведомления 10.56 не найдут штатное поле или метод`);
+    for (const str of ['profHelp', 'bg_card', 'ic_gear', 'ic_chat', 'ic_chevron'])
+      assert.ok(has(arsc14, str), `resources.arsc 10.14: нет «${str}» — строка «Настройки» потеряет штатный вид`);
+    const row = np.slice(np.indexOf('static void ensureRow(final Activity a)'), np.indexOf('static Dialog settings;'));
+    assert.ok(row.includes('if (box.findViewWithTag(ROW_TAG) != null) return;') && row.includes('box.addView(row, box.indexOfChild(help), lp);')
+      && row.includes('row.setPadding(dp(a, 16), dp(a, 16), dp(a, 16), dp(a, 16));') && row.includes('t.setTextSize(15f);') && !row.includes('removeView'),
+      'IvaNotifyPatch.ensureRow: строка «Настройки» — одна, перед «Инструкция», в штатном виде строк кабинета, ничего не удаляет');
+    assert.ok(/eq\("уведомления 10\.56: /.test(R('android/patches/test/IvaPatchTest.java')), 'IvaPatchTest: проверки уведомлений 10.56');
   }
   // радиус — только вид: варианты встречаются лишь в объявлении и в шторке, на фильтр/подсчёт не влияют
   assert.equal((js45.match(/RADIUS_TITLES/g) || []).length, 3, 'IvaSearchPatch: радиус не должен участвовать в фильтре (только заготовка в шторке)');

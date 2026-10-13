@@ -420,6 +420,8 @@ public final class IvaPatch {
         try { IvaChatPatch.onShowTab(a, tab); } catch (Throwable ignore) {}
         // 10.55: заявка — ФИО по полям, без количества, свой срок у инструмента, «+ Добавить инструмент», один прокат.
         try { IvaOrderPatch.onShowTab(a, tab); } catch (Throwable ignore) {}
+        // 10.56: «Настройки» в кабинете (уведомления с переключателями) и свой опрос вместо штатного.
+        try { IvaNotifyPatch.onShowTab(a, tab); } catch (Throwable ignore) {}
     }
 
     /** Чистая проверка выбора пункта — вынесена отдельно, чтобы её можно было проверить без Activity. */
