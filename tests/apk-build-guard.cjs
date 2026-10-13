@@ -265,10 +265,10 @@ try {
     assert.ok(!R('android/patches/apply.py').includes('IvaChatPatch'), 'IvaChatPatch: новые smali-хуки не нужны (вход — IvaPatch.onTab)');
     // штатные поля, методы и ресурсы, к которым чат обращается через отражение, — есть в 10.14
     for (const str of ['chatWith', 'chatTool', 'detItem', 'detOwner', 'chatList', 'chatScroll', 'pageChat', 'chatInput', 'curTab',
-      'userEmail', 'userName', 'accessToken', 'isAdminEmail', 'loadChat', 'sendChat', 'showTab', 'loadPhoto', 'playVoice', 'humanError',
+      'userEmail', 'userName', 'accessToken', 'isAdminEmail', 'loadChat', 'sendChat', 'showTab', 'loadPhoto', 'humanError',
       'lambda$setupChat$88$ru-prokatnvsk-app-MainActivity'])
       assert.ok(has(dex14, str), `classes.dex 10.14: нет «${str}» — чат 10.54 не найдёт штатное поле или метод`);
-    for (const str of ['detAsk', 'chatSend', 'bg_bubble_me', 'bg_bubble_other', 'bg_avatar', 'bg_card', 'bg_photo', 'bg_badge', 'ic_play', 'ic_wrench'])
+    for (const str of ['detAsk', 'chatSend', 'bg_bubble_me', 'bg_bubble_other', 'bg_avatar', 'bg_card', 'bg_photo', 'bg_badge', 'ic_play', 'ic_pause', 'ic_mic', 'ic_wrench'])
       assert.ok(has(arsc14, str), `resources.arsc 10.14: нет «${str}» — чат 10.54 потеряет штатный вид`);
     // «Спросить…» без автосообщения: в нашем обработчике нет POST с текстом «Вопрос по инструменту»; без входа / админу — штатный обработчик
     const ask = chat.slice(chat.indexOf('static void hookAsk('), chat.indexOf('static void nativeAsk('));
@@ -413,8 +413,8 @@ try {
       && cp.includes('try { syncState(a); render(a); refresh(a); } catch (Throwable e) { fallback(a); }\n                        startLive();'),
       'чат 10.57: та же выборка, что у загрузки; запуск при входе в «Чат»');
     assert.ok(np.includes('static void setIcons(Context c, Notification.Builder b, int fallback) {') && np.includes('b.setSmallIcon(android.graphics.drawable.Icon.createWithBitmap(si));')
-      && np.includes('if (lg != null) b.setLargeIcon(lg);') && (np.match(/setIcons\(c, (b|pub), icon\);/g) || []).length === 2,
-      'уведомления 10.57: силуэт логотипа в строке состояния и цветной логотип — и в обычном, и в скрытом (экран блокировки) виде');
+      && (np.match(/setIcons\(c, (b|pub), icon\);/g) || []).length === 2,
+      'уведомления 10.57: силуэт логотипа в строке состояния — и в обычном, и в скрытом (экран блокировки) виде');
     assert.ok(np.includes('getIdentifier("ic_logo", "drawable"') && has(arsc14, 'ic_logo'), 'уведомления 10.57: цветной логотип — штатный ic_logo');
     const png = Buffer.from((np.match(/STATUS_ICON_PNG =\s*([\s\S]*?);/) || [])[1].replace(/[\s"+]/g, ''), 'base64');
     assert.ok(png.slice(1, 4).toString() === 'PNG' && png.readUInt32BE(16) === 96 && png.readUInt32BE(20) === 96 && png[25] === 6,
@@ -423,6 +423,34 @@ try {
       'уведомления 10.57: первый запуск — о непрочитанных за сутки');
     assert.ok(/eq\("чат 10\.57: /.test(R('android/patches/test/IvaPatchTest.java')) && /eq\("уведомления 10\.57: /.test(R('android/patches/test/IvaPatchTest.java')),
       'IvaPatchTest: проверки 10.57');
+  }
+  // 10.58: голосовые — вид штатного пузыря v9.8 и своё воспроизведение из кэша; уведомление-«разговор» с цветным логотипом слева, без картинки справа.
+  {
+    const cp = R('android/patches/IvaChatPatch.java'), np = R('android/patches/IvaNotifyPatch.java'), tp = R('android/patches/test/IvaPatchTest.java');
+    const vb = cp.slice(cp.indexOf('static View voiceBubble('), cp.indexOf('static void voiceIcon('));
+    assert.ok(vb.includes('setBg(a, v, "bg_bubble_other");') && !vb.includes('bg_bubble_me') && vb.includes('res(a, "ic_mic", "drawable")')
+      && vb.includes('text(a, "Голосовое", 14, "white", true)') && vb.includes('mine ? "text" : "orange", true)')
+      && vb.includes('btn.setColorFilter(color(a, "white"));') && vb.includes('v.setOnClickListener(tap);') && vb.includes('btn.setOnClickListener(tap);'),
+      'голосовые 10.58: тёмный пузырь и у своих, микрофон, «Голосовое», длительность, белая кнопка справа — как в v9.8');
+    assert.ok(!cp.includes('"playVoice"') && cp.includes('mp.prepareAsync();') && (cp.match(/\.prepare\(\);/g) || []).length === 1
+      && cp.includes('try { f = voiceFile(a, url); } catch (Throwable e) { err = e.getMessage(); }') && cp.includes('vWorker.execute(new Runnable() {'),
+      'голосовые 10.58: не штатный playVoice (prepare по сети в UI-потоке) — скачивание в фоне, prepareAsync; синхронный prepare только в фоновой очереди длительностей');
+    assert.ok(cp.includes('if (!chat) voiceStop(a);') && cp.includes('openPartner = ""; openPartnerRaw = ""; openTool = "";\n        voiceStop(a);')
+      && cp.includes('if (key.equals(vKey)) {\n            // Перерисовка'),
+      'голосовые 10.58: замолкает при уходе из чата/переписки; перерисовка подхватывает играющее');
+    assert.ok(cp.includes('Toast.makeText(a, "Голосовое не загрузилось"') && cp.includes('voiceFail(a, f, what + "/" + extra);'),
+      'голосовые 10.58: понятная причина, если не загрузилось или не играет');
+    assert.ok(!np.includes('setLargeIcon') && !np.includes('LARGE_ICON_PX'), 'уведомления 10.58: картинки справа нет (решение владельца 14.10)');
+    const cv = np.slice(np.indexOf('static boolean conversation('), np.indexOf('/** Нажали на уведомление'));
+    assert.ok(cv.includes('if (Build.VERSION.SDK_INT < 30) return false;') && cv.includes('.setLongLived(true)') && cv.includes('sm.pushDynamicShortcut(info);')
+      && cv.includes('b.setShortcutId(sid);') && cv.includes('new Notification.MessagingStyle(self)') && cv.includes('ms.setGroupConversation(false);')
+      && cv.includes('sm.removeDynamicShortcuts(ids);') && !cv.includes('removeLongLivedShortcuts'),
+      'уведомления 10.58: Android 11+ — «разговор» (MessagingStyle + долгоживущий ярлык) с логотипом в кружке слева');
+    assert.ok(np.includes('if (!conversation(a, b, ch, title, text, open)) b.setStyle(new Notification.BigTextStyle().bigText(text));'),
+      'уведомления 10.58: не вышло или Android до 11 — обычный вид с полным текстом');
+    assert.ok(np.includes('cv.drawCircle(AVATAR_PX / 2f, AVATAR_PX / 2f, AVATAR_PX / 2f, pt);') && np.includes('getIdentifier("ic_logo", "drawable"'),
+      'уведомления 10.58: штатный ic_logo, обрезанный кругом');
+    assert.ok(/eq\("голосовые 10\.58: /.test(tp) && /eq\("уведомления 10\.58: /.test(tp), 'IvaPatchTest: проверки 10.58');
   }
   // радиус — только вид: варианты встречаются лишь в объявлении и в шторке, на фильтр/подсчёт не влияют
   assert.equal((js45.match(/RADIUS_TITLES/g) || []).length, 3, 'IvaSearchPatch: радиус не должен участвовать в фильтре (только заготовка в шторке)');

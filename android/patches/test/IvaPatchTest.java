@@ -492,7 +492,25 @@ public class IvaPatchTest {
             } catch (Throwable e) {
                 eq("уведомления 10.57: значок читается", String.valueOf(e), "");
             }
-            eq("уведомления 10.57: логотип в шторке", IvaNotifyPatch.LARGE_ICON_PX, 192);
+            eq("уведомления 10.58: логотип в кружке слева — 192 px", IvaNotifyPatch.AVATAR_PX, 192);
+            eq("уведомления 10.58: ярлыки разговоров по каналам", IvaNotifyPatch.SHORTCUT_PREFIX + IvaNotifyPatch.CH_MSG + "|" + IvaNotifyPatch.shortcutLabel(IvaNotifyPatch.CH_MSG)
+                + "|" + IvaNotifyPatch.shortcutLabel(IvaNotifyPatch.CH_ORD) + "|" + IvaNotifyPatch.shortcutLabel(IvaNotifyPatch.CH_UPD), "iva_note_iva_msg|Сообщения|Заявки|Обновления");
+            eq("уведомления 10.58: ярлык убирается через 5 с", IvaNotifyPatch.SHORTCUT_DROP_MS, 5000L);
+            // голосовые 10.58 — размеры как у штатного пузыря v9.8
+            eq("голосовые 10.58: полоска 38% экрана (1080 px, 2.75)", IvaChatPatch.voiceTrackPx(1080, 2.75f), 410);
+            eq("голосовые 10.58: полоска не уже 84dp", IvaChatPatch.voiceTrackPx(100, 1f) + "|" + IvaChatPatch.voiceTrackPx(300, 1f), "84|114");
+            eq("голосовые 10.58: полоска не шире 150dp", IvaChatPatch.voiceTrackPx(1440, 2f), 300);
+            eq("голосовые 10.58: «Голосовое» 24% экрана, 44…96dp", IvaChatPatch.voiceLabelMaxPx(1080, 2.75f) + "|" + IvaChatPatch.voiceLabelMaxPx(100, 1f) + "|" + IvaChatPatch.voiceLabelMaxPx(2000, 1f), "259|44|96");
+            eq("голосовые 10.58: прогресс — доля от полоски", IvaChatPatch.voiceFillPx(2500, 10000, 400), 100);
+            eq("голосовые 10.58: прогресс не вылезает за полоску", IvaChatPatch.voiceFillPx(12000, 10000, 400), 400);
+            eq("голосовые 10.58: прогресс при неизвестной длительности — 0", IvaChatPatch.voiceFillPx(500, 0, 400) + "|" + IvaChatPatch.voiceFillPx(-1, 100, 400), "0|0");
+            String vn = IvaChatPatch.voiceCacheName("https://x.supabase.co/storage/v1/object/public/voice/v1760-123.m4a?t=1");
+            eq("голосовые 10.58: имя в кэше — из ссылки", vn.endsWith("-v1760-123.m4a"), true);
+            eq("голосовые 10.58: имя в кэше без опасных символов", IvaChatPatch.voiceCacheName("https://x/voice/../a b%.m4a").matches("[0-9a-f]+-[A-Za-z0-9._-]+") && !IvaChatPatch.voiceCacheName("https://x/voice/../a b%.m4a").contains("/"), true);
+            eq("голосовые 10.58: разные ссылки — разные файлы", IvaChatPatch.voiceCacheName("https://a/voice/v.m4a").equals(IvaChatPatch.voiceCacheName("https://b/voice/v.m4a")), false);
+            eq("голосовые 10.58: ссылка без имени", IvaChatPatch.voiceCacheName("https://a/voice/").matches("[0-9a-f]+-v"), true);
+            eq("голосовые 10.58: прогресс раз в 100 мс", IvaChatPatch.VOICE_TICK_MS, 100);
+            eq("голосовые 10.58: цвета полоски как в v9.8", Integer.toHexString(IvaChatPatch.VOICE_FILL) + "|" + Integer.toHexString(IvaChatPatch.VOICE_TRACK_BG), "ffffc26b|33ffffff");
         }
         if (fail > 0) { System.out.println("ошибок: " + fail); System.exit(1); }
         System.out.println("все проверки IvaPatch пройдены");

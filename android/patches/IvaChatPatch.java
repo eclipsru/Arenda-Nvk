@@ -71,7 +71,6 @@ final class IvaChatPatch {
     static final int LIST_TOOL_DP = 44;
     static final int HEAD_TOOL_DP = 56;
     static final int MSG_AVATAR_DP = 30;
-    static final int VOICE_TRACK_DP = 150;      // штатный playVoice растягивает fill до доли от 150dp
 
     // ───────────────────────── 1. Чистая модель (проверяется в IvaPatchTest без Android) ─────────────────────────
 
@@ -398,6 +397,7 @@ final class IvaChatPatch {
             if (handler == null) handler = new Handler(Looper.getMainLooper());
             // При запуске showTab идёт ещё внутри onCreate (до setupChat) — ставим всё отдельным шагом.
             final boolean chat = "chat".equals(tab);
+            if (!chat) voiceStop(a);                    // ушли из чата — голосовое замолкает
             handler.post(new Runnable() {
                 @Override public void run() {
                     try { install(a); } catch (Throwable ignore) {}
@@ -554,6 +554,7 @@ final class IvaChatPatch {
         lastToolObj = null;
         lastWith = "";
         openPartner = ""; openPartnerRaw = ""; openTool = "";
+        voiceStop(a);
         renderedSig = "";
         callNative(a, "loadChat");
         render(a);
@@ -1116,48 +1117,380 @@ final class IvaChatPatch {
         return partnerTitle(f);
     }
 
-    static View voiceBubble(final Activity a, Msg m, boolean mine) {
+    // ───────────────────────── Голосовые (10.58) ─────────────────────────
+    // Внешний вид — как штатный пузырь v9.8 (10.14 renderChat): тёмный bg_bubble_other для всех,
+    // микрофон, «Голосовое», длительность, кнопка ▶/❚❚ справа, полоска прогресса снизу.
+    // Воспроизведение своё: файл сначала скачивается в кэш (штатный playVoice делал prepare()
+    // потоком по сети прямо в UI-потоке), состояние привязано к id сообщения, а не к View —
+    // поэтому перерисовка чата не «отрывает» кнопку и полоску от играющего плеера.
+
+    static final int VOICE_TICK_MS = 100;
+    static final int VOICE_FILL = 0xFFFFC26B;
+    static final int VOICE_TRACK_BG = 0x33FFFFFF;
+
+    static android.media.MediaPlayer vMp;
+    static String vKey = "";             // id сообщения (или ссылка), которое сейчас играет/грузится
+    static boolean vLoading;             // идёт скачивание/подготовка
+    static boolean vPlaying;
+    static WeakReference<ImageView> vBtn = new WeakReference<ImageView>(null);
+    static WeakReference<View> vFill = new WeakReference<View>(null);
+    static WeakReference<View> vTrack = new WeakReference<View>(null);
+    static final Map<String, Integer> vDur = new HashMap<String, Integer>();   // ссылка → секунды
+    static final Set<String> vDurAsked = new HashSet<String>();
+    static final java.util.concurrent.ExecutorService vWorker = java.util.concurrent.Executors.newSingleThreadExecutor();
+
+    /** Ширина полоски, как у штатного пузыря: 38% экрана, но 84…150dp. */
+    static int voiceTrackPx(int screenW, float density) {
+        int min = Math.round(84 * density), max = Math.round(150 * density);
+        return Math.max(min, Math.min(max, Math.round(screenW * 0.38f)));
+    }
+
+    /** Ширина «Голосовое», как у штатного: 24% экрана, но 44…96dp. */
+    static int voiceLabelMaxPx(int screenW, float density) {
+        int min = Math.round(44 * density), max = Math.round(96 * density);
+        return Math.max(min, Math.min(max, Math.round(screenW * 0.24f)));
+    }
+
+    /** Заполненная часть полоски. */
+    static int voiceFillPx(int pos, int dur, int trackW) {
+        if (dur <= 0 || trackW <= 0 || pos <= 0) return 0;
+        return Math.round(trackW * Math.min(1f, pos / (float) dur));
+    }
+
+    /** Имя файла в кэше: из ссылки, только безопасные символы. */
+    static String voiceCacheName(String url) {
+        String u = clean(url);
+        int q = u.indexOf('?');
+        if (q >= 0) u = u.substring(0, q);
+        String tail = u.substring(u.lastIndexOf('/') + 1);
+        StringBuilder b = new StringBuilder();
+        for (int i = 0; i < tail.length() && b.length() < 80; i++) {
+            char c = tail.charAt(i);
+            b.append((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '.' || c == '-' || c == '_' ? c : '_');
+        }
+        String n = b.toString();
+        if (n.isEmpty() || n.startsWith(".")) n = "v" + n;
+        return Integer.toHexString(u.hashCode()) + "-" + n;
+    }
+
+    static String voiceKey(Msg m) {
+        return m.id.isEmpty() ? m.audio : m.id;
+    }
+
+    static View voiceBubble(final Activity a, final Msg m, boolean mine) {
+        int sw = a.getResources().getDisplayMetrics().widthPixels;
+        float den = a.getResources().getDisplayMetrics().density;
         LinearLayout v = new LinearLayout(a);
-        v.setOrientation(LinearLayout.HORIZONTAL);
-        v.setGravity(Gravity.CENTER_VERTICAL);
-        setBg(a, v, mine ? "bg_bubble_me" : "bg_bubble_other");
-        v.setPadding(dp(a, 10), dp(a, 8), dp(a, 14), dp(a, 8));
+        v.setOrientation(LinearLayout.VERTICAL);
+        setBg(a, v, "bg_bubble_other");                 // как в v9.8: тёмный и у своих
+        v.setPadding(dp(a, 14), dp(a, 10), dp(a, 14), dp(a, 10));
+
+        LinearLayout row = new LinearLayout(a);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setGravity(Gravity.CENTER_VERTICAL);
+        ImageView mic = new ImageView(a);
+        int micId = res(a, "ic_mic", "drawable");
+        if (micId != 0) mic.setImageResource(micId);
+        LinearLayout.LayoutParams mpl = new LinearLayout.LayoutParams(dp(a, 15), dp(a, 15));
+        mpl.rightMargin = dp(a, 7);
+        row.addView(mic, mpl);
+        TextView label = text(a, "Голосовое", 14, "white", true);
+        label.setSingleLine(true);
+        label.setEllipsize(TextUtils.TruncateAt.END);
+        label.setMaxWidth(voiceLabelMaxPx(sw, den));
+        row.addView(label);
+        int known = m.dur;
+        if (known <= 0) {
+            Integer c;
+            synchronized (vDur) { c = vDur.get(m.audio); }
+            if (c != null) known = c;
+        }
+        TextView dur = text(a, known > 0 ? durLabel(known) : "", 14, mine ? "text" : "orange", true);
+        dur.setSingleLine(true);
+        LinearLayout.LayoutParams dl = new LinearLayout.LayoutParams(-2, -2);
+        dl.leftMargin = dp(a, 5);
+        row.addView(dur, dl);
         final ImageView btn = new ImageView(a);
-        int play = res(a, "ic_play", "drawable");
-        if (play != 0) btn.setImageResource(play);
-        v.addView(btn, new LinearLayout.LayoutParams(dp(a, 28), dp(a, 28)));
-        LinearLayout col = new LinearLayout(a);
-        col.setOrientation(LinearLayout.VERTICAL);
-        LinearLayout track = new LinearLayout(a);
+        btn.setScaleType(ImageView.ScaleType.FIT_CENTER);
+        btn.setColorFilter(color(a, "white"));
+        btn.setPadding(dp(a, 3), dp(a, 3), dp(a, 3), dp(a, 3));
+        LinearLayout.LayoutParams bl = new LinearLayout.LayoutParams(dp(a, 24), dp(a, 24));
+        bl.leftMargin = dp(a, 8);
+        bl.gravity = Gravity.CENTER_VERTICAL;
+        row.addView(btn, bl);
+        v.addView(row, new LinearLayout.LayoutParams(-2, -2));
+
+        final LinearLayout track = new LinearLayout(a);
+        track.setOrientation(LinearLayout.HORIZONTAL);
         GradientDrawable tg = new GradientDrawable();
-        tg.setColor(0x33FFFFFF);
+        tg.setColor(VOICE_TRACK_BG);
         tg.setCornerRadius(dp(a, 2));
         track.setBackground(tg);
         final View fill = new View(a);
         GradientDrawable fg = new GradientDrawable();
-        fg.setColor(0xFFFFC26B);
+        fg.setColor(VOICE_FILL);
         fg.setCornerRadius(dp(a, 2));
         fill.setBackground(fg);
-        track.addView(fill, new LinearLayout.LayoutParams(0, dp(a, 4)));
-        col.addView(track, new LinearLayout.LayoutParams(dp(a, VOICE_TRACK_DP), dp(a, 4)));
-        final TextView label = text(a, "Голосовое" + (m.dur > 0 ? " · " + durLabel(m.dur) : ""), 13, mine ? "white" : "text", false);
-        label.setPadding(0, dp(a, 6), 0, 0);
-        col.addView(label);
-        LinearLayout.LayoutParams cl = new LinearLayout.LayoutParams(-2, -2);
-        cl.leftMargin = dp(a, 8);
-        v.addView(col, cl);
-        final String url = m.audio;
-        v.setOnClickListener(new View.OnClickListener() {
-            @Override public void onClick(View x) {
-                try {
-                    call(a, "playVoice", new Class<?>[]{TextView.class, View.class, String.class, ImageView.class}, label, fill, url, btn);
-                } catch (Throwable e) {
-                    Toast.makeText(a, "Не удалось воспроизвести", Toast.LENGTH_SHORT).show();
-                }
-            }
-        });
+        track.addView(fill, new LinearLayout.LayoutParams(0, -1));
+        final int trackW = voiceTrackPx(sw, den);
+        LinearLayout.LayoutParams tl = new LinearLayout.LayoutParams(trackW, dp(a, 4));
+        tl.topMargin = dp(a, 7);
+        v.addView(track, tl);
+
+        final String key = voiceKey(m);
+        if (key.equals(vKey)) {
+            // Перерисовка во время воспроизведения — подхватываем новые View.
+            vBtn = new WeakReference<ImageView>(btn);
+            vFill = new WeakReference<View>(fill);
+            vTrack = new WeakReference<View>(track);
+            voiceShow(a);
+        } else {
+            voiceIcon(a, btn, false, false);
+        }
+        if (known <= 0) voiceAskDuration(a, m.audio);
+
+        View.OnClickListener tap = new View.OnClickListener() {
+            @Override public void onClick(View x) { voiceTap(a, key, m.audio, btn, fill, track); }
+        };
+        v.setOnClickListener(tap);
+        btn.setOnClickListener(tap);
         return v;
     }
+
+    static void voiceIcon(Activity a, ImageView btn, boolean playing, boolean loading) {
+        if (btn == null) return;
+        int id = res(a, playing ? "ic_pause" : "ic_play", "drawable");
+        if (id != 0) btn.setImageResource(id);
+        btn.setAlpha(loading ? 0.45f : 1f);
+    }
+
+    /** Кнопка и полоска текущего голосового — по состоянию плеера. */
+    static void voiceShow(Activity a) {
+        voiceIcon(a, vBtn.get(), vPlaying, vLoading);
+        View f = vFill.get();
+        View t = vTrack.get();
+        if (f == null) return;
+        int w = 0;
+        try {
+            if (vMp != null && !vLoading) {
+                int tw = t != null && t.getWidth() > 0 ? t.getWidth() : (t != null && t.getLayoutParams() != null ? t.getLayoutParams().width : 0);
+                w = voiceFillPx(vMp.getCurrentPosition(), vMp.getDuration(), tw);
+            }
+        } catch (Throwable ignore) {}
+        ViewGroup.LayoutParams lp = f.getLayoutParams();
+        if (lp != null && lp.width != w) { lp.width = w; f.setLayoutParams(lp); }
+    }
+
+    static final Runnable V_TICK = new Runnable() {
+        @Override public void run() {
+            Activity a = act.get();
+            if (a == null || vMp == null || !vPlaying) return;
+            voiceShow(a);
+            handler.postDelayed(this, VOICE_TICK_MS);
+        }
+    };
+
+    static void voiceTap(final Activity a, final String key, final String url, ImageView btn, View fill, View track) {
+        vBtn = new WeakReference<ImageView>(btn);
+        vFill = new WeakReference<View>(fill);
+        vTrack = new WeakReference<View>(track);
+        if (key.equals(vKey)) {
+            if (vLoading) return;                       // ещё скачивается — ждём
+            if (vMp != null) {
+                try {
+                    if (vPlaying) {
+                        vMp.pause();
+                        vPlaying = false;
+                        handler.removeCallbacks(V_TICK);
+                    } else {
+                        vMp.start();
+                        vPlaying = true;
+                        handler.removeCallbacks(V_TICK);
+                        handler.post(V_TICK);
+                    }
+                } catch (Throwable e) {
+                    voiceStop(a);
+                    Toast.makeText(a, "Не удалось воспроизвести", Toast.LENGTH_SHORT).show();
+                    return;
+                }
+                voiceShow(a);
+                return;
+            }
+        }
+        // Другое голосовое: старое останавливаем, новое скачиваем и играем.
+        ImageView keepBtn = btn; View keepFill = fill; View keepTrack = track;
+        voiceStop(a);
+        vBtn = new WeakReference<ImageView>(keepBtn);
+        vFill = new WeakReference<View>(keepFill);
+        vTrack = new WeakReference<View>(keepTrack);
+        vKey = key;
+        vLoading = true;
+        voiceShow(a);
+        new Thread(new Runnable() {
+            @Override public void run() {
+                String err = null;
+                java.io.File f = null;
+                try { f = voiceFile(a, url); } catch (Throwable e) { err = e.getMessage(); }
+                final java.io.File ff = f;
+                final String fe = err;
+                a.runOnUiThread(new Runnable() {
+                    @Override public void run() {
+                        if (!key.equals(vKey)) return;  // пока качали, нажали другое
+                        if (ff == null) {
+                            voiceStop(a);
+                            Toast.makeText(a, "Голосовое не загрузилось" + (fe == null || fe.isEmpty() ? "" : " (" + fe + ")"), Toast.LENGTH_LONG).show();
+                            return;
+                        }
+                        voiceStart(a, key, url, ff);
+                    }
+                });
+            }
+        }).start();
+    }
+
+    static void voiceStart(final Activity a, final String key, final String url, final java.io.File f) {
+        final android.media.MediaPlayer mp = new android.media.MediaPlayer();
+        vMp = mp;
+        try {
+            if (android.os.Build.VERSION.SDK_INT >= 21) {
+                mp.setAudioAttributes(new android.media.AudioAttributes.Builder()
+                    .setUsage(android.media.AudioAttributes.USAGE_MEDIA)
+                    .setContentType(android.media.AudioAttributes.CONTENT_TYPE_SPEECH).build());
+            }
+            mp.setOnPreparedListener(new android.media.MediaPlayer.OnPreparedListener() {
+                @Override public void onPrepared(android.media.MediaPlayer p) {
+                    if (vMp != p || !key.equals(vKey)) { try { p.release(); } catch (Throwable ignore) {} return; }
+                    try {
+                        int sec = Math.max(1, p.getDuration() / 1000);
+                        synchronized (vDur) { vDur.put(url, sec); }
+                        p.start();
+                        vLoading = false;
+                        vPlaying = true;
+                        voiceShow(a);
+                        handler.removeCallbacks(V_TICK);
+                        handler.post(V_TICK);
+                    } catch (Throwable e) {
+                        voiceFail(a, f, "");
+                    }
+                }
+            });
+            mp.setOnCompletionListener(new android.media.MediaPlayer.OnCompletionListener() {
+                @Override public void onCompletion(android.media.MediaPlayer p) {
+                    if (vMp == p) voiceStop(a);
+                }
+            });
+            mp.setOnErrorListener(new android.media.MediaPlayer.OnErrorListener() {
+                @Override public boolean onError(android.media.MediaPlayer p, int what, int extra) {
+                    if (vMp == p) voiceFail(a, f, what + "/" + extra);
+                    return true;
+                }
+            });
+            mp.setDataSource(f.getAbsolutePath());
+            mp.prepareAsync();
+        } catch (Throwable e) {
+            voiceFail(a, f, e.getClass().getSimpleName());
+        }
+    }
+
+    static void voiceFail(Activity a, java.io.File f, String code) {
+        voiceStop(a);
+        try { if (f != null) f.delete(); } catch (Throwable ignore) {}   // битый кэш — в следующий раз скачаем заново
+        Toast.makeText(a, "Не удалось воспроизвести" + (code == null || code.isEmpty() ? "" : " (" + code + ")"), Toast.LENGTH_LONG).show();
+    }
+
+    /** Остановить и сбросить кнопку/полоску. */
+    static void voiceStop(Activity a) {
+        if (handler != null) handler.removeCallbacks(V_TICK);
+        android.media.MediaPlayer mp = vMp;
+        vMp = null;
+        if (mp != null) {
+            try { mp.stop(); } catch (Throwable ignore) {}
+            try { mp.release(); } catch (Throwable ignore) {}
+        }
+        vPlaying = false;
+        vLoading = false;
+        vKey = "";
+        if (a != null) {
+            voiceIcon(a, vBtn.get(), false, false);
+            View fl = vFill.get();
+            if (fl != null && fl.getLayoutParams() != null) { fl.getLayoutParams().width = 0; fl.requestLayout(); }
+        }
+        vBtn = new WeakReference<ImageView>(null);
+        vFill = new WeakReference<View>(null);
+        vTrack = new WeakReference<View>(null);
+    }
+
+    /** Файл голосового в кэше приложения; если нет — скачать. Вызывать НЕ из UI-потока. */
+    static java.io.File voiceFile(Activity a, String url) throws Exception {
+        java.io.File dir = new java.io.File(a.getCacheDir(), "iva_voice");
+        if (!dir.isDirectory()) dir.mkdirs();
+        java.io.File f = new java.io.File(dir, voiceCacheName(url));
+        if (f.isFile() && f.length() > 0) return f;
+        java.io.File tmp = new java.io.File(dir, f.getName() + ".part");
+        java.net.HttpURLConnection c = (java.net.HttpURLConnection) new java.net.URL(clean(url)).openConnection();
+        c.setConnectTimeout(15000);
+        c.setReadTimeout(30000);
+        c.setInstanceFollowRedirects(true);
+        try {
+            int code = c.getResponseCode();
+            if (code < 200 || code >= 300) throw new Exception(String.valueOf(code));
+            java.io.InputStream in = c.getInputStream();
+            java.io.FileOutputStream out = new java.io.FileOutputStream(tmp);
+            try {
+                byte[] buf = new byte[16384];
+                int n;
+                while ((n = in.read(buf)) > 0) out.write(buf, 0, n);
+            } finally {
+                try { out.close(); } catch (Throwable ignore) {}
+                try { in.close(); } catch (Throwable ignore) {}
+            }
+        } finally {
+            c.disconnect();
+        }
+        if (tmp.length() <= 0 || !tmp.renameTo(f)) { tmp.delete(); throw new Exception("пустой файл"); }
+        return f;
+    }
+
+    /** Старые голосовые без audio_dur: длительность узнаём в фоне (по одному), потом перерисовываем. */
+    static void voiceAskDuration(final Activity a, final String url) {
+        synchronized (vDurAsked) { if (!vDurAsked.add(url)) return; }
+        try {
+            vWorker.execute(new Runnable() {
+                @Override public void run() {
+                    int sec = 0;
+                    android.media.MediaPlayer p = null;
+                    try {
+                        java.io.File f = voiceFile(a, url);
+                        p = new android.media.MediaPlayer();
+                        p.setDataSource(f.getAbsolutePath());
+                        p.prepare();
+                        sec = Math.max(1, p.getDuration() / 1000);
+                    } catch (Throwable ignore) {
+                    } finally {
+                        if (p != null) try { p.release(); } catch (Throwable ignore) {}
+                    }
+                    if (sec <= 0) return;
+                    synchronized (vDur) { vDur.put(url, sec); }
+                    a.runOnUiThread(new Runnable() {
+                        @Override public void run() {
+                            if (handler == null) return;
+                            handler.removeCallbacks(V_RERENDER);       // несколько длительностей подряд — одна перерисовка
+                            handler.postDelayed(V_RERENDER, 300);
+                        }
+                    });
+                }
+            });
+        } catch (Throwable ignore) {}
+    }
+
+    static final Runnable V_RERENDER = new Runnable() {
+        @Override public void run() {
+            Activity a = act.get();
+            if (a == null) return;
+            renderedSig = "";
+            render(a);
+        }
+    };
 
     static void confirmDelete(final Activity a, final Msg m) {
         try {

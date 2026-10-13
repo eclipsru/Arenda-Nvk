@@ -104,7 +104,9 @@ public final class IvaNotifyPatch {
         "M7Q5oeXAROB7BiHUgpHr4T/Rty0xU3Vzcn1hNmsULR8QewvNMpzeJ2SaIfwKQs+Ka4G3XOKlcLtkisaACENMIdTnbNQLUJZGSa8BV9ixusiELyoWFLH/5YTe/h11iOejpLWGcO5GeOzgaof3DLldkg" +
         "PhCzLC9qKlhJ2X0H2zX8mFjTcA37dzfSw/KJ7TW9SUZAa8CXzLLa780/JiGeN0wuNRlrY1lu+n0ytqRqxM6Lq1CSFnuwUhKb7IsPl7Es2oMAhH0Z+oHSskNiGUjLzhTE0piZIYYUA+I41iChfLD3UG" +
         "eKJrsEv8YGXAkB3/B3PLZ+sQBTRvAAAAAElFTkSuQmCC";
-    static final int LARGE_ICON_PX = 192;
+    static final int AVATAR_PX = 192;               // цветной логотип в кружке слева (Android 11+)
+    static final String SHORTCUT_PREFIX = "iva_note_";
+    static final long SHORTCUT_DROP_MS = 5000;      // ярлык нужен только в момент показа — потом убираем из меню значка
 
     static WeakReference<Activity> act;
     static Handler poll;
@@ -456,12 +458,14 @@ public final class IvaNotifyPatch {
             b
              .setContentTitle(title)
              .setContentText(text)
-             .setStyle(new Notification.BigTextStyle().bigText(text))
              .setContentIntent(pi)
              .setAutoCancel(true)
              .setWhen(System.currentTimeMillis())
              .setShowWhen(true)
              .setColor(IvaClientPatch.navColor(a, "orange", 0xffff8f1f));
+            // Android 11+: «разговор» — в кружке слева цветной логотип, силуэт — маленьким значком на нём.
+            // Раньше — обычный вид: силуэт в кружке, без картинки справа.
+            if (!conversation(a, b, ch, title, text, open)) b.setStyle(new Notification.BigTextStyle().bigText(text));
             if (Build.VERSION.SDK_INT < 26) {
                 b.setPriority(CH_UPD.equals(ch) ? Notification.PRIORITY_DEFAULT : Notification.PRIORITY_HIGH);
                 b.setDefaults(Notification.DEFAULT_ALL);
@@ -489,25 +493,90 @@ public final class IvaNotifyPatch {
         return statusBmp;
     }
 
-    /** Цветной логотип приложения (ic_logo) — в шторке и во всплывающем уведомлении. */
+    /** Цветной логотип (ic_logo), уже обрезанный кругом, — для кружка слева у «разговора». */
     static Bitmap logo(Context c) {
         if (logoBmp == null) {
             try {
                 int id = c.getResources().getIdentifier("ic_logo", "drawable", c.getPackageName());
                 Bitmap src = id == 0 ? null : BitmapFactory.decodeResource(c.getResources(), id);
-                if (src != null) logoBmp = Bitmap.createScaledBitmap(src, LARGE_ICON_PX, LARGE_ICON_PX, true);
+                if (src != null) {
+                    Bitmap sq = Bitmap.createScaledBitmap(src, AVATAR_PX, AVATAR_PX, true);
+                    Bitmap out = Bitmap.createBitmap(AVATAR_PX, AVATAR_PX, Bitmap.Config.ARGB_8888);
+                    android.graphics.Canvas cv = new android.graphics.Canvas(out);
+                    android.graphics.Paint pt = new android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG);
+                    cv.drawCircle(AVATAR_PX / 2f, AVATAR_PX / 2f, AVATAR_PX / 2f, pt);
+                    pt.setXfermode(new android.graphics.PorterDuffXfermode(android.graphics.PorterDuff.Mode.SRC_IN));
+                    cv.drawBitmap(sq, 0, 0, pt);
+                    logoBmp = out;
+                }
             } catch (Throwable ignore) {}
         }
         return logoBmp;
     }
 
-    /** Строка состояния — силуэт логотипа (Android 6+; раньше — штатный значок); шторка и всплывающее — цветной логотип. */
+    /** Строка состояния — силуэт логотипа (Android 6+; раньше — штатный значок). Большой картинки справа нет (решение владельца 14.10). */
     static void setIcons(Context c, Notification.Builder b, int fallback) {
         Bitmap si = Build.VERSION.SDK_INT >= 23 ? statusIcon() : null;
         if (si != null) b.setSmallIcon(android.graphics.drawable.Icon.createWithBitmap(si));
         else b.setSmallIcon(fallback != 0 ? fallback : c.getApplicationInfo().icon);
-        Bitmap lg = logo(c);
-        if (lg != null) b.setLargeIcon(lg);
+    }
+
+    static String shortcutLabel(String ch) {
+        return CH_ORD.equals(ch) ? "Заявки" : CH_UPD.equals(ch) ? "Обновления" : "Сообщения";
+    }
+
+    /**
+     * Уведомление-«разговор» (Android 11+): MessagingStyle + долгоживущий ярлык с логотипом.
+     * Только так система (и Samsung One UI) рисует в кружке слева цветную картинку, а не одноцветный значок.
+     * Не вышло — false, показываем обычный вид.
+     */
+    static boolean conversation(final Activity a, Notification.Builder b, String ch, String title, String text, String open) {
+        if (Build.VERSION.SDK_INT < 30) return false;
+        try {
+            final Context c = a.getApplicationContext();
+            Bitmap lg = logo(c);
+            final android.content.pm.ShortcutManager sm = (android.content.pm.ShortcutManager) c.getSystemService(Context.SHORTCUT_SERVICE);
+            if (lg == null || sm == null) return false;
+            android.graphics.drawable.Icon av = android.graphics.drawable.Icon.createWithBitmap(lg);
+            final String sid = SHORTCUT_PREFIX + ch;
+            android.app.Person sender = new android.app.Person.Builder()
+                .setName(title).setIcon(av).setKey(sid).setImportant(true).build();
+            android.app.Person self = new android.app.Person.Builder().setName("Вы").build();
+            Intent si = new Intent(Intent.ACTION_VIEW);
+            si.setClass(c, a.getClass());
+            si.putExtra(EXTRA_OPEN, open);
+            Set<String> cats = new java.util.HashSet<String>();
+            cats.add("android.shortcut.conversation");
+            android.content.pm.ShortcutInfo info = new android.content.pm.ShortcutInfo.Builder(c, sid)
+                .setShortLabel(shortcutLabel(ch))
+                .setLongLived(true)
+                .setPerson(sender)
+                .setIcon(av)
+                .setIntent(si)
+                .setCategories(cats)
+                .build();
+            sm.pushDynamicShortcut(info);
+            Notification.MessagingStyle ms = new Notification.MessagingStyle(self);
+            ms.setConversationTitle(null);
+            ms.setGroupConversation(false);
+            ms.addMessage(new Notification.MessagingStyle.Message(text, System.currentTimeMillis(), sender));
+            b.setStyle(ms);
+            b.setShortcutId(sid);
+            if (CH_MSG.equals(ch)) b.setCategory(Notification.CATEGORY_MESSAGE);
+            // Система сама держит копию ярлыка, пока висит уведомление; из меню значка приложения его убираем.
+            new Handler(Looper.getMainLooper()).postDelayed(new Runnable() {
+                @Override public void run() {
+                    try {
+                        List<String> ids = new ArrayList<String>();
+                        ids.add(sid);
+                        sm.removeDynamicShortcuts(ids);
+                    } catch (Throwable ignore) {}
+                }
+            }, SHORTCUT_DROP_MS);
+            return true;
+        } catch (Throwable e) {
+            return false;
+        }
     }
 
     /** Нажали на уведомление, когда приложение было закрыто: открыть нужный раздел. */
