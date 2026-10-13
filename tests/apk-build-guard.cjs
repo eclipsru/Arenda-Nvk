@@ -383,8 +383,9 @@ try {
     assert.ok(np.includes('static final long POLL_MS = 30000L;') && np.includes('poll.postDelayed(TICK, POLL_MS);') && !/postDelayed\(TICK, [0-9]{1,3}\)/.test(np),
       'уведомления 10.56: опрос раз в 30 с, как штатный');
     assert.ok(np.includes('if (t instanceof TextView) ((TextView) t).setText(n > 0 ? "Заявки •" : "Заявки");'), 'уведомления 10.56: отметка «Заявки •» в меню осталась');
-    assert.ok(np.includes('if (nw.isEmpty() || inChat || !on(a, K_MSG, admin)) return;') && np.includes('b.setVisibility(Notification.VISIBILITY_PRIVATE);'),
-      'уведомления 10.56: в открытом чате без уведомления; на экране блокировки без текста сообщения');
+    assert.ok(np.includes('if (!hiddenInChat(openWith, list.get(ids.indexOf(id)).optString("from_email", ""))) show.add(id);')
+      && np.includes('if (nw.isEmpty() || !on(a, K_MSG, admin)) return;') && np.includes('b.setVisibility(Notification.VISIBILITY_PRIVATE);'),
+      'уведомления 10.56/10.57: в «Чате» без уведомления только о видимом; на экране блокировки без текста сообщения');
     assert.ok(np.includes('(Build.VERSION.SDK_INT >= 23 ? PendingIntent.FLAG_IMMUTABLE : 0)'), 'уведомления 10.56: PendingIntent без FLAG_IMMUTABLE упадёт на Android 12+');
     assert.ok(np.includes('static final long UPDATE_EVERY_MS = 6L * 60 * 60 * 1000;') && np.includes('static final String UPDATE_URL = "https://eclipsru.github.io/Arenda-Nvk/app-update.json";')
       && has(dex14, 'https://eclipsru.github.io/Arenda-Nvk/app-update.json'), 'уведомления 10.56: обновления — тот же app-update.json, что у штатной кнопки, не чаще раза в 6 часов');
@@ -398,6 +399,30 @@ try {
       && row.includes('row.setPadding(dp(a, 16), dp(a, 16), dp(a, 16), dp(a, 16));') && row.includes('t.setTextSize(15f);') && !row.includes('removeView'),
       'IvaNotifyPatch.ensureRow: строка «Настройки» — одна, перед «Инструкция», в штатном виде строк кабинета, ничего не удаляет');
     assert.ok(/eq\("уведомления 10\.56: /.test(R('android/patches/test/IvaPatchTest.java')), 'IvaPatchTest: проверки уведомлений 10.56');
+  }
+  // 10.57: открытый чат обновляется сам; значок уведомлений — логотип (силуэт в строке состояния, цветной в шторке).
+  {
+    const cp = R('android/patches/IvaChatPatch.java'), np = R('android/patches/IvaNotifyPatch.java');
+    const live = cp.slice(cp.indexOf('static void live() {'), cp.indexOf('static JSONArray getArr(Activity a, String path)'));
+    assert.ok(live.includes('if (!"chat".equals(str(IvaClientPatch.get(a, "curTab")))) return;') && live.includes('handler.postDelayed(LIVE, LIVE_MS);')
+      && live.includes('if (!a.hasWindowFocus() || !loggedIn(a) || liveBusy || loading) return;'),
+      'чат 10.57: проверка только пока «Чат» на экране, раз в LIVE_MS, без наложения запросов');
+    assert.ok(live.includes('"/rest/v1/app_messages?select=id,is_read" + msgFilter(my, sup)') && live.includes('callNative(a, "loadChat");\n                        refresh(a);')
+      && !/"PATCH"|"POST"|is_read=eq/.test(live), 'чат 10.57: лёгкий запрос (id, is_read), перезагрузка штатным loadChat; сам ничего не пишет в базу');
+    assert.ok(cp.includes('static final long LIVE_MS = 4000L;') && cp.includes('String filter = msgFilter(my, sup);')
+      && cp.includes('try { syncState(a); render(a); refresh(a); } catch (Throwable e) { fallback(a); }\n                        startLive();'),
+      'чат 10.57: та же выборка, что у загрузки; запуск при входе в «Чат»');
+    assert.ok(np.includes('static void setIcons(Context c, Notification.Builder b, int fallback) {') && np.includes('b.setSmallIcon(android.graphics.drawable.Icon.createWithBitmap(si));')
+      && np.includes('if (lg != null) b.setLargeIcon(lg);') && (np.match(/setIcons\(c, (b|pub), icon\);/g) || []).length === 2,
+      'уведомления 10.57: силуэт логотипа в строке состояния и цветной логотип — и в обычном, и в скрытом (экран блокировки) виде');
+    assert.ok(np.includes('getIdentifier("ic_logo", "drawable"') && has(arsc14, 'ic_logo'), 'уведомления 10.57: цветной логотип — штатный ic_logo');
+    const png = Buffer.from((np.match(/STATUS_ICON_PNG =\s*([\s\S]*?);/) || [])[1].replace(/[\s"+]/g, ''), 'base64');
+    assert.ok(png.slice(1, 4).toString() === 'PNG' && png.readUInt32BE(16) === 96 && png.readUInt32BE(20) === 96 && png[25] === 6,
+      'уведомления 10.57: значок строки состояния — PNG 96×96 RGBA');
+    assert.ok(np.includes('List<String> nw = seen == null ? recent(ids, created, isoUtc(System.currentTimeMillis() - FIRST_RUN_WINDOW_MS)) : fresh(seen, ids);'),
+      'уведомления 10.57: первый запуск — о непрочитанных за сутки');
+    assert.ok(/eq\("чат 10\.57: /.test(R('android/patches/test/IvaPatchTest.java')) && /eq\("уведомления 10\.57: /.test(R('android/patches/test/IvaPatchTest.java')),
+      'IvaPatchTest: проверки 10.57');
   }
   // радиус — только вид: варианты встречаются лишь в объявлении и в шторке, на фильтр/подсчёт не влияют
   assert.equal((js45.match(/RADIUS_TITLES/g) || []).length, 3, 'IvaSearchPatch: радиус не должен участвовать в фильтре (только заготовка в шторке)');

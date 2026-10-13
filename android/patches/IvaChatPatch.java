@@ -403,6 +403,7 @@ final class IvaChatPatch {
                     try { install(a); } catch (Throwable ignore) {}
                     if (chat) {
                         try { syncState(a); render(a); refresh(a); } catch (Throwable e) { fallback(a); }
+                        startLive();
                     }
                 }
             });
@@ -680,6 +681,84 @@ final class IvaChatPatch {
         }).start();
     }
 
+    /** Фильтр переписки: своя (или у владельца — всех прокатов). Один и тот же для загрузки и живой проверки. */
+    static String msgFilter(String my, boolean sup) {
+        if (sup) {
+            StringBuilder in = new StringBuilder();
+            HashSet<String> all = new HashSet<String>(adminEmails());
+            all.add(OWNER);
+            for (String e : all) { if (in.length() > 0) in.append(','); in.append(enc(e)); }
+            return "&or=(from_email.in.(" + in + "),to_email.in.(" + in + "))";
+        }
+        return "&or=(from_email.eq." + enc(my) + ",to_email.eq." + enc(my) + ")";
+    }
+
+    // ───────────────────────── 10.57: живое обновление открытого чата ─────────────────────────
+    // Штатно чат не обновлялся сам (loadChat — только по нажатиям): ответ собеседника появлялся
+    // лишь после повторного входа в «Чат». Пока «Чат» на экране — раз в 4 с лёгкий запрос
+    // (id и is_read последних 30 сообщений); есть новое или изменилось «прочитано» — штатный loadChat
+    // (он же отмечает прочитанным открытую переписку, как при входе) и наша перерисовка.
+    static final long LIVE_MS = 4000L;
+    static final int LIVE_ROWS = 30;
+    static volatile boolean liveBusy = false;
+    static final Runnable LIVE = new Runnable() {
+        @Override public void run() { live(); }
+    };
+
+    static void startLive() {
+        if (handler == null) return;
+        handler.removeCallbacks(LIVE);
+        handler.postDelayed(LIVE, LIVE_MS);
+    }
+
+    /** Нужна ли перезагрузка: на сервере есть сообщение, которого нет у нас, или у него другое «прочитано». */
+    static boolean liveChanged(List<String[]> server, List<Msg> local) {
+        HashMap<String, Boolean> have = new HashMap<String, Boolean>();
+        for (Msg m : local) have.put(m.id, m.read);
+        for (String[] r : server) {
+            Boolean rd = have.get(r[0]);
+            if (rd == null || rd.booleanValue() != "true".equals(r[1])) return true;
+        }
+        return false;
+    }
+
+    static void live() {
+        final Activity a = act.get();
+        if (a == null || a.isFinishing()) return;
+        if (!"chat".equals(str(IvaClientPatch.get(a, "curTab")))) return;   // ушли из «Чата» — проверка останавливается
+        handler.postDelayed(LIVE, LIVE_MS);
+        if (!a.hasWindowFocus() || !loggedIn(a) || liveBusy || loading) return;
+        final String my = low(str(IvaClientPatch.get(a, "userEmail")));
+        if (!ready(my)) return;
+        liveBusy = true;
+        final boolean sup = superView(my);
+        final List<Msg> local = msgs;
+        new Thread(new Runnable() {
+            @Override public void run() {
+                boolean changed = false;
+                try {
+                    JSONArray rows = getArr(a, "/rest/v1/app_messages?select=id,is_read" + msgFilter(my, sup)
+                        + "&order=created_at.desc&limit=" + LIVE_ROWS);
+                    List<String[]> server = new ArrayList<String[]>();
+                    for (int i = 0; i < rows.length(); i++) {
+                        JSONObject o = rows.optJSONObject(i);
+                        if (o != null) server.add(new String[]{o.optString("id", ""), String.valueOf(o.optBoolean("is_read", false))});
+                    }
+                    changed = liveChanged(server, local);
+                } catch (Throwable ignore) {}
+                final boolean ch = changed;
+                a.runOnUiThread(new Runnable() {
+                    @Override public void run() {
+                        liveBusy = false;
+                        if (!ch || !"chat".equals(str(IvaClientPatch.get(a, "curTab")))) return;
+                        callNative(a, "loadChat");
+                        refresh(a);
+                    }
+                });
+            }
+        }).start();
+    }
+
     static JSONArray getArr(Activity a, String path) throws Exception {
         String[] r = IvaClientPatch.apiCall(a, path, "GET", null, true);
         if (!ok(r)) throw new Exception(r == null ? "нет ответа" : r[0]);
@@ -717,16 +796,7 @@ final class IvaChatPatch {
             adminsAt = now;
         }
         boolean sup = superView(my);
-        String filter;
-        if (sup) {
-            StringBuilder in = new StringBuilder();
-            HashSet<String> all = new HashSet<String>(adminEmails());
-            all.add(OWNER);
-            for (String e : all) { if (in.length() > 0) in.append(','); in.append(enc(e)); }
-            filter = "&or=(from_email.in.(" + in + "),to_email.in.(" + in + "))";
-        } else {
-            filter = "&or=(from_email.eq." + enc(my) + ",to_email.eq." + enc(my) + ")";
-        }
+        String filter = msgFilter(my, sup);
         JSONArray rows;
         try {
             rows = getArr(a, "/rest/v1/app_messages?select=" + (toolColumn ? MSG_SELECT : MSG_SELECT_OLD) + filter

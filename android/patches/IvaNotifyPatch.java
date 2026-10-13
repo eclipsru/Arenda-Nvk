@@ -3,7 +3,9 @@
 // Уведомления — системные (строка состояния, шторка, всплывающие), у каждого вида свой канал Android.
 // Штатный опрос (pollRun, раз в 30 с) выключается; вместо него — наш с теми же запросами, отметкой «Заявки •»
 // и проверкой настроек. Новое определяем по id (а не по числу), увиденное помним на телефоне.
-// Работает, пока приложение открыто или свёрнуто; когда закрыто — этап 2 (10.57).
+// Работает, пока приложение открыто или свёрнуто; когда закрыто — этап 2 (10.58).
+// 10.57: значок — силуэт логотипа в строке состояния, цветной логотип в шторке; в «Чате» не уведомляем только о видимом;
+//        первый запуск сообщает о непрочитанных за сутки.
 // Вход — только IvaPatch.onTab (новых smali-хуков нет).
 package ru.prokatnvsk.app;
 
@@ -18,6 +20,8 @@ import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.content.res.ColorStateList;
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
 import android.graphics.drawable.ColorDrawable;
 import android.graphics.drawable.Drawable;
 import android.os.Build;
@@ -65,6 +69,42 @@ public final class IvaNotifyPatch {
     static final String UPDATE_URL = "https://eclipsru.github.io/Arenda-Nvk/app-update.json";   // тот же, что у штатного SelfUpdate
     static final String EXTRA_OPEN = "iva_open";
     static final int MAX_SEEN = 300;
+
+    /** Значок строки состояния — силуэт дрели из логотипа (белый по прозрачному, 96×96; Android рисует его по прозрачности,
+     *  цветной логотип там стал бы белым квадратом). Ресурсы в сборке не пересобираются — PNG здесь, в коде. */
+    static final String STATUS_ICON_PNG =
+        "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";
+    static final int LARGE_ICON_PX = 192;
 
     static WeakReference<Activity> act;
     static Handler poll;
@@ -123,6 +163,31 @@ public final class IvaNotifyPatch {
         if (audio != null && !audio.trim().isEmpty() && !"null".equals(audio.trim())) return "Голосовое сообщение";
         if (img != null && !img.trim().isEmpty() && !"null".equals(img.trim())) return "Фото";
         return t.isEmpty() ? "Вам написали в чат — откройте «Чат»" : t;
+    }
+
+    static final long FIRST_RUN_WINDOW_MS = 24L * 60 * 60 * 1000;
+
+    /** «Чат» на экране (openWith != null): список ("") и открытая переписка с этим собеседником обновляются сами. */
+    static boolean hiddenInChat(String openWith, String from) {
+        if (openWith == null) return false;
+        return openWith.isEmpty() || openWith.trim().equalsIgnoreCase(from == null ? "" : from.trim());
+    }
+
+    /** Время в виде, как у базы (UTC, до секунд) — строки такого вида сравниваются по порядку. */
+    static String isoUtc(long ms) {
+        java.text.SimpleDateFormat f = new java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss", java.util.Locale.US);
+        f.setTimeZone(java.util.TimeZone.getTimeZone("UTC"));
+        return f.format(new java.util.Date(ms));
+    }
+
+    /** id сообщений не раньше since (created_at из базы: 2026-10-13T18:22:11.123+00:00). */
+    static List<String> recent(List<String> ids, List<String> created, String since) {
+        List<String> out = new ArrayList<String>();
+        for (int i = 0; i < ids.size() && i < created.size(); i++) {
+            String c = created.get(i) == null ? "" : created.get(i).trim().replace(' ', 'T');
+            if (c.length() >= 19 && c.substring(0, 19).compareTo(since) >= 0 && !ids.get(i).isEmpty()) out.add(ids.get(i));
+        }
+        return out;
     }
 
     static String messageTitle(int n) { return n > 1 ? "Новые сообщения: " + n : "Новое сообщение"; }
@@ -213,13 +278,14 @@ public final class IvaNotifyPatch {
         final boolean logged = loggedIn(a), admin = logged && isAdmin(a);
         Object em = get(a, "userEmail");
         final String email = em instanceof String ? (String) em : "";
-        Object ct = get(a, "curTab");
-        final boolean inChat = "chat".equals(ct) && a.hasWindowFocus();
+        Object ct = get(a, "curTab"), cw = get(a, "chatWith");
+        // «Чат» на экране: null — нет; "" — список чатов; почта — открытая переписка
+        final String openWith = "chat".equals(ct) && a.hasWindowFocus() ? (cw instanceof String ? ((String) cw).trim() : "") : null;
         new Thread(new Runnable() {
             @Override public void run() {
                 try {
                     if (logged && admin && !email.isEmpty()) checkOrders(a, email);
-                    if (logged && !email.isEmpty()) checkMessages(a, email, admin, inChat);
+                    if (logged && !email.isEmpty()) checkMessages(a, email, admin, openWith);
                     checkUpdate(a, admin);
                 } catch (Throwable ignore) {
                 } finally {
@@ -272,24 +338,30 @@ public final class IvaNotifyPatch {
         showNote(a, CH_ORD, ID_ORD, title, body, "orders");
     }
 
-    /** Непрочитанные входящие сообщения; в открытом чате — без уведомления (как штатно). */
-    static void checkMessages(Activity a, String email, boolean admin, boolean inChat) throws Exception {
-        JSONArray rows = getArr(a, "/rest/v1/app_messages?select=id,from_email,text,img,audio&to_email=eq." + enc(email)
+    /** Непрочитанные входящие сообщения. Не уведомляем только о том, что и так видно: открытая переписка с этим
+     *  собеседником или список чатов (оба обновляются сами, 10.57). Письмо от другого при открытом чате — уведомление. */
+    static void checkMessages(Activity a, String email, boolean admin, String openWith) throws Exception {
+        JSONArray rows = getArr(a, "/rest/v1/app_messages?select=id,from_email,text,img,audio,created_at&to_email=eq." + enc(email)
             + "&is_read=eq.false&order=created_at.desc&limit=50");
-        List<String> ids = new ArrayList<String>();
+        List<String> ids = new ArrayList<String>(), created = new ArrayList<String>();
         List<JSONObject> list = new ArrayList<JSONObject>();
         for (int i = 0; i < rows.length(); i++) {
             JSONObject m = rows.getJSONObject(i);
             if (email.equalsIgnoreCase(m.optString("from_email", ""))) continue;
             ids.add(m.optString("id", ""));
+            created.add(m.optString("created_at", ""));
             list.add(m);
         }
         SharedPreferences p = prefs(a);
         String k = key("seen_m", email);
         Set<String> seen = splitSet(p.getString(k, null));
-        List<String> nw = fresh(seen, ids);
+        // первый запуск на телефоне: о непрочитанных за последние сутки — сообщить (а не молча запомнить)
+        List<String> nw = seen == null ? recent(ids, created, isoUtc(System.currentTimeMillis() - FIRST_RUN_WINDOW_MS)) : fresh(seen, ids);
         p.edit().putString(k, joinSet(remember(seen, ids))).apply();
-        if (nw.isEmpty() || inChat || !on(a, K_MSG, admin)) return;
+        List<String> show = new ArrayList<String>();
+        for (String id : nw) if (!hiddenInChat(openWith, list.get(ids.indexOf(id)).optString("from_email", ""))) show.add(id);
+        nw = show;
+        if (nw.isEmpty() || !on(a, K_MSG, admin)) return;
         JSONObject last = list.get(ids.indexOf(nw.get(0)));
         showNote(a, CH_MSG, ID_MSG, messageTitle(nw.size()),
             messagePreview(last.optString("text", ""), last.optString("img", ""), last.optString("audio", "")), "chat");
@@ -380,7 +452,8 @@ public final class IvaNotifyPatch {
             int fl = PendingIntent.FLAG_UPDATE_CURRENT | (Build.VERSION.SDK_INT >= 23 ? PendingIntent.FLAG_IMMUTABLE : 0);
             PendingIntent pi = PendingIntent.getActivity(c, id, it, fl);
             int icon = c.getResources().getIdentifier("ic_chat", "drawable", c.getPackageName());
-            b.setSmallIcon(icon != 0 ? icon : c.getApplicationInfo().icon)
+            setIcons(c, b, icon);
+            b
              .setContentTitle(title)
              .setContentText(text)
              .setStyle(new Notification.BigTextStyle().bigText(text))
@@ -396,11 +469,45 @@ public final class IvaNotifyPatch {
             if (CH_MSG.equals(ch)) {
                 b.setVisibility(Notification.VISIBILITY_PRIVATE);
                 Notification.Builder pub = Build.VERSION.SDK_INT >= 26 ? new Notification.Builder(c, ch) : new Notification.Builder(c);
-                pub.setSmallIcon(icon != 0 ? icon : c.getApplicationInfo().icon).setContentTitle(title).setContentText("Откройте приложение, чтобы прочитать");
+                setIcons(c, pub, icon);
+                pub.setContentTitle(title).setContentText("Откройте приложение, чтобы прочитать");
                 b.setPublicVersion(pub.build());
             }
             nm.notify(id, b.build());
         } catch (Throwable ignore) {}
+    }
+
+    static Bitmap statusBmp, logoBmp;
+
+    static Bitmap statusIcon() {
+        if (statusBmp == null) {
+            try {
+                byte[] png = android.util.Base64.decode(STATUS_ICON_PNG, android.util.Base64.DEFAULT);
+                statusBmp = BitmapFactory.decodeByteArray(png, 0, png.length);
+            } catch (Throwable ignore) {}
+        }
+        return statusBmp;
+    }
+
+    /** Цветной логотип приложения (ic_logo) — в шторке и во всплывающем уведомлении. */
+    static Bitmap logo(Context c) {
+        if (logoBmp == null) {
+            try {
+                int id = c.getResources().getIdentifier("ic_logo", "drawable", c.getPackageName());
+                Bitmap src = id == 0 ? null : BitmapFactory.decodeResource(c.getResources(), id);
+                if (src != null) logoBmp = Bitmap.createScaledBitmap(src, LARGE_ICON_PX, LARGE_ICON_PX, true);
+            } catch (Throwable ignore) {}
+        }
+        return logoBmp;
+    }
+
+    /** Строка состояния — силуэт логотипа (Android 6+; раньше — штатный значок); шторка и всплывающее — цветной логотип. */
+    static void setIcons(Context c, Notification.Builder b, int fallback) {
+        Bitmap si = Build.VERSION.SDK_INT >= 23 ? statusIcon() : null;
+        if (si != null) b.setSmallIcon(android.graphics.drawable.Icon.createWithBitmap(si));
+        else b.setSmallIcon(fallback != 0 ? fallback : c.getApplicationInfo().icon);
+        Bitmap lg = logo(c);
+        if (lg != null) b.setLargeIcon(lg);
     }
 
     /** Нажали на уведомление, когда приложение было закрыто: открыть нужный раздел. */
