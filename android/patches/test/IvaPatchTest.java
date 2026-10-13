@@ -497,20 +497,36 @@ public class IvaPatchTest {
                 + "|" + IvaNotifyPatch.shortcutLabel(IvaNotifyPatch.CH_ORD) + "|" + IvaNotifyPatch.shortcutLabel(IvaNotifyPatch.CH_UPD), "iva_note_iva_msg|Сообщения|Заявки|Обновления");
             eq("уведомления 10.58: ярлык убирается через 5 с", IvaNotifyPatch.SHORTCUT_DROP_MS, 5000L);
             // голосовые 10.58 — размеры как у штатного пузыря v9.8
-            eq("голосовые 10.58: полоска 38% экрана (1080 px, 2.75)", IvaChatPatch.voiceTrackPx(1080, 2.75f), 410);
-            eq("голосовые 10.58: полоска не уже 84dp", IvaChatPatch.voiceTrackPx(100, 1f) + "|" + IvaChatPatch.voiceTrackPx(300, 1f), "84|114");
-            eq("голосовые 10.58: полоска не шире 150dp", IvaChatPatch.voiceTrackPx(1440, 2f), 300);
-            eq("голосовые 10.58: «Голосовое» 24% экрана, 44…96dp", IvaChatPatch.voiceLabelMaxPx(1080, 2.75f) + "|" + IvaChatPatch.voiceLabelMaxPx(100, 1f) + "|" + IvaChatPatch.voiceLabelMaxPx(2000, 1f), "259|44|96");
-            eq("голосовые 10.58: прогресс — доля от полоски", IvaChatPatch.voiceFillPx(2500, 10000, 400), 100);
-            eq("голосовые 10.58: прогресс не вылезает за полоску", IvaChatPatch.voiceFillPx(12000, 10000, 400), 400);
-            eq("голосовые 10.58: прогресс при неизвестной длительности — 0", IvaChatPatch.voiceFillPx(500, 0, 400) + "|" + IvaChatPatch.voiceFillPx(-1, 100, 400), "0|0");
+            // 10.60: голосовые как в ВК — кнопка, волна по громкости, длительность; цвета приложения
+            eq("голосовые 10.60: волна растёт с длительностью (1080 px, 2.75)", IvaChatPatch.voiceWavePx(0, 1080, 2.75f) + "|" + IvaChatPatch.voiceWavePx(10, 1080, 2.75f) + "|" + IvaChatPatch.voiceWavePx(120, 1080, 2.75f), "198|281|454");
+            eq("голосовые 10.60: волна не шире 190dp и 42% экрана, не уже 72dp", IvaChatPatch.voiceWavePx(600, 3000, 1f) + "|" + IvaChatPatch.voiceWavePx(600, 300, 1f) + "|" + IvaChatPatch.voiceWavePx(-5, 100, 1f), "190|126|72");
+            eq("голосовые 10.60: столбиков влезает (2dp + 1,5dp)", IvaChatPatch.voiceBarCount(198, 5.5f, 4.125f) + "|" + IvaChatPatch.voiceBarCount(0, 2f, 1f) + "|" + IvaChatPatch.voiceBarCount(1, 2f, 1f), "21|0|1");
+            eq("голосовые 10.60: столбики — максимум по участку", java.util.Arrays.toString(IvaChatPatch.voiceBars(new float[]{0.9f, 0.1f, 0.4f, 0.2f}, 2)), "[0.9, 0.4]");
+            eq("голосовые 10.60: столбиков больше, чем уровней", java.util.Arrays.toString(IvaChatPatch.voiceBars(new float[]{0.5f, 1f}, 4)), "[0.5, 0.5, 1.0, 1.0]");
+            eq("голосовые 10.60: волны ещё нет — ровная линия", java.util.Arrays.toString(IvaChatPatch.voiceBars(null, 3)) + java.util.Arrays.toString(IvaChatPatch.voiceBars(new float[]{1f}, 0)), "[0.0, 0.0, 0.0][]");
+            float[] vp = IvaChatPatch.voicePeaks(new int[]{0, 0, 1000, 1000, 8000, 8000, 32000, 32000}, 8, 4);
+            eq("голосовые 10.60: громкость от самого громкого, тихое приподнято", String.format(java.util.Locale.ROOT, "%.2f|%.2f|%.2f|%.2f", vp[0], vp[1], vp[2], vp[3]), "0.00|0.09|0.38|1.00");
+            eq("голосовые 10.60: тишина / пусто — нули", java.util.Arrays.toString(IvaChatPatch.voicePeaks(new int[]{0, 0}, 2, 2)) + java.util.Arrays.toString(IvaChatPatch.voicePeaks(null, 0, 2)) + IvaChatPatch.voicePeaks(new int[]{5}, 1, 0).length, "[0.0, 0.0][0.0, 0.0]0");
+            eq("голосовые 10.60: короткая запись — уровней всё равно 64", IvaChatPatch.voicePeaks(new int[]{5, 10}, 2, IvaChatPatch.VOICE_PEAKS).length, 64);
+            float[] vs = IvaChatPatch.voicePeaks(new int[]{4, 8}, 2, 4);
+            eq("голосовые 10.60: короткая запись растягивается без провалов", String.format(java.util.Locale.ROOT, "%.2f|%.2f|%.2f|%.2f", vs[0], vs[1], vs[2], vs[3]), "0.62|0.62|1.00|1.00");
+            eq("голосовые 10.60: count больше массива не ломает", IvaChatPatch.voicePeaks(new int[]{4, 8}, 9, 2)[1], 1.0f);
+            float[] vr = new float[64]; vr[0] = 1f; vr[1] = 0.5f; vr[63] = 0.2f;
+            float[] vb2 = IvaChatPatch.voicePeaksFrom(IvaChatPatch.voicePeaksBytes(vr));
+            eq("голосовые 10.60: уровни в кэш и обратно", String.format(java.util.Locale.ROOT, "%.2f|%.2f|%.2f|%.2f", vb2[0], vb2[1], vb2[2], vb2[63]), "1.00|0.50|0.00|0.20");
+            eq("голосовые 10.60: битый кэш волны — заново", IvaChatPatch.voicePeaksFrom(new byte[10]) == null && IvaChatPatch.voicePeaksFrom(null) == null, true);
+            eq("голосовые 10.60: перемотка по волне", IvaChatPatch.voiceSeekMs(0.5f, 10000) + "|" + IvaChatPatch.voiceSeekMs(1.4f, 10000) + "|" + IvaChatPatch.voiceSeekMs(-1f, 10000) + "|" + IvaChatPatch.voiceSeekMs(0.5f, 0), "5000|9900|0|0");
+            eq("голосовые 10.60: подпись — длительность, во время воспроизведения — сколько прошло",
+                IvaChatPatch.voiceTimeLabel(-1, 75) + "|" + IvaChatPatch.voiceTimeLabel(0, 75) + "|" + IvaChatPatch.voiceTimeLabel(12500, 75) + "|" + IvaChatPatch.voiceTimeLabel(-1, 0), "1:15|1:15|0:12|");
+            eq("голосовые 10.60: доля прослушанного", IvaChatPatch.voiceProgress(2500, 10000) + "|" + IvaChatPatch.voiceProgress(12000, 10000) + "|" + IvaChatPatch.voiceProgress(500, 0) + "|" + IvaChatPatch.voiceProgress(-1, 100), "0.25|1.0|0.0|0.0");
+            eq("голосовые 10.60: размеры как в ВК", IvaChatPatch.VOICE_BTN_DP + "|" + IvaChatPatch.VOICE_BAR_DP + "|" + IvaChatPatch.VOICE_GAP_DP + "|" + IvaChatPatch.VOICE_WAVE_H_DP + "|" + IvaChatPatch.VOICE_PEAKS, "40|2.0|1.5|24.0|64");
+            eq("голосовые 10.60: непрослушанное — полупрозрачный белый", Integer.toHexString(IvaChatPatch.VOICE_REST_MINE) + "|" + Integer.toHexString(IvaChatPatch.VOICE_REST_OTHER), "73ffffff|59ffffff");
             String vn = IvaChatPatch.voiceCacheName("https://x.supabase.co/storage/v1/object/public/voice/v1760-123.m4a?t=1");
             eq("голосовые 10.58: имя в кэше — из ссылки", vn.endsWith("-v1760-123.m4a"), true);
             eq("голосовые 10.58: имя в кэше без опасных символов", IvaChatPatch.voiceCacheName("https://x/voice/../a b%.m4a").matches("[0-9a-f]+-[A-Za-z0-9._-]+") && !IvaChatPatch.voiceCacheName("https://x/voice/../a b%.m4a").contains("/"), true);
             eq("голосовые 10.58: разные ссылки — разные файлы", IvaChatPatch.voiceCacheName("https://a/voice/v.m4a").equals(IvaChatPatch.voiceCacheName("https://b/voice/v.m4a")), false);
             eq("голосовые 10.58: ссылка без имени", IvaChatPatch.voiceCacheName("https://a/voice/").matches("[0-9a-f]+-v"), true);
             eq("голосовые 10.58: прогресс раз в 100 мс", IvaChatPatch.VOICE_TICK_MS, 100);
-            eq("голосовые 10.58: цвета полоски как в v9.8", Integer.toHexString(IvaChatPatch.VOICE_FILL) + "|" + Integer.toHexString(IvaChatPatch.VOICE_TRACK_BG), "ffffc26b|33ffffff");
             // 10.59: нажатие на уведомление — сразу туда, где нужно
             java.util.List<String> nwIds = java.util.Arrays.asList("30", "29", "27");
             eq("переход 10.59: один собеседник — первое непрочитанное", IvaNotifyPatch.messageTarget(nwIds, java.util.Arrays.asList("adm@x.ru", "Adm@X.ru ", "adm@x.ru")), "27");

@@ -425,14 +425,10 @@ try {
     assert.ok(/eq\("чат 10\.57: /.test(R('android/patches/test/IvaPatchTest.java')) && /eq\("уведомления 10\.57: /.test(R('android/patches/test/IvaPatchTest.java')),
       'IvaPatchTest: проверки 10.57');
   }
-  // 10.58: голосовые — вид штатного пузыря v9.8 и своё воспроизведение из кэша; уведомление-«разговор» с цветным логотипом слева, без картинки справа.
+  // 10.58: голосовые — своё воспроизведение из кэша (вид — с 10.60 как в ВК); уведомление-«разговор» с цветным логотипом слева, без картинки справа.
   {
     const cp = R('android/patches/IvaChatPatch.java'), np = R('android/patches/IvaNotifyPatch.java'), tp = R('android/patches/test/IvaPatchTest.java');
-    const vb = cp.slice(cp.indexOf('static View voiceBubble('), cp.indexOf('static void voiceIcon('));
-    assert.ok(vb.includes('setBg(a, v, "bg_bubble_other");') && !vb.includes('bg_bubble_me') && vb.includes('res(a, "ic_mic", "drawable")')
-      && vb.includes('text(a, "Голосовое", 14, "white", true)') && vb.includes('mine ? "text" : "orange", true)')
-      && vb.includes('btn.setColorFilter(color(a, "white"));') && vb.includes('v.setOnClickListener(tap);') && vb.includes('btn.setOnClickListener(tap);'),
-      'голосовые 10.58: тёмный пузырь и у своих, микрофон, «Голосовое», длительность, белая кнопка справа — как в v9.8');
+    // вид голосового с 10.60 — как в ВК (просьба владельца 14.10.2026), проверяется в блоке 10.60
     assert.ok(!cp.includes('"playVoice"') && cp.includes('mp.prepareAsync();') && (cp.match(/\.prepare\(\);/g) || []).length === 1
       && cp.includes('try { f = voiceFile(a, url); } catch (Throwable e) { err = e.getMessage(); }') && cp.includes('vWorker.execute(new Runnable() {'),
       'голосовые 10.58: не штатный playVoice (prepare по сети в UI-потоке) — скачивание в фоне, prepareAsync; синхронный prepare только в фоновой очереди длительностей');
@@ -494,6 +490,29 @@ try {
       && cp.includes('if (flashRow != null) {          // открыли по уведомлению') && cp.includes('IvaNotifyPatch.reveal(flashRow);'),
       'переход 10.59: чат — прокрутка к сообщению из уведомления и подсветка');
     assert.ok(/eq\("переход 10\.59: /.test(tp), 'IvaPatchTest: проверки перехода 10.59');
+  }
+  // 10.60: голосовые как в ВК, цвета приложения (просьба владельца 14.10.2026, по снимкам: пузырь сжимался до ширины времени).
+  {
+    const cp = R('android/patches/IvaChatPatch.java'), tp = R('android/patches/test/IvaPatchTest.java');
+    const br = cp.slice(cp.indexOf('static View bubbleRow('), cp.indexOf('static String senderTitle('));
+    assert.ok(br.includes('col.addView(voice, new LinearLayout.LayoutParams(-2, -2));') && !/col\.addView\(voiceBubble\([^)]*\)\)/.test(cp)
+      && br.includes('if (voice != null) voice.setOnLongClickListener(hold);'),
+      'голосовые 10.60: пузырь в колонке по своему размеру (без размеров сжимался до подписи времени); долгое нажатие — удалить, как у текста');
+    const vb = cp.slice(cp.indexOf('static View voiceBubble('), cp.indexOf('static void voiceShow('));
+    assert.ok(vb.includes('setBg(a, v, mine ? "bg_bubble_me" : "bg_bubble_other");') && vb.includes('int accent = color(a, "orange");')
+      && vb.includes('new VoiceBtn(a, mine ? 0xFFFFFFFF : accent, mine ? accent : 0xFFFFFFFF)') && vb.includes('new VoiceWave(a, pk, mine ? 0xFFFFFFFF : accent, mine ? VOICE_REST_MINE : VOICE_REST_OTHER, den)')
+      && vb.includes('voiceWavePx(known, sw, den)') && vb.includes('if (pk == null) voiceAskWave(a, m.audio);') && vb.includes('voiceSeek(a, key, m.audio, ui, e.getX()')
+      && !/#[0-9A-Fa-f]{6}|0x[0-9A-Fa-f]{8}/.test(vb.replace(/0xFFFFFFFF/g, '')),
+      'голосовые 10.60: как в ВК — круглая кнопка слева, волна, длительность; цвета приложения (оранжевый из темы, белый), без новых цветов');
+    assert.ok(cp.includes('if (!outEos) return null;') && cp.includes('java.io.File wf = new java.io.File(f.getPath() + ".wave");')
+      && cp.includes('synchronized (vPeaksAsked) { vPeaksAsked.remove(url); }') && cp.includes('if (u != null) u.wave.setPeaks(fp);'),
+      'голосовые 10.60: волна по настоящей громкости (в фоне, кэш рядом с файлом), дорисовывается на месте без перерисовки чата; не вышло — ровная линия');
+    assert.ok(cp.includes('java.io.File tmp = new java.io.File(dir, f.getName() + "." + System.nanoTime() + ".part");'),
+      'голосовые 10.60: кнопка и фоновая волна качают один файл без столкновения временных файлов');
+    assert.ok(cp.includes('if (vSeek >= 0) p.seekTo(voiceSeekMs(vSeek, p.getDuration()));') && cp.includes('vSeek = -1f;\n        voiceReset(vUi.get());'),
+      'голосовые 10.60: перемотка до подготовки применяется после неё; стоп сбрасывает всё');
+    assert.ok(!cp.includes('ic_mic') && !cp.includes('"Голосовое", 14') && !cp.includes('VOICE_TRACK_BG'), 'голосовые 10.60: старого вида v9.8 не осталось');
+    assert.ok(/eq\("голосовые 10\.60: /.test(tp), 'IvaPatchTest: проверки 10.60');
   }
   // радиус — только вид: варианты встречаются лишь в объявлении и в шторке, на фильтр/подсчёт не влияют
   assert.equal((js45.match(/RADIUS_TITLES/g) || []).length, 3, 'IvaSearchPatch: радиус не должен участвовать в фильтре (только заготовка в шторке)');
