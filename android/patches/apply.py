@@ -18,6 +18,8 @@
  10. logoutLocal()                           : в конце → IvaPatch.onLogout(this) (выход: иконка «Кабинета» снова на месте)
  11. showTab(String)                         : после штатного выбора вкладки → IvaPatch.onTab(this, имя) (оранжевая окантовка без заливки)
  12. renderProfile()                          : только на шаге 10.30 → IvaClientPatch.onProfile(this) (профиль обычного клиента)
+ 13. onNewIntent(Intent) — НОВЫЙ метод (10.59, решение владельца 14.10.2026): штатных методов не трогает;
+     super.onNewIntent → setIntent → IvaPatch.onNewIntent(this, intent) (нажатие на уведомление при открытом приложении)
  Плюс versionCode/versionName в apktool.yml.
 """
 import os
@@ -182,7 +184,34 @@ def patch(lines):
     before_return(lines, s, e, f'invoke-static/range {{p0 .. p0}}, Lru/prokatnvsk/app/IvaClientPatch;->onProfile(Landroid/app/Activity;)V', 'client onProfile')
     done.append('12 client onProfile')
 
+    # 13. Новый метод onNewIntent (в 10.14 его нет: launchMode standard, нажатие на уведомление при открытом
+    #     приложении приходит сюда и терялось). Вставка в конец класса — существующие методы не меняются.
+    if methods(lines, r' onNewIntent\('):
+        die('onNewIntent уже есть в MainActivity — нужна другая вставка')
+    sup = [l for l in lines if l.startswith('.super ')]
+    if sup != ['.super Landroid/app/Activity;']:
+        die(f'MainActivity: ожидался .super Landroid/app/Activity;, а не {sup}')
+    lines.extend(NEW_INTENT)
+    done.append('13 onNewIntent (новый метод)')
+
     return done
+
+
+NEW_INTENT = [
+    '',
+    '.method protected onNewIntent(Landroid/content/Intent;)V',
+    '    .registers 2',
+    '',
+    '    invoke-super {p0, p1}, Landroid/app/Activity;->onNewIntent(Landroid/content/Intent;)V',
+    '',
+    '    invoke-virtual {p0, p1}, Lru/prokatnvsk/app/MainActivity;->setIntent(Landroid/content/Intent;)V',
+    '',
+    f'    invoke-static {{p0, p1}}, {P}->onNewIntent(Landroid/app/Activity;Landroid/content/Intent;)V',
+    '',
+    '    return-void',
+    '.end method',
+    '',
+]
 
 
 def before_return(lines, s, e, call, what):

@@ -68,6 +68,10 @@ public final class IvaNotifyPatch {
     static final long UPDATE_EVERY_MS = 6L * 60 * 60 * 1000;     // обновления — не чаще раза в 6 часов
     static final String UPDATE_URL = "https://eclipsru.github.io/Arenda-Nvk/app-update.json";   // тот же, что у штатного SelfUpdate
     static final String EXTRA_OPEN = "iva_open";
+    static final String EXTRA_TARGET = "iva_target";  // 10.59: что именно открыть — id сообщения / id заявки / «код|версия»
+    static final long ROUTE_WAIT_MS = 15000;          // сколько ждать загрузки раздела после нажатия
+    static final long ROUTE_STEP_MS = 250;
+    static final String UPDATE_BTN_TAG = "iva_selfupdate_btn";   // штатная кнопка SelfUpdate «Обновить до версии …»
     static final int MAX_SEEN = 300;
 
     /** Значок строки состояния — силуэт дрели из логотипа (белый по прозрачному, 96×96; Android рисует его по прозрачности,
@@ -337,7 +341,7 @@ public final class IvaNotifyPatch {
                 try { Toast.makeText(a, "Новая заявка!", Toast.LENGTH_LONG).show(); } catch (Throwable ignore) {}
             }
         });
-        showNote(a, CH_ORD, ID_ORD, title, body, "orders");
+        showNote(a, CH_ORD, ID_ORD, title, body, "orders", orderTarget(nw));
     }
 
     /** Непрочитанные входящие сообщения. Не уведомляем только о том, что и так видно: открытая переписка с этим
@@ -365,8 +369,10 @@ public final class IvaNotifyPatch {
         nw = show;
         if (nw.isEmpty() || !on(a, K_MSG, admin)) return;
         JSONObject last = list.get(ids.indexOf(nw.get(0)));
+        List<String> from = new ArrayList<String>();
+        for (String id : nw) from.add(list.get(ids.indexOf(id)).optString("from_email", ""));
         showNote(a, CH_MSG, ID_MSG, messageTitle(nw.size()),
-            messagePreview(last.optString("text", ""), last.optString("img", ""), last.optString("audio", "")), "chat");
+            messagePreview(last.optString("text", ""), last.optString("img", ""), last.optString("audio", "")), "chat", messageTarget(nw, from));
     }
 
     static int installedCode(Context c) {
@@ -386,7 +392,8 @@ public final class IvaNotifyPatch {
         int remote = j.optInt("versionCode", 0);
         if (!updateNews(remote, installedCode(a), p.getInt("upd_notified", 0))) return;
         p.edit().putInt("upd_notified", remote).apply();
-        showNote(a, CH_UPD, ID_UPD, "Вышло обновление приложения", updateText(j.optString("versionName", "")), "update");
+        showNote(a, CH_UPD, ID_UPD, "Вышло обновление приложения", updateText(j.optString("versionName", "")), "update",
+            remote + "|" + j.optString("versionName", ""));
     }
 
     static String httpGet(String u) {
@@ -442,6 +449,10 @@ public final class IvaNotifyPatch {
     /** Строка состояния + шторка + всплывающее (канал HIGH); на экране блокировки — без текста сообщения. */
     @SuppressWarnings("deprecation")
     static void showNote(Activity a, String ch, int id, String title, String text, String open) {
+        showNote(a, ch, id, title, text, open, "");
+    }
+
+    static void showNote(Activity a, String ch, int id, String title, String text, String open, String target) {
         try {
             Context c = a.getApplicationContext();
             NotificationManager nm = (NotificationManager) c.getSystemService(Context.NOTIFICATION_SERVICE);
@@ -450,6 +461,7 @@ public final class IvaNotifyPatch {
             Notification.Builder b = Build.VERSION.SDK_INT >= 26 ? new Notification.Builder(c, ch) : new Notification.Builder(c);
             Intent it = new Intent(c, a.getClass());
             it.putExtra(EXTRA_OPEN, open);
+            it.putExtra(EXTRA_TARGET, target == null ? "" : target);
             it.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_SINGLE_TOP);
             int fl = PendingIntent.FLAG_UPDATE_CURRENT | (Build.VERSION.SDK_INT >= 23 ? PendingIntent.FLAG_IMMUTABLE : 0);
             PendingIntent pi = PendingIntent.getActivity(c, id, it, fl);
@@ -465,7 +477,7 @@ public final class IvaNotifyPatch {
              .setColor(IvaClientPatch.navColor(a, "orange", 0xffff8f1f));
             // Android 11+: «разговор» — в кружке слева цветной логотип, силуэт — маленьким значком на нём.
             // Раньше — обычный вид: силуэт в кружке, без картинки справа.
-            if (!conversation(a, b, ch, title, text, open)) b.setStyle(new Notification.BigTextStyle().bigText(text));
+            if (!conversation(a, b, ch, title, text, open, target)) b.setStyle(new Notification.BigTextStyle().bigText(text));
             if (Build.VERSION.SDK_INT < 26) {
                 b.setPriority(CH_UPD.equals(ch) ? Notification.PRIORITY_DEFAULT : Notification.PRIORITY_HIGH);
                 b.setDefaults(Notification.DEFAULT_ALL);
@@ -530,7 +542,7 @@ public final class IvaNotifyPatch {
      * Только так система (и Samsung One UI) рисует в кружке слева цветную картинку, а не одноцветный значок.
      * Не вышло — false, показываем обычный вид.
      */
-    static boolean conversation(final Activity a, Notification.Builder b, String ch, String title, String text, String open) {
+    static boolean conversation(final Activity a, Notification.Builder b, String ch, String title, String text, String open, String target) {
         if (Build.VERSION.SDK_INT < 30) return false;
         try {
             final Context c = a.getApplicationContext();
@@ -545,6 +557,7 @@ public final class IvaNotifyPatch {
             Intent si = new Intent(Intent.ACTION_VIEW);
             si.setClass(c, a.getClass());
             si.putExtra(EXTRA_OPEN, open);
+            si.putExtra(EXTRA_TARGET, target == null ? "" : target);
             Set<String> cats = new java.util.HashSet<String>();
             cats.add("android.shortcut.conversation");
             android.content.pm.ShortcutInfo info = new android.content.pm.ShortcutInfo.Builder(c, sid)
@@ -579,23 +592,230 @@ public final class IvaNotifyPatch {
         }
     }
 
-    /** Нажали на уведомление, когда приложение было закрыто: открыть нужный раздел. */
+    // ───────────────────────── 10.59: нажатие на уведомление — сразу туда, где нужно ─────────────────────────
+
+    /** Сообщения от одного собеседника — первое непрочитанное (список идёт от новых к старым); от нескольких — "" (список чатов). */
+    static String messageTarget(List<String> nwIds, List<String> from) {
+        if (nwIds == null || from == null || nwIds.isEmpty() || nwIds.size() != from.size()) return "";
+        String one = from.get(0) == null ? "" : from.get(0).trim().toLowerCase();
+        if (one.isEmpty()) return "";
+        for (String f : from) if (!one.equals(f == null ? "" : f.trim().toLowerCase())) return "";
+        return nwIds.get(nwIds.size() - 1);
+    }
+
+    /** Одна новая заявка — её id; несколько — "" (список клиентов). */
+    static String orderTarget(List<String> nw) {
+        return nw != null && nw.size() == 1 && nw.get(0) != null ? nw.get(0) : "";
+    }
+
+    /** Место карточки заявки среди заявок того же клиента (штатный экран клиента рисует их в этом порядке). -1 — нет. */
+    static int indexInClient(List<String> partIds, List<String> keys, String partId) {
+        int at = partIds.indexOf(partId);
+        if (at < 0 || keys.size() != partIds.size()) return -1;
+        String k = keys.get(at);
+        int n = 0;
+        for (int i = 0; i < at; i++) if (k.equals(keys.get(i))) n++;
+        return n;
+    }
+
+    /** «код|версия» из уведомления об обновлении → код (0 — неизвестен). */
+    static int targetCode(String t) {
+        try { return Integer.parseInt(t.substring(0, t.indexOf('|')).trim()); } catch (Throwable e) { return 0; }
+    }
+
+    static String targetName(String t) {
+        int i = t == null ? -1 : t.indexOf('|');
+        return i < 0 ? "" : t.substring(i + 1).trim();
+    }
+
+    /** Холодный запуск по нажатию на уведомление (приложение было закрыто): первый showTab. */
     static void openFromNotification(final Activity a) {
         Intent it = a.getIntent();
-        if (it == null) return;
+        if (it == null || it.getStringExtra(EXTRA_OPEN) == null) return;
+        route(a, it);
+    }
+
+    /** Приложение уже открыто или свёрнуто: новый метод MainActivity.onNewIntent → IvaPatch.onNewIntent → сюда. */
+    static void onNewIntent(Activity a, Intent it) {
+        act = new WeakReference<Activity>(a);
+        if (it == null || it.getStringExtra(EXTRA_OPEN) == null) return;
+        route(a, it);
+    }
+
+    static void route(final Activity a, Intent it) {
         final String open = it.getStringExtra(EXTRA_OPEN);
-        if (open == null) return;
-        it.removeExtra(EXTRA_OPEN);
-        if (!"chat".equals(open) && !"orders".equals(open)) return;
+        String t = it.getStringExtra(EXTRA_TARGET);
+        final String target = t == null ? "" : t.trim();
+        it.removeExtra(EXTRA_OPEN);          // второй раз (поворот, возврат) не переходим
+        it.removeExtra(EXTRA_TARGET);
         new Handler(Looper.getMainLooper()).post(new Runnable() {
             @Override public void run() {
                 try {
-                    Method m = a.getClass().getDeclaredMethod("showTab", String.class);
-                    m.setAccessible(true);
-                    m.invoke(a, open);
+                    if ("chat".equals(open)) IvaChatPatch.openFromNote(a, target);
+                    else if ("orders".equals(open)) openOrder(a, target);
+                    else if ("update".equals(open)) openUpdate(a, target);
                 } catch (Throwable ignore) {}
             }
         });
+    }
+
+    static void tab(Activity a, String t) {
+        try {
+            Method m = a.getClass().getDeclaredMethod("showTab", String.class);
+            m.setAccessible(true);
+            m.invoke(a, t);
+        } catch (Throwable ignore) {}
+    }
+
+    /** Заявки (админ): дождаться штатной загрузки, открыть клиента этой заявки (как нажатие на него) и показать карточку. */
+    static void openOrder(final Activity a, final String partId) {
+        tab(a, "orders");
+        if (partId.isEmpty()) return;
+        final long until = System.currentTimeMillis() + ROUTE_WAIT_MS;
+        final Handler h = new Handler(Looper.getMainLooper());
+        h.postDelayed(new Runnable() {
+            @Override public void run() {
+                try {
+                    if (a.isFinishing() || !"orders".equals(String.valueOf(get(a, "curTab")))) return;   // ушли — не мешаем
+                    Object pb = get(a, "progOrders");
+                    boolean busy = pb instanceof View && ((View) pb).getVisibility() == View.VISIBLE;
+                    Object parts = get(a, "admParts");
+                    List<String> ids = new ArrayList<String>(), keys = new ArrayList<String>();
+                    JSONObject part = null;
+                    if (!busy && parts instanceof List) {
+                        for (Object o : (List<?>) parts) {
+                            if (!(o instanceof JSONObject)) continue;
+                            JSONObject j = (JSONObject) o;
+                            ids.add(j.optString("id", ""));
+                            keys.add(clientKey(a, j));
+                            if (partId.equals(j.optString("id", ""))) part = j;
+                        }
+                    }
+                    if (part == null) {
+                        if (System.currentTimeMillis() < until) h.postDelayed(this, ROUTE_STEP_MS);
+                        return;
+                    }
+                    String key = clientKey(a, part);
+                    IvaClientPatch.set(a, "admClientKey", key);
+                    IvaClientPatch.set(a, "admDrill", Boolean.TRUE);
+                    call(a, "renderAdmOrders");
+                    int idx = indexInClient(ids, keys, partId);
+                    Object ol = get(a, "ordersList");
+                    if (idx >= 0 && ol instanceof ViewGroup) {
+                        ViewGroup list = (ViewGroup) ol;
+                        int count = 0;
+                        for (String k : keys) if (k.equals(key)) count++;
+                        // штатно: «‹ Все клиенты», затем по карточке на заявку клиента
+                        if (list.getChildCount() == count + 1) reveal(list.getChildAt(idx + 1));
+                    }
+                } catch (Throwable ignore) {}
+            }
+        }, ROUTE_STEP_MS);
+    }
+
+    static String clientKey(Activity a, JSONObject part) {
+        try {
+            Method m = a.getClass().getDeclaredMethod("partClientKey", JSONObject.class);
+            m.setAccessible(true);
+            return String.valueOf(m.invoke(a, part));
+        } catch (Throwable e) { return ""; }
+    }
+
+    /** Обновление: «Кабинет» → штатная кнопка «Обновить до версии …» (SelfUpdate); нет — штатная проверка ещё раз. */
+    static void openUpdate(final Activity a, final String target) {
+        tab(a, "profile");
+        final Object anchor = get(a, "profVer");
+        if (!(anchor instanceof View)) return;
+        final ViewGroup box = updateBox((View) anchor);
+        if (box == null) return;
+        View old = box.findViewWithTag(UPDATE_BTN_TAG);
+        String ver = targetName(target);
+        if (old instanceof TextView && !ver.isEmpty() && !String.valueOf(((TextView) old).getText()).contains(ver)) {
+            box.removeView(old);             // кнопка со старой версией: штатная проверка вторую не добавит
+            old = null;
+        }
+        if (old == null) {
+            new Thread(new Runnable() {
+                @Override public void run() {
+                    try {
+                        Class<?> su = Class.forName(a.getPackageName() + ".SelfUpdate");
+                        Method m = su.getDeclaredMethod("checkInBackground", Activity.class, View.class);
+                        m.setAccessible(true);
+                        m.invoke(null, a, anchor);
+                    } catch (Throwable ignore) {}
+                }
+            }).start();
+        }
+        final long until = System.currentTimeMillis() + ROUTE_WAIT_MS;
+        final Handler h = new Handler(Looper.getMainLooper());
+        h.post(new Runnable() {
+            @Override public void run() {
+                if (a.isFinishing() || !"profile".equals(String.valueOf(get(a, "curTab")))) return;
+                View b = box.findViewWithTag(UPDATE_BTN_TAG);
+                if (b != null) { reveal(b); return; }
+                if (System.currentTimeMillis() < until) { h.postDelayed(this, ROUTE_STEP_MS); return; }
+                int code = targetCode(target);
+                try {
+                    Toast.makeText(a, code > 0 && installedCode(a) >= code ? "Эта версия уже установлена"
+                        : "Не удалось проверить обновление — проверьте интернет", Toast.LENGTH_LONG).show();
+                } catch (Throwable ignore) {}
+            }
+        });
+    }
+
+    /** Куда штатный SelfUpdate кладёт кнопку: родитель родителя строки версии. */
+    static ViewGroup updateBox(View anchor) {
+        Object p = anchor.getParent();
+        Object g = p instanceof View ? ((View) p).getParent() : null;
+        return g instanceof ViewGroup ? (ViewGroup) g : null;
+    }
+
+    /** Прокрутить ближайший ScrollView к виду (с отступом 12dp сверху) и мягко подсветить его. */
+    static void reveal(final View v) {
+        if (v == null) return;
+        v.post(new Runnable() {
+            @Override public void run() {
+                try {
+                    int y = 0;
+                    View c = v;
+                    Object p = v.getParent();
+                    while (p instanceof View && !(p instanceof ScrollView)) { y += c.getTop(); c = (View) p; p = c.getParent(); }
+                    if (p instanceof ScrollView) {
+                        y += c.getTop();
+                        int pad = Math.round(12 * v.getResources().getDisplayMetrics().density);
+                        ((ScrollView) p).smoothScrollTo(0, Math.max(0, revealY(y, pad)));
+                    }
+                } catch (Throwable ignore) {}
+                flash(v);
+            }
+        });
+    }
+
+    static int revealY(int top, int pad) { return top - pad; }
+
+    static final int FLASH_COLOR = 0x55FF8F1F;   // фирменный оранжевый, полупрозрачный
+    static final long FLASH_MS = 1600;
+
+    /** Подсветка поверх вида (Android 6+: foreground), гаснет за FLASH_MS. Фон и содержимое вида не меняются. */
+    static void flash(final View v) {
+        if (Build.VERSION.SDK_INT < 23 || v == null) return;
+        try {
+            final android.graphics.drawable.GradientDrawable g = new android.graphics.drawable.GradientDrawable();
+            g.setColor(FLASH_COLOR);
+            g.setCornerRadius(12 * v.getResources().getDisplayMetrics().density);
+            final Drawable before = v.getForeground();
+            v.setForeground(g);
+            android.animation.ValueAnimator an = android.animation.ValueAnimator.ofInt(255, 0);
+            an.setStartDelay(500);
+            an.setDuration(FLASH_MS);
+            an.addUpdateListener(new android.animation.ValueAnimator.AnimatorUpdateListener() {
+                @Override public void onAnimationUpdate(android.animation.ValueAnimator x) { g.setAlpha((Integer) x.getAnimatedValue()); }
+            });
+            an.addListener(new android.animation.AnimatorListenerAdapter() {
+                @Override public void onAnimationEnd(android.animation.Animator x) { v.setForeground(before); }
+            });
+            an.start();
+        } catch (Throwable ignore) {}
     }
 
     // ───────────────────────── «Настройки» в кабинете ─────────────────────────

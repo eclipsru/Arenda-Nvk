@@ -391,6 +391,15 @@ public final class IvaPatch {
     // Штатный setCircle() вызывается в showTab() и рисует оранжевую заливку с белым значком.
     // Этот вызов стоит после всех четырёх setCircle: заливка убирается, а выбранный пункт получает
     // прозрачный круг с оранжевой окантовкой и оранжевые текст/значок.
+    /**
+     * 13. Новый метод MainActivity.onNewIntent (10.59): нажали на уведомление, когда приложение уже открыто
+     * или свёрнуто. Штатных методов не меняет; переход — в IvaNotifyPatch. Любая ошибка — приложение просто
+     * показывается как было.
+     */
+    public static void onNewIntent(Activity a, android.content.Intent it) {
+        try { IvaNotifyPatch.onNewIntent(a, it); } catch (Throwable ignore) {}
+    }
+
     public static void onTab(Activity a, String tab) {
         try {
             String t = tab == null ? "" : tab;

@@ -548,6 +548,61 @@ final class IvaChatPatch {
         renderedSig = "";
     }
 
+    // ── 10.59: нажали на уведомление о сообщении ──
+    static final long NOTE_WAIT_MS = 20000;
+    static String noteMsg = "";          // id сообщения: открыть его переписку, когда загрузится
+    static long noteUntil;
+    static volatile int loadStarted, loadDone;   // номера загрузок: начатой последней и последней завершённой
+    static int noteGen;                   // loadStarted в момент нажатия: решают только загрузки, начатые после него
+    static String flashMsg = "";          // показать и подсветить это сообщение при ближайшей отрисовке
+    static View flashRow;
+
+    /** Уведомление о сообщении: msgId — его переписка с прокруткой к нему; пусто (несколько собеседников) — список чатов. */
+    public static void openFromNote(Activity a, String msgId) {
+        act = new WeakReference<Activity>(a);
+        if (handler == null) handler = new Handler(Looper.getMainLooper());
+        voiceStop(a);
+        IvaClientPatch.set(a, "chatWith", null);
+        IvaClientPatch.set(a, "chatTool", null);
+        lastToolObj = null;
+        lastWith = "";
+        openPartner = ""; openPartnerRaw = ""; openTool = "";
+        renderedSig = "";
+        noteMsg = clean(msgId);
+        noteUntil = System.currentTimeMillis() + NOTE_WAIT_MS;
+        noteGen = loadStarted;
+        callTab(a, "chat");                  // штатный переход → IvaPatch.onTab → onShowTab → загрузка → render → applyNote
+    }
+
+    /** Переписка сообщения: {собеседник, его адрес как в базе, инструмент} — по тем же правилам, что и список. null — нет. */
+    static String[] locate(List<Msg> asc, String me, Set<String> admins, boolean sup, Map<String, String> localTags, String id) {
+        if (asc == null || clean(id).isEmpty()) return null;
+        Map<String, String> tools = assignTools(asc, me, admins, sup, localTags);
+        for (Msg m : asc) {
+            if (!m.id.equals(id) || !tools.containsKey(m.id)) continue;
+            String p = partnerOf(m, me, admins, sup);
+            if (p.isEmpty()) return null;
+            return new String[]{p, partnerRawOf(m, p), tools.get(m.id)};
+        }
+        return null;
+    }
+
+    static void applyNote(Activity a) {
+        if (noteMsg.isEmpty()) return;
+        if (System.currentTimeMillis() > noteUntil) { noteMsg = ""; return; }
+        String my = low(str(IvaClientPatch.get(a, "userEmail")));
+        if (!ready(my)) return;
+        String[] t = locate(msgs, my, adminEmails(), superView(my), localTags, noteMsg);
+        if (t == null) {
+            if (loadDone > noteGen) noteMsg = "";     // загрузка, начатая после нажатия, прошла, а сообщения нет (удалено) — остаётся список
+            return;
+        }
+        flashMsg = noteMsg;
+        noteMsg = "";
+        openThread(a, t[1].isEmpty() ? t[0] : t[1], t[2], toolCache.get(t[2]));
+        callNative(a, "loadChat");           // как нажатие в списке: штатно отмечает переписку прочитанной
+    }
+
     static void closeThread(Activity a) {
         IvaClientPatch.set(a, "chatWith", null);
         IvaClientPatch.set(a, "chatTool", null);
@@ -663,10 +718,12 @@ final class IvaChatPatch {
         final String my = low(str(IvaClientPatch.get(a, "userEmail")));
         final boolean adm = isAdmin(a);
         final String partner = openPartner, tool = openTool;
+        final int gen = ++loadStarted;
         new Thread(new Runnable() {
             @Override public void run() {
                 try {
                     load(a, my, adm, partner, tool);
+                    loadDone = Math.max(loadDone, gen);
                     lastError = "";
                 } catch (Throwable e) {
                     lastError = "Нет связи — обновим через несколько секунд";
@@ -929,6 +986,7 @@ final class IvaChatPatch {
         }
         root.setVisibility(View.VISIBLE);
         if (sc instanceof View) ((View) sc).setVisibility(View.GONE);
+        try { applyNote(a); } catch (Throwable ignore) {}
         String sig = signature(a);
         if (sig.equals(renderedSig)) return;
         renderedSig = sig;
@@ -939,8 +997,13 @@ final class IvaChatPatch {
         if (!openPartner.isEmpty()) {
             header.setVisibility(View.VISIBLE);
             renderHeader(a);
+            flashRow = null;
             renderThread(a, my);
-            if (keepBottom) toBottom();
+            if (flashRow != null) {          // открыли по уведомлению — к первому непрочитанному, с подсветкой
+                flashMsg = "";
+                IvaNotifyPatch.reveal(flashRow);
+                flashRow = null;
+            } else if (keepBottom) toBottom();
         } else {
             header.setVisibility(View.GONE);
             renderList(a, my);
@@ -1031,7 +1094,9 @@ final class IvaChatPatch {
                 body.addView(d, new LinearLayout.LayoutParams(-1, -2));
                 lastDay = day;
             }
-            body.addView(bubbleRow(a, m, ours(m, my, ad, sup), low(m.from).equals(my), tz));
+            View br = bubbleRow(a, m, ours(m, my, ad, sup), low(m.from).equals(my), tz);
+            if (!flashMsg.isEmpty() && flashMsg.equals(m.id)) flashRow = br;
+            body.addView(br);
         }
         if (!lastError.isEmpty()) body.addView(hint(a, lastError));
     }

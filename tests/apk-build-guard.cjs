@@ -2,7 +2,7 @@
 // Ловит: вывод ключа/пароля (set -x, echo, пароль в командной строке), запуск из Pull Request,
 // подпись без сверки сертификата с эталоном ключа №6, эталон ≠ памятке, коммит APK не в ветку агента,
 // поломку смены версии в двоичном манифесте (проверяется на настоящем манифесте 10.14),
-// пропажу любой из 11 точек apply.py (10 видов вызовов IvaPatch и замена текста кнопки доставки), кандидата без нужной версии,
+// пропажу любой из 12 точек apply.py (11 видов вызовов IvaPatch и замена текста кнопки доставки), кандидата без нужной версии,
 // и что фраза «Нет связи с сервером…» в classes.dex 10.14 одна (точка 6 однозначна).
 // Запуск: node tests/apk-build-guard.cjs
 const fs = require('node:fs'), path = require('node:path'), os = require('node:os'), assert = require('node:assert/strict');
@@ -31,12 +31,13 @@ try {
   assert.ok(exp && exp === doc, `${f}: эталон ${exp} ≠ памятке ${doc}`);
   assert.match(R('.github/workflows/keystore-check.yml'), new RegExp('EXPECTED=' + exp));
   const ap = R('android/patches/apply.py');
-  // вставки: вызов IvaPatch в smali (их ровно 10); виньетка добавляется внутри уже имеющейся точки onCreated
+  // вставки: вызов IvaPatch в smali (их ровно 11, 11-я — новый метод onNewIntent); виньетка добавляется внутри уже имеющейся точки onCreated
   const insertions = ['->onPrice(Ljava/lang/String;)Ljava/lang/String;', '->onSummary(Landroid/app/Activity;)V',
     '->onHub(Landroid/app/Activity;)V', '->publishError(Ljava/lang/String;)Ljava/lang/String;',
     '->netError(Ljava/lang/String;)Ljava/lang/String;', '->onCreated(Landroid/app/Activity;)V',
     '->onSession(Landroid/app/Activity;)V', '->onAvatar(Landroid/app/Activity;Ljava/lang/String;)V',
-    '->onLogout(Landroid/app/Activity;)V', '->onTab(Landroid/app/Activity;Ljava/lang/String;)V'];
+    '->onLogout(Landroid/app/Activity;)V', '->onTab(Landroid/app/Activity;Ljava/lang/String;)V',
+    '->onNewIntent(Landroid/app/Activity;Landroid/content/Intent;)V'];
   // якоря: по ним apply.py находит место вставки (метод, поле «avatar», тело updateSummary-подобных методов)
   const anchors = ["one_method(lines, r' paintDelToggle\\(Z\\)V$')", "one_method(lines, r' logoutLocal\\(\\)V$')",
     "one_method(lines, r' showTab\\(Ljava/lang/String;\\)V$')", 'lambda\\$loadAdminProfile\\$201', '"avatar"'];
@@ -446,11 +447,53 @@ try {
       && cv.includes('b.setShortcutId(sid);') && cv.includes('new Notification.MessagingStyle(self)') && cv.includes('ms.setGroupConversation(false);')
       && cv.includes('sm.removeDynamicShortcuts(ids);') && !cv.includes('removeLongLivedShortcuts'),
       'уведомления 10.58: Android 11+ — «разговор» (MessagingStyle + долгоживущий ярлык) с логотипом в кружке слева');
-    assert.ok(np.includes('if (!conversation(a, b, ch, title, text, open)) b.setStyle(new Notification.BigTextStyle().bigText(text));'),
+    assert.ok(np.includes('if (!conversation(a, b, ch, title, text, open, target)) b.setStyle(new Notification.BigTextStyle().bigText(text));'),
       'уведомления 10.58: не вышло или Android до 11 — обычный вид с полным текстом');
     assert.ok(np.includes('cv.drawCircle(AVATAR_PX / 2f, AVATAR_PX / 2f, AVATAR_PX / 2f, pt);') && np.includes('getIdentifier("ic_logo", "drawable"'),
       'уведомления 10.58: штатный ic_logo, обрезанный кругом');
     assert.ok(/eq\("голосовые 10\.58: /.test(tp) && /eq\("уведомления 10\.58: /.test(tp), 'IvaPatchTest: проверки 10.58');
+  }
+  // 10.59: нажатие на уведомление — сразу на сообщение / заявку / кнопку обновления. Решение владельца 14.10.2026:
+  // новый метод MainActivity.onNewIntent (в 10.14 его нет) — единственная новая smali-вставка, существующие методы не меняются.
+  {
+    const np = R('android/patches/IvaNotifyPatch.java'), cp = R('android/patches/IvaChatPatch.java'), ip = R('android/patches/IvaPatch.java');
+    const tp = R('android/patches/test/IvaPatchTest.java');
+    assert.ok(ap.includes("    '.method protected onNewIntent(Landroid/content/Intent;)V',\n    '    .registers 2',")
+      && ap.includes("'    invoke-super {p0, p1}, Landroid/app/Activity;->onNewIntent(Landroid/content/Intent;)V',")
+      && ap.includes("'    invoke-virtual {p0, p1}, Lru/prokatnvsk/app/MainActivity;->setIntent(Landroid/content/Intent;)V',")
+      && ap.includes("f'    invoke-static {{p0, p1}}, {P}->onNewIntent(Landroid/app/Activity;Landroid/content/Intent;)V',")
+      && ap.includes("if methods(lines, r' onNewIntent\\('):") && ap.includes("if sup != ['.super Landroid/app/Activity;']:")
+      && ap.includes('lines.extend(NEW_INTENT)'),
+      'apply.py 13: новый onNewIntent — super, setIntent, IvaPatch; отказ, если метод уже есть или класс не от Activity');
+    assert.ok(!has(dex14, 'onNewIntent'), 'classes.dex 10.14: onNewIntent уже есть — вставка 13 не нужна или сломает класс');
+    for (const str of ['admParts', 'admDrill', 'admClientKey', 'partClientKey', 'renderAdmOrders', 'progOrders', 'ordersList', 'profVer', 'checkInBackground', 'iva_selfupdate_btn'])
+      assert.ok(has(dex14, str), `classes.dex 10.14: нет «${str}» — переход 10.59 не найдёт штатное поле или метод`);
+    assert.ok(ip.includes('public static void onNewIntent(Activity a, android.content.Intent it) {\n        try { IvaNotifyPatch.onNewIntent(a, it); } catch (Throwable ignore) {}'),
+      'IvaPatch.onNewIntent: любая ошибка перехода не мешает приложению');
+    const rt = np.slice(np.indexOf('static void route(final Activity a, Intent it) {'), np.indexOf('static void tab(Activity a, String t) {'));
+    assert.ok(rt.indexOf('it.removeExtra(EXTRA_OPEN);') > 0 && rt.indexOf('it.removeExtra(EXTRA_OPEN);') < rt.indexOf('.post(new Runnable()')
+      && rt.includes('IvaChatPatch.openFromNote(a, target);') && rt.includes('openOrder(a, target);') && rt.includes('openUpdate(a, target);'),
+      'переход 10.59: цель снимается с intent до перехода (повторно не переходим); чат / заявка / обновление');
+    assert.ok(np.includes('it.putExtra(EXTRA_TARGET, target == null ? "" : target);') && np.includes('si.putExtra(EXTRA_TARGET, target == null ? "" : target);')
+      && np.includes('"orders", orderTarget(nw));') && np.includes('"chat", messageTarget(nw, from));') && np.includes('remote + "|" + j.optString("versionName", ""));'),
+      'переход 10.59: цель в уведомлении (и в ярлыке «разговора»): сообщение, заявка, «код|версия»');
+    const oo = np.slice(np.indexOf('static void openOrder('), np.indexOf('static String clientKey('));
+    assert.ok(oo.includes('boolean busy = pb instanceof View && ((View) pb).getVisibility() == View.VISIBLE;') && oo.includes('IvaClientPatch.set(a, "admDrill", Boolean.TRUE);')
+      && oo.includes('IvaClientPatch.set(a, "admClientKey", key);') && oo.includes('call(a, "renderAdmOrders");') && oo.includes('if (list.getChildCount() == count + 1) reveal(list.getChildAt(idx + 1));')
+      && oo.includes('!"orders".equals(String.valueOf(get(a, "curTab")))') && !/apiCall|"POST"|"PATCH"/.test(oo),
+      'переход 10.59: заявка — ждём штатную загрузку, открываем клиента как штатное нажатие, подсветка только при совпадении карточек, ушли — не мешаем, в базу не пишем');
+    const ou = np.slice(np.indexOf('static void openUpdate('), np.indexOf('static ViewGroup updateBox('));
+    assert.ok(ou.includes('su.getDeclaredMethod("checkInBackground", Activity.class, View.class);') && ou.includes('box.removeView(old);')
+      && ou.includes('if (b != null) { reveal(b); return; }') && !ou.includes('onButtonTap'),
+      'переход 10.59: обновление — штатная кнопка SelfUpdate (проверка ещё раз), само не скачивает и не ставит');
+    assert.ok(cp.includes('try { applyNote(a); } catch (Throwable ignore) {}\n        String sig = signature(a);') && cp.includes('load(a, my, adm, partner, tool);\n                    loadDone = Math.max(loadDone, gen);')
+      && cp.includes('callTab(a, "chat");                  // штатный переход') && cp.includes('if (loadDone > noteGen) noteMsg = "";'),
+      'переход 10.59: чат — переписка сообщения после загрузки, начатой после нажатия; нет сообщения — список');
+    const rth = cp.slice(cp.indexOf('static void renderThread('), cp.indexOf('static View bubbleRow('));
+    assert.ok(rth.includes('if (!flashMsg.isEmpty() && flashMsg.equals(m.id)) flashRow = br;')
+      && cp.includes('if (flashRow != null) {          // открыли по уведомлению') && cp.includes('IvaNotifyPatch.reveal(flashRow);'),
+      'переход 10.59: чат — прокрутка к сообщению из уведомления и подсветка');
+    assert.ok(/eq\("переход 10\.59: /.test(tp), 'IvaPatchTest: проверки перехода 10.59');
   }
   // радиус — только вид: варианты встречаются лишь в объявлении и в шторке, на фильтр/подсчёт не влияют
   assert.equal((js45.match(/RADIUS_TITLES/g) || []).length, 3, 'IvaSearchPatch: радиус не должен участвовать в фильтре (только заготовка в шторке)');

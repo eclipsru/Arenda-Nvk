@@ -511,6 +511,48 @@ public class IvaPatchTest {
             eq("голосовые 10.58: ссылка без имени", IvaChatPatch.voiceCacheName("https://a/voice/").matches("[0-9a-f]+-v"), true);
             eq("голосовые 10.58: прогресс раз в 100 мс", IvaChatPatch.VOICE_TICK_MS, 100);
             eq("голосовые 10.58: цвета полоски как в v9.8", Integer.toHexString(IvaChatPatch.VOICE_FILL) + "|" + Integer.toHexString(IvaChatPatch.VOICE_TRACK_BG), "ffffc26b|33ffffff");
+            // 10.59: нажатие на уведомление — сразу туда, где нужно
+            java.util.List<String> nwIds = java.util.Arrays.asList("30", "29", "27");
+            eq("переход 10.59: один собеседник — первое непрочитанное", IvaNotifyPatch.messageTarget(nwIds, java.util.Arrays.asList("adm@x.ru", "Adm@X.ru ", "adm@x.ru")), "27");
+            eq("переход 10.59: несколько собеседников — список чатов", IvaNotifyPatch.messageTarget(nwIds, java.util.Arrays.asList("adm@x.ru", "b@x.ru", "adm@x.ru")), "");
+            eq("переход 10.59: одно сообщение", IvaNotifyPatch.messageTarget(java.util.Arrays.asList("5"), java.util.Arrays.asList("a@x.ru")), "5");
+            eq("переход 10.59: пусто / без отправителя / разная длина — список",
+                IvaNotifyPatch.messageTarget(new java.util.ArrayList<String>(), new java.util.ArrayList<String>()) + "|"
+                + IvaNotifyPatch.messageTarget(java.util.Arrays.asList("5"), java.util.Arrays.asList("")) + "|"
+                + IvaNotifyPatch.messageTarget(java.util.Arrays.asList("5", "4"), java.util.Arrays.asList("a@x.ru")), "||");
+            eq("переход 10.59: одна заявка — её карточка, несколько — список",
+                IvaNotifyPatch.orderTarget(java.util.Arrays.asList("77")) + "|" + IvaNotifyPatch.orderTarget(java.util.Arrays.asList("77", "76")) + "|" + IvaNotifyPatch.orderTarget(null), "77||");
+            java.util.List<String> pids = java.util.Arrays.asList("5", "4", "3", "2"), pkeys = java.util.Arrays.asList("e:a", "e:b", "e:a", "e:a");
+            eq("переход 10.59: место карточки среди заявок клиента",
+                IvaNotifyPatch.indexInClient(pids, pkeys, "5") + "|" + IvaNotifyPatch.indexInClient(pids, pkeys, "3") + "|" + IvaNotifyPatch.indexInClient(pids, pkeys, "2")
+                + "|" + IvaNotifyPatch.indexInClient(pids, pkeys, "4"), "0|1|2|0");
+            eq("переход 10.59: нет заявки / ключи не сошлись — не подсвечиваем",
+                IvaNotifyPatch.indexInClient(pids, pkeys, "9") + "|" + IvaNotifyPatch.indexInClient(pids, java.util.Arrays.asList("e:a"), "5"), "-1|-1");
+            eq("переход 10.59: обновление — код и версия", IvaNotifyPatch.targetCode("133|10.59") + "|" + IvaNotifyPatch.targetName("133|10.59"), "133|10.59");
+            eq("переход 10.59: обновление — без кода", IvaNotifyPatch.targetCode("") + "|" + IvaNotifyPatch.targetName("") + "|" + IvaNotifyPatch.targetCode("x|1") + "|" + IvaNotifyPatch.targetName(null), "0||0|");
+            eq("переход 10.59: прокрутка с отступом сверху", IvaNotifyPatch.revealY(500, 33), 467);
+            eq("переход 10.59: ожидание и метка кнопки обновления", IvaNotifyPatch.ROUTE_WAIT_MS + "|" + IvaNotifyPatch.ROUTE_STEP_MS + "|" + IvaChatPatch.NOTE_WAIT_MS + "|" + IvaNotifyPatch.UPDATE_BTN_TAG,
+                "15000|250|20000|iva_selfupdate_btn");
+            eq("переход 10.59: подсветка — полупрозрачный оранжевый 1,6 с", Integer.toHexString(IvaNotifyPatch.FLASH_COLOR) + "|" + IvaNotifyPatch.FLASH_MS, "55ff8f1f|1600");
+            {
+                String cme = "client@x.ru", a1 = "adm@x.ru", a2 = "adm2@x.ru";
+                java.util.Set<String> ads = new java.util.HashSet<String>(java.util.Arrays.asList(a1, a2));
+                java.util.List<IvaChatPatch.Msg> lm = new java.util.ArrayList<IvaChatPatch.Msg>();
+                lm.add(IvaChatPatch.msg("1", cme, a1, "Есть дрель?", "", "", 0, true, "2026-10-14T09:00:00+00:00", "T1"));
+                lm.add(IvaChatPatch.msg("2", a1, cme, "Да", "", "", 0, false, "2026-10-14T09:01:00+00:00", "T1"));
+                lm.add(IvaChatPatch.msg("3", "Adm@X.ru", cme, "", "", "https://x/voice/v.m4a", 5, false, "2026-10-14T09:02:00+00:00", ""));
+                lm.add(IvaChatPatch.msg("4", a2, cme, "Добрый день", "", "", 0, false, "2026-10-14T09:03:00+00:00", ""));
+                java.util.Map<String, String> noTags = new java.util.HashMap<String, String>();
+                eq("переход 10.59: сообщение по инструменту — его переписка", String.join("|", IvaChatPatch.locate(lm, cme, ads, false, noTags, "2")), "adm@x.ru|adm@x.ru|T1");
+                eq("переход 10.59: голосовое без tool_id — переписка предыдущего (как в списке)", String.join("|", IvaChatPatch.locate(lm, cme, ads, false, noTags, "3")), "adm@x.ru|Adm@X.ru|T1");
+                eq("переход 10.59: общий чат другого проката", String.join("|", IvaChatPatch.locate(lm, cme, ads, false, noTags, "4")), "adm2@x.ru|adm2@x.ru|");
+                eq("переход 10.59: нет сообщения / пустой id — null", IvaChatPatch.locate(lm, cme, ads, false, noTags, "9") == null && IvaChatPatch.locate(lm, cme, ads, false, noTags, " ") == null, true);
+                // как в списке: переписка из locate есть среди buildChats
+                boolean inList = false;
+                for (IvaChatPatch.Chat c : IvaChatPatch.buildChats(lm, cme, ads, false, noTags))
+                    if (c.partner.equals("adm@x.ru") && c.tool.equals("T1")) inList = true;
+                eq("переход 10.59: та же переписка, что в списке чатов", inList, true);
+            }
         }
         if (fail > 0) { System.out.println("ошибок: " + fail); System.exit(1); }
         System.out.println("все проверки IvaPatch пройдены");
