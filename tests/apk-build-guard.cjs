@@ -769,6 +769,40 @@ try {
       assert.ok(has(arsc14, str) || has(dex14, str), `APK 10.14: нет «${str}» — правка 10.67 не найдёт штатное поле`);
     assert.ok(/eq\("админ 10\.67: /.test(tp) && /eq\("подкатегория 10\.67: /.test(tp) && /eq\("кабинет 10\.67: /.test(tp), 'IvaPatchTest: проверки 10.67');
   }
+  // 10.71 (просьба владельца 14.10.2026): рейтинг на картинке, «Нет отзывов», ряды ровные; мат запрещён (приложение + база)
+  {
+    const rp = R('android/patches/IvaReviewPatch.java'), tp = R('android/patches/test/IvaPatchTest.java');
+    const sql = R('supabase/migrations/20261014_reviews_no_mat.sql');
+    const jconst = (n) => { const m = rp.match(new RegExp('\\b' + n + ' = ((?:"[^"]*"\\s*(?:\\+\\s*)?)+)[,;]')); assert.ok(m, `IvaReviewPatch: нет ${n}`); return (m[1].match(/"([^"]*)"/g) || []).map((x) => x.slice(1, -1)).join(''); };
+    // выражения в приложении и в базе одинаковые
+    assert.ok(sql.includes(`IF t ~ '${jconst('MAT_RE')}' THEN`) && sql.includes(`CONTINUE WHEN t ~ '${jconst('MAT_ALLOW')}';`)
+      && sql.includes(`translate(lower(p), '${jconst('MAT_FROM')}', '${jconst('MAT_TO')}')`)
+      && sql.includes(`regexp_replace(s, '${jconst('MAT_STRIP').replace(/'/g, "''")}', '', 'g')`)
+      && sql.includes(`regexp_split_to_table(s, '${jconst('MAT_SPLIT')}')`)
+      && sql.includes("t := regexp_replace(t, '(.)\\1+', '\\1', 'g');") && rp.includes('String t = tok.replaceAll("(.)\\\\1+", "$1");'),
+      'мат 10.71: проверка в приложении и в базе (iva_has_mat) должна совпадать');
+    assert.equal(jconst('MAT_FROM').length, jconst('MAT_TO').length, 'мат 10.71: translate — строки одной длины');
+    assert.ok(/BEFORE INSERT OR UPDATE OF text, author_name ON public\.reviews/.test(sql) && !/UPDATE OF[^\n]*status/.test(sql)
+      && sql.includes("RAISE EXCEPTION 'В отзыве есть нецензурные слова. Уберите их, пожалуйста.';")
+      && rp.includes('static final String MAT_MSG = "В отзыве есть нецензурные слова. Уберите их, пожалуйста.";'),
+      'мат 10.71: триггер — на новый отзыв и правку текста/имени (модерация status не задевается), сообщение как в приложении');
+    assert.ok(/^-- UPDATE public\.reviews SET status = 'hidden'/m.test(sql) && !/^UPDATE /m.test(sql) && !/DROP TABLE|DELETE FROM|TRUNCATE/i.test(sql),
+      'мат 10.71: SQL ничего не удаляет; скрытие старых отзывов — только по желанию (закомментировано)');
+    // форма не отправляет мат; «Скрыть спам» — только у отзывов с матом
+    const fm = rp.slice(rp.indexOf('static void showForm('));
+    assert.ok(fm.indexOf('if (bad != null) { err.setText(bad); err.setVisibility(View.VISIBLE); return; }') > 0
+      && fm.indexOf('if (bad != null) { err.setText(bad); err.setVisibility(View.VISIBLE); return; }') < fm.indexOf('"/rest/v1/rpc/submit_review"'),
+      'мат 10.71: форма проверяет текст и имя до отправки');
+    assert.ok(rp.includes('if (!chief) return null;') && rp.includes('return mat ? "hidden" : null;'), 'мат 10.71: «Скрыть спам» — только главному админу и только с матом');
+    // лента: плашка на картинке справа внизу, строка у всех карточек, карточки в ряду — на высоту ряда
+    const dc = rp.slice(rp.indexOf('static void decorateCard('), rp.indexOf('static String priceText('));
+    assert.ok(dc.includes('new FrameLayout.LayoutParams(-2, -2, Gravity.BOTTOM | Gravity.END)') && dc.includes('pic.addView(b, bl);') && dc.includes('b.setTag(BADGE_TAG);')
+      && dc.includes('tv.setText(tx == null ? NO_REVIEWS_CARD : tx[1]);') && dc.includes('tv.setVisibility(tx == null ? View.INVISIBLE : View.VISIBLE);')
+      && dc.includes('cl.height = ViewGroup.LayoutParams.MATCH_PARENT;') && dc.includes('getOrientation() == LinearLayout.HORIZONTAL'),
+      'лента 10.71: «★ 4,8» на картинке справа внизу, «N отзывов» / «Нет отзывов» у всех, карточки в ряду одной высоты');
+    assert.ok(!/removeView|setImage|setOnClickListener/.test(dc), 'лента 10.71: штатные картинка, избранное и нажатие не трогаются');
+    assert.ok((tp.match(/eq\("(лента|мат) 10\.71: /g) || []).length >= 11, 'IvaPatchTest: проверки 10.71');
+  }
   // 10.70 (решения владельца 14.10.2026): отзывы и оценки, этап 1 — те же отзывы, что на сайте; база и сайт не меняются
   {
     const rp = R('android/patches/IvaReviewPatch.java'), ip = R('android/patches/IvaPatch.java'), sp = R('android/patches/IvaSearchPatch.java');
@@ -795,7 +829,7 @@ try {
     for (const col of 'id,tool_id,author_id,author_name,rating,text,status,created_at,updated_at'.split(','))
       assert.ok(new RegExp(`\\n  ${col} `).test(mig.slice(mig.indexOf('CREATE TABLE IF NOT EXISTS public.reviews'), mig.indexOf('CONSTRAINT uq_reviews_tool_author'))), `отзывы 10.70: колонки ${col} нет в таблице reviews`);
     // модерация — только кнопки главного админа (право всё равно проверяет база)
-    assert.ok(rp.includes('} else if (chief && item != null) {') && rp.includes('final boolean ch = chief(a);')
+    assert.ok(rp.includes('} else if (item != null && modAction(chief, hidden, hasMat(body) || hasMat(val(r.get("author_name")))) != null) {') && rp.includes('final boolean ch = chief(a);')
       && rp.includes('return logged(a) && e instanceof String && CHIEF_EMAIL.equalsIgnoreCase(((String) e).trim());'),
       'отзывы 10.70: «Скрыть спам» / «Восстановить» — только главному админу');
     // прокат: штатный текст заменяется, только если это «Отзывы: пока нет», и только когда отзывы есть

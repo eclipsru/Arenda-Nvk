@@ -927,6 +927,33 @@ public class IvaPatchTest {
             java.util.Map<String, String> q70rr = new java.util.HashMap<String, String>(); q70rr.put("rating", "null");
             eq("отзывы 10.70: оценка из строки", IvaReviewPatch.ratingOf(q70rr) + "|" + IvaReviewPatch.ratingOf(q70rv.get(0)), "0|5");
         }
+        {   // 10.71: рейтинг на картинке, «Нет отзывов», запрет мата
+            eq("лента 10.71: на картинке «★ 4,8», без отзывов — нет плашки", IvaReviewPatch.badgeText(4.75, 12) + "|" + IvaReviewPatch.badgeText(0, 0) + "|" + IvaReviewPatch.badgeText(4, 0), "★ 4,8||");
+            eq("лента 10.71: под ценой — число отзывов / «Нет отзывов»", IvaReviewPatch.countLine(12) + "|" + IvaReviewPatch.countLine(1) + "|" + IvaReviewPatch.countLine(3) + "|" + IvaReviewPatch.countLine(0), "12 отзывов|1 отзыв|3 отзыва|Нет отзывов");
+            eq("лента 10.71: ключ карточки", IvaReviewPatch.feedKey(4.8, 12) + "/" + IvaReviewPatch.feedKey(0, 0) + "/" + IvaReviewPatch.feedKey(5, 0), "12|4,8/0|/0|");
+            eq("лента 10.71: тексты по ключу", String.join("/", IvaReviewPatch.feedTexts("12|4,8")) + "|" + String.join("/", IvaReviewPatch.feedTexts("0|")), "★ 4,8/12 отзывов|/Нет отзывов");
+            eq("лента 10.71: карточку не узнали — null (строка невидима, место сохраняется)", IvaReviewPatch.feedTexts("") == null && IvaReviewPatch.feedTexts(null) == null && IvaReviewPatch.feedTexts("x|1") == null, true);
+            java.util.List<String[]> q71c = new java.util.ArrayList<String[]>();
+            q71c.add(new String[]{"от 500 ₽/сут", IvaReviewPatch.feedKey(0, 0)}); q71c.add(new String[]{"от 700 ₽/сут", IvaReviewPatch.feedKey(4.5, 2)});
+            eq("лента 10.71: одинаковые названия — по цене", String.join("/", IvaReviewPatch.feedTexts(IvaReviewPatch.chooseLine(q71c, "от 500 ₽/сут"))), "/Нет отзывов");
+            String[] q71bad = {"хуй", "Нахуй", "ХУЁВО", "х.у.й", "xуй", "пиздец", "пздц", "ебать", "Заебись", "выебон", "съебался", "сьебался", "ёбаный", "еб@ть", "долбоеб", "въебал",
+                "бля", "блять", "бляяяя", "выблядок", "мудак", "пидор", "пидр", "залупа", "гондон", "манда", "мандавошка", "шлюха", "сука", "суука", "херня", "похер", "дрочить", "хули",
+                "Отличная дрель, но продавец мудак"};
+            String q71miss = "";
+            for (String w : q71bad) if (!IvaReviewPatch.hasMat(w)) q71miss += w + ";";
+            eq("мат 10.71: нецензурные слова узнаются (и с ё, латиницей, точками, повторами)", q71miss, "");
+            String[] q71good = {"хлеб", "небо", "себе", "тебе", "требовать", "учебный", "колеблется", "бляха", "бляшка", "мудрый", "педикюр", "мандарин", "мандат", "сучок", "сук",
+                "херес", "херувим", "страхует", "застрахуйте", "не психуй", "хулиган", "употреблять", "погребение", "вебинар", "дебет", "лебёдка", "гребень", "щебень", "худой",
+                "хутор", "сукно", "скука", "хребет", "оскорблять", "Makita", "Хорошая дрель, всё понравилось!", "", null};
+            String q71fp = "";
+            for (String w : q71good) if (IvaReviewPatch.hasMat(w)) q71fp += w + ";";
+            eq("мат 10.71: обычные слова — не мат (хлеб, себе, бляха, сучок, лебёдка, страхует…)", q71fp, "");
+            eq("мат 10.71: «Скрыть спам» — только у отзыва с матом; скрытый — «Восстановить»; не главный админ — ничего",
+                IvaReviewPatch.modAction(true, false, true) + "|" + IvaReviewPatch.modAction(true, false, false) + "|" + IvaReviewPatch.modAction(true, true, false) + "|" + IvaReviewPatch.modAction(false, false, true),
+                "hidden|null|published|null");
+            eq("мат 10.71: замена букв — одной длины (как translate в базе)", IvaReviewPatch.MAT_FROM.length() == IvaReviewPatch.MAT_TO.length(), true);
+            eq("мат 10.71: подготовка текста", IvaReviewPatch.matNorm("ЁЖ x.y-й 3@0"), "еж хуй зао");
+        }
         if (fail > 0) { System.out.println("ошибок: " + fail); System.exit(1); }
         System.out.println("все проверки IvaPatch пройдены");
     }

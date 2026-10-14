@@ -4,7 +4,7 @@ package ru.prokatnvsk.app;
 // «Аккуратно вмонтировать систему отзывов и оценок, чтобы ничего не испортить». Те же отзывы, что на сайте:
 // таблица reviews, tools.rating / tools.reviews_count (пересчитывает триггер базы), RPC can_user_review,
 // submit_review, toggle_review_status, get_landlord_rating (миграция 20260924_reviews.sql). База и сайт не меняются.
-//  • лента — на карточке «★ 4,8 (12)» под ценой (только если отзывы есть);
+//  • лента — 10.71: на картинке справа внизу «★ 4,8», под ценой «12 отзывов» / «Нет отзывов» (карточки в ряду одной высоты);
 //  • страница инструмента — под названием «★ 4,8 · 12 отзывов», внизу блок «Отзывы»: свой отзыв (изменить),
 //    «Оставить отзыв» (право — как на сайте: can_user_review), список; главному админу — «Скрыть спам» / «Восстановить»;
 //  • страница проката — вместо «Отзывы: пока нет» общий рейтинг проката (если отзывы есть);
@@ -87,6 +87,79 @@ public final class IvaReviewPatch {
     static String cardLine(double rating, int count) {
         if (count <= 0 || !(rating > 0)) return "";
         return "★ " + fmtRating(rating) + " (" + count + ")";
+    }
+
+    // 10.71 (просьба владельца 14.10): в ленте рейтинг — на картинке справа внизу, под ценой — «12 отзывов» / «Нет отзывов»
+    // у каждой карточки (карточки в ряду одной высоты, ряды не «сползают»).
+    static final String NO_REVIEWS_CARD = "Нет отзывов";
+
+    /** На картинке: «★ 4,8»; отзывов нет — пусто (плашки нет). */
+    static String badgeText(double rating, int count) {
+        if (count <= 0 || !(rating > 0)) return "";
+        return "★ " + fmtRating(rating);
+    }
+
+    /** Под ценой: «12 отзывов» / «Нет отзывов». */
+    static String countLine(int count) { return count <= 0 ? NO_REVIEWS_CARD : count + " " + reviewsWord(count); }
+
+    /** Ключ карточки для выбора среди одинаковых названий: «число|рейтинг» (без отзывов — «0|»). */
+    static String feedKey(double rating, int count) {
+        return count <= 0 || !(rating > 0) ? "0|" : count + "|" + fmtRating(rating);
+    }
+
+    /** {плашка на картинке, строка под ценой} по ключу; ключа нет (не узнали карточку) — null. */
+    static String[] feedTexts(String key) {
+        if (key == null || key.isEmpty() || key.indexOf('|') < 0) return null;
+        int n;
+        try { n = Integer.parseInt(key.substring(0, key.indexOf('|'))); } catch (Throwable e) { return null; }
+        String r = key.substring(key.indexOf('|') + 1);
+        return new String[]{n <= 0 || r.isEmpty() ? "" : "★ " + r, countLine(n)};
+    }
+
+    // ───────────── 10.71: нецензурные слова в отзывах запрещены (решение владельца 14.10.2026) ─────────────
+    // Та же проверка — в базе (триггер tr_reviews_no_mat, supabase/migrations/20261014_reviews_no_mat.sql: iva_has_mat),
+    // выражения в приложении и в SQL одинаковые (сторож сверяет). Текст: строчные, ё→е, ъ→ь, похожие латинские буквы и
+    // цифры → русские, точки/дефисы/звёздочки внутри слова убираются, слово — без повторов букв («сууука» → «сука»).
+    // «Скрыть спам» у главного админа — только у отзывов с такими словами (у скрытых — «Восстановить»).
+    static final String MAT_FROM = "ёъaceopxykmt306@", MAT_TO = "еьасеорхукмтзоба";
+    static final String MAT_STRIP = "[._*'`~-]", MAT_SPLIT = "[^а-яa-z0-9]+";
+    static final String MAT_ALLOW = "^(за|пере|под|недо|при)?страху|психу";
+    static final String MAT_RE = "хуй|хуе|хуя|хуи|хую|^хули$|пизд|пздц|^еб|^(за|на|по|вы|от|у|сь|разь|до|подь|при|про|обь|вь|изь|недо|пере|оть|взь)еб[аиулнкчшыо]"
+        + "|^долбоеб|^(вы|по|за|у)?бля(д|т|$)|^муд(ак|ил|оз|ач|ень|ло)|^пид[оа]?р|^педик(и|а|ов|у|ам)?$|залуп|^г[ао]ндон"
+        + "|^манд(а|у|ы|ой|е)$|^мандавош|^шлюх|^сук(а|и|у|ой|ин|ины|ину|ами)$|^(на|по|ни)?хер($|н|ов)|^(за|по|на|от)?дроч";
+    static final String MAT_MSG = "В отзыве есть нецензурные слова. Уберите их, пожалуйста.";
+    static final String MAT_NAME_MSG = "В имени есть нецензурные слова. Измените имя в профиле.";
+    static java.util.regex.Pattern matRe, matAllow;
+
+    static String matNorm(String s) {
+        String t = s.toLowerCase(new Locale("ru"));
+        StringBuilder b = new StringBuilder(t.length());
+        for (int i = 0; i < t.length(); i++) {
+            char ch = t.charAt(i);
+            int k = MAT_FROM.indexOf(ch);
+            b.append(k >= 0 ? MAT_TO.charAt(k) : ch);
+        }
+        return b.toString().replaceAll(MAT_STRIP, "");
+    }
+
+    /** Есть ли в тексте нецензурные слова (как iva_has_mat в базе). */
+    static boolean hasMat(String s) {
+        if (s == null || s.trim().isEmpty()) return false;
+        if (matRe == null) { matRe = java.util.regex.Pattern.compile(MAT_RE); matAllow = java.util.regex.Pattern.compile(MAT_ALLOW); }
+        for (String tok : matNorm(s).split(MAT_SPLIT)) {
+            if (tok.isEmpty()) continue;
+            String t = tok.replaceAll("(.)\\1+", "$1");
+            if (matAllow.matcher(t).find()) continue;
+            if (matRe.matcher(t).find()) return true;
+        }
+        return false;
+    }
+
+    /** Кнопка модерации: null — нет; "hidden" — «Скрыть спам» (только с матом); "published" — «Восстановить». */
+    static String modAction(boolean chief, boolean hidden, boolean mat) {
+        if (!chief) return null;
+        if (hidden) return "published";
+        return mat ? "hidden" : null;
     }
 
     /** Страница инструмента, под названием: «★ 4,8 · 12 отзывов» / «Отзывов пока нет». */
@@ -345,29 +418,61 @@ public final class IvaReviewPatch {
         return info.getChildCount() >= 2 && info.getChildAt(0) instanceof TextView && info.getChildAt(1) instanceof TextView;
     }
 
+    static final String BADGE_TAG = "iva_rv_badge";
+
     static void decorateCard(Activity a, LinearLayout card, Map<String, List<JSONObject>> byName) {
         LinearLayout info = (LinearLayout) card.getChildAt(1);
+        FrameLayout pic = (FrameLayout) card.getChildAt(0);
         String name = String.valueOf(((TextView) info.getChildAt(0)).getText());
         String price = String.valueOf(((TextView) info.getChildAt(1)).getText());
         List<JSONObject> same = byName.get(name);
         List<String[]> cands = new ArrayList<String[]>();
         if (same != null) for (JSONObject j : same)
-            cands.add(new String[]{priceText(a, j), cardLine(num(j, "rating"), (int) num(j, "reviews_count"))});
-        String line = chooseLine(cands, price);
+            cands.add(new String[]{priceText(a, j), feedKey(num(j, "rating"), (int) num(j, "reviews_count"))});
+        String[] tx = feedTexts(chooseLine(cands, price));   // null — карточку не узнали: строка пустая, но место за ней
+        // ряд по две карточки: обе — на высоту ряда (низ карточек на одной линии, ряды не «сползают»)
+        if (card.getParent() instanceof LinearLayout && ((LinearLayout) card.getParent()).getOrientation() == LinearLayout.HORIZONTAL
+            && card.getLayoutParams() instanceof LinearLayout.LayoutParams && card.getLayoutParams().height != ViewGroup.LayoutParams.MATCH_PARENT) {
+            LinearLayout.LayoutParams cl = (LinearLayout.LayoutParams) card.getLayoutParams();
+            cl.height = ViewGroup.LayoutParams.MATCH_PARENT;
+            card.setLayoutParams(cl);
+        }
+        // под ценой — «12 отзывов» / «Нет отзывов» (у всех карточек)
         View old = info.findViewWithTag(CARD_TAG);
-        if (line.isEmpty()) { if (old != null) old.setVisibility(View.GONE); return; }
         TextView tv = old instanceof TextView ? (TextView) old : null;
         if (tv == null) {
             tv = new TextView(a);
             tv.setTag(CARD_TAG);
             tv.setTextSize(12f);
             tv.setSingleLine(true);
+            tv.setTextColor(color(a, "gray", 0xff9aa1b0));
             LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-2, -2);
             lp.topMargin = dp(a, 2);
             info.addView(tv, Math.min(2, info.getChildCount()), lp);
         }
-        tv.setVisibility(View.VISIBLE);
-        tv.setText(starText(a, line, color(a, "gray", 0xff9aa1b0)));
+        tv.setText(tx == null ? NO_REVIEWS_CARD : tx[1]);
+        tv.setVisibility(tx == null ? View.INVISIBLE : View.VISIBLE);
+        // на картинке справа внизу — «★ 4,8» (слева внизу — штатный значок доставки, справа вверху — избранное)
+        View ob = pic.findViewWithTag(BADGE_TAG);
+        if (tx == null || tx[0].isEmpty()) { if (ob != null) ob.setVisibility(View.GONE); return; }
+        TextView b = ob instanceof TextView ? (TextView) ob : null;
+        if (b == null) {
+            b = new TextView(a);
+            b.setTag(BADGE_TAG);
+            b.setTextSize(12f);
+            b.setTypeface(null, Typeface.BOLD);
+            b.setSingleLine(true);
+            b.setPadding(dp(a, 7), dp(a, 2), dp(a, 7), dp(a, 2));
+            GradientDrawable bg = new GradientDrawable();
+            bg.setColor(0xcc101217);                     // фон приложения, полупрозрачный
+            bg.setCornerRadius(dp(a, 10));
+            b.setBackground(bg);
+            FrameLayout.LayoutParams bl = new FrameLayout.LayoutParams(-2, -2, Gravity.BOTTOM | Gravity.END);
+            bl.setMargins(0, 0, dp(a, 6), dp(a, 6));
+            pic.addView(b, bl);
+        }
+        b.setVisibility(View.VISIBLE);
+        b.setText(starText(a, tx[0], color(a, "text", 0xfff2f4f8)));
     }
 
     /** Текст цены, как его пишет штатный feedCard: «от 500 ₽/сут» / «Цену уточняйте». */
@@ -689,8 +794,8 @@ public final class IvaReviewPatch {
             ed.setTag("iva_rv_my_edit");
             ed.setPadding(0, dp(a, 8), 0, 0);
             c.addView(ed, new LinearLayout.LayoutParams(-2, -2));
-        } else if (chief && item != null) {
-            final String to = hidden ? "published" : "hidden";
+        } else if (item != null && modAction(chief, hidden, hasMat(body) || hasMat(val(r.get("author_name")))) != null) {
+            final String to = modAction(chief, hidden, true);
             final TextView mod = text(a, hidden ? "Восстановить" : "Скрыть спам", 13f, cOrange, true);
             mod.setPadding(0, dp(a, 8), 0, 0);
             mod.setOnClickListener(new View.OnClickListener() {
@@ -999,6 +1104,9 @@ public final class IvaReviewPatch {
         send.setOnClickListener(new View.OnClickListener() {
             @Override public void onClick(View v) {
                 if (!logged(a)) { err.setText("Войдите в аккаунт, чтобы оставить отзыв"); err.setVisibility(View.VISIBLE); return; }
+                Object un0 = get(a, "userName");
+                String bad = hasMat(String.valueOf(in.getText())) ? MAT_MSG : hasMat(un0 instanceof String ? (String) un0 : "") ? MAT_NAME_MSG : null;
+                if (bad != null) { err.setText(bad); err.setVisibility(View.VISIBLE); return; }   // 10.71: мат не отправляем (база тоже не примет)
                 send.setEnabled(false);
                 send.setAlpha(0.6f);
                 send.setText("Сохраняем…");
