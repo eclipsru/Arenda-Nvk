@@ -656,6 +656,21 @@ public class IvaPatchTest {
                 eq("заявки 10.63: архив — подписи", IvaOrderPatch.ARCH_TITLE + "|" + IvaOrderPatch.ARCH_ON + "|" + IvaOrderPatch.ARCH_OFF + "|" + IvaOrderPatch.ARCH_ONLY_CLOSED,
                     "Архив заявок|В архив|Вернуть из архива|В архив можно убрать только закрытую заявку");
             }
+            // 10.65: уведомления, этап 2 — когда приложение закрыто
+            String bgJwt = "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiAidTEiLCAiZXhwIjogMTc2MDAwMDAwMCwgImVtYWlsIjogItCwQGIucnUifQ.sig";
+            eq("уведомления 10.65: срок токена из JWT (base64url, кириллица, без «=»)", IvaNotifyPatch.jwtExp(bgJwt) + "|" + IvaNotifyPatch.jwtExp("плохой") + "|" + IvaNotifyPatch.jwtExp(null) + "|" + IvaNotifyPatch.jwtExp("a.%%%.b"),
+                "1760000000|0|0|0");
+            eq("уведомления 10.65: обновлять токен — истёк, истекает за 2 мин или срок неизвестен",
+                IvaNotifyPatch.needRefresh(1760000000L, 1760000000L * 1000 - 600000) + "|" + IvaNotifyPatch.needRefresh(1760000000L, 1760000000L * 1000 - 60000)
+                + "|" + IvaNotifyPatch.needRefresh(1760000000L, 1760000000L * 1000 + 1) + "|" + IvaNotifyPatch.needRefresh(0, 5),
+                "false|true|true|true");
+            eq("уведомления 10.65: фон — только когда окно закрыто и общий переключатель включён",
+                IvaNotifyPatch.bgShouldRun(false, true) + "|" + IvaNotifyPatch.bgShouldRun(true, true) + "|" + IvaNotifyPatch.bgShouldRun(false, false),
+                "true|false|false");
+            eq("уведомления 10.65: rt в JSON экранируется", IvaNotifyPatch.jsonStr("a\"b\\c\n") + "|" + IvaNotifyPatch.jsonStr(null), "\"a\\\"b\\\\c\\u000a\"|\"\"");
+            eq("уведомления 10.65: раз в 15 минут, своя задача", IvaNotifyPatch.BG_EVERY_MS + "|" + IvaNotifyPatch.BG_JOB_ID + "|" + IvaNotifyPatch.SESSION_PREFS, "900000|7210|prokat_session");
+            eq("уведомления 10.65: в «Настройках» сказано, что приходят и когда закрыто", IvaNotifyPatch.BG_NOTE.contains("когда приложение закрыто") && IvaNotifyPatch.BG_NOTE.contains("15 минут")
+                && !IvaNotifyPatch.BG_NOTE.contains("в следующей версии"), true);
             // 10.65: «Доставка» в форме инструмента — выключатель
             eq("доставка 10.65: подпись по штатному значению", IvaPatch.delSub(true) + "|" + IvaPatch.delSub(false) + "|" + IvaPatch.DEL_TITLE,
                 "Есть — укажите цену ниже, ₽ за 1 км (в одну сторону)|Нет — только самовывоз. Включите, чтобы указать цену|Доставка");

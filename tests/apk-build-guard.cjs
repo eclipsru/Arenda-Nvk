@@ -372,7 +372,10 @@ try {
     assert.ok(code.includes('android/patches/IvaOrderPatch.java android/patches/IvaNotifyPatch.java 2>&1') && chk56.includes('android/patches/IvaNotifyPatch.java \\'),
       'IvaNotifyPatch.java не компилируется в сборке или в проверке');
     assert.ok(!R('android/patches/apply.py').includes('IvaNotifyPatch'), 'IvaNotifyPatch: новые smali-хуки не нужны (вход — IvaPatch.onTab)');
-    assert.ok(!/firebase|com\.google\.android\.gms|JobScheduler|AlarmManager|WorkManager/i.test(np), 'IvaNotifyPatch: этап 1 — без Firebase и фоновых служб');
+    // этап 1 — без фоновых служб; этап 2 (10.65) — отдельный раздел в конце файла, только JobScheduler (проверка в блоке 10.65)
+    const np1 = np.slice(0, np.indexOf('// ───────────── 10.65: этап 2'));
+    assert.ok(np1.length > 1000 && !/firebase|com\.google\.android\.gms|JobScheduler|AlarmManager|WorkManager/i.test(np1), 'IvaNotifyPatch: этап 1 — без Firebase и фоновых служб');
+    assert.ok(!/com\.google\.firebase|FirebaseMessaging|com\.google\.android\.gms|AlarmManager|ALARM_SERVICE|androidx\.work|WorkManager/.test(np), 'IvaNotifyPatch: без Firebase, AlarmManager и WorkManager (решение владельца 13.10)');
     assert.ok(!/customer_profiles|passport|phone|surname/.test(np), 'IvaNotifyPatch: лишние персональные данные');
     assert.ok(np.includes('static boolean pref(Context c, String k) { return prefs(c).getBoolean(k, true); }'), 'уведомления 10.56: по умолчанию всё включено');
     assert.ok(np.includes('if (!all || !own) return false;\n        return !K_ORD.equals(kind) || admin;')
@@ -698,6 +701,44 @@ try {
       assert.ok(has(arsc14, str), `resources.arsc 10.14: нет «${str}» — раздел «Заявки» 10.64 не найдёт штатную страницу`);
     assert.ok(has(dex14, 'Lru/prokatnvsk/app/PullScrollView;') && has(dex14, 'onRefresh'), 'classes.dex 10.14: нет PullScrollView.onRefresh');
     assert.ok(/eq\("заявки 10\.64: /.test(tp), 'IvaPatchTest: проверки 10.64');
+  }
+  // 10.65: уведомления, этап 2 — когда приложение закрыто (JobScheduler раз в ~15 мин, без Firebase; решение владельца 13.10.2026)
+  {
+    const np = R('android/patches/IvaNotifyPatch.java'), tp = R('android/patches/test/IvaPatchTest.java'), ax = R('android/patches/axml_service.py');
+    const bg = np.slice(np.indexOf('// ───────────── 10.65: этап 2'));
+    assert.ok(bg.includes('public static final class Bg extends android.app.job.JobService {') && bg.includes('try { jobFinished(params, false); } catch (Throwable ignore) {}')
+      && bg.includes('.setPeriodic(BG_EVERY_MS)') && bg.includes('static final long BG_EVERY_MS = 15L * 60 * 1000;')
+      && bg.includes('.setRequiredNetworkType(android.app.job.JobInfo.NETWORK_TYPE_ANY);')
+      && bg.includes('if (j.getId() == BG_JOB_ID && j.getIntervalMillis() == BG_EVERY_MS) { bgScheduled = true; return; }'),
+      'уведомления 10.65: служба JobScheduler раз в 15 минут, ставится один раз (не сбивает отсчёт), работа — в своём потоке');
+    const run = bg.slice(bg.indexOf('static void bgRun(Context app) {'));
+    assert.ok(run.includes('if (!bgShouldRun(activityAlive(), pref(app, K_ALL))) return;')
+      && run.includes('if (logged && admin) try { checkOrders(c, email); } catch (Throwable ignore) {}')
+      && run.includes('if (logged) try { checkMessages(c, email, admin, null); } catch (Throwable ignore) {}')
+      && run.includes('try { checkUpdate(c, admin); } catch (Throwable ignore) {}')
+      && run.includes('boolean admin = logged && prefs(app).getBoolean(key("admin", email), false);'),
+      'уведомления 10.65: те же проверки и переключатели, что у этапа 1; пока окно живо — не работает; заявки — только админу');
+    const rf = bg.slice(bg.indexOf('static String bgRefresh('), bg.indexOf('static void bgRun('));
+    assert.ok(rf.includes('"/auth/v1/token?grant_type=refresh_token", "POST"') && rf.includes('s.edit().putString("at", at).putString("rt", nrt).commit();')
+      && rf.includes('if (!rt.equals(s.getString("rt", "")) || activityAlive()) return null;') && !/\.clear\(\)|\.remove\(|logoutLocal/.test(bg),
+      'уведомления 10.65: истёкший токен — обновить и записать новую пару в штатное хранилище (rt одноразовый); выход из аккаунта — только штатный');
+    assert.ok(np.includes('if (logged && !email.isEmpty()) try { prefs(a).edit().putBoolean(key("admin", email), admin).apply(); } catch (Throwable ignore) {}')
+      && np.includes('try { scheduleBg(a.getApplicationContext()); } catch (Throwable ignore) {}   // 10.65'),
+      'уведомления 10.65: этап 1 запоминает «админ ли» и ставит фоновую проверку');
+    assert.ok(np.includes(': nativeCall(IvaClientPatch.SB_URL + path, "GET", null, true, a instanceof BgCtx ? ((BgCtx) a).token : null);')
+      && np.includes('Intent it = new Intent(c, mainClass(a));') && np.includes('si.setClass(c, mainClass(a));')
+      && np.includes('if (a instanceof Activity) ((Activity) a).runOnUiThread(new Runnable() {'),
+      'уведомления 10.65: проверки работают и без окна (токен входа, MainActivity для нажатия, без UI)');
+    assert.ok(np.includes('note.setText(BG_NOTE);') && !np.includes('в следующей версии'), 'уведомления 10.65: в «Настройках» — что приходят и когда закрыто');
+    for (const str of ['prokat_session', 'refresh_token', '/auth/v1/token?grant_type=refresh_token', 'MainActivity$Api'])
+      assert.ok(has(dex14, str), `classes.dex 10.14: нет «${str}» — фоновая проверка не найдёт штатный вход`);
+    assert.ok(ax.includes('SERVICE = "ru.prokatnvsk.app.IvaNotifyPatch$Bg"') && ax.includes('BIND = "android.permission.BIND_JOB_SERVICE"')
+      && ax.includes('BOOT = "android.permission.RECEIVE_BOOT_COMPLETED"') && ax.includes('"permission": 0x01010006')
+      && ax.includes('(ns, exp_attr, NONE, TYPE_BOOL, 0),'),
+      'axml_service.py: служба с BIND_JOB_SERVICE, exported=false, разрешение после перезагрузки');
+    assert.ok(code.includes('python3 android/patches/axml_service.py "$W/AndroidManifest.xml"')
+      && code.indexOf('axml_service.py "$W') > code.indexOf('axml_version.py "$W'), 'сборка: служба добавляется в манифест после версии');
+    assert.ok(/eq\("уведомления 10\.65: /.test(tp), 'IvaPatchTest: проверки 10.65 (уведомления)');
   }
   // 10.65 (просьба владельца 14.10.2026): «Доставка» в форме инструмента — выключатель вместо серой полосы
   {

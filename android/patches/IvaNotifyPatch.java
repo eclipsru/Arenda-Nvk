@@ -3,7 +3,8 @@
 // Уведомления — системные (строка состояния, шторка, всплывающие), у каждого вида свой канал Android.
 // Штатный опрос (pollRun, раз в 30 с) выключается; вместо него — наш с теми же запросами, отметкой «Заявки •»
 // и проверкой настроек. Новое определяем по id (а не по числу), увиденное помним на телефоне.
-// Работает, пока приложение открыто или свёрнуто; когда закрыто — этап 2 (10.58).
+// Работает, пока приложение открыто или свёрнуто; когда закрыто — этап 2 (10.65, внизу файла): системный планировщик
+// Android раз в ~15 минут делает те же проверки с теми же переключателями и той же памятью «уже показано».
 // 10.57: значок — силуэт логотипа в строке состояния, цветной логотип в шторке; в «Чате» не уведомляем только о видимом;
 //        первый запуск сообщает о непрочитанных за сутки.
 // Вход — только IvaPatch.onTab (новых smali-хуков нет).
@@ -53,6 +54,7 @@ import java.net.URLEncoder;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Set;
 
 public final class IvaNotifyPatch {
@@ -234,6 +236,7 @@ public final class IvaNotifyPatch {
         act = new WeakReference<Activity>(a);
         try { stopNative(a); } catch (Throwable ignore) {}
         try { startPoll(); } catch (Throwable ignore) {}
+        try { scheduleBg(a.getApplicationContext()); } catch (Throwable ignore) {}   // 10.65: этап 2 — когда приложение закрыто
         try { openFromNotification(a); } catch (Throwable ignore) {}
         try { ensureRow(a); } catch (Throwable ignore) {}
     }
@@ -284,6 +287,8 @@ public final class IvaNotifyPatch {
         final boolean logged = loggedIn(a), admin = logged && isAdmin(a);
         Object em = get(a, "userEmail");
         final String email = em instanceof String ? (String) em : "";
+        // 10.65: фоновой проверке (приложение закрыто) неоткуда узнать, админ ли это, — запоминаем здесь
+        if (logged && !email.isEmpty()) try { prefs(a).edit().putBoolean(key("admin", email), admin).apply(); } catch (Throwable ignore) {}
         Object ct = get(a, "curTab"), cw = get(a, "chatWith");
         // «Чат» на экране: null — нет; "" — список чатов; почта — открытая переписка
         final String openWith = "chat".equals(ct) && a.hasWindowFocus() ? (cw instanceof String ? ((String) cw).trim() : "") : null;
@@ -301,8 +306,10 @@ public final class IvaNotifyPatch {
         }).start();
     }
 
-    static JSONArray getArr(Activity a, String path) throws Exception {
-        String[] r = IvaClientPatch.apiCall(a, path, "GET", null, true);
+    static JSONArray getArr(Context a, String path) throws Exception {
+        // открыто — штатный токен из окна; закрыто (10.65) — токен сохранённого входа, тот же штатный Api.call
+        String[] r = a instanceof Activity ? IvaClientPatch.apiCall((Activity) a, path, "GET", null, true)
+            : nativeCall(IvaClientPatch.SB_URL + path, "GET", null, true, a instanceof BgCtx ? ((BgCtx) a).token : null);
         if (r == null || !r[0].startsWith("2")) throw new Exception(r == null ? "нет ответа" : r[0]);
         String t = r.length > 1 && r[1] != null ? r[1].trim() : "";
         return t.startsWith("[") ? new JSONArray(t) : new JSONArray();
@@ -313,12 +320,12 @@ public final class IvaNotifyPatch {
     }
 
     /** Как штатный опрос: новые заявки на инструменты админа, отметка «Заявки •» в меню. */
-    static void checkOrders(final Activity a, String email) throws Exception {
+    static void checkOrders(final Context a, String email) throws Exception {
         JSONArray rows = getArr(a, "/rest/v1/order_parts?select=id,tools_text&status=eq.new&archived=eq.false&owner_email=eq." + enc(email) + "&order=id.desc&limit=50");
         final int n = rows.length();
         List<String> ids = new ArrayList<String>();
         for (int i = 0; i < n; i++) ids.add(rows.getJSONObject(i).optString("id", ""));
-        a.runOnUiThread(new Runnable() {
+        if (a instanceof Activity) ((Activity) a).runOnUiThread(new Runnable() {
             @Override public void run() {
                 Object t = get(a, "navOrdersTxt");
                 if (t instanceof TextView) ((TextView) t).setText(n > 0 ? "Заявки •" : "Заявки");
@@ -336,7 +343,7 @@ public final class IvaNotifyPatch {
             if (o.optString("id", "").equals(nw.get(0))) { text = o.optString("tools_text", ""); break; }
         }
         final String title = orderTitle(nw.size()), body = nw.size() > 1 ? "Откройте «Заявки»" : orderText(text);
-        a.runOnUiThread(new Runnable() {
+        if (a instanceof Activity) ((Activity) a).runOnUiThread(new Runnable() {
             @Override public void run() {
                 try { Toast.makeText(a, "Новая заявка!", Toast.LENGTH_LONG).show(); } catch (Throwable ignore) {}
             }
@@ -346,7 +353,7 @@ public final class IvaNotifyPatch {
 
     /** Непрочитанные входящие сообщения. Не уведомляем только о том, что и так видно: открытая переписка с этим
      *  собеседником или список чатов (оба обновляются сами, 10.57). Письмо от другого при открытом чате — уведомление. */
-    static void checkMessages(Activity a, String email, boolean admin, String openWith) throws Exception {
+    static void checkMessages(Context a, String email, boolean admin, String openWith) throws Exception {
         JSONArray rows = getArr(a, "/rest/v1/app_messages?select=id,from_email,text,img,audio,created_at&to_email=eq." + enc(email)
             + "&is_read=eq.false&order=created_at.desc&limit=50");
         List<String> ids = new ArrayList<String>(), created = new ArrayList<String>();
@@ -380,7 +387,7 @@ public final class IvaNotifyPatch {
     }
 
     /** Вышла новая версия (тот же app-update.json, что у штатной кнопки «Обновить»). */
-    static void checkUpdate(Activity a, boolean admin) throws Exception {
+    static void checkUpdate(Context a, boolean admin) throws Exception {
         if (!on(a, K_UPD, admin)) return;
         SharedPreferences p = prefs(a);
         long now = System.currentTimeMillis();
@@ -448,18 +455,18 @@ public final class IvaNotifyPatch {
 
     /** Строка состояния + шторка + всплывающее (канал HIGH); на экране блокировки — без текста сообщения. */
     @SuppressWarnings("deprecation")
-    static void showNote(Activity a, String ch, int id, String title, String text, String open) {
+    static void showNote(Context a, String ch, int id, String title, String text, String open) {
         showNote(a, ch, id, title, text, open, "");
     }
 
-    static void showNote(Activity a, String ch, int id, String title, String text, String open, String target) {
+    static void showNote(Context a, String ch, int id, String title, String text, String open, String target) {
         try {
             Context c = a.getApplicationContext();
             NotificationManager nm = (NotificationManager) c.getSystemService(Context.NOTIFICATION_SERVICE);
             if (nm == null) return;
             ensureChannels(c);
             Notification.Builder b = Build.VERSION.SDK_INT >= 26 ? new Notification.Builder(c, ch) : new Notification.Builder(c);
-            Intent it = new Intent(c, a.getClass());
+            Intent it = new Intent(c, mainClass(a));
             it.putExtra(EXTRA_OPEN, open);
             it.putExtra(EXTRA_TARGET, target == null ? "" : target);
             it.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_SINGLE_TOP);
@@ -474,7 +481,7 @@ public final class IvaNotifyPatch {
              .setAutoCancel(true)
              .setWhen(System.currentTimeMillis())
              .setShowWhen(true)
-             .setColor(IvaClientPatch.navColor(a, "orange", 0xffff8f1f));
+             .setColor(ctxColor(a, "orange", 0xffff8f1f));
             // Android 11+: «разговор» — в кружке слева цветной логотип, силуэт — маленьким значком на нём.
             // Раньше — обычный вид: силуэт в кружке, без картинки справа.
             if (!conversation(a, b, ch, title, text, open, target)) b.setStyle(new Notification.BigTextStyle().bigText(text));
@@ -542,7 +549,7 @@ public final class IvaNotifyPatch {
      * Только так система (и Samsung One UI) рисует в кружке слева цветную картинку, а не одноцветный значок.
      * Не вышло — false, показываем обычный вид.
      */
-    static boolean conversation(final Activity a, Notification.Builder b, String ch, String title, String text, String open, String target) {
+    static boolean conversation(final Context a, Notification.Builder b, String ch, String title, String text, String open, String target) {
         if (Build.VERSION.SDK_INT < 30) return false;
         try {
             final Context c = a.getApplicationContext();
@@ -555,7 +562,7 @@ public final class IvaNotifyPatch {
                 .setName(title).setIcon(av).setKey(sid).setImportant(true).build();
             android.app.Person self = new android.app.Person.Builder().setName("Вы").build();
             Intent si = new Intent(Intent.ACTION_VIEW);
-            si.setClass(c, a.getClass());
+            si.setClass(c, mainClass(a));
             si.putExtra(EXTRA_OPEN, open);
             si.putExtra(EXTRA_TARGET, target == null ? "" : target);
             Set<String> cats = new java.util.HashSet<String>();
@@ -948,7 +955,7 @@ public final class IvaNotifyPatch {
             });
 
             TextView note = new TextView(a);
-            note.setText("Сейчас уведомления приходят, пока приложение открыто или свёрнуто. Когда приложение закрыто — в следующей версии.");
+            note.setText(BG_NOTE);
             note.setTextSize(12f);
             note.setTextColor(cGray);
             LinearLayout.LayoutParams nl = new LinearLayout.LayoutParams(-1, -2);
@@ -1078,4 +1085,163 @@ public final class IvaNotifyPatch {
         }
     }
 
+
+    // ───────────── 10.65: этап 2 — проверка, когда приложение закрыто (решение владельца 13.10.2026, без Firebase) ─────────────
+    // Системный планировщик Android (JobScheduler) раз в ~15 минут (чаще Android не даёт) будит службу Bg: те же запросы,
+    // те же переключатели «Настроек», та же память «уже показано» (prefs iva_notify) — уведомление не придёт дважды.
+    // Пока окно приложения живо — служба ничего не делает (работает этап 1, раз в 30 с).
+    // Вход — сохранённый штатным входом токен (prokat_session: at, rt, email). Истёк — обновляем по rt и записываем новую
+    // пару туда же, как штатный saveSession: в Supabase rt одноразовый, иначе при следующем запуске приложение разлогинит.
+    // Не обновился — молча пропускаем (выход из аккаунта — только штатный). Админ ли это — запоминает этап 1.
+    static final int BG_JOB_ID = 7210;
+    static final long BG_EVERY_MS = 15L * 60 * 1000;
+    static final long BG_REFRESH_AHEAD_MS = 2L * 60 * 1000;
+    static final String SESSION_PREFS = "prokat_session";   // штатное хранилище входа (MainActivity.onCreate)
+    static final String BG_NOTE = "Уведомления приходят и когда приложение закрыто: Android проверяет примерно раз в 15 минут "
+        + "(в режиме экономии батареи — реже). На Xiaomi, Huawei и Honor для этого может понадобиться разрешить Иве «Автозапуск» "
+        + "или «Без ограничений» в настройках батареи.";
+    static volatile boolean bgScheduled;
+
+    /** Контекст фоновой проверки: приложение + токен сохранённого входа (getArr берёт его отсюда). */
+    static final class BgCtx extends android.content.ContextWrapper {
+        final String token;
+        BgCtx(Context base, String token) { super(base); this.token = token; }
+    }
+
+    /** Служба для JobScheduler (запись в манифесте — axml_service.py, с разрешением BIND_JOB_SERVICE). */
+    public static final class Bg extends android.app.job.JobService {
+        @Override public boolean onStartJob(final android.app.job.JobParameters params) {
+            final Context c = getApplicationContext();
+            new Thread(new Runnable() {
+                @Override public void run() {
+                    try { bgRun(c); } catch (Throwable ignore) {
+                    } finally {
+                        try { jobFinished(params, false); } catch (Throwable ignore) {}
+                    }
+                }
+            }).start();
+            return true;
+        }
+        @Override public boolean onStopJob(android.app.job.JobParameters params) { return false; }
+    }
+
+    static Class<?> mainClass(Context a) {
+        if (a instanceof Activity) return a.getClass();
+        try { return Class.forName("ru.prokatnvsk.app.MainActivity"); } catch (Throwable e) { return Activity.class; }
+    }
+
+    static int ctxColor(Context a, String n, int f) {
+        try {
+            int rid = a.getResources().getIdentifier(n, "color", a.getPackageName());
+            return rid == 0 ? f : a.getResources().getColor(rid);
+        } catch (Throwable e) { return f; }
+    }
+
+    /** Штатный MainActivity$Api.call(url, method, body, bearer, token) → {код, тело}. */
+    static String[] nativeCall(String url, String method, String body, boolean bearer, String token) throws Exception {
+        Class<?> c = Class.forName("ru.prokatnvsk.app.MainActivity$Api");
+        Method m = c.getDeclaredMethod("call", String.class, String.class, String.class, boolean.class, String.class);
+        m.setAccessible(true);
+        return (String[]) m.invoke(null, url, method, body, bearer, token);
+    }
+
+    static boolean activityAlive() {
+        Activity x = act == null ? null : act.get();
+        return x != null && !x.isFinishing();
+    }
+
+    /** Ставим один раз; уже стоит с тем же периодом — не трогаем (перестановка сбила бы отсчёт). */
+    static void scheduleBg(Context c) {
+        if (bgScheduled || Build.VERSION.SDK_INT < 21) return;
+        android.app.job.JobScheduler js = (android.app.job.JobScheduler) c.getSystemService(Context.JOB_SCHEDULER_SERVICE);
+        if (js == null) return;
+        for (android.app.job.JobInfo j : js.getAllPendingJobs())
+            if (j.getId() == BG_JOB_ID && j.getIntervalMillis() == BG_EVERY_MS) { bgScheduled = true; return; }
+        android.app.job.JobInfo.Builder b = new android.app.job.JobInfo.Builder(BG_JOB_ID, new android.content.ComponentName(c, Bg.class))
+            .setPeriodic(BG_EVERY_MS)
+            .setRequiredNetworkType(android.app.job.JobInfo.NETWORK_TYPE_ANY);
+        // после перезагрузки телефона — сама (нужно RECEIVE_BOOT_COMPLETED; без него — до первого открытия приложения)
+        if (c.getPackageManager().checkPermission("android.permission.RECEIVE_BOOT_COMPLETED", c.getPackageName()) == PackageManager.PERMISSION_GRANTED)
+            b.setPersisted(true);
+        bgScheduled = js.schedule(b.build()) == android.app.job.JobScheduler.RESULT_SUCCESS;
+    }
+
+    /** Нужна ли фоновая проверка: окно закрыто и общий переключатель включён. */
+    static boolean bgShouldRun(boolean alive, boolean all) { return !alive && all; }
+
+    /** Токен пора обновить: срок неизвестен, истёк или истекает в ближайшие 2 минуты. */
+    static boolean needRefresh(long expSec, long nowMs) { return expSec <= 0 || expSec * 1000L - nowMs < BG_REFRESH_AHEAD_MS; }
+
+    /** Срок действия токена (поле exp из середины JWT, секунды); не разобрали — 0. */
+    static long jwtExp(String jwt) {
+        try {
+            String[] parts = jwt == null ? new String[0] : jwt.split("\\.");
+            if (parts.length < 2) return 0;
+            String json = new String(b64url(parts[1]), "UTF-8");
+            java.util.regex.Matcher m = java.util.regex.Pattern.compile("\"exp\"\\s*:\\s*(\\d+)").matcher(json);
+            return m.find() ? Long.parseLong(m.group(1)) : 0;
+        } catch (Throwable e) { return 0; }
+    }
+
+    static byte[] b64url(String s) {
+        String abc = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        int buf = 0, bits = 0;
+        for (int i = 0; i < s.length(); i++) {
+            char ch = s.charAt(i);
+            if (ch == '+') ch = '-';
+            else if (ch == '/') ch = '_';
+            int v = abc.indexOf(ch);
+            if (v < 0) continue;            // «=» и мусор
+            buf = (buf << 6) | v;
+            bits += 6;
+            if (bits >= 8) { bits -= 8; out.write((buf >> bits) & 0xff); }
+        }
+        return out.toByteArray();
+    }
+
+    static String jsonStr(String s) {
+        StringBuilder b = new StringBuilder("\"");
+        for (char ch : (s == null ? "" : s).toCharArray()) {
+            if (ch == '"' || ch == '\\') b.append('\\').append(ch);
+            else if (ch < 0x20) b.append(String.format(Locale.ROOT, "\\u%04x", (int) ch));
+            else b.append(ch);
+        }
+        return b.append('"').toString();
+    }
+
+    /** Обновить токен по rt и записать новую пару в штатное хранилище (как saveSession). Не вышло — null. */
+    static String bgRefresh(SharedPreferences s, String rt) {
+        try {
+            if (rt == null || rt.trim().isEmpty()) return null;
+            String[] r = nativeCall(IvaClientPatch.SB_URL + "/auth/v1/token?grant_type=refresh_token", "POST",
+                "{\"refresh_token\":" + jsonStr(rt) + "}", false, null);
+            if (r == null || r.length < 2 || r[0] == null || !r[0].startsWith("2")) return null;
+            JSONObject j = new JSONObject(r[1]);
+            String at = j.optString("access_token", ""), nrt = j.optString("refresh_token", "");
+            if (at.isEmpty() || nrt.isEmpty() || "null".equals(at) || "null".equals(nrt)) return null;
+            if (!rt.equals(s.getString("rt", "")) || activityAlive()) return null;   // пока ходили — вошли/вышли/открыли приложение
+            s.edit().putString("at", at).putString("rt", nrt).commit();
+            return at;
+        } catch (Throwable e) { return null; }
+    }
+
+    /** Одна фоновая проверка (поток службы Bg). */
+    static void bgRun(Context app) {
+        if (!bgShouldRun(activityAlive(), pref(app, K_ALL))) return;
+        SharedPreferences s = app.getSharedPreferences(SESSION_PREFS, Context.MODE_PRIVATE);
+        String at = s.getString("at", ""), email = s.getString("email", "");
+        at = at == null ? "" : at.trim();
+        email = email == null ? "" : email.trim();
+        boolean logged = !at.isEmpty() && !email.isEmpty();
+        if (logged && needRefresh(jwtExp(at), System.currentTimeMillis())) {
+            String fresh = bgRefresh(s, s.getString("rt", ""));
+            if (fresh == null) logged = false; else at = fresh;
+        }
+        BgCtx c = new BgCtx(app, logged ? at : null);
+        boolean admin = logged && prefs(app).getBoolean(key("admin", email), false);
+        if (logged && admin) try { checkOrders(c, email); } catch (Throwable ignore) {}
+        if (logged) try { checkMessages(c, email, admin, null); } catch (Throwable ignore) {}
+        try { checkUpdate(c, admin); } catch (Throwable ignore) {}
+    }
 }
