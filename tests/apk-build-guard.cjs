@@ -657,11 +657,12 @@ try {
     // приложение: архив только у закрытых, только после ответа базы; без SQL — подсказка
     assert.ok(op.includes('if (on && !ordClosed(r)) { Toast.makeText(a, ARCH_ONLY_CLOSED, Toast.LENGTH_LONG).show(); return; }')
       && op.includes('IvaClientPatch.apiCall(a, ARCH_RPC, "POST", archBody(id, on), true)') && op.includes('if ("ok".equals(fc)) {')
-      && op.includes('} else if ("404".equals(fc)) {') && op.includes('if (!r.containsKey(ORD_PARTIAL) && (archived || ordClosed(r))) {')
+      && op.includes('} else if ("404".equals(fc)) {') && op.includes('if (!adm && !r.containsKey(ORD_PARTIAL) && (archived || ordClosed(r))) {')
       && !/"DELETE"|"PATCH"/.test(op), 'заявки 10.63: в архив — только закрытые и только после ответа базы; заявки не удаляются и не меняются');
     // подробности: данные проката, без данных клиента
     assert.ok(op.includes('static final String[] ORD_COLS = {"id", "created_at", "status", "tools", "days", "get_method", "comment"};')
-      && !/"Имя"|"Адрес"[^ ]|ordAdd\(out, "Телефон", r\.get/.test(op) && op.includes('ordAdd(out, "Телефон", ad.get("phone"));')
+      && !/"Имя"|"Адрес"[^ ]|ordAdd\(out, "Телефон", r\.get/.test(op.slice(0, op.indexOf('// ───────────── 10.68: подробности заявки у админа')))
+      && op.indexOf('// ───────────── 10.68: подробности заявки у админа') > 0 && op.includes('ordAdd(out, "Телефон", ad.get("phone"));')
       && op.includes('static final String PROKAT_PATH = "/rest/v1/admins?select=email,full_name,company,address,phone,work_hours&email=in.";'),
       'заявки 10.63: в подробностях — прокат (как на странице проката), имени, телефона и адреса клиента нет');
     // свой список — только у клиента; не загрузился — штатный
@@ -767,6 +768,29 @@ try {
     for (const str of ['rowCall', 'rowMax', 'atSubKey', 'atCatKey', 'editToolSub', 'editToolCat', 'admParts', 'admDrill', 'admClientKey', 'partClientKey'])
       assert.ok(has(arsc14, str) || has(dex14, str), `APK 10.14: нет «${str}» — правка 10.67 не найдёт штатное поле`);
     assert.ok(/eq\("админ 10\.67: /.test(tp) && /eq\("подкатегория 10\.67: /.test(tp) && /eq\("кабинет 10\.67: /.test(tp), 'IvaPatchTest: проверки 10.67');
+  }
+  // 10.68 (решение владельца 14.10.2026): подробности заявки у админа — та же шторка, блок «Клиент» только у админа
+  {
+    const op = R('android/patches/IvaOrderPatch.java'), np = R('android/patches/IvaNotifyPatch.java'), tp = R('android/patches/test/IvaPatchTest.java');
+    const ad = op.slice(op.indexOf('// ───────────── 10.68: подробности заявки у админа'));
+    const sheet = op.slice(op.indexOf('static void ordOpenRow('), op.indexOf('static void ordFieldView('));
+    assert.ok(sheet.includes('final boolean adm = r.containsKey(ADM_ROW);')
+      && sheet.includes('for (String[] f : adm ? admFields(r, nice) : ordFields(r, nice)) ordFieldView(a, body, f, "Статус".equals(f[0]));')
+      && sheet.includes('if (adm) admClientBlock(a, body, r);') && sheet.includes('if (!adm) ordFillProkat(a, prokat, owners);')
+      && (op.match(/admClientBlock\(a, body, r\)/g) || []).length === 1 && (op.match(/m\.put\(ADM_ROW, "1"\)/g) || []).length === 1,
+      'админ 10.68: шторка клиента прежняя (прокат, без данных клиента); «Клиент» — только для строки админа (admRow)');
+    assert.ok(ad.includes('JSONObject o = part.optJSONObject("orders");') && ad.includes('ordAdd(out, "Телефон", r.get("phone"));')
+      && !/apiCall|new Thread|"address"|removeView|removeAllViews/.test(ad)
+      && ad.includes('if (part == null || card.findViewWithTag(ADM_MORE_TAG) != null) return;')
+      && ad.includes('@Override public void onClick(View v) { try { ordOpenRow(a, row, false); } catch (Throwable ignore) {} }'),
+      'админ 10.68: данные — из уже загруженного списка (без запросов и без адреса из базы), нажатие — на карточку, ничего не удаляется');
+    assert.ok(op.includes('List<Integer> mine = drill ? admDrillIdx(keys, String.valueOf(get(a, "admClientKey"))) : null;')
+      && op.includes('if (mine != null && i < mine.size())   // 10.68: нажатие на заявку — подробности')
+      && op.includes('try { admMore(a, cards.get(i), (JSONObject) ((List<?>) parts).get(mine.get(i))); } catch (Throwable ignore) {}'),
+      'админ 10.68: подробности — только на карточках заявок клиента, по тому же порядку, что картинки');
+    assert.ok(np.includes('try { IvaOrderPatch.ordOpenRow(a, IvaOrderPatch.admRow(part), false); } catch (Throwable ignore) {}   // 10.68: сразу подробности'),
+      'админ 10.68: из уведомления «Новая заявка» — сразу подробности');
+    assert.ok(/eq\("админ 10\.68: /.test(tp), 'IvaPatchTest: проверки 10.68');
   }
   // 10.65: уведомления, этап 2 — когда приложение закрыто (JobScheduler раз в ~15 мин, без Firebase; решение владельца 13.10.2026)
   {

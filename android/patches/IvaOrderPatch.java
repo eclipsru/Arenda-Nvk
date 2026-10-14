@@ -1719,8 +1719,7 @@ public final class IvaOrderPatch {
         }
         List<Map<String, String>> out = new ArrayList<Map<String, String>>();
         if (drill) {
-            List<Integer> g = groups.get(drillKey == null ? "" : drillKey);
-            if (g != null) for (Integer i : g) out.add(admPicRow(tools, owners, java.util.Collections.singletonList(i)));
+            for (Integer i : admDrillIdx(keys, drillKey)) out.add(admPicRow(tools, owners, java.util.Collections.singletonList(i)));
         } else {
             for (List<Integer> g : groups.values()) out.add(admPicRow(tools, owners, g));
         }
@@ -1771,9 +1770,20 @@ public final class IvaOrderPatch {
         List<Map<String, String>> rows = admPicRows(keys, tools, owners, drill, String.valueOf(get(a, "admClientKey")));
         List<LinearLayout> cards = admCards((ViewGroup) ol);
         if (rows.isEmpty() || cards.size() != rows.size()) return;
+        List<Integer> mine = drill ? admDrillIdx(keys, String.valueOf(get(a, "admClientKey"))) : null;
         for (int i = 0; i < cards.size(); i++) {
             try { admPicCard(a, cards.get(i), rows.get(i), drill); } catch (Throwable ignore) {}
+            if (mine != null && i < mine.size())   // 10.68: нажатие на заявку — подробности
+                try { admMore(a, cards.get(i), (JSONObject) ((List<?>) parts).get(mine.get(i))); } catch (Throwable ignore) {}
         }
+    }
+
+    /** Номера частей (в admParts) одного клиента — в порядке штатных карточек его заявок. */
+    static List<Integer> admDrillIdx(List<String> keys, String drillKey) {
+        List<Integer> out = new ArrayList<Integer>();
+        String k = drillKey == null ? "" : drillKey;
+        for (int i = 0; i < keys.size(); i++) if (k.equals(keys.get(i) == null ? "" : keys.get(i))) out.add(i);
+        return out;
     }
 
     static void admPicCard(Activity a, LinearLayout card, Map<String, String> r, boolean drill) {
@@ -2116,12 +2126,14 @@ public final class IvaOrderPatch {
         sc.addView(body, new FrameLayout.LayoutParams(-1, -2));
         sh.addView(sc, new LinearLayout.LayoutParams(-1, 0, 1f));
         String nice = r.containsKey(ORD_NICE) ? r.get(ORD_NICE) : ordNice(a, r.get("created_at"));
-        for (String[] f : ordFields(r, nice)) ordFieldView(a, body, f, "Статус".equals(f[0]));
+        final boolean adm = r.containsKey(ADM_ROW);           // 10.68: заявка у админа — вместо «Прокат» блок «Клиент»
+        for (String[] f : adm ? admFields(r, nice) : ordFields(r, nice)) ordFieldView(a, body, f, "Статус".equals(f[0]));
+        if (adm) admClientBlock(a, body, r);
         final LinearLayout prokat = new LinearLayout(a);
         prokat.setOrientation(LinearLayout.VERTICAL);
-        body.addView(prokat, new LinearLayout.LayoutParams(-1, -2));
-        final List<String> owners = ordOwners(a, r);
-        ordFillProkat(a, prokat, owners);
+        if (!adm) body.addView(prokat, new LinearLayout.LayoutParams(-1, -2));
+        final List<String> owners = adm ? new ArrayList<String>() : ordOwners(a, r);
+        if (!adm) ordFillProkat(a, prokat, owners);
         boolean missing = false;
         for (String e : owners) if (!ordProkat.containsKey(e)) missing = true;
         if (missing) {
@@ -2134,7 +2146,7 @@ public final class IvaOrderPatch {
         }
 
         final Dialog d = new Dialog(a, android.R.style.Theme_Material_NoActionBar);
-        if (!r.containsKey(ORD_PARTIAL) && (archived || ordClosed(r))) {   // «В архив» — только у закрытых; в архиве — «Вернуть»
+        if (!adm && !r.containsKey(ORD_PARTIAL) && (archived || ordClosed(r))) {   // «В архив» — только у закрытых; в архиве — «Вернуть» (у админа — штатная «В архив →» на карточке)
             TextView arch = new TextView(a);
             arch.setText(archived ? ARCH_OFF : ARCH_ON);
             arch.setGravity(Gravity.CENTER);
@@ -2239,5 +2251,105 @@ public final class IvaOrderPatch {
             tl.topMargin = dp(a, 8);
             box.addView(t, tl);
         }
+    }
+
+    // ───────────── 10.68: подробности заявки у админа (решение владельца 14.10.2026) ─────────────
+    // Нажатие на карточку заявки (внутри клиента) — та же шторка, что у клиента (85 %, те же строки и вид), только
+    // вместо «Прокат» — «Клиент»: имя, телефон (нажать — набор номера), e-mail. Всё это админ и так видит: на штатной
+    // карточке («Позвонить: …») и в штатной «Аренды» (rentalDetail). Данные — из уже загруженного списка (admParts:
+    // order_parts + orders), своих запросов нет. Кнопки карточки («Выдал», «Вернули», «В архив →», «Позвонить») — штатные,
+    // нажимаются как раньше: у них свои обработчики, у самой карточки штатного нажатия нет.
+    static final String ADM_ROW = "_adm", ADM_MORE_TAG = "iva_adm_more";
+
+    /** Строка шторки из части заявки (order_parts) и самой заявки (orders) — как их загрузил штатный loadOrders. */
+    static Map<String, String> admRow(JSONObject part) {
+        Map<String, String> m = new LinkedHashMap<String, String>();
+        JSONObject o = part.optJSONObject("orders");
+        m.put(ADM_ROW, "1");
+        m.put("id", ordVal(part.optString("order_id", "")));
+        m.put("part_id", ordVal(part.optString("id", "")));
+        m.put("status", ordVal(part.optString("status", "")));
+        m.put("tools", ordVal(part.optString("tools_text", "")));
+        m.put("rent_sum", ordVal(part.optString("rent_sum", "")));
+        m.put("fee", ordVal(part.optString("fee", "")));
+        String at = ordVal(part.optString("created_at", ""));
+        if (o != null) {
+            if (at.isEmpty()) at = ordVal(o.optString("created_at", ""));
+            m.put("get_method", ordVal(o.optString("get_method", "")));
+            m.put("comment", ordVal(o.optString("comment", "")));
+            m.put("name", ordVal(o.optString("name", "")));
+            m.put("phone", ordVal(o.optString("phone", "")));
+            m.put("user_email", ordVal(o.optString("user_email", "")));
+        }
+        m.put("created_at", at);
+        return m;
+    }
+
+    /** Строки шторки админа: о заявке (без «Срока» — его штатный список не загружает, сроки — в названиях). */
+    static List<String[]> admFields(Map<String, String> r, String nice) {
+        List<String[]> out = new ArrayList<String[]>();
+        ordAdd(out, "Дата", nice == null || nice.trim().isEmpty() ? r.get("created_at") : nice);
+        out.add(new String[]{"Статус", ordStatus(r.get("status"))});
+        ordAdd(out, "Инструменты", r.get("tools"));
+        ordAdd(out, "Получение", r.get("get_method"));
+        ordAdd(out, "Комментарий", r.get("comment"));
+        String rent = admMoney(r.get("rent_sum")), fee = admMoney(r.get("fee"));
+        ordAdd(out, "Аренда", rent.isEmpty() ? "" : rent + (fee.isEmpty() ? "" : " · комиссия 5 %: " + fee));
+        ordAdd(out, "Номер заявки", r.get("id"));
+        return out;
+    }
+
+    /** Строки блока «Клиент». */
+    static List<String[]> admClientFields(Map<String, String> r) {
+        List<String[]> out = new ArrayList<String[]>();
+        ordAdd(out, "Имя", r.get("name"));
+        ordAdd(out, "Телефон", r.get("phone"));
+        ordAdd(out, "E-mail", r.get("user_email"));
+        return out;
+    }
+
+    /** «1200» / «1200.0» → «1200 ₽», «99.5» → «99,50 ₽»; пусто / не число — пусто. */
+    static String admMoney(String v) {
+        String s = ordVal(v);
+        if (s.isEmpty()) return "";
+        try {
+            double d = Double.parseDouble(s);
+            if (Math.abs(d - Math.rint(d)) < 0.005) return Math.round(d) + " ₽";
+            return String.format(Locale.ROOT, "%.2f", d).replace('.', ',') + " ₽";
+        } catch (Throwable e) { return ""; }
+    }
+
+    static void admClientBlock(Activity a, LinearLayout body, Map<String, String> r) {
+        List<String[]> fs = admClientFields(r);
+        if (fs.isEmpty()) return;
+        TextView h = new TextView(a);
+        h.setText("Клиент");
+        h.setTextColor(color(a, "text", 0xfff2f4f8));
+        h.setTextSize(16f);
+        h.setTypeface(null, Typeface.BOLD);
+        LinearLayout.LayoutParams hl = new LinearLayout.LayoutParams(-1, -2);
+        hl.topMargin = dp(a, 22);
+        body.addView(h, hl);
+        for (String[] f : fs) ordFieldView(a, body, f, false);
+    }
+
+    /** Карточка заявки у админа: нажатие — подробности, под названиями — «Подробнее ›». */
+    static void admMore(final Activity a, LinearLayout card, JSONObject part) {
+        if (part == null || card.findViewWithTag(ADM_MORE_TAG) != null) return;
+        final Map<String, String> row = admRow(part);
+        card.setClickable(true);
+        card.setOnClickListener(new View.OnClickListener() {
+            @Override public void onClick(View v) { try { ordOpenRow(a, row, false); } catch (Throwable ignore) {} }
+        });
+        TextView more = new TextView(a);
+        more.setTag(ADM_MORE_TAG);
+        more.setText(ORD_MORE);
+        more.setTextColor(color(a, "orange", 0xffff8f1f));
+        more.setTextSize(12f);
+        more.setTypeface(null, Typeface.BOLD);
+        LinearLayout.LayoutParams ml = new LinearLayout.LayoutParams(-2, -2);
+        ml.topMargin = dp(a, 6);
+        int at = card.getChildAt(0) instanceof TextView ? 2 : 1;      // после даты и названий (или их строки с картинками)
+        card.addView(more, Math.min(at, card.getChildCount()), ml);
     }
 }

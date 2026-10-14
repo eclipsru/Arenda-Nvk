@@ -715,6 +715,7 @@ public final class IvaNotifyPatch {
                         // штатно: «‹ Все клиенты», затем по карточке на заявку клиента
                         if (list.getChildCount() == count + 1) reveal(list.getChildAt(idx + 1));
                     }
+                    try { IvaOrderPatch.ordOpenRow(a, IvaOrderPatch.admRow(part), false); } catch (Throwable ignore) {}   // 10.68: сразу подробности
                 } catch (Throwable ignore) {}
             }
         }, ROUTE_STEP_MS);

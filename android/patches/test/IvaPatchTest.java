@@ -708,6 +708,24 @@ public class IvaPatchTest {
                 + "/" + IvaClientPatch.contactsLeak(true, new boolean[]{false, false}) + "/" + IvaClientPatch.contactsLeak(true, new boolean[]{true, true})
                 + "/" + IvaClientPatch.contactsLeak(false, null),
                 "true/false/false/false/false");
+            // 10.68: подробности заявки у админа
+            java.util.Map<String, String> admD = new java.util.LinkedHashMap<String, String>();
+            admD.put(IvaOrderPatch.ADM_ROW, "1"); admD.put("id", "57"); admD.put("status", "rented"); admD.put("tools", "Дрель (3 дня)");
+            admD.put("get_method", "Доставка: ул. Мира, 5 — 300 ₽"); admD.put("comment", ""); admD.put("rent_sum", "1200.0"); admD.put("fee", "60");
+            admD.put("created_at", "2026-10-14T10:00:00"); admD.put("name", "Иван Петров"); admD.put("phone", "+7 900 000-00-00"); admD.put("user_email", "");
+            StringBuilder admF = new StringBuilder();
+            for (String[] f : IvaOrderPatch.admFields(admD, "14 окт, 13:00")) admF.append(f[0]).append('=').append(f[1]).append(" | ");
+            eq("админ 10.68: шторка — дата, статус, инструменты, получение, аренда с комиссией, номер; пустое не показываем",
+                admF.toString(), "Дата=14 окт, 13:00 | Статус=В аренде | Инструменты=Дрель (3 дня) | Получение=Доставка: ул. Мира, 5 — 300 ₽ | Аренда=1200 ₽ · комиссия 5 %: 60 ₽ | Номер заявки=57 | ");
+            StringBuilder admC = new StringBuilder();
+            for (String[] f : IvaOrderPatch.admClientFields(admD)) admC.append(f[0]).append('=').append(f[1]).append(" | ");
+            eq("админ 10.68: блок «Клиент» — имя и телефон (нажимается), пустой e-mail не показываем", admC.toString(), "Имя=Иван Петров | Телефон=+7 900 000-00-00 | ");
+            eq("админ 10.68: суммы", IvaOrderPatch.admMoney("1200") + "|" + IvaOrderPatch.admMoney("99.5") + "|" + IvaOrderPatch.admMoney("null") + "|" + IvaOrderPatch.admMoney("abc") + "|" + IvaOrderPatch.admMoney(null),
+                "1200 ₽|99,50 ₽|||");
+            eq("админ 10.68: заявки клиента — номера частей по порядку карточек",
+                IvaOrderPatch.admDrillIdx(java.util.Arrays.asList("ivan", "petr", "ivan", null), "ivan") + "/" + IvaOrderPatch.admDrillIdx(java.util.Arrays.asList("a", null), "") + "/" + IvaOrderPatch.admDrillIdx(java.util.Arrays.asList("a"), "b"),
+                "[0, 2]/[1]/[]");
+            eq("админ 10.68: статусы как у клиента", IvaOrderPatch.ordStatus("new") + "/" + IvaOrderPatch.ordStatus("rented") + "/" + IvaOrderPatch.ordStatus("closed"), "Новая/В аренде/Закрыта");
             // 10.65: уведомления, этап 2 — когда приложение закрыто
             String bgJwt = "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiAidTEiLCAiZXhwIjogMTc2MDAwMDAwMCwgImVtYWlsIjogItCwQGIucnUifQ.sig";
             eq("уведомления 10.65: срок токена из JWT (base64url, кириллица, без «=»)", IvaNotifyPatch.jwtExp(bgJwt) + "|" + IvaNotifyPatch.jwtExp("плохой") + "|" + IvaNotifyPatch.jwtExp(null) + "|" + IvaNotifyPatch.jwtExp("a.%%%.b"),
