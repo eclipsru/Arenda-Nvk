@@ -992,6 +992,39 @@ public class IvaPatchTest {
             eq("сдавать 10.72: тема не путается с инструментом", IvaChatPatch.isLend("lend") && IvaChatPatch.isLend(" lend ") && !IvaChatPatch.isLend("") && !IvaChatPatch.isLend("t1"), true);
             eq("сдавать 10.72: в базу — topic, список читает topic", IvaChatPatch.MSG_SELECT_TOPIC.endsWith(",tool_id,topic"), true);
         }
+        {   // 10.73: расписание уведомлений у админов
+            int[][] q73d = IvaNotifyPatch.schedParse("");
+            eq("расписание 10.73: по умолчанию — каждый день 09:00–21:00", IvaNotifyPatch.schedFormat(q73d), "1,540,1260;1,540,1260;1,540,1260;1,540,1260;1,540,1260;1,540,1260;1,540,1260");
+            eq("расписание 10.73: битая строка — по умолчанию, хорошие дни сохраняются",
+                IvaNotifyPatch.schedFormat(IvaNotifyPatch.schedParse("0,600,1080;x;1,2000,10;1,0,0")), "0,600,1080;1,540,1260;1,540,1260;1,0,0;1,540,1260;1,540,1260;1,540,1260");
+            int[][] q73w = IvaNotifyPatch.schedParse("1,540,1260;1,540,1260;1,540,1260;1,540,1260;1,540,1260;1,600,1080;0,540,1260");
+            eq("расписание 10.73: внутри и на границах часов (с — включительно, до — нет)",
+                IvaNotifyPatch.inSchedule(q73w, 0, 540) + "|" + IvaNotifyPatch.inSchedule(q73w, 0, 539) + "|" + IvaNotifyPatch.inSchedule(q73w, 0, 1259) + "|" + IvaNotifyPatch.inSchedule(q73w, 0, 1260),
+                "true|false|true|false");
+            eq("расписание 10.73: у каждого дня свои часы; выключенный день — тихо",
+                IvaNotifyPatch.inSchedule(q73w, 5, 590) + "|" + IvaNotifyPatch.inSchedule(q73w, 5, 600) + "|" + IvaNotifyPatch.inSchedule(q73w, 6, 720), "false|true|false");
+            int[][] q73n = IvaNotifyPatch.schedParse("1,1320,480;0,0,0;0,0,0;0,0,0;0,0,0;0,0,0;1,0,0");
+            eq("расписание 10.73: через полночь — хвост после 00:00 относится ко дню начала",
+                IvaNotifyPatch.inSchedule(q73n, 0, 1330) + "|" + IvaNotifyPatch.inSchedule(q73n, 1, 400) + "|" + IvaNotifyPatch.inSchedule(q73n, 1, 480) + "|" + IvaNotifyPatch.inSchedule(q73n, 0, 400),
+                "true|true|false|false");   // пн 06:40: воскресенье «круглосуточно» на понедельник не переходит
+            eq("расписание 10.73: одинаковые «с» и «до» — круглосуточно", IvaNotifyPatch.inSchedule(q73n, 6, 0) + "|" + IvaNotifyPatch.inSchedule(q73n, 6, 1439), "true|true");
+            int[][] q73r = IvaNotifyPatch.schedParse("1,600,600;0,0,0;0,0,0;0,0,0;0,0,0;0,0,0;0,0,0");
+            eq("расписание 10.73: круглосуточно и при 10:00 – 10:00 (весь день, не через полночь)",
+                IvaNotifyPatch.inSchedule(q73r, 0, 300) + "|" + IvaNotifyPatch.inSchedule(q73r, 0, 900) + "|" + IvaNotifyPatch.inSchedule(q73r, 1, 300), "true|true|false");
+            eq("расписание 10.73: день недели из Calendar (вс=1 → 6, пн=2 → 0, сб=7 → 5)",
+                IvaNotifyPatch.dowMon(1) + "|" + IvaNotifyPatch.dowMon(2) + "|" + IvaNotifyPatch.dowMon(7), "6|0|5");
+            eq("расписание 10.73: тихо — только у админа и только при включённом расписании вне его часов",
+                IvaNotifyPatch.quietAt(true, true, q73w, 6, 720) + "|" + IvaNotifyPatch.quietAt(false, true, q73w, 6, 720) + "|" + IvaNotifyPatch.quietAt(true, false, q73w, 6, 720) + "|" + IvaNotifyPatch.quietAt(true, true, q73w, 0, 720),
+                "true|false|false|false");
+            int[] q73s = IvaNotifyPatch.nextStart(q73w, 5, 1100);
+            eq("расписание 10.73: ближайшее начало — суббота вечер → понедельник 09:00", q73s[0] + "|" + q73s[1], "0|540");
+            eq("расписание 10.73: нет ни одного дня — начала нет", IvaNotifyPatch.nextStart(IvaNotifyPatch.schedParse("0,1,2;0,1,2;0,1,2;0,1,2;0,1,2;0,1,2;0,1,2"), 0, 0) == null, true);
+            eq("расписание 10.73: строки дней", IvaNotifyPatch.dayText(q73w[0]) + "|" + IvaNotifyPatch.dayText(q73w[6]) + "|" + IvaNotifyPatch.dayText(q73n[0]) + "|" + IvaNotifyPatch.dayText(q73n[6]),
+                "09:00 – 21:00|без уведомлений|22:00 – 08:00 (через полночь)|круглосуточно");
+            eq("расписание 10.73: строка «сейчас»", IvaNotifyPatch.schedStatus(q73w, 0, 720) + "|" + IvaNotifyPatch.schedStatus(q73w, 6, 720),
+                "Сейчас время по расписанию — уведомления приходят.|Сейчас вне расписания — уведомления придут в Пн в 09:00.");
+            eq("расписание 10.73: часы с нулями", IvaNotifyPatch.hm(5) + "|" + IvaNotifyPatch.hm(1439), "00:05|23:59");
+        }
         if (fail > 0) { System.out.println("ошибок: " + fail); System.exit(1); }
         System.out.println("все проверки IvaPatch пройдены");
     }

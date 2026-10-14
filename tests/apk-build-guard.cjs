@@ -769,6 +769,38 @@ try {
       assert.ok(has(arsc14, str) || has(dex14, str), `APK 10.14: нет «${str}» — правка 10.67 не найдёт штатное поле`);
     assert.ok(/eq\("админ 10\.67: /.test(tp) && /eq\("подкатегория 10\.67: /.test(tp) && /eq\("кабинет 10\.67: /.test(tp), 'IvaPatchTest: проверки 10.67');
   }
+  // 10.73 (решения владельца 14.10.2026): расписание уведомлений у админов — одно на все виды, у каждого дня свои часы,
+  // пришедшее вне расписания показываем в начале разрешённого времени
+  {
+    const np = R('android/patches/IvaNotifyPatch.java'), tp = R('android/patches/test/IvaPatchTest.java');
+    const fn = (name) => { const mm = new RegExp(`static \\w+ ${name}\\(`).exec(np); const i = mm ? mm.index : -1; assert.ok(i > 0, `IvaNotifyPatch: нет ${name}`); return np.slice(i, np.indexOf('\n    }\n', i)); };
+    // вне расписания: ничего не запоминаем как показанное (иначе уведомление потеряется) и не показываем
+    const co = fn('checkOrders'), cm = fn('checkMessages'), cu = fn('checkUpdate');
+    assert.ok(co.indexOf('if (quiet(a, true)) return;') > co.indexOf('"Заявки •"') && co.indexOf('if (quiet(a, true)) return;') < co.indexOf('remember(seen, ids)'),
+      'расписание 10.73: заявки — отметка «Заявки •» обновляется всегда, а «уже показано» — только в разрешённое время');
+    assert.ok(cm.indexOf('if (quiet(a, admin)) return;') > 0 && cm.indexOf('if (quiet(a, admin)) return;') < cm.indexOf('remember(seen, ids)'),
+      'расписание 10.73: сообщения — вне расписания не запоминаются, придут позже');
+    assert.ok(cu.includes('if (!on(a, K_UPD, admin) || quiet(a, admin)) return;') && cu.indexOf('quiet(a, admin)') < cu.indexOf('"upd_checked"'),
+      'расписание 10.73: обновления — вне расписания не проверяются и не отмечаются');
+    // одна и та же проверка и при открытом приложении, и в фоне (служба вызывает те же check*)
+    const bg = fn('bgRun');
+    assert.ok(bg.includes('checkOrders(c, email)') && bg.includes('checkMessages(c, email, admin, null)') && bg.includes('checkUpdate(c, admin)'),
+      'расписание 10.73: фоновая проверка идёт через те же checkOrders/checkMessages/checkUpdate');
+    // только админам; по умолчанию выключено — всё как раньше
+    const q = fn('quiet');
+    assert.ok(q.includes("if (!admin || !prefs(c).getBoolean(K_SCHED_ON, false)) return false;") && q.includes('catch (Throwable e) {\n            return false;'),
+      'расписание 10.73: только у админа, по умолчанию выключено, при сбое уведомления не глушатся');
+    assert.ok(np.includes('sw.setChecked(prefs(a).getBoolean(k, !K_SCHED_ON.equals(k)));'), 'расписание 10.73: остальные переключатели по умолчанию включены, расписание — выключено');
+    const os = fn('openSettings');
+    assert.ok(os.includes('if (admin) {') && os.indexOf('schedSw[0] = switchRow(') > os.indexOf('if (admin) {') && os.includes('for (int i = 0; i < 7; i++) {'),
+      'расписание 10.73: раздел «Расписание» с семью днями — только админам');
+    assert.ok(/static final int SCHED_FROM = 9 \* 60, SCHED_TO = 21 \* 60;/.test(np) && np.includes('static final String[] DAYS = {"Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"};'),
+      'расписание 10.73: по умолчанию 09:00–21:00, неделя с понедельника');
+    assert.ok(fn('pickHours').includes('android.R.style.Theme_Material_Dialog') && (fn('pickHours').match(/, true\);/g) || []).length === 2,
+      'расписание 10.73: выбор часов — штатный диалог в 24-часовом формате, «с» и «до»');
+    assert.ok(!/SharedPreferences\.Editor[^;]*clear\(\)|\.clear\(\)\.apply/.test(np), 'расписание 10.73: настройки уведомлений не стираются');
+    assert.ok((tp.match(/eq\("расписание 10\.73: /g) || []).length >= 13, 'IvaPatchTest: проверки 10.73 (расписание)');
+  }
   // 10.72 (просьба владельца 14.10.2026): «Хочу сдавать инструмент» → «Чат с владельцем» — отдельная переписка;
   // у владельца в карточке — подмигивающий кислотно-зелёный смайлик, у клиента — аватарка владельца
   {

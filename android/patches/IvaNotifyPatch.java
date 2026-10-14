@@ -7,6 +7,8 @@
 // Android раз в ~15 минут делает те же проверки с теми же переключателями и той же памятью «уже показано».
 // 10.57: значок — силуэт логотипа в строке состояния, цветной логотип в шторке; в «Чате» не уведомляем только о видимом;
 //        первый запуск сообщает о непрочитанных за сутки.
+// 10.73: у админов — расписание: в какие дни и часы приходят уведомления (одно на все виды, у каждого дня свои часы);
+//        что пришло в другое время, показываем в начале разрешённого (решения владельца 14.10.2026).
 // Вход — только IvaPatch.onTab (новых smali-хуков нет).
 package ru.prokatnvsk.app;
 
@@ -129,6 +131,88 @@ public final class IvaNotifyPatch {
         return !K_ORD.equals(kind) || admin;
     }
 
+    // ── 10.73: расписание уведомлений у админов (решения владельца 14.10.2026) ──
+    // Одно расписание на сообщения, заявки и обновления; у каждого дня недели свои часы или «без уведомлений».
+    // Вне расписания уведомление не показывается и не запоминается как показанное — оно придёт в начале разрешённого
+    // времени (если сообщение уже прочитано или заявку уже взяли — не придёт). Время — часы телефона.
+    static final String K_SCHED_ON = "sched_on", K_SCHED = "sched";
+    static final String[] DAYS = {"Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"};
+    static final String[] DAYS_FULL = {"понедельник", "вторник", "среда", "четверг", "пятница", "суббота", "воскресенье"};
+    static final int SCHED_FROM = 9 * 60, SCHED_TO = 21 * 60;     // по умолчанию — каждый день с 09:00 до 21:00
+
+    /** Расписание из строки «вкл,с,до;…» — 7 дней с понедельника, минуты от полуночи. Пусто или битое — 09:00–21:00. */
+    static int[][] schedParse(String s) {
+        int[][] d = new int[7][];
+        String[] parts = s == null ? new String[0] : s.split(";", -1);
+        for (int i = 0; i < 7; i++) {
+            int[] v = {1, SCHED_FROM, SCHED_TO};
+            if (i < parts.length) {
+                String[] x = parts[i].split(",", -1);
+                if (x.length == 3) try {
+                    int on = Integer.parseInt(x[0].trim()), f = Integer.parseInt(x[1].trim()), t = Integer.parseInt(x[2].trim());
+                    if ((on == 0 || on == 1) && f >= 0 && f < 1440 && t >= 0 && t < 1440) v = new int[] {on, f, t};
+                } catch (NumberFormatException ignore) {}
+            }
+            d[i] = v;
+        }
+        return d;
+    }
+
+    static String schedFormat(int[][] d) {
+        StringBuilder b = new StringBuilder();
+        for (int i = 0; i < 7; i++) {
+            if (i > 0) b.append(';');
+            b.append(d[i][0]).append(',').append(d[i][1]).append(',').append(d[i][2]);
+        }
+        return b.toString();
+    }
+
+    /** Можно ли уведомлять в день dow (0 = Пн) в минуту min. «С» позже «до» (22:00–08:00) — через полночь:
+     *  часы после полуночи относятся ко дню начала. Одинаковые «с» и «до» — круглосуточно. */
+    static boolean inSchedule(int[][] d, int dow, int min) {
+        int[] t = d[dow];
+        if (t[0] == 1) {
+            if (t[1] == t[2]) return true;
+            if (t[1] < t[2] ? (min >= t[1] && min < t[2]) : min >= t[1]) return true;
+        }
+        int[] y = d[(dow + 6) % 7];
+        return y[0] == 1 && y[1] > y[2] && min < y[2];
+    }
+
+    /** Calendar.DAY_OF_WEEK (1 = воскресенье … 7 = суббота) → 0 = понедельник … 6 = воскресенье. */
+    static int dowMon(int calendarDow) { return (calendarDow + 5) % 7; }
+
+    /** Тихо ли сейчас: только у админа, только если расписание включено и сейчас не его время. */
+    static boolean quietAt(boolean admin, boolean schedOn, int[][] d, int dow, int min) {
+        return admin && schedOn && !inSchedule(d, dow, min);
+    }
+
+    /** Ближайшее начало разрешённого времени после (dow, min): {день, минута}; null — в расписании нет ни одного дня. */
+    static int[] nextStart(int[][] d, int dow, int min) {
+        for (int k = 1; k <= 7 * 1440; k++) {
+            int m = min + k, day = (dow + m / 1440) % 7;
+            if (inSchedule(d, day, m % 1440)) return new int[] {day, m % 1440};
+        }
+        return null;
+    }
+
+    static String hm(int min) { return (min / 60 < 10 ? "0" : "") + (min / 60) + ":" + (min % 60 < 10 ? "0" : "") + (min % 60); }
+
+    /** Строка дня в настройках. */
+    static String dayText(int[] t) {
+        if (t[0] == 0) return "без уведомлений";
+        if (t[1] == t[2]) return "круглосуточно";
+        return hm(t[1]) + " – " + hm(t[2]) + (t[1] > t[2] ? " (через полночь)" : "");
+    }
+
+    /** Строка «сейчас» под переключателями (расписание включено). */
+    static String schedStatus(int[][] d, int dow, int min) {
+        if (inSchedule(d, dow, min)) return "Сейчас время по расписанию — уведомления приходят.";
+        int[] n = nextStart(d, dow, min);
+        if (n == null) return "В расписании нет ни одного дня — уведомления не придут.";
+        return "Сейчас вне расписания — уведомления придут в " + DAYS[n[0]] + " в " + hm(n[1]) + ".";
+    }
+
     /** Новые id (по порядку ответа). seen == null — первый запуск на этом телефоне: только запомнить. */
     static List<String> fresh(Set<String> seen, List<String> now) {
         List<String> out = new ArrayList<String>();
@@ -227,6 +311,22 @@ public final class IvaNotifyPatch {
     static void setPref(Context c, String k, boolean v) { prefs(c).edit().putBoolean(k, v).apply(); }
 
     static boolean on(Context c, String kind, boolean admin) { return allowed(pref(c, K_ALL), pref(c, kind), kind, admin); }
+
+    static int[][] loadSched(Context c) { return schedParse(prefs(c).getString(K_SCHED, "")); }
+
+    static void saveSched(Context c, int[][] d) { prefs(c).edit().putString(K_SCHED, schedFormat(d)).apply(); }
+
+    /** 10.73: сейчас вне расписания админа — уведомление ждёт начала разрешённого времени. Сбой — не мешаем уведомлениям. */
+    static boolean quiet(Context c, boolean admin) {
+        try {
+            if (!admin || !prefs(c).getBoolean(K_SCHED_ON, false)) return false;
+            java.util.Calendar cal = java.util.Calendar.getInstance();
+            return quietAt(true, true, loadSched(c), dowMon(cal.get(java.util.Calendar.DAY_OF_WEEK)),
+                cal.get(java.util.Calendar.HOUR_OF_DAY) * 60 + cal.get(java.util.Calendar.MINUTE));
+        } catch (Throwable e) {
+            return false;
+        }
+    }
 
     static String key(String what, String email) { return what + "_" + (email == null ? "" : email.trim().toLowerCase()); }
 
@@ -331,6 +431,7 @@ public final class IvaNotifyPatch {
                 if (t instanceof TextView) ((TextView) t).setText(n > 0 ? "Заявки •" : "Заявки");
             }
         });
+        if (quiet(a, true)) return;          // 10.73: вне расписания — не запоминаем, покажем в начале разрешённого времени
         SharedPreferences p = prefs(a);
         String k = key("seen_o", email);
         Set<String> seen = splitSet(p.getString(k, null));
@@ -354,6 +455,7 @@ public final class IvaNotifyPatch {
     /** Непрочитанные входящие сообщения. Не уведомляем только о том, что и так видно: открытая переписка с этим
      *  собеседником или список чатов (оба обновляются сами, 10.57). Письмо от другого при открытом чате — уведомление. */
     static void checkMessages(Context a, String email, boolean admin, String openWith) throws Exception {
+        if (quiet(a, admin)) return;         // 10.73: вне расписания — ничего не запоминаем, покажем позже
         JSONArray rows = getArr(a, "/rest/v1/app_messages?select=id,from_email,text,img,audio,created_at&to_email=eq." + enc(email)
             + "&is_read=eq.false&order=created_at.desc&limit=50");
         List<String> ids = new ArrayList<String>(), created = new ArrayList<String>();
@@ -388,7 +490,7 @@ public final class IvaNotifyPatch {
 
     /** Вышла новая версия (тот же app-update.json, что у штатной кнопки «Обновить»). */
     static void checkUpdate(Context a, boolean admin) throws Exception {
-        if (!on(a, K_UPD, admin)) return;
+        if (!on(a, K_UPD, admin) || quiet(a, admin)) return;
         SharedPreferences p = prefs(a);
         long now = System.currentTimeMillis();
         if (!updateDue(p.getLong("upd_checked", 0), now)) return;
@@ -937,6 +1039,102 @@ public final class IvaNotifyPatch {
             if (admin) kids.add(switchRow(a, card, "Новые заявки", "Заявки на ваши инструменты", K_ORD, cText, cGray, cOrange));
             kids.add(switchRow(a, card, "Обновления приложения", "Когда вышла новая версия", K_UPD, cText, cGray, cOrange));
 
+            // 10.73: расписание — только админам
+            final Switch[] schedSw = new Switch[1];
+            final List<View> dayRows = new ArrayList<View>();
+            final TextView[] dayTexts = new TextView[7];
+            final Switch[] daySw = new Switch[7];
+            final Runnable[] ref = new Runnable[1];
+            final boolean[] drawing = new boolean[1];
+            if (admin) {
+                TextView ssec = new TextView(a);
+                ssec.setText("Расписание");
+                ssec.setTextSize(17f);
+                ssec.setTypeface(null, android.graphics.Typeface.BOLD);
+                ssec.setTextColor(cText);
+                LinearLayout.LayoutParams ssl = new LinearLayout.LayoutParams(-1, -2);
+                ssl.topMargin = dp(a, 18);
+                body.addView(ssec, ssl);
+                LinearLayout sc = new LinearLayout(a);
+                sc.setOrientation(LinearLayout.VERTICAL);
+                Drawable sbg = drawable(a, "bg_card");
+                if (sbg != null) sc.setBackground(sbg);
+                sc.setPadding(dp(a, 16), dp(a, 6), dp(a, 12), dp(a, 10));
+                LinearLayout.LayoutParams scl = new LinearLayout.LayoutParams(-1, -2);
+                scl.topMargin = dp(a, 10);
+                body.addView(sc, scl);
+                schedSw[0] = switchRow(a, sc, "По расписанию", SCHED_SUB, K_SCHED_ON, cText, cGray, cOrange);
+                schedSw[0].setOnCheckedChangeListener(new CompoundButton.OnCheckedChangeListener() {
+                    @Override public void onCheckedChanged(CompoundButton b, boolean v) {
+                        setPref(a, K_SCHED_ON, v);
+                        if (ref[0] != null) ref[0].run();
+                    }
+                });
+                for (int i = 0; i < 7; i++) {
+                    final int day = i;
+                    LinearLayout row = new LinearLayout(a);
+                    row.setOrientation(LinearLayout.HORIZONTAL);
+                    row.setGravity(Gravity.CENTER_VERTICAL);
+                    row.setPadding(0, dp(a, 2), 0, dp(a, 2));
+                    TextView dl = new TextView(a);
+                    dl.setText(DAYS[i]);
+                    dl.setTextSize(15f);
+                    dl.setTypeface(null, android.graphics.Typeface.BOLD);
+                    dl.setTextColor(cText);
+                    row.addView(dl, new LinearLayout.LayoutParams(dp(a, 40), -2));
+                    TextView tt = new TextView(a);
+                    tt.setTextSize(15f);
+                    tt.setPadding(0, dp(a, 10), dp(a, 8), dp(a, 10));
+                    row.addView(tt, new LinearLayout.LayoutParams(0, -2, 1f));
+                    Switch ds = new Switch(a);
+                    tint(ds, cOrange);
+                    row.addView(ds, new LinearLayout.LayoutParams(-2, -2));
+                    tt.setOnClickListener(new View.OnClickListener() {
+                        @Override public void onClick(View v) {
+                            if (!all.isChecked() || !schedSw[0].isChecked() || !daySw[day].isChecked()) return;
+                            pickHours(a, day, ref[0]);
+                        }
+                    });
+                    ds.setOnCheckedChangeListener(new CompoundButton.OnCheckedChangeListener() {
+                        @Override public void onCheckedChanged(CompoundButton b, boolean v) {
+                            if (drawing[0]) return;
+                            int[][] d = loadSched(a);
+                            d[day][0] = v ? 1 : 0;
+                            saveSched(a, d);
+                            if (ref[0] != null) ref[0].run();
+                        }
+                    });
+                    dayTexts[i] = tt;
+                    daySw[i] = ds;
+                    dayRows.add(row);
+                    sc.addView(row);
+                }
+                TextView copy = new TextView(a);
+                copy.setText("Часы понедельника — на все дни");
+                copy.setTextSize(14f);
+                copy.setTypeface(null, android.graphics.Typeface.BOLD);
+                copy.setTextColor(cOrange);
+                copy.setPadding(0, dp(a, 10), 0, dp(a, 6));
+                copy.setOnClickListener(new View.OnClickListener() {
+                    @Override public void onClick(View v) {
+                        if (!all.isChecked() || !schedSw[0].isChecked()) return;
+                        int[][] d = loadSched(a);
+                        for (int i = 1; i < 7; i++) d[i] = d[0].clone();
+                        saveSched(a, d);
+                        if (ref[0] != null) ref[0].run();
+                    }
+                });
+                dayRows.add(copy);
+                sc.addView(copy);
+                TextView sh = new TextView(a);
+                sh.setText(SCHED_HINT);
+                sh.setTextSize(12f);
+                sh.setTextColor(cGray);
+                sh.setPadding(0, dp(a, 2), 0, dp(a, 4));
+                dayRows.add(sh);
+                sc.addView(sh);
+            }
+
             final TextView status = new TextView(a);
             status.setTextSize(13f);
             status.setTextColor(cGray);
@@ -968,10 +1166,34 @@ public final class IvaNotifyPatch {
                     boolean master = all.isChecked();
                     for (Switch s : kids) { s.setEnabled(master); ((View) s.getParent()).setAlpha(master ? 1f : 0.45f); }
                     boolean ok = systemAllows(a);
-                    status.setText(!master ? "Все уведомления выключены."
+                    String sched = "";
+                    boolean schedWarn = false;
+                    if (schedSw[0] != null) {                     // 10.73: расписание админа
+                        schedSw[0].setEnabled(master);
+                        ((View) schedSw[0].getParent()).setAlpha(master ? 1f : 0.45f);
+                        boolean son = master && schedSw[0].isChecked();
+                        int[][] d = loadSched(a);
+                        drawing[0] = true;
+                        for (int i = 0; i < 7; i++) {
+                            daySw[i].setChecked(d[i][0] == 1);
+                            daySw[i].setEnabled(son);
+                            dayTexts[i].setText(dayText(d[i]));
+                            dayTexts[i].setTextColor(d[i][0] == 1 ? cOrange : cGray);
+                        }
+                        drawing[0] = false;
+                        for (View r : dayRows) r.setAlpha(son ? 1f : 0.45f);
+                        if (son) {
+                            java.util.Calendar cal = java.util.Calendar.getInstance();
+                            int dow = dowMon(cal.get(java.util.Calendar.DAY_OF_WEEK));
+                            int min = cal.get(java.util.Calendar.HOUR_OF_DAY) * 60 + cal.get(java.util.Calendar.MINUTE);
+                            sched = "\n" + schedStatus(d, dow, min);
+                            schedWarn = nextStart(d, dow, min) == null;
+                        }
+                    }
+                    status.setText((!master ? "Все уведомления выключены."
                         : ok ? "Android разрешает уведомления. Каждый вид можно отдельно настроить и в настройках Android."
-                        : "Уведомления запрещены в настройках Android — включите их, иначе они не появятся.");
-                    status.setTextColor(master && !ok ? cOrange : cGray);
+                        : "Уведомления запрещены в настройках Android — включите их, иначе они не появятся.") + sched);
+                    status.setTextColor(master && (!ok || schedWarn) ? cOrange : cGray);
                 }
             };
             all.setOnCheckedChangeListener(new CompoundButton.OnCheckedChangeListener() {
@@ -981,6 +1203,7 @@ public final class IvaNotifyPatch {
                     refresh.run();
                 }
             });
+            ref[0] = refresh;
             refresh.run();
 
             final Dialog d = new Dialog(a, android.R.style.Theme_Material_NoActionBar);
@@ -1027,12 +1250,8 @@ public final class IvaNotifyPatch {
         col.addView(s);
         row.addView(col, new LinearLayout.LayoutParams(0, -2, 1f));
         final Switch sw = new Switch(a);
-        sw.setChecked(pref(a, k));
-        if (Build.VERSION.SDK_INT >= 23) {
-            int[][] st = {{android.R.attr.state_checked}, {}};
-            sw.setThumbTintList(new ColorStateList(st, new int[] {cOrange, 0xffd0d3da}));
-            sw.setTrackTintList(new ColorStateList(st, new int[] {(cOrange & 0x00ffffff) | 0x88000000, 0x55a0a4ad}));
-        }
+        sw.setChecked(prefs(a).getBoolean(k, !K_SCHED_ON.equals(k)));   // всё включено, кроме расписания (10.73)
+        tint(sw, cOrange);
         if (!K_ALL.equals(k)) {
             sw.setOnCheckedChangeListener(new CompoundButton.OnCheckedChangeListener() {
                 @Override public void onCheckedChanged(CompoundButton b, boolean v) { setPref(a, k, v); }
@@ -1042,6 +1261,50 @@ public final class IvaNotifyPatch {
         row.setOnClickListener(new View.OnClickListener() { @Override public void onClick(View v) { if (sw.isEnabled()) sw.toggle(); } });
         card.addView(row);
         return sw;
+    }
+
+    static void tint(Switch sw, int cOrange) {
+        if (Build.VERSION.SDK_INT >= 23) {
+            int[][] st = {{android.R.attr.state_checked}, {}};
+            sw.setThumbTintList(new ColorStateList(st, new int[] {cOrange, 0xffd0d3da}));
+            sw.setTrackTintList(new ColorStateList(st, new int[] {(cOrange & 0x00ffffff) | 0x88000000, 0x55a0a4ad}));
+        }
+    }
+
+    static final String SCHED_SUB = "Уведомления приходят только в выбранные дни и часы";
+    static final String SCHED_HINT = "Что придёт в другое время, покажем, когда начнётся разрешённое (если вы ещё не прочитали "
+        + "сообщение и заявку не взяли). Когда приложение закрыто, Android проверяет примерно раз в 15 минут. "
+        + "«С» позже «до» (например, 22:00 – 08:00) — через полночь; одинаковое время — круглосуточно.";
+
+    /** Часы дня: сначала «с», потом «до» (24 часа, как в телефоне). Отмена — ничего не меняется. */
+    static void pickHours(final Activity a, final int day, final Runnable after) {
+        try {
+            final int[][] d = loadSched(a);
+            android.app.TimePickerDialog from = new android.app.TimePickerDialog(a, android.R.style.Theme_Material_Dialog,
+                new android.app.TimePickerDialog.OnTimeSetListener() {
+                    @Override public void onTimeSet(android.widget.TimePicker v, int h, int m) {
+                        final int f = h * 60 + m;
+                        try {
+                            android.app.TimePickerDialog to = new android.app.TimePickerDialog(a, android.R.style.Theme_Material_Dialog,
+                                new android.app.TimePickerDialog.OnTimeSetListener() {
+                                    @Override public void onTimeSet(android.widget.TimePicker v2, int h2, int m2) {
+                                        d[day][0] = 1;
+                                        d[day][1] = f;
+                                        d[day][2] = h2 * 60 + m2;
+                                        saveSched(a, d);
+                                        if (after != null) after.run();
+                                    }
+                                }, d[day][2] / 60, d[day][2] % 60, true);
+                            to.setTitle("До какого времени — " + DAYS_FULL[day]);
+                            to.show();
+                        } catch (Throwable ignore) {}
+                    }
+                }, d[day][1] / 60, d[day][1] % 60, true);
+            from.setTitle("С какого времени — " + DAYS_FULL[day]);
+            from.show();
+        } catch (Throwable e) {
+            try { Toast.makeText(a, "Не удалось открыть выбор времени", Toast.LENGTH_SHORT).show(); } catch (Throwable ignore) {}
+        }
     }
 
     static TextView linkButton(Activity a, LinearLayout body, String text, int cOrange) {
