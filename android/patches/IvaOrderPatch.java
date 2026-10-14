@@ -2148,6 +2148,8 @@ public final class IvaOrderPatch {
         }
 
         final Dialog d = new Dialog(a, android.R.style.Theme_Material_NoActionBar);
+        // 10.76: активная заявка — «Написать» и «Позвонить»: клиенту — прокату, админу — клиенту (первым может любой)
+        if (ordActive(r, archived)) try { ordContactRow(a, sh, d, r, owners, adm); } catch (Throwable ignore) {}
         if (!adm && !r.containsKey(ORD_PARTIAL) && (archived || ordClosed(r))) {   // «В архив» — только у закрытых; в архиве — «Вернуть» (у админа — штатная «В архив →» на карточке)
             TextView arch = new TextView(a);
             arch.setText(archived ? ARCH_OFF : ARCH_ON);
@@ -2195,6 +2197,126 @@ public final class IvaOrderPatch {
         d.show();
         sh.setTranslationY(screen);                  // выезжает снизу, как шторка фильтра
         sh.animate().translationY(0).setDuration(220).start();
+    }
+
+    // ───────────── 10.76: связаться из активной заявки (просьба владельца 14.10.2026) ─────────────
+    // В подробностях активной заявки (новая или в аренде) — две кнопки: «Написать» открывает общую переписку в «Чате»
+    // (клиент — с прокатом заявки, админ — с клиентом; писать первым может любой), «Позвонить» — набор номера
+    // (телефон проката из его профиля, у админа — телефон из заявки). Звонок только через набор номера — без разрешений.
+    static final String CONTACT_WRITE = "Написать", CONTACT_CALL = "Позвонить";
+    static final String CONTACT_NO_PHONE_CLIENT = "Клиент не указал телефон — напишите ему";
+    static final String CONTACT_NO_PHONE_PROKAT = "Телефон проката не указан или ещё загружается — напишите в чат";
+    static final String CONTACT_NO_EMAIL = "Клиент оформил заявку без входа в приложение — позвоните ему";
+    static final String CONTACT_NO_PROKAT = "Прокат этой заявки не найден";
+    static final String CONTACT_NO_CHAT = "Не удалось открыть чат";
+
+    /** Активная заявка — новая или в аренде, не в архиве (у админа — статус его части заявки). */
+    static boolean ordActive(Map<String, String> r, boolean archived) {
+        return r != null && !archived && !"Закрыта".equals(ordStatus(ordStatusOf(r)));
+    }
+
+    /**
+     * С кем связаться: {почта для чата (как в базе), телефон, имя}. Админу — клиент заявки; клиенту — прокат заявки
+     * (первый, чьи данные загружены; пока не загружены — почта из заявки, без телефона).
+     */
+    static String[] ordContact(boolean adm, Map<String, String> r, List<String> owners, Map<String, Map<String, String>> prokat) {
+        if (adm) return new String[]{ordVal(r.get("user_email")), ordVal(r.get("phone")), ordVal(r.get("name"))};
+        for (String e : owners) {
+            Map<String, String> ad = prokat == null ? null : prokat.get(e);
+            if (ad == null) continue;
+            String mail = ordVal(ad.get("email")), company = ordVal(ad.get("company")), name = ordVal(ad.get("full_name"));
+            return new String[]{mail.isEmpty() ? e : mail, ordVal(ad.get("phone")), company.isEmpty() ? name : company};
+        }
+        return new String[]{owners.isEmpty() ? "" : ordVal(owners.get(0)), "", ""};
+    }
+
+    /** «+7 (900) 123-45-67» → «tel:+79001234567»; меньше 5 цифр — пусто (звонить некуда). */
+    static String dialUri(String phone) {
+        String d = ordVal(phone).replaceAll("[^0-9+]", "");
+        return d.replace("+", "").length() < 5 ? "" : "tel:" + d;
+    }
+
+    static void ordContactRow(final Activity a, LinearLayout sh, final Dialog d, final Map<String, String> r,
+                              final List<String> owners, final boolean adm) {
+        LinearLayout row = new LinearLayout(a);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        View write = ordContactBtn(a, CONTACT_WRITE, "ic_chat"), call = ordContactBtn(a, CONTACT_CALL, "ic_phone");
+        LinearLayout.LayoutParams wl = new LinearLayout.LayoutParams(0, dp(a, 50), 1f);
+        wl.rightMargin = dp(a, 10);
+        row.addView(write, wl);
+        row.addView(call, new LinearLayout.LayoutParams(0, dp(a, 50), 1f));
+        LinearLayout.LayoutParams rl = new LinearLayout.LayoutParams(-1, -2);
+        rl.setMargins(dp(a, 16), dp(a, 8), dp(a, 16), 0);
+        sh.addView(row, rl);
+        write.setOnClickListener(new View.OnClickListener() {
+            @Override public void onClick(View v) {
+                String[] k = ordContact(adm, r, owners, ordProkat);
+                if (k[0].isEmpty()) { Toast.makeText(a, adm ? CONTACT_NO_EMAIL : CONTACT_NO_PROKAT, Toast.LENGTH_LONG).show(); return; }
+                try { d.dismiss(); } catch (Throwable ignore) {}
+                boolean ok = false;
+                try { ok = IvaChatPatch.openWith(a, k[0]); } catch (Throwable ignore) {}
+                if (!ok) Toast.makeText(a, CONTACT_NO_CHAT, Toast.LENGTH_SHORT).show();
+            }
+        });
+        call.setOnClickListener(new View.OnClickListener() {
+            @Override public void onClick(View v) {
+                String uri = dialUri(ordContact(adm, r, owners, ordProkat)[1]);
+                if (uri.isEmpty()) { Toast.makeText(a, adm ? CONTACT_NO_PHONE_CLIENT : CONTACT_NO_PHONE_PROKAT, Toast.LENGTH_LONG).show(); return; }
+                try { a.startActivity(new android.content.Intent(android.content.Intent.ACTION_DIAL, android.net.Uri.parse(uri))); }
+                catch (Throwable e) { Toast.makeText(a, "Не удалось открыть набор номера", Toast.LENGTH_SHORT).show(); }
+            }
+        });
+    }
+
+    /** Кнопка как «В архив»: карточка темы, оранжевый жирный текст, слева значок приложения (ic_chat / ic_phone). */
+    static View ordContactBtn(Activity a, String text, String icon) {
+        int orange = color(a, "orange", 0xffff8f1f);
+        LinearLayout b = new LinearLayout(a);
+        b.setOrientation(LinearLayout.HORIZONTAL);
+        b.setGravity(Gravity.CENTER);
+        b.setClickable(true);
+        b.setBackground(IvaClientPatch.choiceBg(a, "card", 0xff1a1d24, IvaClientPatch.CHOICE_RADIUS_DP));
+        b.setContentDescription(text);
+        Drawable ic = drawable(a, icon);
+        if (ic != null) {
+            android.widget.ImageView iv = new android.widget.ImageView(a);
+            iv.setImageDrawable(ic.mutate());
+            iv.setColorFilter(orange);
+            LinearLayout.LayoutParams il = new LinearLayout.LayoutParams(dp(a, 18), dp(a, 18));
+            il.rightMargin = dp(a, 8);
+            b.addView(iv, il);
+        }
+        TextView t = new TextView(a);
+        t.setText(text);
+        t.setTextColor(orange);
+        t.setTextSize(15f);
+        t.setTypeface(null, Typeface.BOLD);
+        b.addView(t, new LinearLayout.LayoutParams(-2, -2));
+        return b;
+    }
+
+    /** 10.76: нажали на напоминание об аренде — «Заявки», а когда список загрузится — подробности этой заявки. */
+    static void openById(final Activity a, final String orderId) {
+        IvaNotifyPatch.tab(a, "orders");
+        final String id = ordVal(orderId);
+        if (id.isEmpty()) return;
+        final long until = System.currentTimeMillis() + 15000;
+        ordH().postDelayed(new Runnable() {
+            @Override public void run() {
+                try {
+                    if (a.isFinishing() || !"orders".equals(String.valueOf(get(a, "curTab")))) return;   // ушли — не мешаем
+                    if (ordMine(a)) {
+                        for (Map<String, String> r : new ArrayList<Map<String, String>>(ordRows)) {
+                            if (!id.equals(ordVal(r.get("id")))) continue;
+                            if (ordDialog == null || !ordDialog.isShowing()) ordOpenRow(a, r, ordArchived.contains(id));
+                            return;
+                        }
+                        if (!ordLoading) return;          // свежий список пришёл, а заявки в нём нет — остаётся список
+                    }
+                    if (System.currentTimeMillis() < until) ordH().postDelayed(this, 300);
+                } catch (Throwable ignore) {}
+            }
+        }, 300);
     }
 
     static void ordFieldView(final Activity a, LinearLayout body, final String[] f, boolean accent) {

@@ -1077,6 +1077,69 @@ public class IvaPatchTest {
             eq("настройки 10.75: включены", IvaNotifyPatch.headSummary(true, true, false), "Включены");
             eq("настройки 10.75: включены по расписанию", IvaNotifyPatch.headSummary(true, true, true), "Включены · по расписанию");
             eq("настройки 10.75: заголовок кнопки", IvaNotifyPatch.NOTIF_TITLE, "Уведомления");
+            // 10.76: связаться из активной заявки; напоминание об окончании аренды
+            {
+                java.util.Map<String, String> act = new java.util.HashMap<String, String>();
+                act.put("status", "rented");
+                eq("связь 10.76: заявка в аренде — активная", IvaOrderPatch.ordActive(act, false), true);
+                eq("связь 10.76: в архиве — кнопок нет", IvaOrderPatch.ordActive(act, true), false);
+                java.util.Map<String, String> cl = new java.util.HashMap<String, String>();
+                cl.put("status", "new");
+                cl.put(IvaOrderPatch.ORD_PARTS, "closed,closed");
+                eq("связь 10.76: все части закрыты — заявка закрыта, кнопок нет", IvaOrderPatch.ordActive(cl, false), false);
+                cl.put(IvaOrderPatch.ORD_PARTS, "closed,rented");
+                eq("связь 10.76: одна часть ещё в аренде — активная", IvaOrderPatch.ordActive(cl, false), true);
+                java.util.Map<String, String> adm = new java.util.HashMap<String, String>();
+                adm.put(IvaOrderPatch.ADM_ROW, "1"); adm.put("status", "closed");
+                eq("связь 10.76: у админа закрытая часть — кнопок нет", IvaOrderPatch.ordActive(adm, false), false);
+                adm.put("status", "new"); adm.put("user_email", "Client@Mail.ru"); adm.put("phone", "+7 900 111-22-33"); adm.put("name", "Иван");
+                eq("связь 10.76: админу — клиент заявки (почта как в базе, телефон, имя)",
+                    java.util.Arrays.asList(IvaOrderPatch.ordContact(true, adm, new java.util.ArrayList<String>(), null)).toString(), "[Client@Mail.ru, +7 900 111-22-33, Иван]");
+                java.util.List<String> own = new java.util.ArrayList<String>();
+                own.add("prokat@mail.ru");
+                java.util.Map<String, java.util.Map<String, String>> pk = new java.util.HashMap<String, java.util.Map<String, String>>();
+                eq("связь 10.76: данные проката ещё не загружены — написать можно, телефона нет",
+                    java.util.Arrays.asList(IvaOrderPatch.ordContact(false, act, own, pk)).toString(), "[prokat@mail.ru, , ]");
+                java.util.Map<String, String> ad = new java.util.HashMap<String, String>();
+                ad.put("email", "Prokat@Mail.ru"); ad.put("phone", "8 (863) 200-00-00"); ad.put("company", "Прокат Юг"); ad.put("full_name", "Пётр");
+                pk.put("prokat@mail.ru", ad);
+                eq("связь 10.76: клиенту — прокат заявки из профиля (почта как в базе, телефон, название)",
+                    java.util.Arrays.asList(IvaOrderPatch.ordContact(false, act, own, pk)).toString(), "[Prokat@Mail.ru, 8 (863) 200-00-00, Прокат Юг]");
+                eq("связь 10.76: прокат не найден — пусто", IvaOrderPatch.ordContact(false, act, new java.util.ArrayList<String>(), pk)[0], "");
+                eq("связь 10.76: набор номера — только цифры и +", IvaOrderPatch.dialUri("+7 (900) 123-45-67"), "tel:+79001234567");
+                eq("связь 10.76: нет номера — звонить некуда", IvaOrderPatch.dialUri(" тел. 12 "), "");
+                eq("связь 10.76: «null» — не номер", IvaOrderPatch.dialUri("null"), "");
+            }
+            eq("аренда 10.76: за 1, 2 или 3 часа; другое — 1 час", IvaNotifyPatch.rentHours(3) + "," + IvaNotifyPatch.rentHours(2) + "," + IvaNotifyPatch.rentHours(7) + "," + IvaNotifyPatch.rentHours(0), "3,2,1,1");
+            eq("аренда 10.76: подписи чипов", IvaNotifyPatch.hoursText(1) + "|" + IvaNotifyPatch.hoursText(2) + "|" + IvaNotifyPatch.hoursText(3), "1 час|2 часа|3 часа");
+            eq("аренда 10.76: срок у каждого инструмента из текста заявки",
+                IvaNotifyPatch.rentTools("Дрель (3 дня), Пила ×2 (1 день), Фен (10 дней)", 0).toString(), "{Дрель=3, Пила ×2=1, Фен=10}");
+            eq("аренда 10.76: без срока в тексте — срок заявки; совсем без срока — не напоминаем",
+                IvaNotifyPatch.rentTools("Дрель, Пила (2 сут.)", 4).toString() + IvaNotifyPatch.rentTools("Дрель", 0).toString(), "{Дрель=4, Пила=2}{}");
+            {
+                long at = 1760440000000L;
+                java.util.List<IvaNotifyPatch.RentEnd> es = IvaNotifyPatch.rentEnds("11", "5", "Дрель (3 дня), Пила (1 день), Фен (3 дня)", 3, at);
+                eq("аренда 10.76: одинаковый срок — одно напоминание, разный — отдельные", es.size(), 2);
+                eq("аренда 10.76: конец = «Выдал» + сутки", es.get(0).end - at, 3L * 24 * 3600 * 1000);
+                eq("аренда 10.76: в напоминании — инструменты с этим сроком", es.get(0).names + "|" + es.get(1).names, "Дрель, Фен|Пила");
+                eq("аренда 10.76: ключ «уже напомнили» — часть и конец, заявка — для перехода", es.get(1).key + "|" + es.get(1).order, "r11@" + (at + 24L * 3600 * 1000) + "|5");
+                eq("аренда 10.76: нет времени выдачи (выдали до SQL) — не напоминаем", IvaNotifyPatch.rentEnds("11", "5", "Дрель (3 дня)", 3, -1).size(), 0);
+            }
+            {
+                long end = 1760440000000L, h = 3600000L;
+                eq("аренда 10.76: за 1 час — ровно за час уже пора", IvaNotifyPatch.rentDue(end, end - h, 1), true);
+                eq("аренда 10.76: за 1 час — за час с минутой ещё рано", IvaNotifyPatch.rentDue(end, end - h - 60000, 1), false);
+                eq("аренда 10.76: за 3 часа — за 2 ч 59 мин пора", IvaNotifyPatch.rentDue(end, end - 3 * h + 60000, 3), true);
+                eq("аренда 10.76: срок вышел — не напоминаем", IvaNotifyPatch.rentDue(end, end, 1) || IvaNotifyPatch.rentDue(end, end + 1, 3), false);
+                java.util.TimeZone utc = java.util.TimeZone.getTimeZone("UTC");
+                long noon = 1760443200000L;                      // 2025-10-14 12:00 UTC
+                eq("аренда 10.76: заголовок — сегодня", IvaNotifyPatch.rentTitle(noon + 150 * 60000L, noon, utc), "Аренда заканчивается в 14:30");
+                eq("аренда 10.76: заголовок — после полуночи", IvaNotifyPatch.rentTitle(noon + 13 * h, noon + 11 * h, utc), "Аренда заканчивается завтра в 01:00");
+            }
+            eq("аренда 10.76: по умолчанию выключено (как и расписание), остальное включено",
+                IvaNotifyPatch.defOn(IvaNotifyPatch.K_RENT) + "," + IvaNotifyPatch.defOn(IvaNotifyPatch.K_SCHED_ON) + "," + IvaNotifyPatch.defOn(IvaNotifyPatch.K_MSG), "false,false,true");
+            eq("аренда 10.76: текст — инструменты и куда нажать", IvaNotifyPatch.rentText("Дрель").startsWith("Дрель. ") && IvaNotifyPatch.rentText("Дрель").contains("«Написать» или «Позвонить»"), true);
+            eq("аренда 10.76: свой канал «Окончание аренды»", IvaNotifyPatch.channelName(IvaNotifyPatch.CH_RENT), "Окончание аренды");
         }
         if (fail > 0) { System.out.println("ошибок: " + fail); System.exit(1); }
         System.out.println("все проверки IvaPatch пройдены");

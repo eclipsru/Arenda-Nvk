@@ -828,6 +828,23 @@ final class IvaChatPatch {
         } catch (Throwable ignore) {}
     }
 
+    /**
+     * 10.76: «Написать» в активной заявке — общая переписка с этим человеком (у клиента — прокат, у админа — клиент).
+     * Писать первым может любой: в списке чат появится после первого сообщения. Без входа / сам себе — false.
+     */
+    static boolean openWith(Activity a, String partnerRaw) {
+        String p = clean(partnerRaw);
+        if (p.isEmpty() || !loggedIn(a) || low(p).equals(low(str(IvaClientPatch.get(a, "userEmail"))))) return false;
+        act = new WeakReference<Activity>(a);
+        if (handler == null) handler = new Handler(Looper.getMainLooper());
+        voiceStop(a);
+        openThread(a, p, "", null);
+        callTab(a, "chat");
+        callNative(a, "loadChat");
+        render(a);
+        return true;
+    }
+
     static void openThread(Activity a, String partnerRaw, String tool, JSONObject toolObj) {
         if (toolObj != null && !clean(tool).isEmpty() && !isLend(tool) && !toolCache.containsKey(tool)) toolCache.put(tool, toolObj);
         IvaClientPatch.set(a, "chatWith", partnerRaw);

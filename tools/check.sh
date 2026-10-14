@@ -137,6 +137,18 @@ else
   skip "стенд прав на публикацию: нет pgserver (PG_PY=<python с pgserver> bash tools/check.sh)"
 fi
 
+head_ "4.5.1. Стенд напоминания об окончании аренды (локальный PostgreSQL)"
+# 10.76: время выдачи ставит сама база при «Выдал» (подделать нельзя), клиенту — только свои выданные инструменты.
+if "$PG_PY" -c "import pgserver" >/dev/null 2>&1; then
+  if "$PG_PY" tools/rent-reminder-stand.py >/tmp/iva-test-rent-stand.log 2>&1; then
+    ok "напоминание об аренде: $(grep -c '✔' /tmp/iva-test-rent-stand.log) проверок SQL на PostgreSQL"
+  else
+    bad "стенд напоминания об аренде"; grep -E '✘|ИТОГ' /tmp/iva-test-rent-stand.log | head -8 | sed 's/^/      /'
+  fi
+else
+  skip "стенд напоминания об аренде: нет pgserver (PG_PY=<python с pgserver> bash tools/check.sh)"
+fi
+
 head_ "4.6. Скачивание приложения у всех: файл выпущенной версии на месте"
 # Выпущенная версия живёт строкой в базе (app_releases) и ссылается на файл в корне сайта.
 # Если файл убрать, у всех пользователей ломается «Скачать APK». Код 2 = проверить не удалось (нет сети).

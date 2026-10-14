@@ -769,10 +769,59 @@ try {
       assert.ok(has(arsc14, str) || has(dex14, str), `APK 10.14: нет «${str}» — правка 10.67 не найдёт штатное поле`);
     assert.ok(/eq\("админ 10\.67: /.test(tp) && /eq\("подкатегория 10\.67: /.test(tp) && /eq\("кабинет 10\.67: /.test(tp), 'IvaPatchTest: проверки 10.67');
   }
+  // 10.76 (просьба владельца 14.10.2026): 1) в активной заявке — «Написать» и «Позвонить» (клиенту — прокату, админу — клиенту,
+  // первым может любой); 2) клиентам — напоминание об окончании аренды за 1/2/3 часа (конец = «Выдал» + сутки, по умолчанию выключено)
+  {
+    const op = R('android/patches/IvaOrderPatch.java'), cp = R('android/patches/IvaChatPatch.java'), np = R('android/patches/IvaNotifyPatch.java');
+    const tp = R('android/patches/test/IvaPatchTest.java'), wf = R('.github/workflows/build-apk.yml'), ap = R('android/patches/apply.py');
+    const sql = R('supabase/migrations/20261014_rent_reminder.sql'), chk = R('tools/check.sh');
+    const fnx = (src, name) => { const mm = new RegExp(`static \\w+(?:\\[\\])? ${name}\\(`).exec(src); assert.ok(mm, `нет ${name}`); return src.slice(mm.index, src.indexOf('\n    }\n', mm.index)); };
+    // 1) кнопки — только в подробностях активной заявки, у обеих сторон; сбой не ломает шторку
+    const row = fnx(op, 'ordOpenRow');
+    assert.ok(row.includes('if (ordActive(r, archived)) try { ordContactRow(a, sh, d, r, owners, adm); } catch (Throwable ignore) {}')
+      && row.indexOf('ordContactRow(') < row.indexOf('sh.addView(close, cl);'), 'связь 10.76: «Написать»/«Позвонить» — в подробностях активной заявки, над «Закрыть»');
+    assert.ok(fnx(op, 'ordActive').includes('!archived && !"Закрыта".equals(ordStatus(ordStatusOf(r)))'), 'связь 10.76: только новая или в аренде, не в архиве');
+    const cr = fnx(op, 'ordContactRow');
+    assert.ok(cr.includes('IvaChatPatch.openWith(a, k[0])') && cr.includes('d.dismiss()') && cr.includes('Intent.ACTION_DIAL') && !/ACTION_CALL\b|CALL_PHONE/.test(op),
+      'связь 10.76: «Написать» — переписка в «Чате», «Позвонить» — набор номера без разрешения на звонки');
+    const oc = fnx(op, 'ordContact');
+    assert.ok(oc.includes('if (adm) return new String[]{ordVal(r.get("user_email")), ordVal(r.get("phone")), ordVal(r.get("name"))};') && oc.includes('ad.get("phone")'),
+      'связь 10.76: админу — клиент заявки, клиенту — прокат из профиля');
+    const ow = fnx(cp, 'openWith');
+    assert.ok(ow.includes('openThread(a, p, "", null);') && ow.includes('callTab(a, "chat");') && ow.includes('!loggedIn(a)') && ow.includes('low(p).equals(low(str(IvaClientPatch.get(a, "userEmail"))))'),
+      'связь 10.76: общая переписка, без входа и самому себе — нет');
+    // 2) напоминание
+    assert.ok(/ALTER TABLE public\.order_parts ADD COLUMN IF NOT EXISTS rented_at timestamptz;/.test(sql) && sql.includes('new.rented_at := old.rented_at;')
+      && /BEFORE INSERT OR UPDATE ON public\.order_parts/.test(sql) && sql.includes("REVOKE ALL ON FUNCTION public.iva_my_rentals() FROM public, anon;")
+      && sql.includes("and lower(coalesce(o.user_email, '')) = lower(auth.jwt() ->> 'email')") && sql.includes("and lower(btrim(coalesce(p.status, ''))) = 'rented'")
+      && !/\b(o\.name|o\.phone|o\.address|passport)\b/.test(sql) && !/\bDROP\s+(TABLE|COLUMN)\b/i.test(sql.replace(/^--.*$/mg, '')),
+      'SQL 10.76: время выдачи ставит база (не подделать), клиенту — только свои выданные, без личных данных, ничего не удаляется');
+    assert.ok(chk.includes('tools/rent-reminder-stand.py'), 'SQL 10.76: стенд на PostgreSQL — в check.sh');
+    const crn = fnx(np, 'checkRent');
+    assert.ok(crn.includes('if (admin || email == null || email.trim().isEmpty() || !rentOn(a)) return;') && crn.includes('"404".equals(r[0])')
+      && crn.includes('if (rentDue(e.end, now, hours) && !seen.contains(e.key)) { due.add(e); keys.add(e.key); }')
+      && crn.indexOf('p.edit().putString(k, joinSet(remember(seen, keys))).apply();') < crn.indexOf('showNote(a, CH_RENT'),
+      'аренда 10.76: только клиентам и если включено; без SQL — тихо; каждое напоминание один раз');
+    assert.ok(crn.includes('if (a instanceof Activity && now - rentAt < RENT_EVERY_MS) return;'), 'аренда 10.76: открыто — не чаще раза в 5 минут');
+    assert.ok(np.includes('if (logged && !admin && !email.isEmpty()) try { checkRent(a, email, admin); } catch (Throwable ignore) {}')
+      && fnx(np, 'bgRun').includes('if (logged && !admin) try { checkRent(c, email, admin); } catch (Throwable ignore) {}'),
+      'аренда 10.76: и при открытом приложении, и в фоне; сбой не мешает остальным уведомлениям');
+    assert.ok(np.includes('static boolean rentOn(Context c) { return pref(c, K_ALL) && prefs(c).getBoolean(K_RENT, false); }'), 'аренда 10.76: по умолчанию выключено, общий выключатель главнее');
+    assert.ok(np.includes('else if ("rent".equals(open)) IvaOrderPatch.openById(a, target);'), 'аренда 10.76: нажатие — эта заявка');
+    const os = fnx(np, 'openSettings');
+    assert.ok(os.includes('if (loggedIn(a) && !admin) {') && os.indexOf('switchRow(a, card, RENT_TITLE') > os.indexOf('if (loggedIn(a) && !admin) {')
+      && os.includes('RENT_HOURS.length') && os.includes('"bg_chip_on" : "bg_chip"') && os.includes('card.addView(chips'),
+      'аренда 10.76: в «Какие присылать» у клиентов — переключатель и чипы «За 1 час / 2 часа / 3 часа» в стиле приложения');
+    assert.ok(/static final int\[\] RENT_HOURS = \{1, 2, 3\};/.test(np), 'аренда 10.76: выбор — 1, 2 или 3 часа');
+    assert.ok(!/AlarmManager|WorkManager|customer_profiles|passport|phone|surname/.test(np), 'аренда 10.76: без будильников и личных данных в IvaNotifyPatch');
+    assert.ok(!ap.includes('openWith') && !ap.includes('checkRent') && !ap.includes('openById'), 'связь/аренда 10.76: новых вставок в smali нет');
+    assert.ok(/NEW_NAME: '10\.76'/.test(wf) && /NEW_CODE: '150'/.test(wf), 'версия 10.76 (150)');
+    assert.ok((tp.match(/eq\("связь 10\.76: /g) || []).length >= 12 && (tp.match(/eq\("аренда 10\.76: /g) || []).length >= 16, 'IvaPatchTest: проверки 10.76');
+  }
   // 10.75 (просьба владельца 14.10.2026): в «Настройках» — раскрывающаяся кнопка «Уведомления», по умолчанию свёрнута;
   // внутри сверху «Открыть настройки уведомлений Android», потом какие присылать, потом расписание, потом всё остальное
   {
-    const np = R('android/patches/IvaNotifyPatch.java'), tp = R('android/patches/test/IvaPatchTest.java'), wf = R('.github/workflows/build-apk.yml');
+    const np = R('android/patches/IvaNotifyPatch.java'), tp = R('android/patches/test/IvaPatchTest.java');
     const mm = /static \w+ openSettings\(/.exec(np); assert.ok(mm, 'IvaNotifyPatch: нет openSettings');
     const os = np.slice(mm.index, np.indexOf('\n    }\n', mm.index));
     const at = (t) => { const i = os.indexOf(t); assert.ok(i > 0, `openSettings: нет ${t}`); return i; };
@@ -792,7 +841,6 @@ try {
     assert.ok(os.includes('hsub.setText(headSummary(master, ok, schedSw[0] != null && schedSw[0].isChecked()));'), 'настройки 10.75: под кнопкой — коротко о состоянии');
     assert.ok(os.includes('drawable(a, "bg_card")') && os.includes('bellIcon(cOrange)') && !/#[0-9A-Fa-f]{6}|0xff(?!101217|f2f4f8|9aa1b0|ff8f1f)[0-9a-f]{6}/i.test(os),
       'настройки 10.75: стиль приложения — bg_card, оранжевый значок, только цвета темы');
-    assert.ok(/NEW_NAME: '10\.75'/.test(wf) && /NEW_CODE: '149'/.test(wf), 'настройки 10.75: версия 10.75 (149)');
     assert.ok((tp.match(/eq\("настройки 10\.75: /g) || []).length >= 5, 'IvaPatchTest: проверки 10.75');
   }
   // 10.74 (решение владельца 14.10.2026, отменяет «без Firebase» от 13.10 — только для админов): мгновенные уведомления.
@@ -856,7 +904,7 @@ try {
     const q = fn('quiet');
     assert.ok(q.includes("if (!admin || !prefs(c).getBoolean(K_SCHED_ON, false)) return false;") && q.includes('catch (Throwable e) {\n            return false;'),
       'расписание 10.73: только у админа, по умолчанию выключено, при сбое уведомления не глушатся');
-    assert.ok(np.includes('sw.setChecked(prefs(a).getBoolean(k, !K_SCHED_ON.equals(k)));'), 'расписание 10.73: остальные переключатели по умолчанию включены, расписание — выключено');
+    assert.ok(np.includes('sw.setChecked(prefs(a).getBoolean(k, defOn(k)));') && np.includes('static boolean defOn(String k) { return !K_SCHED_ON.equals(k) && !K_RENT.equals(k); }'), 'расписание 10.73: остальные переключатели по умолчанию включены, расписание — выключено');
     const os = fn('openSettings');
     assert.ok(os.includes('if (admin) {') && os.indexOf('schedSw[0] = switchRow(') > os.indexOf('if (admin) {') && os.includes('for (int i = 0; i < 7; i++) {'),
       'расписание 10.73: раздел «Расписание» с семью днями — только админам');

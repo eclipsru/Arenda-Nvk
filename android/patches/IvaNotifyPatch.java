@@ -54,6 +54,7 @@ import java.net.HttpURLConnection;
 import java.net.URL;
 import java.net.URLEncoder;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
@@ -328,6 +329,98 @@ public final class IvaNotifyPatch {
         }
     }
 
+    // ── 10.76: напоминание клиенту об окончании аренды (решения владельца 14.10.2026) ──
+    // Конец = время «Выдал» (ставит база, SQL 20261014_rent_reminder.sql) + срок инструмента в сутках. Клиент выбирает,
+    // за сколько напомнить: за 1, 2 или 3 часа; по умолчанию выключено. Открыто — проверка не чаще раза в 5 минут,
+    // закрыто — каждая фоновая проверка (Android будит примерно раз в 15 минут, поэтому напоминание может прийти
+    // на несколько минут позже выбранного). После конца срока не напоминаем. Админам — не показывается.
+    static final String K_RENT = "rent", K_RENT_H = "rent_h";
+    static final String CH_RENT = "iva_rent";
+    static final int ID_RENT = 7300;
+    static final int[] RENT_HOURS = {1, 2, 3};
+    static final String RENT_RPC = "/rest/v1/rpc/iva_my_rentals";
+    static final long RENT_EVERY_MS = 5L * 60 * 1000;
+    static final long DAY_MS = 24L * 60 * 60 * 1000;
+    static final String RENT_TITLE = "Напоминать об окончании аренды";
+    static final String RENT_SUB = "За сколько до конца срока — выберите ниже";
+    static volatile long rentAt, rentMissingUntil;
+
+    /** Конец аренды одной группы инструментов части заявки (с одинаковым сроком). */
+    static final class RentEnd {
+        String key = "", order = "", names = "";
+        long end;
+    }
+
+    static int rentHours(int h) { return h == 2 || h == 3 ? h : 1; }
+
+    static String hoursText(int h) { return h == 1 ? "1 час" : h + " часа"; }
+
+    /** «Дрель (3 дня), Пила ×2 (1 день)» → {Дрель=3, Пила ×2=1}; у инструмента без срока — срок заявки (если есть). */
+    static LinkedHashMap<String, Integer> rentTools(String toolsText, int days) {
+        LinkedHashMap<String, Integer> out = new LinkedHashMap<String, Integer>();
+        java.util.regex.Pattern pt = java.util.regex.Pattern.compile("^(.*?)\\s*\\((\\d{1,3})\\s*(?:дн|день|дня|дней|сут)[^()]*\\)\\s*$");
+        for (String part : (toolsText == null ? "" : toolsText).split(",")) {
+            String t = part.trim();
+            if (t.isEmpty()) continue;
+            java.util.regex.Matcher m = pt.matcher(t);
+            String name = t;
+            int d = days;
+            if (m.find()) { name = m.group(1).trim(); d = Integer.parseInt(m.group(2)); }
+            if (d <= 0 || d > 365 || name.isEmpty()) continue;
+            if (!out.containsKey(name)) out.put(name, d);
+        }
+        return out;
+    }
+
+    /** Окончания аренды части заявки: инструменты с одинаковым сроком — одно напоминание. Нет времени выдачи — пусто. */
+    static List<RentEnd> rentEnds(String partId, String orderId, String toolsText, int days, long rentedAt) {
+        List<RentEnd> out = new ArrayList<RentEnd>();
+        if (rentedAt <= 0) return out;
+        LinkedHashMap<Integer, StringBuilder> byDays = new LinkedHashMap<Integer, StringBuilder>();
+        LinkedHashMap<String, Integer> tools = rentTools(toolsText, days);
+        if (tools.isEmpty() && days > 0) tools.put("Инструменты по заявке", days);
+        for (java.util.Map.Entry<String, Integer> e : tools.entrySet()) {
+            StringBuilder b = byDays.get(e.getValue());
+            if (b == null) byDays.put(e.getValue(), b = new StringBuilder());
+            if (b.length() > 0) b.append(", ");
+            b.append(e.getKey());
+        }
+        for (java.util.Map.Entry<Integer, StringBuilder> e : byDays.entrySet()) {
+            RentEnd r = new RentEnd();
+            r.end = rentedAt + e.getKey() * DAY_MS;
+            r.key = "r" + (partId == null ? "" : partId.trim()) + "@" + r.end;
+            r.order = orderId == null ? "" : orderId.trim();
+            r.names = e.getValue().toString();
+            out.add(r);
+        }
+        return out;
+    }
+
+    /** Пора напомнить: до конца осталось не больше выбранного числа часов, и срок ещё не вышел. */
+    static boolean rentDue(long end, long now, int hours) {
+        return now < end && end - now <= rentHours(hours) * 3600000L;
+    }
+
+    /** «Аренда заканчивается в 14:30» / «… завтра в 01:00» (по часам телефона). */
+    static String rentTitle(long end, long now, java.util.TimeZone tz) {
+        java.util.Calendar e = java.util.Calendar.getInstance(tz), n = java.util.Calendar.getInstance(tz);
+        e.setTimeInMillis(end);
+        n.setTimeInMillis(now);
+        boolean today = e.get(java.util.Calendar.YEAR) == n.get(java.util.Calendar.YEAR)
+            && e.get(java.util.Calendar.DAY_OF_YEAR) == n.get(java.util.Calendar.DAY_OF_YEAR);
+        return "Аренда заканчивается " + (today ? "" : "завтра ")
+            + String.format(Locale.ROOT, "в %02d:%02d", e.get(java.util.Calendar.HOUR_OF_DAY), e.get(java.util.Calendar.MINUTE));
+    }
+
+    static String rentText(String names) {
+        return names + ". Продлить или договориться о возврате — в заявке: «Написать» или «Позвонить» прокату.";
+    }
+
+    /** Значение переключателя по умолчанию: всё включено (решение владельца), кроме расписания и напоминания об аренде. */
+    static boolean defOn(String k) { return !K_SCHED_ON.equals(k) && !K_RENT.equals(k); }
+
+    static boolean rentOn(Context c) { return pref(c, K_ALL) && prefs(c).getBoolean(K_RENT, false); }
+
     static String key(String what, String email) { return what + "_" + (email == null ? "" : email.trim().toLowerCase()); }
 
     // ───────────────────────── вход ─────────────────────────
@@ -407,6 +500,7 @@ public final class IvaNotifyPatch {
                     checkUpdate(a, admin);
                 } catch (Throwable ignore) {
                 }
+                if (logged && !admin && !email.isEmpty()) try { checkRent(a, email, admin); } catch (Throwable ignore) {}   // 10.76
                 try { IvaPushPatch.sync(a, email, logged, admin); } catch (Throwable ignore) {   // 10.74: мгновенные (админам)
                 } finally {
                     busy = false;
@@ -422,6 +516,46 @@ public final class IvaNotifyPatch {
         if (r == null || !r[0].startsWith("2")) throw new Exception(r == null ? "нет ответа" : r[0]);
         String t = r.length > 1 && r[1] != null ? r[1].trim() : "";
         return t.startsWith("[") ? new JSONArray(t) : new JSONArray();
+    }
+
+    /** Запрос к базе: открыто — штатный токен окна; закрыто — токен сохранённого входа (как getArr). */
+    static String[] api(Context a, String path, String method, String body) throws Exception {
+        return a instanceof Activity ? IvaClientPatch.apiCall((Activity) a, path, method, body, true)
+            : nativeCall(IvaClientPatch.SB_URL + path, method, body, true, a instanceof BgCtx ? ((BgCtx) a).token : null);
+    }
+
+    /** 10.76: напоминание клиенту об окончании аренды (см. RentEnd). Каждое — один раз. */
+    static void checkRent(Context a, String email, boolean admin) throws Exception {
+        if (admin || email == null || email.trim().isEmpty() || !rentOn(a)) return;
+        long now = System.currentTimeMillis();
+        if (now < rentMissingUntil) return;
+        if (a instanceof Activity && now - rentAt < RENT_EVERY_MS) return;
+        rentAt = now;
+        String[] r = api(a, RENT_RPC, "POST", "{}");
+        if (r == null) return;
+        if ("404".equals(r[0])) { rentMissingUntil = now + UPDATE_EVERY_MS; return; }   // SQL ещё не применён — тихо ждём
+        if (!r[0].startsWith("2")) return;
+        String t = r.length > 1 && r[1] != null ? r[1].trim() : "";
+        JSONArray rows = t.startsWith("[") ? new JSONArray(t) : new JSONArray();
+        SharedPreferences p = prefs(a);
+        int hours = rentHours(p.getInt(K_RENT_H, 1));
+        String k = key("seen_r", email);
+        Set<String> seen = splitSet(p.getString(k, null));
+        if (seen == null) seen = new LinkedHashSet<String>();
+        List<RentEnd> due = new ArrayList<RentEnd>();
+        List<String> keys = new ArrayList<String>();
+        for (int i = 0; i < rows.length(); i++) {
+            JSONObject o = rows.optJSONObject(i);
+            if (o == null) continue;
+            long at = IvaChatPatch.parseIso(o.optString("rented_at", ""));
+            for (RentEnd e : rentEnds(o.optString("part_id", ""), o.optString("order_id", ""), o.optString("tools_text", ""), o.optInt("days", 0), at)) {
+                if (rentDue(e.end, now, hours) && !seen.contains(e.key)) { due.add(e); keys.add(e.key); }
+            }
+        }
+        if (due.isEmpty()) return;
+        p.edit().putString(k, joinSet(remember(seen, keys))).apply();
+        for (RentEnd e : due)
+            showNote(a, CH_RENT, ID_RENT + Math.abs(e.key.hashCode() % 500), rentTitle(e.end, now, java.util.TimeZone.getDefault()), rentText(e.names), "rent", e.order);
     }
 
     static String enc(String s) {
@@ -539,19 +673,21 @@ public final class IvaNotifyPatch {
     // ───────────────────────── системные уведомления ─────────────────────────
 
     static String channelName(String ch) {
-        return CH_MSG.equals(ch) ? "Новые сообщения" : CH_ORD.equals(ch) ? "Новые заявки" : CH_UPD.equals(ch) ? "Обновления приложения" : "Ива";
+        return CH_MSG.equals(ch) ? "Новые сообщения" : CH_ORD.equals(ch) ? "Новые заявки" : CH_UPD.equals(ch) ? "Обновления приложения"
+            : CH_RENT.equals(ch) ? "Окончание аренды" : "Ива";
     }
 
     static void ensureChannels(Context c) {
         if (Build.VERSION.SDK_INT < 26) return;
         NotificationManager nm = (NotificationManager) c.getSystemService(Context.NOTIFICATION_SERVICE);
         if (nm == null) return;
-        String[] ids = {CH_MSG, CH_ORD, CH_UPD};
+        String[] ids = {CH_MSG, CH_ORD, CH_UPD, CH_RENT};
         for (String id : ids) {
             if (nm.getNotificationChannel(id) != null) continue;
             int imp = CH_UPD.equals(id) ? NotificationManager.IMPORTANCE_DEFAULT : NotificationManager.IMPORTANCE_HIGH;
             NotificationChannel ch = new NotificationChannel(id, channelName(id), imp);
-            ch.setDescription(CH_MSG.equals(id) ? "Когда вам пишут в чат" : CH_ORD.equals(id) ? "Заявки на ваши инструменты" : "Когда вышла новая версия приложения");
+            ch.setDescription(CH_MSG.equals(id) ? "Когда вам пишут в чат" : CH_ORD.equals(id) ? "Заявки на ваши инструменты"
+                : CH_RENT.equals(id) ? "Скоро закончится срок аренды" : "Когда вышла новая версия приложения");
             nm.createNotificationChannel(ch);
         }
     }
@@ -652,7 +788,7 @@ public final class IvaNotifyPatch {
     }
 
     static String shortcutLabel(String ch) {
-        return CH_ORD.equals(ch) ? "Заявки" : CH_UPD.equals(ch) ? "Обновления" : "Сообщения";
+        return CH_ORD.equals(ch) ? "Заявки" : CH_UPD.equals(ch) ? "Обновления" : CH_RENT.equals(ch) ? "Аренда" : "Сообщения";
     }
 
     /**
@@ -772,6 +908,7 @@ public final class IvaNotifyPatch {
                     if ("chat".equals(open)) IvaChatPatch.openFromNote(a, target);
                     else if ("orders".equals(open)) openOrder(a, target);
                     else if ("update".equals(open)) openUpdate(a, target);
+                    else if ("rent".equals(open)) IvaOrderPatch.openById(a, target);     // 10.76: эта заявка
                 } catch (Throwable ignore) {}
             }
         });
@@ -1096,6 +1233,45 @@ public final class IvaNotifyPatch {
             kids.add(switchRow(a, card, "Новые сообщения", "Когда вам пишут в чат", K_MSG, cText, cGray, cOrange));
             if (admin) kids.add(switchRow(a, card, "Новые заявки", "Заявки на ваши инструменты", K_ORD, cText, cGray, cOrange));
             kids.add(switchRow(a, card, "Обновления приложения", "Когда вышла новая версия", K_UPD, cText, cGray, cOrange));
+            // 10.76: клиентам — напоминание об окончании аренды и за сколько: 1, 2 или 3 часа (по умолчанию выключено)
+            final Switch[] rentSw = new Switch[1];
+            final TextView[] rentChips = new TextView[RENT_HOURS.length];
+            final LinearLayout[] rentRow = new LinearLayout[1];
+            final Runnable[] ref0 = new Runnable[1];
+            if (loggedIn(a) && !admin) {
+                rentSw[0] = switchRow(a, card, RENT_TITLE, RENT_SUB, K_RENT, cText, cGray, cOrange);
+                kids.add(rentSw[0]);
+                rentSw[0].setOnCheckedChangeListener(new CompoundButton.OnCheckedChangeListener() {
+                    @Override public void onCheckedChanged(CompoundButton b, boolean v) {
+                        setPref(a, K_RENT, v);
+                        if (ref0[0] != null) ref0[0].run();
+                    }
+                });
+                LinearLayout chips = new LinearLayout(a);
+                chips.setOrientation(LinearLayout.HORIZONTAL);
+                chips.setPadding(0, 0, 0, dp(a, 12));
+                for (int i = 0; i < RENT_HOURS.length; i++) {
+                    final int h = RENT_HOURS[i];
+                    TextView c = new TextView(a);
+                    c.setText("За " + hoursText(h));
+                    c.setTextSize(14f);
+                    c.setGravity(Gravity.CENTER);
+                    c.setPadding(dp(a, 14), 0, dp(a, 14), 0);
+                    c.setOnClickListener(new View.OnClickListener() {
+                        @Override public void onClick(View v) {
+                            if (!all.isChecked() || !rentSw[0].isChecked()) return;
+                            prefs(a).edit().putInt(K_RENT_H, h).apply();
+                            if (ref0[0] != null) ref0[0].run();
+                        }
+                    });
+                    LinearLayout.LayoutParams chl = new LinearLayout.LayoutParams(-2, dp(a, 36));
+                    if (i > 0) chl.leftMargin = dp(a, 8);
+                    chips.addView(c, chl);
+                    rentChips[i] = c;
+                }
+                rentRow[0] = chips;
+                card.addView(chips, new LinearLayout.LayoutParams(-1, -2));
+            }
 
             // 10.73: расписание — только админам
             final Switch[] schedSw = new Switch[1];
@@ -1272,6 +1448,19 @@ public final class IvaNotifyPatch {
                         : ok ? "Android разрешает уведомления. Каждый вид можно отдельно настроить и в настройках Android."
                         : "Уведомления запрещены в настройках Android — включите их, иначе они не появятся.") + sched);
                     status.setTextColor(master && (!ok || schedWarn) ? cOrange : cGray);
+                    if (rentSw[0] != null) {                      // 10.76: выбранное «за сколько» — оранжевым, как чипы фильтра
+                        boolean ron = master && rentSw[0].isChecked();
+                        int sel = rentHours(prefs(a).getInt(K_RENT_H, 1));
+                        for (int i = 0; i < rentChips.length; i++) {
+                            boolean on = RENT_HOURS[i] == sel;
+                            Drawable cb = drawable(a, on ? "bg_chip_on" : "bg_chip");
+                            if (cb != null) rentChips[i].setBackground(cb);
+                            rentChips[i].setTextColor(on ? cText : cGray);
+                            rentChips[i].setTypeface(null, on ? android.graphics.Typeface.BOLD : android.graphics.Typeface.NORMAL);
+                            rentChips[i].setEnabled(ron);
+                        }
+                        rentRow[0].setAlpha(ron ? 1f : 0.45f);
+                    }
                     hsub.setText(headSummary(master, ok, schedSw[0] != null && schedSw[0].isChecked()));
                     hsub.setTextColor(master && !ok ? cOrange : cGray);
                 }
@@ -1284,6 +1473,7 @@ public final class IvaNotifyPatch {
                 }
             });
             ref[0] = refresh;
+            ref0[0] = refresh;
             refresh.run();
 
             final Dialog d = new Dialog(a, android.R.style.Theme_Material_NoActionBar);
@@ -1393,7 +1583,7 @@ public final class IvaNotifyPatch {
         col.addView(s);
         row.addView(col, new LinearLayout.LayoutParams(0, -2, 1f));
         final Switch sw = new Switch(a);
-        sw.setChecked(prefs(a).getBoolean(k, !K_SCHED_ON.equals(k)));   // всё включено, кроме расписания (10.73)
+        sw.setChecked(prefs(a).getBoolean(k, defOn(k)));   // всё включено, кроме расписания (10.73)
         tint(sw, cOrange);
         if (!K_ALL.equals(k)) {
             sw.setOnCheckedChangeListener(new CompoundButton.OnCheckedChangeListener() {
@@ -1662,5 +1852,6 @@ public final class IvaNotifyPatch {
         if (logged && admin) try { checkOrders(c, email); } catch (Throwable ignore) {}
         if (logged) try { checkMessages(c, email, admin, null); } catch (Throwable ignore) {}
         try { checkUpdate(c, admin); } catch (Throwable ignore) {}
+        if (logged && !admin) try { checkRent(c, email, admin); } catch (Throwable ignore) {}   // 10.76
     }
 }
