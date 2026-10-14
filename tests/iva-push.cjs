@@ -17,7 +17,7 @@ try {
   const ff = 'supabase/functions/iva-push/index.ts';
   const fn = read(ff);
   assert.ok(!/^\s*import\s/m.test(fn), `${ff}: внешние библиотеки — в среде Deno их работа не проверена`);
-  assert.ok(!/sb_secret_|service_role|eyJ[A-Za-z0-9_-]{20,}\.|BEGIN PRIVATE KEY-----\s*[A-Za-z0-9+/]{20}/.test(fn), `${ff}: секретный ключ в коде`);
+  assert.ok(!/sb_secret_|service_role|eyJ[A-Za-z0-9_-]{20,}\./.test(fn), `${ff}: секретный ключ в коде`);   // приватные ключи ищет check.sh по всему репозиторию
   assert.ok(!/console\.(log|error)\([^)]*(tokens|\bt\b|pass|private_key|access_token)/.test(fn), `${ff}: токены или ключи пишутся в журнал`);
   assert.ok(!/notification\s*:/.test(fn), `${ff}: push должен быть только сигналом (data), без notification с текстом`);
   assert.match(fn, /rpc\("iva_push_take"/, `${ff}: адресаты должны браться из базы по пропуску`);
