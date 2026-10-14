@@ -1020,18 +1020,67 @@ public final class IvaNotifyPatch {
             root.addView(bar, new LinearLayout.LayoutParams(-1, dp(a, 56)));
 
             ScrollView scroll = new ScrollView(a);
-            final LinearLayout body = new LinearLayout(a);
-            body.setOrientation(LinearLayout.VERTICAL);
-            body.setPadding(dp(a, 16), dp(a, 4), dp(a, 16), dp(a, 24));
-            scroll.addView(body, new FrameLayout.LayoutParams(-1, -2));
+            final LinearLayout page = new LinearLayout(a);
+            page.setOrientation(LinearLayout.VERTICAL);
+            page.setPadding(dp(a, 16), dp(a, 4), dp(a, 16), dp(a, 24));
+            scroll.addView(page, new FrameLayout.LayoutParams(-1, -2));
             root.addView(scroll, new LinearLayout.LayoutParams(-1, 0, 1f));
 
-            TextView sec = new TextView(a);
-            sec.setText("Уведомления");
-            sec.setTextSize(17f);
-            sec.setTypeface(null, android.graphics.Typeface.BOLD);
-            sec.setTextColor(cText);
-            body.addView(sec);
+            // 10.75: «Уведомления» — раскрывающаяся кнопка (как строки кабинета); всё про уведомления — внутри, по умолчанию свёрнуто
+            LinearLayout head = new LinearLayout(a);
+            head.setOrientation(LinearLayout.HORIZONTAL);
+            head.setGravity(Gravity.CENTER_VERTICAL);
+            Drawable hbg = drawable(a, "bg_card");
+            if (hbg != null) head.setBackground(hbg);
+            head.setPadding(dp(a, 16), dp(a, 14), dp(a, 16), dp(a, 14));
+            head.setClickable(true);
+            ImageView bell = new ImageView(a);
+            bell.setImageDrawable(bellIcon(cOrange));
+            head.addView(bell, new LinearLayout.LayoutParams(dp(a, 22), dp(a, 22)));
+            LinearLayout hcol = new LinearLayout(a);
+            hcol.setOrientation(LinearLayout.VERTICAL);
+            TextView htitle = new TextView(a);
+            htitle.setText(NOTIF_TITLE);
+            htitle.setTextSize(15f);
+            htitle.setTextColor(cText);
+            hcol.addView(htitle);
+            final TextView hsub = new TextView(a);
+            hsub.setTextSize(13f);
+            hsub.setTextColor(cGray);
+            hcol.addView(hsub);
+            LinearLayout.LayoutParams hcl = new LinearLayout.LayoutParams(0, -2, 1f);
+            hcl.leftMargin = dp(a, 14);
+            head.addView(hcol, hcl);
+            final ImageView chev = new ImageView(a);
+            Drawable chd = drawable(a, "ic_chevron");
+            if (chd != null) {
+                chev.setImageDrawable(chd);
+                chev.setColorFilter(cGray);
+            }
+            head.addView(chev, new LinearLayout.LayoutParams(dp(a, 20), dp(a, 20)));
+            LinearLayout.LayoutParams hl = new LinearLayout.LayoutParams(-1, -2);
+            hl.topMargin = dp(a, 10);
+            page.addView(head, hl);
+            final LinearLayout body = new LinearLayout(a);
+            body.setOrientation(LinearLayout.VERTICAL);
+            body.setVisibility(View.GONE);
+            page.addView(body, new LinearLayout.LayoutParams(-1, -2));
+            try { page.setLayoutTransition(new android.animation.LayoutTransition()); } catch (Throwable ignore) {}
+            head.setContentDescription(NOTIF_TITLE + ", развернуть");
+            head.setOnClickListener(new View.OnClickListener() {
+                @Override public void onClick(View v) {
+                    boolean open = body.getVisibility() != View.VISIBLE;
+                    body.setVisibility(open ? View.VISIBLE : View.GONE);
+                    try { chev.animate().rotation(open ? 90f : 0f).setDuration(180).start(); } catch (Throwable e) { chev.setRotation(open ? 90f : 0f); }
+                    v.setContentDescription(NOTIF_TITLE + (open ? ", свернуть" : ", развернуть"));
+                }
+            });
+
+            // в самом верху списка — настройки Android
+            final TextView sys = linkButton(a, body, "Открыть настройки уведомлений Android", cOrange);
+            sys.setOnClickListener(new View.OnClickListener() { @Override public void onClick(View v) { openSystemSettings(a); } });
+
+            body.addView(label(a, "Какие присылать", cGray));
 
             LinearLayout card = new LinearLayout(a);
             card.setOrientation(LinearLayout.VERTICAL);
@@ -1039,10 +1088,10 @@ public final class IvaNotifyPatch {
             if (bg != null) card.setBackground(bg);
             card.setPadding(dp(a, 16), dp(a, 6), dp(a, 12), dp(a, 6));
             LinearLayout.LayoutParams cl = new LinearLayout.LayoutParams(-1, -2);
-            cl.topMargin = dp(a, 10);
+            cl.topMargin = dp(a, 8);
             body.addView(card, cl);
 
-            final Switch all = switchRow(a, card, "Уведомления", "Строка состояния, шторка и всплывающие уведомления", K_ALL, cText, cGray, cOrange);
+            final Switch all = switchRow(a, card, "Все уведомления", "Строка состояния, шторка и всплывающие уведомления", K_ALL, cText, cGray, cOrange);
             final List<Switch> kids = new ArrayList<Switch>();
             kids.add(switchRow(a, card, "Новые сообщения", "Когда вам пишут в чат", K_MSG, cText, cGray, cOrange));
             if (admin) kids.add(switchRow(a, card, "Новые заявки", "Заявки на ваши инструменты", K_ORD, cText, cGray, cOrange));
@@ -1056,21 +1105,14 @@ public final class IvaNotifyPatch {
             final Runnable[] ref = new Runnable[1];
             final boolean[] drawing = new boolean[1];
             if (admin) {
-                TextView ssec = new TextView(a);
-                ssec.setText("Расписание");
-                ssec.setTextSize(17f);
-                ssec.setTypeface(null, android.graphics.Typeface.BOLD);
-                ssec.setTextColor(cText);
-                LinearLayout.LayoutParams ssl = new LinearLayout.LayoutParams(-1, -2);
-                ssl.topMargin = dp(a, 18);
-                body.addView(ssec, ssl);
+                body.addView(label(a, "Расписание", cGray));
                 LinearLayout sc = new LinearLayout(a);
                 sc.setOrientation(LinearLayout.VERTICAL);
                 Drawable sbg = drawable(a, "bg_card");
                 if (sbg != null) sc.setBackground(sbg);
                 sc.setPadding(dp(a, 16), dp(a, 6), dp(a, 12), dp(a, 10));
                 LinearLayout.LayoutParams scl = new LinearLayout.LayoutParams(-1, -2);
-                scl.topMargin = dp(a, 10);
+                scl.topMargin = dp(a, 8);
                 body.addView(sc, scl);
                 schedSw[0] = switchRow(a, sc, "По расписанию", SCHED_SUB, K_SCHED_ON, cText, cGray, cOrange);
                 schedSw[0].setOnCheckedChangeListener(new CompoundButton.OnCheckedChangeListener() {
@@ -1152,8 +1194,6 @@ public final class IvaNotifyPatch {
             sl.topMargin = dp(a, 12);
             body.addView(status, sl);
 
-            final TextView sys = linkButton(a, body, "Открыть настройки уведомлений Android", cOrange);
-            sys.setOnClickListener(new View.OnClickListener() { @Override public void onClick(View v) { openSystemSettings(a); } });
             final TextView test = linkButton(a, body, "Показать пробное уведомление", cOrange);
             test.setOnClickListener(new View.OnClickListener() {
                 @Override public void onClick(View v) {
@@ -1232,6 +1272,8 @@ public final class IvaNotifyPatch {
                         : ok ? "Android разрешает уведомления. Каждый вид можно отдельно настроить и в настройках Android."
                         : "Уведомления запрещены в настройках Android — включите их, иначе они не появятся.") + sched);
                     status.setTextColor(master && (!ok || schedWarn) ? cOrange : cGray);
+                    hsub.setText(headSummary(master, ok, schedSw[0] != null && schedSw[0].isChecked()));
+                    hsub.setTextColor(master && !ok ? cOrange : cGray);
                 }
             };
             all.setOnCheckedChangeListener(new CompoundButton.OnCheckedChangeListener() {
@@ -1267,6 +1309,69 @@ public final class IvaNotifyPatch {
         } catch (Throwable e) {
             try { Toast.makeText(a, "Не удалось открыть настройки", Toast.LENGTH_SHORT).show(); } catch (Throwable ignore) {}
         }
+    }
+
+    static final String NOTIF_TITLE = "Уведомления";
+
+    /** 10.75: строка под «Уведомления» в свёрнутом виде. */
+    static String headSummary(boolean master, boolean systemOk, boolean sched) {
+        if (!master) return "Выключены";
+        if (!systemOk) return "Запрещены в настройках Android";
+        return sched ? "Включены · по расписанию" : "Включены";
+    }
+
+    /** 10.75: подзаголовок внутри списка (серый, 13sp, жирный), как подписи разделов. */
+    static TextView label(Activity a, String text, int cGray) {
+        TextView t = new TextView(a);
+        t.setText(text);
+        t.setTextSize(13f);
+        t.setTypeface(null, android.graphics.Typeface.BOLD);
+        t.setTextColor(cGray);
+        t.setPadding(dp(a, 4), dp(a, 18), 0, 0);
+        return t;
+    }
+
+    /** 10.75: значок-колокольчик — Material «notifications» (как остальные залитые значки 24×24), без новых ресурсов. */
+    static Drawable bellIcon(final int color) {
+        final android.graphics.Path p = new android.graphics.Path();
+        p.moveTo(12f, 22f);
+        p.cubicTo(13.1f, 22f, 14f, 21.1f, 14f, 20f);
+        p.lineTo(10f, 20f);
+        p.cubicTo(10f, 21.1f, 10.89f, 22f, 12f, 22f);
+        p.close();
+        p.moveTo(18f, 16f);
+        p.lineTo(18f, 11f);
+        p.cubicTo(18f, 7.93f, 16.36f, 5.36f, 13.5f, 4.68f);
+        p.lineTo(13.5f, 4f);
+        p.cubicTo(13.5f, 3.17f, 12.83f, 2.5f, 12f, 2.5f);
+        p.cubicTo(11.17f, 2.5f, 10.5f, 3.17f, 10.5f, 4f);
+        p.lineTo(10.5f, 4.68f);
+        p.cubicTo(7.63f, 5.36f, 6f, 7.92f, 6f, 11f);
+        p.lineTo(6f, 16f);
+        p.lineTo(4f, 18f);
+        p.lineTo(4f, 19f);
+        p.lineTo(20f, 19f);
+        p.lineTo(20f, 18f);
+        p.close();
+        final android.graphics.Paint paint = new android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG);
+        paint.setColor(color);
+        paint.setStyle(android.graphics.Paint.Style.FILL);
+        return new Drawable() {
+            @Override public void draw(android.graphics.Canvas c) {
+                android.graphics.Rect b = getBounds();
+                if (b.width() <= 0 || b.height() <= 0) return;
+                int save = c.save();
+                c.translate(b.left, b.top);
+                c.scale(b.width() / 24f, b.height() / 24f);
+                c.drawPath(p, paint);
+                c.restoreToCount(save);
+            }
+            @Override public void setAlpha(int al) { paint.setAlpha(al); invalidateSelf(); }
+            @Override public void setColorFilter(android.graphics.ColorFilter cf) { paint.setColorFilter(cf); invalidateSelf(); }
+            @Override public int getOpacity() { return android.graphics.PixelFormat.TRANSLUCENT; }
+            @Override public int getIntrinsicWidth() { return 24; }
+            @Override public int getIntrinsicHeight() { return 24; }
+        };
     }
 
     static Switch switchRow(final Activity a, LinearLayout card, String title, String sub, final String k, int cText, int cGray, int cOrange) {

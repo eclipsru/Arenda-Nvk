@@ -769,6 +769,32 @@ try {
       assert.ok(has(arsc14, str) || has(dex14, str), `APK 10.14: нет «${str}» — правка 10.67 не найдёт штатное поле`);
     assert.ok(/eq\("админ 10\.67: /.test(tp) && /eq\("подкатегория 10\.67: /.test(tp) && /eq\("кабинет 10\.67: /.test(tp), 'IvaPatchTest: проверки 10.67');
   }
+  // 10.75 (просьба владельца 14.10.2026): в «Настройках» — раскрывающаяся кнопка «Уведомления», по умолчанию свёрнута;
+  // внутри сверху «Открыть настройки уведомлений Android», потом какие присылать, потом расписание, потом всё остальное
+  {
+    const np = R('android/patches/IvaNotifyPatch.java'), tp = R('android/patches/test/IvaPatchTest.java'), wf = R('.github/workflows/build-apk.yml');
+    const mm = /static \w+ openSettings\(/.exec(np); assert.ok(mm, 'IvaNotifyPatch: нет openSettings');
+    const os = np.slice(mm.index, np.indexOf('\n    }\n', mm.index));
+    const at = (t) => { const i = os.indexOf(t); assert.ok(i > 0, `openSettings: нет ${t}`); return i; };
+    assert.ok(at('page.addView(head, hl);') < at('page.addView(body, new LinearLayout.LayoutParams(-1, -2));') && os.includes('body.setVisibility(View.GONE);'),
+      'настройки 10.75: список «Уведомления» под кнопкой и по умолчанию свёрнут');
+    assert.ok(os.includes('boolean open = body.getVisibility() != View.VISIBLE;') && os.includes('body.setVisibility(open ? View.VISIBLE : View.GONE);'),
+      'настройки 10.75: нажатие на кнопку раскрывает и сворачивает список');
+    assert.ok((os.match(/Открыть настройки уведомлений Android/g) || []).length === 1 && (np.match(/Открыть настройки уведомлений Android/g) || []).length === 1,
+      'настройки 10.75: кнопка Android — одна, в других местах её нет');
+    const sys = at('linkButton(a, body, "Открыть настройки уведомлений Android"');
+    assert.ok(sys < at('switchRow(a, card, "Все уведомления"') && at('switchRow(a, card, "Все уведомления"') < at('schedSw[0] = switchRow(')
+      && at('schedSw[0] = switchRow(') < at('body.addView(status, sl);') && at('body.addView(status, sl);') < at('body.addView(note, nl);'),
+      'настройки 10.75: порядок — Android, какие присылать, расписание, остальное');
+    assert.ok(!/(?:page|root)\.addView\((?:status|test|note|push|card|sc|sys)\b/.test(os) && (os.match(/page\.addView\(/g) || []).length === 2
+      && (os.match(/\bpage\b/g) || []).length === 7 && !/\(a, page\b/.test(os),
+      'настройки 10.75: всё про уведомления — внутри списка, снаружи только кнопка');
+    assert.ok(os.includes('hsub.setText(headSummary(master, ok, schedSw[0] != null && schedSw[0].isChecked()));'), 'настройки 10.75: под кнопкой — коротко о состоянии');
+    assert.ok(os.includes('drawable(a, "bg_card")') && os.includes('bellIcon(cOrange)') && !/#[0-9A-Fa-f]{6}|0xff(?!101217|f2f4f8|9aa1b0|ff8f1f)[0-9a-f]{6}/i.test(os),
+      'настройки 10.75: стиль приложения — bg_card, оранжевый значок, только цвета темы');
+    assert.ok(/NEW_NAME: '10\.75'/.test(wf) && /NEW_CODE: '149'/.test(wf), 'настройки 10.75: версия 10.75 (149)');
+    assert.ok((tp.match(/eq\("настройки 10\.75: /g) || []).length >= 5, 'IvaPatchTest: проверки 10.75');
+  }
   // 10.74 (решение владельца 14.10.2026, отменяет «без Firebase» от 13.10 — только для админов): мгновенные уведомления.
   // Push — только сигнал «проверь сейчас»; показывает уведомление та же проверка, что и раньше (расписание, переключатели, «уже показано»).
   {

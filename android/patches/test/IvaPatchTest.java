@@ -1071,6 +1071,12 @@ public class IvaPatchTest {
                 IvaPushPatch.shortErr("сервер a@b.ru  токен " + "abcdefghij0123456789abcdefghij0123456789xyz") + "|" + IvaPushPatch.shortErr(null),
                 "сервер … токен …|");
             eq("push 10.74: SHA-1 подписи — заглавные hex", IvaPushPatch.hexUpper(new byte[] { 0, (byte) 0xab, 15 }), "00AB0F");
+            // 10.75: «Уведомления» — раскрывающаяся кнопка; под заголовком — коротко о состоянии
+            eq("настройки 10.75: выключены — так и пишем", IvaNotifyPatch.headSummary(false, true, true), "Выключены");
+            eq("настройки 10.75: Android запретил — видно сразу, не раскрывая", IvaNotifyPatch.headSummary(true, false, false), "Запрещены в настройках Android");
+            eq("настройки 10.75: включены", IvaNotifyPatch.headSummary(true, true, false), "Включены");
+            eq("настройки 10.75: включены по расписанию", IvaNotifyPatch.headSummary(true, true, true), "Включены · по расписанию");
+            eq("настройки 10.75: заголовок кнопки", IvaNotifyPatch.NOTIF_TITLE, "Уведомления");
         }
         if (fail > 0) { System.out.println("ошибок: " + fail); System.exit(1); }
         System.out.println("все проверки IvaPatch пройдены");
