@@ -590,13 +590,13 @@ public class IvaPatchTest {
                 or.put("name", "Иванов Иван"); or.put("phone", "+7 900 000-00-00"); or.put("comment", "Чек: 1500 ₽"); 
                 StringBuilder ob = new StringBuilder();
                 for (String[] f : IvaOrderPatch.ordFields(or, "14 окт, 12:00")) ob.append(f[0]).append('=').append(f[1]).append(';');
-                eq("заявки 10.62: все поля по порядку", ob.toString(), "Дата=14 окт, 12:00;Статус=В аренде;Инструменты=Перфоратор (3 дн.);Срок=3 дн.;Получение=Доставка;"
-                    + "Адрес=ул. Мира, 1;Имя=Иванов Иван;Телефон=+7 900 000-00-00;Комментарий=Чек: 1500 ₽;Номер заявки=42;");
+                eq("заявки 10.63: поля по порядку, без имени, телефона и адреса клиента", ob.toString(), "Дата=14 окт, 12:00;Статус=В аренде;Инструменты=Перфоратор (3 дн.);Срок=3 дн.;Получение=Доставка;"
+                    + "Комментарий=Чек: 1500 ₽;Номер заявки=42;");
                 or.put("address", ""); or.put("comment", "null"); or.put("days", "0"); or.put("status", "");
                 ob.setLength(0);
                 for (String[] f : IvaOrderPatch.ordFields(or, " ")) ob.append(f[0]).append('=').append(f[1]).append(';');
                 eq("заявки 10.62: пустое не показывается; нет даты — как в базе; статус всегда", ob.toString(), "Дата=2026-10-14T09:00:00+00:00;Статус=Новая;Инструменты=Перфоратор (3 дн.);"
-                    + "Получение=Доставка;Имя=Иванов Иван;Телефон=+7 900 000-00-00;Номер заявки=42;");
+                    + "Получение=Доставка;Номер заявки=42;");
                 or.put("days", "по инструментам");
                 eq("заявки 10.62: срок не числом — как есть", IvaOrderPatch.ordFields(or, "x").get(3)[0] + "=" + IvaOrderPatch.ordFields(or, "x").get(3)[1], "Срок=по инструментам");
                 java.util.List<String> od = java.util.Arrays.asList("14 окт", "14 окт", "13 окт"), ot = java.util.Arrays.asList("Дрель", "Дрель", "Дрель");
@@ -604,9 +604,71 @@ public class IvaPatchTest {
                     IvaOrderPatch.ordFind(od, ot, IvaOrderPatch.ordKey("14 окт", "Дрель", 0)) + "|" + IvaOrderPatch.ordFind(od, ot, IvaOrderPatch.ordKey("14 окт", "Дрель", 1))
                     + "|" + IvaOrderPatch.ordFind(od, ot, IvaOrderPatch.ordKey("13 окт", "Дрель", 0)) + "|" + IvaOrderPatch.ordFind(od, ot, IvaOrderPatch.ordKey("14 окт", "Дрель", 2))
                     + "|" + IvaOrderPatch.ordFind(od, ot, IvaOrderPatch.ordKey("12 окт", "Пила", 0)) + "|" + IvaOrderPatch.ordFind(od, ot, IvaOrderPatch.ordKey(" 13 окт ", "Дрель ", 0)), "0|1|2|-1|-1|2");
-                eq("заявки 10.62: запрос как у штатного loadOrders, но все поля; шторка 85%", IvaOrderPatch.ORD_PATH + "|" + IvaOrderPatch.ORD_SHEET,
-                    "/rest/v1/orders?select=*&order=created_at.desc&limit=30|0.85");
+                eq("заявки 10.63: запросы (100 последних; части заявки — прокат и статус); шторка 85%", IvaOrderPatch.ORD_PATH + "|" + IvaOrderPatch.ORD_PATH_PARTS + "|" + IvaOrderPatch.ORD_SHEET,
+                    "/rest/v1/orders?select=*&order=created_at.desc&limit=100|/rest/v1/orders?select=*,order_parts(owner_email,status)&order=created_at.desc&limit=100|0.85");
+                eq("заявки 10.63: в карточке нет полей клиента", String.join("|", IvaOrderPatch.ORD_COLS), "id|created_at|status|tools|days|get_method|comment");
+                // 10.63: статус по частям заявки («Выдал»/«Вернули» прокат отмечает в части)
+                eq("заявки 10.63: статус по частям", IvaOrderPatch.ordEffStatus("new", "closed,closed") + "|" + IvaOrderPatch.ordEffStatus("new", "closed,rented")
+                    + "|" + IvaOrderPatch.ordEffStatus("closed", "rented,new") + "|" + IvaOrderPatch.ordEffStatus("rented", "") + "|" + IvaOrderPatch.ordEffStatus(" ", null)
+                    + "|" + IvaOrderPatch.ordEffStatus("new", " closed , ") + "|" + IvaOrderPatch.ordEffStatus("Closed", ""), "closed|rented|new|rented|new|closed|closed");
+                java.util.Map<String, String> oc = new java.util.HashMap<String, String>();
+                oc.put("status", "new"); oc.put(IvaOrderPatch.ORD_PARTS, "closed");
+                boolean oc1 = IvaOrderPatch.ordClosed(oc);
+                oc.put(IvaOrderPatch.ORD_PARTS, "closed,new");
+                boolean oc2 = IvaOrderPatch.ordClosed(oc);
+                oc.put(IvaOrderPatch.ORD_PARTS, ""); oc.put("status", "done");
+                boolean oc3 = IvaOrderPatch.ordClosed(oc);
+                oc.put("status", "");
+                eq("заявки 10.63: в архив — только закрытые", oc1 + "|" + oc2 + "|" + oc3 + "|" + IvaOrderPatch.ordClosed(oc), "true|false|true|false");
+                eq("заявки 10.63: статусы частей — все по порядку, пустой = new",
+                    IvaOrderPatch.ordJoinAll(java.util.Arrays.asList("closed", "", null, " Rented ")) + "|" + IvaOrderPatch.ordJoinAll(null), "closed,new,new,rented|");
+                eq("заявки 10.63: прокаты — без повторов и пустых",
+                    IvaOrderPatch.ordJoin(java.util.Arrays.asList("A@x.ru", "a@x.ru ", "", null, "b@x.ru", "c,d")), "a@x.ru,b@x.ru");
+                java.util.List<java.util.Map<String, String>> om = new java.util.ArrayList<java.util.Map<String, String>>();
+                java.util.Map<String, String> om1 = new java.util.HashMap<String, String>(); om1.put("id", "7"); om1.put(IvaOrderPatch.ORD_OWNERS, ""); om1.put(IvaOrderPatch.ORD_PARTS, "");
+                java.util.Map<String, String> om2 = new java.util.HashMap<String, String>(); om2.put("id", "8"); om2.put(IvaOrderPatch.ORD_OWNERS, "q@x.ru"); om2.put(IvaOrderPatch.ORD_PARTS, "new");
+                om.add(om1); om.add(om2);
+                java.util.Map<String, String[]> omp = new java.util.HashMap<String, String[]>();
+                omp.put("7", new String[]{"p@x.ru", "closed,closed"});
+                IvaOrderPatch.ordMergeParts(om, omp);
+                eq("заявки 10.63: части из функции базы подставляются, остальные как были",
+                    om1.get(IvaOrderPatch.ORD_OWNERS) + "|" + om1.get(IvaOrderPatch.ORD_PARTS) + "|" + om2.get(IvaOrderPatch.ORD_OWNERS) + "|" + om2.get(IvaOrderPatch.ORD_PARTS)
+                    + "|" + String.join(",", IvaOrderPatch.ordOwnersOf(om)), "p@x.ru|closed,closed|q@x.ru|new|p@x.ru,q@x.ru");
+                // 10.63: прокат в подробностях — не данные клиента
+                java.util.Map<String, String> pa = new java.util.HashMap<String, String>();
+                pa.put("company", "Прокат-НВ"); pa.put("full_name", "Пётр"); pa.put("phone", "+7 900 111-22-33"); pa.put("address", "ул. Ленина, 5"); pa.put("work_hours", "9–18");
+                StringBuilder pb = new StringBuilder();
+                for (String[] f : IvaOrderPatch.ordProkatFields(pa)) pb.append(f[0]).append('=').append(f[1]).append(';');
+                eq("заявки 10.63: прокат — название, контакт, телефон, адрес выдачи, часы", pb.toString(),
+                    "Прокат=Прокат-НВ;Контактное лицо=Пётр;Телефон=+7 900 111-22-33;Адрес выдачи=ул. Ленина, 5;Часы работы=9–18;");
+                pa.put("company", "null"); pa.put("work_hours", ""); pa.put("address", null);
+                pb.setLength(0);
+                for (String[] f : IvaOrderPatch.ordProkatFields(pa)) pb.append(f[0]).append('=').append(f[1]).append(';');
+                eq("заявки 10.63: нет компании — имя; пустое не показывается", pb.toString(), "Прокат=Пётр;Телефон=+7 900 111-22-33;");
+                pa.put("company", "ПЁТР");
+                eq("заявки 10.63: имя как компания — без повтора; нет данных — пусто", IvaOrderPatch.ordProkatFields(pa).size() + "|" + IvaOrderPatch.ordProkatFields(null).size(), "2|0");
+                eq("заявки 10.63: названия инструментов из заявки (для поиска проката по каталогу)",
+                    String.join("|", IvaOrderPatch.ordToolNames("Дрель Bosch (3 дн.), Пила ×2, Лестница x 1; Пила, Шуруповёрт (1 дн.)\nА")),
+                    "дрель bosch|пила|лестница|шуруповёрт");
+                eq("заявки 10.63: пусто — пусто", IvaOrderPatch.ordToolNames(null).size() + "|" + IvaOrderPatch.ordToolNames(" , ").size(), "0|0");
+                eq("заявки 10.63: архив — запросы", IvaOrderPatch.ARCH_PATH + "|" + IvaOrderPatch.ARCH_RPC + "|" + IvaOrderPatch.ORD_PARTS_RPC,
+                    "/rest/v1/app_order_archived?select=order_id&limit=1000|/rest/v1/rpc/iva_archive_order|/rest/v1/rpc/iva_my_order_parts");
+                eq("заявки 10.63: архив — подписи", IvaOrderPatch.ARCH_TITLE + "|" + IvaOrderPatch.ARCH_ON + "|" + IvaOrderPatch.ARCH_OFF + "|" + IvaOrderPatch.ARCH_ONLY_CLOSED,
+                    "Архив заявок|В архив|Вернуть из архива|В архив можно убрать только закрытую заявку");
             }
+            // 10.63: «Назад» на телефоне
+            eq("назад 10.63: фильтр, «Заявка отправлена», вход", IvaPatch.backAction(true, true, true, true, "home", true) + "|" + IvaPatch.backAction(false, true, true, true, "orders", false)
+                + "|" + IvaPatch.backAction(false, false, false, true, "orders", false), "panel|success|background");
+            eq("назад 10.63: кнопка «‹» на экране, раздел логотипа, вкладка, главная",
+                IvaPatch.backAction(false, false, true, true, "home", false) + "|" + IvaPatch.backAction(false, false, true, false, "home", true)
+                + "|" + IvaPatch.backAction(false, false, true, false, "chat", false) + "|" + IvaPatch.backAction(false, false, true, false, "home", false)
+                + "|" + IvaPatch.backAction(false, false, true, false, null, false), "button|home|home|background|home");
+            eq("назад 10.63: метка кнопки", IvaPatch.BACK_MARK, "‹");
+            // 10.63: вопрос «Удалить сообщение» в стиле приложения
+            eq("удаление 10.63: подсказка — своё / чужое", IvaChatPatch.deleteHint(true) + "|" + IvaChatPatch.deleteHint(false),
+                "«У меня» — сообщение останется у собеседника. «У всех» — пропадёт у обоих.|Сообщение пропадёт только у вас — у собеседника оно останется.");
+            eq("удаление 10.63: пузыри 50dp, углы 14/20dp, ширина до 360dp", IvaClientPatch.CHOICE_BUBBLE_DP + "|" + IvaClientPatch.CHOICE_RADIUS_DP + "|" + IvaClientPatch.CHOICE_CARD_RADIUS_DP
+                + "|" + IvaClientPatch.CHOICE_MAX_DP + "|" + IvaClientPatch.CHOICE_CANCEL, "50|14|20|360|Отмена");
             // 10.60: голосовые как в ВК — кнопка, волна по громкости, длительность; цвета приложения
             eq("голосовые 10.60: волна растёт с длительностью (1080 px, 2.75)", IvaChatPatch.voiceWavePx(0, 1080, 2.75f) + "|" + IvaChatPatch.voiceWavePx(10, 1080, 2.75f) + "|" + IvaChatPatch.voiceWavePx(120, 1080, 2.75f), "198|281|454");
             eq("голосовые 10.60: волна не шире 190dp и 42% экрана, не уже 72dp", IvaChatPatch.voiceWavePx(600, 3000, 1f) + "|" + IvaChatPatch.voiceWavePx(600, 300, 1f) + "|" + IvaChatPatch.voiceWavePx(-5, 100, 1f), "190|126|72");

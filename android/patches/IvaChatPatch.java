@@ -261,6 +261,10 @@ final class IvaChatPatch {
     static final String HIDDEN_MSG_PREFS = "iva_msg_hidden";
     static final String DEL_TITLE = "Удалить сообщение?";
     static final String DEL_ME = "Удалить у меня", DEL_ALL = "Удалить у всех";
+    static final String DEL_HINT = "«У меня» — сообщение останется у собеседника. «У всех» — пропадёт у обоих.";
+    static final String DEL_HINT_ME = "Сообщение пропадёт только у вас — у собеседника оно останется.";
+
+    static String deleteHint(boolean own) { return own ? DEL_HINT : DEL_HINT_ME; }
     static final String DEL_NO_DB = "«Удалить у меня» заработает после обновления базы";
 
     /** Копия на телефоне: id через запятую (id сообщений — числа/uuid, запятых в них нет). */
@@ -2079,17 +2083,14 @@ final class IvaChatPatch {
     static void confirmDelete(final Activity a, final Msg m, final boolean own) {
         try {
             final String[] items = deleteChoices(own);
-            new AlertDialog.Builder(a)
-                .setTitle(DEL_TITLE)
-                .setItems(items, new DialogInterface.OnClickListener() {
-                    @Override public void onClick(DialogInterface d, int w) {
-                        if (w < 0 || w >= items.length) return;
-                        if (DEL_ALL.equals(items[w])) deleteForAll(a, m);
-                        else hideMsg(a, m);
-                    }
-                })
-                .setNegativeButton("Отмена", null)
-                .show();
+            // 10.63: окно в стиле приложения — тёмные пузыри с оранжевым текстом (вместо системного AlertDialog)
+            IvaClientPatch.styledChoice(a, DEL_TITLE, deleteHint(own), items, new IvaClientPatch.Choice() {
+                @Override public void pick(int w) {
+                    if (w < 0 || w >= items.length) return;
+                    if (DEL_ALL.equals(items[w])) deleteForAll(a, m);
+                    else hideMsg(a, m);
+                }
+            });
         } catch (Throwable ignore) {}
     }
 

@@ -401,6 +401,7 @@ public final class IvaPatch {
     }
 
     public static void onTab(Activity a, String tab) {
+        try { installBack(a); } catch (Throwable ignore) {}   // 10.63: системная «Назад» — внутри приложения
         try {
             String t = tab == null ? "" : tab;
             int orange = navColor(a, "orange", 0xffff9800);
@@ -674,5 +675,89 @@ public final class IvaPatch {
     }
     static void set(Object o, String name, Object v) {
         try { field(o.getClass(), name).set(o, v); } catch (Throwable ignore) {}
+    }
+
+    // ───────────── 10.63: кнопка «Назад» на телефоне работает внутри приложения (просьба владельца 14.10.2026) ─────────────
+    // В 10.14 своего onBackPressed нет — «Назад» закрывала приложение с любого экрана. Новых вставок в smali нет:
+    // обёртка окна (Window.Callback) ловит только клавишу «Назад», всё остальное отдаёт приложению как было.
+    // Порядок: открытый фильтр → кнопка «‹ …» на экране (штатные «‹ Назад», «‹ Кабинет», «‹ Все клиенты», наша
+    // «‹ Назад к чатам») → экран «Заявка отправлена» → «На главную» → со вкладок и раздела логотипа — на главную →
+    // на главной (и на экране входа) — свернуть приложение, как кнопка «Домой» (решение владельца 14.10.2026).
+    // Окна поверх (шторка заявки, архив, выбор города, вопросы) закрываются «Назад» сами — это отдельные окна.
+    static final String BACK_PANEL = "panel", BACK_BUTTON = "button", BACK_SUCCESS = "success", BACK_HOME = "home", BACK_HIDE = "background";
+    static final String BACK_MARK = "\u2039";   // «‹»
+
+    /** Что делает «Назад» — чистая функция (проверяется тестом). */
+    static String backAction(boolean panelOpen, boolean successShown, boolean mainShown, boolean backButton, String tab, boolean hubOpen) {
+        if (panelOpen) return BACK_PANEL;
+        if (successShown) return BACK_SUCCESS;
+        if (!mainShown) return BACK_HIDE;                      // вход / заставка — свернуть
+        if (backButton) return BACK_BUTTON;
+        if (hubOpen) return BACK_HOME;
+        return "home".equals(tab == null ? "" : tab) ? BACK_HIDE : BACK_HOME;
+    }
+
+    static void installBack(final Activity a) {
+        final android.view.Window w = a.getWindow();
+        if (w == null) return;
+        final android.view.Window.Callback orig = w.getCallback();
+        if (orig == null || java.lang.reflect.Proxy.isProxyClass(orig.getClass())) return;   // уже стоит
+        Object px = java.lang.reflect.Proxy.newProxyInstance(IvaPatch.class.getClassLoader(),
+            new Class<?>[]{android.view.Window.Callback.class}, new java.lang.reflect.InvocationHandler() {
+                @Override public Object invoke(Object proxy, Method m, Object[] args) throws Throwable {
+                    if (args != null && args.length == 1 && args[0] instanceof android.view.KeyEvent && "dispatchKeyEvent".equals(m.getName())) {
+                        android.view.KeyEvent e = (android.view.KeyEvent) args[0];
+                        if (e.getKeyCode() == android.view.KeyEvent.KEYCODE_BACK) {
+                            if (e.getAction() == android.view.KeyEvent.ACTION_UP && !e.isCanceled()) {
+                                try { onBack(a); } catch (Throwable t) { try { a.moveTaskToBack(true); } catch (Throwable ignore) {} }
+                            }
+                            return Boolean.TRUE;
+                        }
+                    }
+                    try { return m.invoke(orig, args); }
+                    catch (java.lang.reflect.InvocationTargetException ex) { throw ex.getCause() != null ? ex.getCause() : ex; }
+                }
+            });
+        w.setCallback((android.view.Window.Callback) px);
+    }
+
+    static boolean shown(Activity a, String idName) {
+        int id = a.getResources().getIdentifier(idName, "id", a.getPackageName());
+        View v = id == 0 ? null : a.findViewById(id);
+        return v != null && v.isShown();
+    }
+
+    /** Видимая кнопка «‹ …» на экране (кроме нижнего меню): первая по порядку. */
+    static View backButton(View v) {
+        if (v == null || v.getVisibility() != View.VISIBLE) return null;
+        if (v instanceof TextView && !(v instanceof android.widget.EditText) && v.isShown()) {
+            CharSequence t = ((TextView) v).getText();
+            if (t != null && t.toString().trim().startsWith(BACK_MARK) && v.hasOnClickListeners()) return v;
+        }
+        if (v instanceof ViewGroup) {
+            ViewGroup g = (ViewGroup) v;
+            for (int i = 0; i < g.getChildCount(); i++) {
+                View r = backButton(g.getChildAt(i));
+                if (r != null) return r;
+            }
+        }
+        return null;
+    }
+
+    static void onBack(Activity a) {
+        ViewGroup pages = IvaClientPatch.hubPages(a);
+        View btn = pages == null ? null : backButton(pages);
+        Object ct = get(a, "curTab");
+        String act = backAction(IvaSearchPatch.panelOpen(), shown(a, "scrSuccess"), shown(a, "scrMain"), btn != null,
+            ct instanceof String ? (String) ct : "", IvaClientPatch.hubVisible);
+        if (BACK_PANEL.equals(act)) IvaSearchPatch.closePanel(a, true);
+        else if (BACK_SUCCESS.equals(act)) {
+            int id = a.getResources().getIdentifier("btnHome", "id", a.getPackageName());
+            View h = id == 0 ? null : a.findViewById(id);
+            if (h != null) h.performClick(); else a.moveTaskToBack(true);
+        }
+        else if (BACK_BUTTON.equals(act)) btn.performClick();
+        else if (BACK_HOME.equals(act)) IvaNotifyPatch.tab(a, "home");
+        else a.moveTaskToBack(true);
     }
 }

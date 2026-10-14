@@ -329,13 +329,14 @@ try {
     const snd = op.slice(op.indexOf('static void send(final Activity a)'), op.indexOf('static void sent(Activity a)'));
     const keys = (snd.match(/body\.put\("(p_[a-z_]+)"/g) || []).map(x => x.slice(10, -1));
     assert.deepEqual(keys, ['p_name', 'p_phone', 'p_tools', 'p_get_method', 'p_address', 'p_comment', 'p_user_email', 'p_days'], 'IvaOrderPatch.send: поля submit_order как у штатной заявки');
-    assert.ok(snd.includes('IvaClientPatch.apiCall(a, "/rest/v1/rpc/submit_order", "POST", body.toString(), true)') && (op.match(/apiCall\(/g) || []).length === 2
-      && op.includes('IvaClientPatch.apiCall(a, ORD_PATH, "GET", null, true)') && (op.match(/"POST"/g) || []).length === 1
+    assert.ok(snd.includes('IvaClientPatch.apiCall(a, "/rest/v1/rpc/submit_order", "POST", body.toString(), true)') && (op.match(/apiCall\(/g) || []).length === 7
+      && op.includes('IvaClientPatch.apiCall(a, ORD_PATH, "GET", null, true)') && (op.match(/"POST"/g) || []).length === 3
       && snd.includes('body.put("p_days", maxDays(ls));') && snd.includes('body.put("p_tools", toolsText(ls));')
       && snd.includes('callNative(a, "sendOrder");                       // штатные') && snd.includes('if (sending) return;'),
       'IvaOrderPatch.send: одна заявка submit_order, p_days — самый длинный срок, без повторной отправки');
     assert.ok(op.includes('((View) send).setOnClickListener(new View.OnClickListener() {\n                @Override public void onClick(View v) { send(a); }')
-      && !/setOnLongClickListener|setOnTouchListener|postDelayed\([^)]*send/.test(op), 'IvaOrderPatch: заявка уходит только по нажатию «Отправить заявку»');
+      && (op.match(/setOnLongClickListener/g) || []).length === 1 && op.includes('@Override public boolean onLongClick(View v) { try { ordAskArchive(a, r, !archived); } catch (Throwable ignore) {} return true; }')
+      && !/setOnTouchListener|postDelayed\([^)]*send/.test(op), 'IvaOrderPatch: заявка уходит только по нажатию «Отправить заявку» (долгое нажатие — только «В архив?» на карточке 10.63)');
     assert.ok(!/passport|birth|паспорт/i.test(op), 'IvaOrderPatch: лишние персональные данные');
     // один прокат: другой прокат — вопрос «Заменить?», очистка только по согласию
     const det = op.slice(op.indexOf('static void onDetOrder('), op.indexOf('static void nativeAdd('));
@@ -352,7 +353,9 @@ try {
     const enf = op.slice(op.indexOf('static void enforceDelivery('), op.indexOf('static void render('));
     assert.ok(enf.includes('if (d.isChecked() && rp instanceof RadioButton) ((RadioButton) rp).setChecked(true);') && op.includes('if (!l.deliv) return false;'),
       'IvaOrderPatch: инструмент без доставки — только самовывоз');
-    assert.ok(!/removeView\(|\.removeViewAt\(/.test(op) && (op.match(/removeAllViews\(\)/g) || []).length === 1 && op.includes('box.removeAllViews();')
+    const opForm = op.slice(0, op.indexOf('// ───────────────────────── 10.62–10.63: заявки клиента'));
+    assert.ok(!/removeView\(|\.removeViewAt\(/.test(op) && opForm.length > 1000 && (opForm.match(/removeAllViews\(\)/g) || []).length === 1 && opForm.includes('box.removeAllViews();')
+      && (op.match(/removeAllViews\(\)/g) || []).length === 4 && op.includes('mine.removeAllViews();') && op.includes('list.removeAllViews();')
       && op.includes('((View) ol).setVisibility(View.GONE);') && op.includes('dr.setVisibility(View.GONE);') && op.includes('if (j.optInt("qty", 1) != 1) j.put("qty", 1);'),
       'IvaOrderPatch: штатные строки заявки и общий срок только скрыты (не удаляются), количество — 1');
     assert.ok(op.includes('static final int MIN_DAYS = 1, MAX_DAYS = 90;'), 'IvaOrderPatch: срок 1…90 как штатный счётчик');
@@ -577,7 +580,7 @@ try {
       && br.includes('@Override public boolean onLongClick(View v) { confirmDelete(a, m, deletable); return true; }'),
       'сообщения 10.62: долгое нажатие — на любом сообщении, × — только у своих');
     const del = cp.slice(cp.indexOf('static void confirmDelete('), cp.indexOf('static void renderList('));
-    assert.ok(del.includes('final String[] items = deleteChoices(own);') && del.includes('.setNegativeButton("Отмена", null)')
+    assert.ok(del.includes('final String[] items = deleteChoices(own);') && del.includes('IvaClientPatch.styledChoice(a, DEL_TITLE, deleteHint(own), items, new IvaClientPatch.Choice() {')
       && del.includes('if (DEL_ALL.equals(items[w])) deleteForAll(a, m);') && cp.includes('return own ? new String[]{DEL_ME, DEL_ALL} : new String[]{DEL_ME};')
       && (del.match(/"DELETE"/g) || []).length === 1 && del.includes('"/rest/v1/rpc/iva_hide_msg", "POST", b.toString(), true)')
       && del.includes('if ("ok".equals(fc)) {') && del.includes('} else if ("404".equals(fc)) {'),
@@ -587,20 +590,83 @@ try {
       && cp.includes('hiddenMsgs.clear(); hiddenMsgsLocal.clear(); hiddenMsgsAt = 0; hiddenMsgsFor = "";') && cp.includes('saveHiddenMsgs(a, my);'),
       'сообщения 10.62: скрытое не в списке, не в переписке и не по уведомлению; копия на телефоне; при смене аккаунта — сброс');
     const tabs = jc.slice(jc.indexOf('static LinearLayout hubTabButton('), jc.indexOf('static void renderClientHub('));
-    assert.ok(jc.includes('if (cardId != 0) tabs.setBackgroundResource(cardId);') && tabs.includes('g.setCornerRadii(hubBubbleRadii(hubDp(a, HUB_TAB_RADIUS_DP)));')
-      && tabs.includes('line.setBackgroundColor(on ? orange : Color.TRANSPARENT);') && tabs.includes('setTextColor(on ? Color.WHITE : gray)')
-      && !/#[0-9A-Fa-f]{6}|0x[0-9A-Fa-f]{8}/.test(tabs.replace(/0xffff8f1f|0xff9aa1b0/g, '')),
-      'вкладки 10.62: как у админа (bg_card, линия 3dp), пузырь — цвет темы, без новых цветов');
-    const pc = jc.slice(jc.indexOf('static void profileContacts('), jc.indexOf('static ViewGroup hubPages('));
+    assert.ok(jc.includes('tabs.setBackground(tabCard(a));') && tabs.includes('g.setCornerRadii(hubBubbleRadii(hubDp(a, HUB_TAB_RADIUS_DP)));')
+      && tabs.includes('line.setBackgroundColor(on ? orange : Color.TRANSPARENT);') && tabs.includes('setTextColor(on ? orange : gray)')
+      && !/#[0-9A-Fa-f]{6}|0x[0-9A-Fa-f]{8}/.test(tabs.replace(/0xffff8f1f|0xff9aa1b0|0xff1a1d24|0xff262b35/g, '')),
+      'вкладки 10.62–10.63: как у админа (цвета bg_card, линия 3dp, выбранная — оранжевая), без новых цветов');
+    const pc = jc.slice(jc.indexOf('static void profileContacts('), jc.indexOf('// ── 10.63: окно выбора в стиле приложения'));
     assert.ok(jc.includes('try { if ("profile".equals(tab)) profileContacts(a); } catch (Throwable ignore) {}') && pc.includes('boolean show = !isClient(a);')
       && pc.includes('isSingleRow(a, (ViewGroup) row)') && !/removeView|removeAllViews|setText|setOnClick/.test(pc),
       'кабинет 10.62: у клиента строки только скрываются (у админа — видны), ничего не удаляется; строка адреса — только если это одна строка');
-    const ord = op.slice(op.indexOf('static void clientOrders('), op.indexOf('static void ordOpen('));
-    assert.ok(op.includes('if ("orders".equals(tab)) {\n            try { clientOrders(a); } catch (Throwable ignore) {}') && (ord.match(/!IvaClientPatch\.isClient\(a\)\) return;/g) || []).length === 2
-      && !/removeView|removeAllViews|setText\(|setVisibility/.test(ord.replace('more.setText(ORD_MORE);', '')),
-      'заявки 10.62: только у клиента; штатные карточки не пересоздаются и не прячутся — только нажатие и «Подробнее ›»');
+    const att = op.slice(op.indexOf('static void ordAttach('), op.indexOf('static boolean ordCard('));
+    assert.ok(op.includes('if ("orders".equals(tab)) {\n            try { clientOrders(a); } catch (Throwable ignore) {}') && att.includes('!IvaClientPatch.isClient(a)) return;')
+      && !/removeView|removeAllViews|setText\(|setVisibility/.test(att.replace('more.setText(ORD_MORE);', '')),
+      'заявки 10.62: запасной путь — штатные карточки не пересоздаются — только нажатие и «Подробнее ›»');
     assert.ok(!/passport|birth|паспорт/i.test(op), 'заявки 10.62: лишних персональных данных нет');
     assert.ok(/eq\("сообщения 10\.62: /.test(tp) && /eq\("заявки 10\.62: /.test(tp) && /eq\("вкладки 10\.62: /.test(tp) && /eq\("кабинет 10\.62: /.test(tp), 'IvaPatchTest: проверки 10.62');
+  }
+  // 10.63 (просьба владельца 14.10.2026): «Назад» внутри приложения; вкладки клиента один в один как у админа, у админа
+  // карточка вкладок снизу ровная; окно удаления сообщения в стиле приложения; «Архив заявок»; прокат в подробностях заявки.
+  {
+    const ip = R('android/patches/IvaPatch.java'), jc = R('android/patches/IvaClientPatch.java'), op = R('android/patches/IvaOrderPatch.java');
+    const cp = R('android/patches/IvaChatPatch.java'), tp = R('android/patches/test/IvaPatchTest.java');
+    const sql = R('supabase/migrations/20261014_order_archive.sql'), body = sql.replace(/^--.*$/gm, '');
+    // «Назад»: без новых вставок в smali — обёртка окна только для клавиши «Назад»; на главной — свернуть
+    const tab = ip.slice(ip.indexOf('static void onTab('), ip.indexOf('static void onTab(') + 600);
+    assert.ok(tab.includes('installBack(a);') && ip.includes('if (e.getKeyCode() == android.view.KeyEvent.KEYCODE_BACK) {')
+      && ip.includes('try { return m.invoke(orig, args); }') && ip.includes('java.lang.reflect.Proxy.isProxyClass(orig.getClass())) return;')
+      && ip.includes('else if (BACK_HOME.equals(act)) IvaNotifyPatch.tab(a, "home");') && ip.includes('a.moveTaskToBack(true)')
+      && !/finish\(\)|System\.exit|killProcess/.test(ip.slice(ip.indexOf('// ───────────── 10.63: кнопка «Назад»'))),
+      '«Назад» 10.63: только клавиша «Назад» (остальное — приложению как было), не закрывает приложение, на главной — свернуть');
+    // вкладки и окно выбора — цвета темы
+    assert.ok(jc.includes('card.setBackground(tabCard(a));') && jc.includes('try { adminTabsFlat(a); } catch (Throwable ignore) {}')
+      && jc.includes('((TextView) tv).setTextColor(on ? orange : gray);'), 'вкладки 10.63: у админа карточка снизу ровная, у клиента — как у админа');
+    const ch = jc.slice(jc.indexOf('// ── 10.63: окно выбора в стиле приложения'), jc.indexOf('static ViewGroup hubPages('));
+    assert.ok(ch.includes('b.setTextColor(idx >= 0 ? orange : gray);') && ch.includes('d.setCanceledOnTouchOutside(true);')
+      && !/#[0-9A-Fa-f]{6}|0x[0-9A-Fa-f]{8}/.test(ch.replace(/0xffff8f1f|0xff9aa1b0|0xfff2f4f8|0xff1a1d24|0xff262b35|0xff101217/g, '')),
+      'окно выбора 10.63: пузыри цветов темы, оранжевый текст; мимо / «Отмена» / «Назад» — ничего не выбрано');
+    assert.ok(!/AlertDialog\.Builder|new AlertDialog/.test(cp.slice(cp.indexOf('static void confirmDelete('), cp.indexOf('static void deleteForAll('))),
+      'удаление 10.63: вопрос — окно в стиле приложения, не системное');
+    // архив: SQL — только своё и только закрытые; заявки не меняются
+    assert.ok(body.includes('primary key (user_email, order_id)') && body.includes('alter table public.app_order_archived enable row level security;')
+      && body.includes('revoke all on public.app_order_archived from anon;') && body.includes('revoke all on public.app_order_archived from authenticated;')
+      && body.includes('grant select on public.app_order_archived to authenticated;')
+      && body.includes("using (user_email = lower(coalesce(auth.jwt() ->> 'email', '')));")
+      && !/grant\s+(insert|update|delete|all)[^;]*app_order_archived/i.test(body) && !/for\s+(insert|update|delete|all)\b/i.test(body),
+      '20261014_order_archive.sql: каждый видит только свой архив; писать напрямую нельзя');
+    assert.ok(body.includes("me text := lower(coalesce(auth.jwt() ->> 'email', ''));") && body.includes('values (me, v_id)')
+      && body.includes("lower(coalesce(o.user_email, '')) = me) then") && body.includes("in ('new', 'rented')) then\n      return 0;")
+      && (body.match(/security definer\s+set search_path = public/g) || []).length === 2
+      && body.includes('revoke all on function public.iva_archive_order(text, boolean) from public, anon;')
+      && body.includes('revoke all on function public.iva_my_order_parts() from public, anon;')
+      && !/\bupdate\s+public\.|insert\s+into\s+public\.(orders|order_parts)|delete\s+from\s+public\.(orders|order_parts)/i.test(body),
+      '20261014_order_archive.sql: архив — только своя закрытая заявка; заявки и части заявок не меняются');
+    const parts = body.slice(body.indexOf('create or replace function public.iva_my_order_parts()'));
+    assert.ok(parts.includes("where lower(coalesce(o.user_email, '')) = lower(coalesce(auth.jwt() ->> 'email', ''))")
+      && parts.includes('returns table (order_id text, owner_email text, status text)') && !/o\.(name|phone|address|comment)/.test(parts),
+      '20261014_order_archive.sql: части — только своих заявок, без данных клиента');
+    assert.ok(sql.includes('--   drop function if exists public.iva_my_order_parts();') && sql.includes('--   drop function if exists public.iva_archive_order(text, boolean);')
+      && sql.includes('--   drop table if exists public.app_order_archived;'), '20261014_order_archive.sql: откат записан');
+    // приложение: архив только у закрытых, только после ответа базы; без SQL — подсказка
+    assert.ok(op.includes('if (on && !ordClosed(r)) { Toast.makeText(a, ARCH_ONLY_CLOSED, Toast.LENGTH_LONG).show(); return; }')
+      && op.includes('IvaClientPatch.apiCall(a, ARCH_RPC, "POST", archBody(id, on), true)') && op.includes('if ("ok".equals(fc)) {')
+      && op.includes('} else if ("404".equals(fc)) {') && op.includes('if (archived || ordClosed(r)) {')
+      && !/"DELETE"|"PATCH"/.test(op), 'заявки 10.63: в архив — только закрытые и только после ответа базы; заявки не удаляются и не меняются');
+    // подробности: данные проката, без данных клиента
+    assert.ok(op.includes('static final String[] ORD_COLS = {"id", "created_at", "status", "tools", "days", "get_method", "comment"};')
+      && !/"Имя"|"Адрес"[^ ]|ordAdd\(out, "Телефон", r\.get/.test(op) && op.includes('ordAdd(out, "Телефон", ad.get("phone"));')
+      && op.includes('static final String PROKAT_PATH = "/rest/v1/admins?select=email,full_name,company,address,phone,work_hours&email=in.";'),
+      'заявки 10.63: в подробностях — прокат (как на странице проката), имени, телефона и адреса клиента нет');
+    // свой список — только у клиента; не загрузился — штатный
+    const rn = op.slice(op.indexOf('static void ordRender('), op.indexOf('static TextView ordHint('));
+    assert.ok(rn.includes('if (!IvaClientPatch.isClient(a)) {') && rn.includes('if (!ordMine(a) && ordFailed) {') && rn.includes('ordAttach(a);')
+      && (rn.match(/nat\.setVisibility\(View\.VISIBLE\);/g) || []).length === 2 && rn.includes('if (ordArchived.contains(r.get("id"))) continue;'),
+      'заявки 10.63: свой список только у клиента; не загрузилось — штатный; убранные в архив не показываются');
+    assert.ok(op.includes('if ("profile".equals(tab)) {\n            try { profileArchiveRow(a); } catch (Throwable ignore) {}')
+      && op.includes('list.addView(row, list.indexOfChild(call), lp);') && op.includes('row.setVisibility(client ? View.VISIBLE : View.GONE);'),
+      'кабинет 10.63: «Архив заявок» — только у клиента, перед штатной строкой (ничего не удаляется)');
+    assert.ok(!/passport|birth|паспорт|getLastKnownLocation|ACCESS_FINE/i.test(op), 'заявки 10.63: лишних персональных данных нет');
+    assert.ok(/eq\("заявки 10\.63: /.test(tp) && /eq\("назад 10\.63: /.test(tp) && /eq\("удаление 10\.63: /.test(tp), 'IvaPatchTest: проверки 10.63');
   }
   // радиус — только вид: варианты встречаются лишь в объявлении и в шторке, на фильтр/подсчёт не влияют
   assert.equal((js45.match(/RADIUS_TITLES/g) || []).length, 3, 'IvaSearchPatch: радиус не должен участвовать в фильтре (только заготовка в шторке)');

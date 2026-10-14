@@ -424,6 +424,9 @@ public final class IvaOrderPatch {
         if ("orders".equals(tab)) {
             try { clientOrders(a); } catch (Throwable ignore) {}
         }
+        if ("profile".equals(tab)) {
+            try { profileArchiveRow(a); } catch (Throwable ignore) {}
+        }
     }
 
     /** Из IvaPatch.onSummary (начало штатного updateSummary): свои строки и итог — сразу после него. */
@@ -1020,21 +1023,45 @@ public final class IvaOrderPatch {
     }
 
 
-    // ───────────────────────── 10.62: заявки клиента нажимаются ─────────────────────────
-    // Штатный renderOrders рисует у клиента карточку: дата (niceDate), инструменты, способ получения. Карточки
-    // не меняем и не пересоздаём — только делаем их нажимаемыми и добавляем «Подробнее ›». Полные данные заявки —
-    // тот же запрос, что у штатного loadOrders (RLS отдаёт клиенту только его заявки), но select=*.
-    // Нажатие открывает шторку на 85% экрана (как фильтр) со всеми полями заявки. У админа — ничего не меняется.
-    static final String ORD_PATH = "/rest/v1/orders?select=*&order=created_at.desc&limit=30";
+    // ───────────────────────── 10.62–10.63: заявки клиента ─────────────────────────
+    // 10.62: заявки нажимаются → шторка 85% со всеми данными. 10.63 (просьба и решения владельца 14.10.2026):
+    //  • свой список вместо штатного (штатный renderOrders продолжает грузиться, но у клиента скрыт) — без мигания
+    //    убранных в архив; не загрузилось — штатный список, как в 10.62 (нажатие по карточке, «Подробнее ›»);
+    //  • «Архив заявок»: в базе (app_order_archived, SQL у владельца); убрать — кнопкой «В архив» в подробностях или
+    //    долгим нажатием на карточку, только закрытые заявки; в «Кабинете» — пункт «Архив заявок», заявки там тоже
+    //    нажимаются, есть «Вернуть из архива»;
+    //  • в подробностях — данные заявки и проката (название, контактное лицо, телефон, адрес выдачи, часы работы),
+    //    а не самого клиента (его имя, телефон и адрес не показываются).
+    // У админа — ничего не меняется (штатный список).
+    static final String ORD_PATH = "/rest/v1/orders?select=*&order=created_at.desc&limit=100";
+    static final String ORD_PATH_PARTS = "/rest/v1/orders?select=*,order_parts(owner_email,status)&order=created_at.desc&limit=100";
+    static final String ORD_PARTS_RPC = "/rest/v1/rpc/iva_my_order_parts";
+    static final String ARCH_PATH = "/rest/v1/app_order_archived?select=order_id&limit=1000";
+    static final String ARCH_RPC = "/rest/v1/rpc/iva_archive_order";
+    static final String PROKAT_PATH = "/rest/v1/admins?select=email,full_name,company,address,phone,work_hours&email=in.";
     static final String ORD_KEY = "iva_ord:", ORD_MORE_TAG = "iva_ord_more", ORD_MORE = "Подробнее ›";
-    static final String[] ORD_COLS = {"id", "created_at", "status", "tools", "days", "get_method", "address", "name", "phone", "comment"};
+    static final String ORD_LIST_TAG = "iva_ord_list", ARCH_ROW_TAG = "iva_arch_row";
+    static final String[] ORD_COLS = {"id", "created_at", "status", "tools", "days", "get_method", "comment"};
+    static final String ORD_OWNERS = "_owners", ORD_PARTS = "_parts";
     static final long ORD_ATTACH_MS = 250, ORD_REFETCH_MS = 5000;
     static final float ORD_SHEET = 0.85f;
+    static final String ARCH_TITLE = "Архив заявок", ARCH_SUB = "Закрытые заявки, убранные из «Заявок»";
+    static final String ARCH_ASK = "Убрать заявку в архив?";
+    static final String ARCH_ASK_TEXT = "Она пропадёт из «Заявок». Найти её можно в «Кабинете» → «Архив заявок».";
+    static final String ARCH_BACK_ASK = "Вернуть заявку из архива?";
+    static final String ARCH_ON = "В архив", ARCH_OFF = "Вернуть из архива";
+    static final String ARCH_ONLY_CLOSED = "В архив можно убрать только закрытую заявку";
+    static final String ARCH_NO_DB = "Архив заявок заработает после обновления базы";
+    static final String ARCH_EMPTY = "В архиве пока пусто.\n\nЗакрытую заявку можно убрать сюда из «Заявок» — долгим нажатием на неё или кнопкой «В архив» в подробностях.";
+    static final String ORD_EMPTY = "Заявок пока нет.\nВыберите инструмент и отправьте первую заявку!";
+    static final String ORD_ALL_ARCHIVED = "Все заявки в архиве.\nОни в «Кабинете» → «Архив заявок».";
     static WeakReference<View> ordHooked = new WeakReference<View>(null);
     static List<Map<String, String>> ordRows = new ArrayList<Map<String, String>>();
+    static final java.util.Set<String> ordArchived = java.util.Collections.synchronizedSet(new java.util.HashSet<String>());
+    static final Map<String, Map<String, String>> ordProkat = java.util.Collections.synchronizedMap(new java.util.HashMap<String, Map<String, String>>());
     static String ordFor = "";
     static long ordAt = 0;
-    static boolean ordLoading = false;
+    static boolean ordLoading = false, ordReady = false, ordFailed = false, archMissing = false;
     static Handler ordH;                 // создаётся при первом обращении (не в статическом блоке класса)
 
     static Handler ordH() {
@@ -1042,11 +1069,12 @@ public final class IvaOrderPatch {
         return ordH;
     }
     static Runnable ordRun;
-    static Dialog ordDialog;
+    static Dialog ordDialog, archDialog;
+    static LinearLayout archList;
 
     static void clientOrders(final Activity a) {
         Object o = get(a, "ordersList");
-        if (!(o instanceof LinearLayout) || !IvaClientPatch.isClient(a)) return;
+        if (!(o instanceof LinearLayout) || !IvaClientPatch.isClient(a)) { try { ordRender(a); } catch (Throwable ignore) {} return; }
         if (ordHooked.get() != o) {
             ((LinearLayout) o).setOnHierarchyChangeListener(new ViewGroup.OnHierarchyChangeListener() {
                 @Override public void onChildViewAdded(View parent, View child) { ordSchedule(a); }
@@ -1054,12 +1082,13 @@ public final class IvaOrderPatch {
             });
             ordHooked = new WeakReference<View>((View) o);
         }
+        ordRender(a);
         ordFetch(a);   // раздел открыли — свежие статусы (штатный loadOrders тоже грузит заново)
     }
 
     static void ordSchedule(final Activity a) {
         if (ordRun != null) ordH().removeCallbacks(ordRun);
-        ordRun = new Runnable() { @Override public void run() { try { ordAttach(a); } catch (Throwable ignore) {} } };
+        ordRun = new Runnable() { @Override public void run() { try { ordRender(a); } catch (Throwable ignore) {} } };
         ordH().postDelayed(ordRun, ORD_ATTACH_MS);
     }
 
@@ -1068,6 +1097,8 @@ public final class IvaOrderPatch {
         return e instanceof String ? ((String) e).trim().toLowerCase(Locale.ROOT) : "";
     }
 
+    static boolean ordMine(Activity a) { return ordReady && ordMe(a).equals(ordFor); }
+
     static void ordFetch(final Activity a) {
         if (ordLoading) return;
         ordLoading = true;
@@ -1075,17 +1106,40 @@ public final class IvaOrderPatch {
         new Thread(new Runnable() {
             @Override public void run() {
                 List<Map<String, String>> rows = null;
+                java.util.Set<String> arch = null;
+                boolean noArch = false;
                 try {
-                    String[] r = IvaClientPatch.apiCall(a, ORD_PATH, "GET", null, true);
+                    String[] r = IvaClientPatch.apiCall(a, ORD_PATH_PARTS, "GET", null, true);
+                    if (r == null || !"200".equals(r[0])) r = IvaClientPatch.apiCall(a, ORD_PATH, "GET", null, true);
                     if (r != null && r.length > 1 && "200".equals(r[0])) rows = ordParse(r[1]);
                 } catch (Throwable ignore) {}
+                if (rows != null) {
+                    try {   // части заявок (прокат и «Выдал/Вернули») — функцией из SQL 10.63, если её ещё нет — как получилось выше
+                        String[] r = IvaClientPatch.apiCall(a, ORD_PARTS_RPC, "POST", "{}", true);
+                        if (r != null && r.length > 1 && "200".equals(r[0])) ordMergeParts(rows, ordParseParts(r[1]));
+                    } catch (Throwable ignore) {}
+                    try {
+                        String[] r = IvaClientPatch.apiCall(a, ARCH_PATH, "GET", null, true);
+                        if (r != null && "404".equals(r[0])) noArch = true;
+                        else if (r != null && r.length > 1 && "200".equals(r[0])) arch = ordParseArch(r[1]);
+                    } catch (Throwable ignore) {}
+                    ordLoadProkat(a, ordOwnersOf(rows));
+                }
                 final List<Map<String, String>> got = rows;
+                final java.util.Set<String> fa = arch;
+                final boolean fna = noArch;
                 ordH().post(new Runnable() {
                     @Override public void run() {
                         ordLoading = false;
                         ordAt = System.currentTimeMillis();
-                        if (got != null) { ordRows = got; ordFor = me; }
-                        try { ordAttach(a); } catch (Throwable ignore) {}
+                        if (got != null) {
+                            ordRows = got; ordFor = me; ordReady = true; ordFailed = false;
+                            archMissing = fna;
+                            if (fa != null) { synchronized (ordArchived) { ordArchived.clear(); ordArchived.addAll(fa); } }
+                            else if (fna) ordArchived.clear();
+                        } else if (!me.equals(ordFor) || !ordReady) ordFailed = true;
+                        try { ordRender(a); } catch (Throwable ignore) {}
+                        try { archRender(a); } catch (Throwable ignore) {}
                     }
                 });
             }
@@ -1100,12 +1154,120 @@ public final class IvaOrderPatch {
             if (o == null) continue;
             Map<String, String> m = new LinkedHashMap<String, String>();
             for (String k : ORD_COLS) m.put(k, o.isNull(k) ? "" : String.valueOf(o.opt(k)));
+            List<String> owners = new ArrayList<String>(), parts = new ArrayList<String>();
+            JSONArray ps = o.optJSONArray("order_parts");
+            for (int k = 0; ps != null && k < ps.length(); k++) {
+                JSONObject p = ps.optJSONObject(k);
+                if (p == null) continue;
+                owners.add(p.isNull("owner_email") ? "" : p.optString("owner_email", ""));
+                parts.add(p.isNull("status") ? "" : p.optString("status", ""));
+            }
+            m.put(ORD_OWNERS, ordJoin(owners));
+            m.put(ORD_PARTS, ordJoinAll(parts));
             out.add(m);
         }
         return out;
     }
 
-    /** Штатная дата карточки (niceDate) — по ней и тексту инструментов карточка находит свою заявку. */
+    /** Ответ iva_my_order_parts → id заявки → [владельцы, статусы частей]. */
+    static Map<String, String[]> ordParseParts(String body) throws Exception {
+        JSONArray arr = new JSONArray(body == null ? "[]" : body.trim());
+        Map<String, List<String>> ow = new LinkedHashMap<String, List<String>>(), st = new LinkedHashMap<String, List<String>>();
+        for (int i = 0; i < arr.length(); i++) {
+            JSONObject p = arr.optJSONObject(i);
+            if (p == null) continue;
+            String id = p.isNull("order_id") ? "" : String.valueOf(p.opt("order_id"));
+            if (id.isEmpty()) continue;
+            if (!ow.containsKey(id)) { ow.put(id, new ArrayList<String>()); st.put(id, new ArrayList<String>()); }
+            ow.get(id).add(p.isNull("owner_email") ? "" : p.optString("owner_email", ""));
+            st.get(id).add(p.isNull("status") ? "" : p.optString("status", ""));
+        }
+        Map<String, String[]> out = new LinkedHashMap<String, String[]>();
+        for (String id : ow.keySet()) out.put(id, new String[]{ordJoin(ow.get(id)), ordJoinAll(st.get(id))});
+        return out;
+    }
+
+    /** Части из функции базы точнее, чем видимые по RLS: подставляем их в заявки. */
+    static void ordMergeParts(List<Map<String, String>> rows, Map<String, String[]> parts) {
+        if (rows == null || parts == null) return;
+        for (Map<String, String> r : rows) {
+            String[] p = parts.get(r.get("id"));
+            if (p == null) continue;
+            r.put(ORD_OWNERS, p[0]);
+            r.put(ORD_PARTS, p[1]);
+        }
+    }
+
+    static java.util.Set<String> ordParseArch(String body) throws Exception {
+        JSONArray arr = new JSONArray(body == null ? "[]" : body.trim());
+        java.util.Set<String> out = new java.util.HashSet<String>();
+        for (int i = 0; i < arr.length(); i++) {
+            JSONObject o = arr.optJSONObject(i);
+            String id = o == null || o.isNull("order_id") ? "" : String.valueOf(o.opt("order_id")).trim();
+            if (!id.isEmpty()) out.add(id);
+        }
+        return out;
+    }
+
+    /** Почты без повторов и пустых, нижний регистр, через запятую. */
+    static String ordJoin(List<String> xs) {
+        java.util.LinkedHashSet<String> s = new java.util.LinkedHashSet<String>();
+        if (xs != null) for (String x : xs) { String c = x == null ? "" : x.trim().toLowerCase(Locale.ROOT); if (!c.isEmpty() && c.indexOf(',') < 0) s.add(c); }
+        StringBuilder b = new StringBuilder();
+        for (String x : s) { if (b.length() > 0) b.append(','); b.append(x); }
+        return b.toString();
+    }
+
+    /** Статусы частей — все по порядку (пустой = new), через запятую. */
+    static String ordJoinAll(List<String> xs) {
+        StringBuilder b = new StringBuilder();
+        if (xs != null) for (String x : xs) {
+            String c = x == null ? "" : x.trim().toLowerCase(Locale.ROOT);
+            if (b.length() > 0) b.append(',');
+            b.append(c.isEmpty() ? "new" : c);
+        }
+        return b.toString();
+    }
+
+    static java.util.Set<String> ordOwnersOf(List<Map<String, String>> rows) {
+        java.util.Set<String> out = new java.util.LinkedHashSet<String>();
+        if (rows != null) for (Map<String, String> r : rows) for (String e : ordSplit(r.get(ORD_OWNERS))) out.add(e);
+        return out;
+    }
+
+    static List<String> ordSplit(String csv) {
+        List<String> out = new ArrayList<String>();
+        for (String p : (csv == null ? "" : csv).split(",")) { String c = p.trim(); if (!c.isEmpty()) out.add(c); }
+        return out;
+    }
+
+    /** Данные прокатов (как на странице проката в приложении: admins), в фоне; уже загруженные не спрашиваем. */
+    static void ordLoadProkat(Activity a, java.util.Collection<String> emails) {
+        List<String> need = new ArrayList<String>();
+        for (String e : emails) if (!ordProkat.containsKey(e)) need.add(e);
+        if (need.isEmpty()) return;
+        try {
+            StringBuilder q = new StringBuilder("(");
+            for (String e : need) {
+                if (q.length() > 1) q.append(',');
+                q.append("%22").append(java.net.URLEncoder.encode(e, "UTF-8")).append("%22");
+            }
+            q.append(')');
+            String[] r = IvaClientPatch.apiCall(a, PROKAT_PATH + q, "GET", null, true);
+            if (r == null || r.length < 2 || !"200".equals(r[0])) return;
+            JSONArray arr = new JSONArray(r[1] == null ? "[]" : r[1].trim());
+            for (int i = 0; i < arr.length(); i++) {
+                JSONObject o = arr.optJSONObject(i);
+                if (o == null) continue;
+                Map<String, String> m = new LinkedHashMap<String, String>();
+                for (String k : new String[]{"email", "full_name", "company", "address", "phone", "work_hours"})
+                    m.put(k, o.isNull(k) ? "" : o.optString(k, ""));
+                ordProkat.put(m.get("email").trim().toLowerCase(Locale.ROOT), m);
+            }
+        } catch (Throwable ignore) {}
+    }
+
+    /** Штатная дата карточки (niceDate). */
     static String ordNice(Activity a, String at) {
         try {
             Method m = a.getClass().getDeclaredMethod("niceDate", String.class);
@@ -1132,6 +1294,214 @@ public final class IvaOrderPatch {
         return -1;
     }
 
+    /**
+     * Статус заявки. «Выдал»/«Вернули» прокат отмечает в части заявки (order_parts.status), поэтому если части
+     * известны — по ним: хоть одна new → «new»; иначе хоть одна rented → «rented»; иначе (все закрыты) — «closed».
+     * Частей нет — статус самой заявки (пусто = new).
+     */
+    static String ordEffStatus(String orderStatus, String partsCsv) {
+        List<String> ps = ordSplit(partsCsv);
+        if (ps.isEmpty()) {
+            String s = orderStatus == null ? "" : orderStatus.trim().toLowerCase(Locale.ROOT);
+            return s.isEmpty() ? "new" : s;
+        }
+        if (ps.contains("new")) return "new";
+        if (ps.contains("rented")) return "rented";
+        return "closed";
+    }
+
+    /** Статус словами как на сайте: new — «Новая», rented — «В аренде», иначе — «Закрыта». */
+    static String ordStatus(String st) {
+        String s = st == null || st.trim().isEmpty() ? "new" : st.trim();
+        return "new".equals(s) ? "Новая" : "rented".equals(s) ? "В аренде" : "Закрыта";
+    }
+
+    static String ordStatusOf(Map<String, String> r) { return ordEffStatus(r.get("status"), r.get(ORD_PARTS)); }
+
+    /** В архив — только закрытые (решение владельца 14.10.2026). То же правило в iva_archive_order. */
+    static boolean ordClosed(Map<String, String> r) { return "Закрыта".equals(ordStatus(ordStatusOf(r))); }
+
+    /** Строки шторки о заявке; данных клиента (имя, телефон, адрес) нет — решение владельца 14.10.2026. */
+    static List<String[]> ordFields(Map<String, String> r, String nice) {
+        List<String[]> out = new ArrayList<String[]>();
+        ordAdd(out, "Дата", nice == null || nice.trim().isEmpty() ? r.get("created_at") : nice);
+        out.add(new String[]{"Статус", ordStatus(ordStatusOf(r))});
+        ordAdd(out, "Инструменты", r.get("tools"));
+        String days = r.get("days") == null ? "" : r.get("days").trim();
+        ordAdd(out, "Срок", days.matches("\\d+") ? (days.equals("0") ? "" : days + " дн.") : days);
+        ordAdd(out, "Получение", r.get("get_method"));
+        ordAdd(out, "Комментарий", r.get("comment"));
+        ordAdd(out, "Номер заявки", r.get("id"));
+        return out;
+    }
+
+    /** Строки о прокате: название (компания, иначе имя), контактное лицо, телефон, адрес выдачи, часы работы. */
+    static List<String[]> ordProkatFields(Map<String, String> ad) {
+        List<String[]> out = new ArrayList<String[]>();
+        if (ad == null) return out;
+        String company = ordVal(ad.get("company")), name = ordVal(ad.get("full_name"));
+        ordAdd(out, "Прокат", company.isEmpty() ? name : company);
+        if (!company.isEmpty() && !name.isEmpty() && !name.equalsIgnoreCase(company)) ordAdd(out, "Контактное лицо", name);
+        ordAdd(out, "Телефон", ad.get("phone"));
+        ordAdd(out, "Адрес выдачи", ad.get("address"));
+        ordAdd(out, "Часы работы", ad.get("work_hours"));
+        return out;
+    }
+
+    static String ordVal(String v) { return v == null || "null".equals(v.trim()) ? "" : v.trim(); }
+
+    static void ordAdd(List<String[]> out, String label, String v) {
+        if (v != null && !v.trim().isEmpty() && !"null".equals(v.trim())) out.add(new String[]{label, v.trim()});
+    }
+
+    /**
+     * Названия инструментов из текста заявки: «Дрель (3 дн.), Пила ×2» → [дрель, пила]. Нужны, только если части
+     * заявки не видны: прокат тогда находится по каталогу (у инструмента есть владелец).
+     */
+    static List<String> ordToolNames(String tools) {
+        List<String> out = new ArrayList<String>();
+        for (String p : (tools == null ? "" : tools).split("[,;\\n]")) {
+            String n = p.trim();
+            n = n.replaceAll("\\s*\\([^()]*\\)\\s*$", "");
+            n = n.replaceAll("\\s*[\u00d7xх*]\\s*\\d+\\s*$", "");
+            n = n.trim().toLowerCase(Locale.ROOT);
+            if (n.length() >= 2 && !out.contains(n)) out.add(n);
+        }
+        return out;
+    }
+
+    /** Владельцы заявки: по частям; не видны — по каталогу (тот же инструмент по названию). */
+    static List<String> ordOwners(Activity a, Map<String, String> r) {
+        List<String> own = ordSplit(r.get(ORD_OWNERS));
+        if (!own.isEmpty()) return own;
+        try {
+            List<String> names = ordToolNames(r.get("tools"));
+            java.util.LinkedHashSet<String> found = new java.util.LinkedHashSet<String>();
+            for (Object t : IvaSearchPatch.allTools(a)) {
+                if (!(t instanceof JSONObject)) continue;
+                JSONObject j = (JSONObject) t;
+                if (names.contains(j.optString("name", "").trim().toLowerCase(Locale.ROOT))) {
+                    String e = j.optString("owner_email", "").trim().toLowerCase(Locale.ROOT);
+                    if (!e.isEmpty()) found.add(e);
+                }
+            }
+            own.addAll(found);
+        } catch (Throwable ignore) {}
+        return own;
+    }
+
+    // ── список «Заявки» у клиента ──
+
+    static void ordRender(final Activity a) {
+        Object o = get(a, "ordersList");
+        if (!(o instanceof LinearLayout) || !(((View) o).getParent() instanceof ViewGroup)) return;
+        LinearLayout nat = (LinearLayout) o;
+        ViewGroup parent = (ViewGroup) nat.getParent();
+        View found = null;
+        for (int i = 0; i < parent.getChildCount(); i++) if (ORD_LIST_TAG.equals(parent.getChildAt(i).getTag())) found = parent.getChildAt(i);
+        if (!IvaClientPatch.isClient(a)) {                 // админ / гость — штатный список как был
+            nat.setVisibility(View.VISIBLE);
+            if (found != null) found.setVisibility(View.GONE);
+            return;
+        }
+        if (!ordMine(a) && ordFailed) {                     // не загрузилось — штатный список (как 10.62)
+            nat.setVisibility(View.VISIBLE);
+            if (found != null) found.setVisibility(View.GONE);
+            ordAttach(a);
+            return;
+        }
+        LinearLayout mine;
+        if (found instanceof LinearLayout) mine = (LinearLayout) found;
+        else {
+            mine = new LinearLayout(a);
+            mine.setOrientation(LinearLayout.VERTICAL);
+            mine.setTag(ORD_LIST_TAG);
+            parent.addView(mine, parent.indexOfChild(nat) + 1, parent instanceof LinearLayout
+                ? new LinearLayout.LayoutParams(-1, -2) : new ViewGroup.LayoutParams(-1, -2));
+        }
+        nat.setVisibility(View.GONE);
+        mine.setVisibility(View.VISIBLE);
+        mine.removeAllViews();
+        if (!ordMine(a)) { mine.addView(ordHint(a, "Загрузка заявок…")); return; }
+        int shown = 0;
+        for (Map<String, String> r : ordRows) {
+            if (ordArchived.contains(r.get("id"))) continue;
+            mine.addView(ordCardView(a, r, false));
+            shown++;
+        }
+        if (shown == 0) mine.addView(ordHint(a, ordRows.isEmpty() ? ORD_EMPTY : ORD_ALL_ARCHIVED));
+    }
+
+    static TextView ordHint(Activity a, String s) {
+        TextView t = new TextView(a);
+        t.setText(s);
+        t.setTextColor(color(a, "gray", 0xff9aa1b0));
+        t.setTextSize(14f);
+        t.setGravity(Gravity.CENTER);
+        t.setPadding(dp(a, 16), dp(a, 32), dp(a, 16), dp(a, 32));
+        return t;
+    }
+
+    /** Карточка как штатная (renderOrders): bg_card, 14dp, дата оранжевая 13sp, инструменты 14sp, получение 12sp. */
+    static View ordCardView(final Activity a, final Map<String, String> r, final boolean archived) {
+        LinearLayout c = new LinearLayout(a);
+        c.setOrientation(LinearLayout.VERTICAL);
+        Drawable bg = drawable(a, "bg_card");
+        if (bg != null) c.setBackground(bg);
+        c.setPadding(dp(a, 14), dp(a, 14), dp(a, 14), dp(a, 14));
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2);
+        lp.bottomMargin = dp(a, 10);
+        c.setLayoutParams(lp);
+        TextView d = new TextView(a);
+        d.setText(ordNice(a, r.get("created_at")));
+        d.setTextColor(color(a, "orange", 0xffff8f1f));
+        d.setTextSize(13f);
+        d.setTypeface(null, Typeface.BOLD);
+        c.addView(d);
+        TextView t = new TextView(a);
+        t.setText(ordVal(r.get("tools")));
+        t.setTextColor(color(a, "text", 0xfff2f4f8));
+        t.setTextSize(14f);
+        LinearLayout.LayoutParams tl = new LinearLayout.LayoutParams(-2, -2);
+        tl.topMargin = dp(a, 4);
+        c.addView(t, tl);
+        String gm = ordVal(r.get("get_method"));
+        if (!gm.isEmpty()) {
+            TextView g = new TextView(a);
+            g.setText(gm);
+            g.setTextColor(color(a, "gray", 0xff9aa1b0));
+            g.setTextSize(12f);
+            c.addView(g);
+        }
+        LinearLayout foot = new LinearLayout(a);
+        foot.setOrientation(LinearLayout.HORIZONTAL);
+        foot.setGravity(Gravity.CENTER_VERTICAL);
+        TextView st = new TextView(a);
+        st.setText(ordStatus(ordStatusOf(r)));
+        st.setTextColor(color(a, "gray2", 0xff6b7080));
+        st.setTextSize(12f);
+        foot.addView(st, new LinearLayout.LayoutParams(0, -2, 1f));
+        TextView more = new TextView(a);
+        more.setTag(ORD_MORE_TAG);
+        more.setText(ORD_MORE);
+        more.setTextColor(color(a, "orange", 0xffff8f1f));
+        more.setTextSize(12f);
+        more.setTypeface(null, Typeface.BOLD);
+        foot.addView(more, new LinearLayout.LayoutParams(-2, -2));
+        LinearLayout.LayoutParams fl = new LinearLayout.LayoutParams(-1, -2);
+        fl.topMargin = dp(a, 6);
+        c.addView(foot, fl);
+        c.setClickable(true);
+        c.setOnClickListener(new View.OnClickListener() {
+            @Override public void onClick(View v) { try { ordOpenRow(a, r, archived); } catch (Throwable ignore) {} }
+        });
+        c.setOnLongClickListener(new View.OnLongClickListener() {
+            @Override public boolean onLongClick(View v) { try { ordAskArchive(a, r, !archived); } catch (Throwable ignore) {} return true; }
+        });
+        return c;
+    }
+
+    /** Запасной путь (наш список не загрузился): штатные карточки — нажатие и «Подробнее ›», как в 10.62. */
     static void ordAttach(final Activity a) {
         Object o = get(a, "ordersList");
         if (!(o instanceof LinearLayout) || !IvaClientPatch.isClient(a)) return;
@@ -1152,12 +1522,14 @@ public final class IvaOrderPatch {
             int nth = n == null ? 0 : n;
             counts.put(base, nth + 1);
             final String key = ordKey(date, tl, nth);
-            if (ordFind(dates, tools, key) < 0) { missing = true; continue; }
+            final int idx = ordFind(dates, tools, key);
+            if (idx < 0) { missing = true; continue; }
             if (key.equals(card.getTag())) continue;
             card.setTag(key);
             card.setClickable(true);
+            final Map<String, String> row = ordRows.get(idx);
             card.setOnClickListener(new View.OnClickListener() {
-                @Override public void onClick(View v) { try { ordOpen(a, key); } catch (Throwable ignore) {} }
+                @Override public void onClick(View v) { try { ordOpenRow(a, row, ordArchived.contains(row.get("id"))); } catch (Throwable ignore) {} }
             });
             if (card.findViewWithTag(ORD_MORE_TAG) == null) {
                 TextView more = new TextView(a);
@@ -1171,7 +1543,6 @@ public final class IvaOrderPatch {
                 card.addView(more, ml);
             }
         }
-        // новая заявка или другой вход — данные ещё старые: один раз догружаем (не чаще раза в 5 с)
         if (missing && !ordLoading && System.currentTimeMillis() - ordAt > ORD_REFETCH_MS) ordFetch(a);
     }
 
@@ -1183,40 +1554,197 @@ public final class IvaOrderPatch {
             && l.getChildAt(0) instanceof TextView && l.getChildAt(1) instanceof TextView;
     }
 
-    /** Статус как на сайте (cabinet.html badge): пусто/new — «Новая», rented — «В аренде», иначе — «Закрыта». */
-    static String ordStatus(String st) {
-        String s = st == null || st.trim().isEmpty() ? "new" : st.trim();
-        return "new".equals(s) ? "Новая" : "rented".equals(s) ? "В аренде" : "Закрыта";
+    // ── архив ──
+
+    static void ordAskArchive(final Activity a, final Map<String, String> r, final boolean on) {
+        if (archMissing) { Toast.makeText(a, ARCH_NO_DB, Toast.LENGTH_LONG).show(); return; }
+        if (on && !ordClosed(r)) { Toast.makeText(a, ARCH_ONLY_CLOSED, Toast.LENGTH_LONG).show(); return; }
+        IvaClientPatch.styledChoice(a, on ? ARCH_ASK : ARCH_BACK_ASK, on ? ARCH_ASK_TEXT : "Заявка снова появится в «Заявках».",
+            new String[]{on ? ARCH_ON : ARCH_OFF}, new IvaClientPatch.Choice() {
+                @Override public void pick(int i) { ordArchive(a, r, on); }
+            });
     }
 
-    /** Строки шторки «подпись — значение»; пустые поля не показываются. */
-    static List<String[]> ordFields(Map<String, String> r, String nice) {
-        List<String[]> out = new ArrayList<String[]>();
-        ordAdd(out, "Дата", nice == null || nice.trim().isEmpty() ? r.get("created_at") : nice);
-        out.add(new String[]{"Статус", ordStatus(r.get("status"))});
-        ordAdd(out, "Инструменты", r.get("tools"));
-        String days = r.get("days") == null ? "" : r.get("days").trim();
-        ordAdd(out, "Срок", days.matches("\\d+") ? (days.equals("0") ? "" : days + " дн.") : days);
-        ordAdd(out, "Получение", r.get("get_method"));
-        ordAdd(out, "Адрес", r.get("address"));
-        ordAdd(out, "Имя", r.get("name"));
-        ordAdd(out, "Телефон", r.get("phone"));
-        ordAdd(out, "Комментарий", r.get("comment"));
-        ordAdd(out, "Номер заявки", r.get("id"));
-        return out;
+    static String archBody(String id, boolean on) throws Exception {
+        JSONObject b = new JSONObject();
+        b.put("p_id", id);
+        b.put("p_on", on);
+        return b.toString();
     }
 
-    static void ordAdd(List<String[]> out, String label, String v) {
-        if (v != null && !v.trim().isEmpty() && !"null".equals(v.trim())) out.add(new String[]{label, v.trim()});
+    static void ordArchive(final Activity a, final Map<String, String> r, final boolean on) {
+        final String id = ordVal(r.get("id"));
+        if (id.isEmpty()) return;
+        new Thread(new Runnable() {
+            @Override public void run() {
+                String code = "";
+                try {
+                    String[] x = IvaClientPatch.apiCall(a, ARCH_RPC, "POST", archBody(id, on), true);
+                    code = x == null ? "" : String.valueOf(x[0]);
+                    if ("200".equals(code) && x.length > 1 && x[1] != null) code = x[1].trim().equals("1") ? "ok" : "no";
+                } catch (Throwable ignore) {}
+                final String fc = code;
+                ordH().post(new Runnable() {
+                    @Override public void run() {
+                        if ("ok".equals(fc)) {
+                            if (on) ordArchived.add(id); else ordArchived.remove(id);
+                            try { if (ordDialog != null) ordDialog.dismiss(); } catch (Throwable ignore) {}
+                            try { ordRender(a); } catch (Throwable ignore) {}
+                            try { archRender(a); } catch (Throwable ignore) {}
+                            Toast.makeText(a, on ? "Заявка в архиве" : "Заявка снова в «Заявках»", Toast.LENGTH_SHORT).show();
+                        } else if ("404".equals(fc)) {
+                            archMissing = true;
+                            Toast.makeText(a, ARCH_NO_DB, Toast.LENGTH_LONG).show();
+                        } else if ("no".equals(fc)) {
+                            Toast.makeText(a, ARCH_ONLY_CLOSED, Toast.LENGTH_LONG).show();
+                        } else {
+                            Toast.makeText(a, "Не получилось — проверьте интернет", Toast.LENGTH_LONG).show();
+                        }
+                    }
+                });
+            }
+        }).start();
     }
+
+    /** Пункт «Архив заявок» в кабинете клиента — как штатные строки кабинета (bg_card, значок, подпись, «›»). */
+    static void profileArchiveRow(final Activity a) {
+        int callId = a.getResources().getIdentifier("rowCall", "id", a.getPackageName());
+        View call = callId == 0 ? null : a.findViewById(callId);
+        if (call == null || !(call.getParent() instanceof ViewGroup)) return;
+        ViewGroup list = (ViewGroup) call.getParent();
+        View row = list.findViewWithTag(ARCH_ROW_TAG);
+        boolean client = IvaClientPatch.isClient(a);
+        if (row == null) {
+            if (!client) return;
+            row = archRowView(a);
+            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2);
+            lp.topMargin = dp(a, 12);
+            list.addView(row, list.indexOfChild(call), lp);
+        }
+        row.setVisibility(client ? View.VISIBLE : View.GONE);
+    }
+
+    static View archRowView(final Activity a) {
+        LinearLayout row = new LinearLayout(a);
+        row.setTag(ARCH_ROW_TAG);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setGravity(Gravity.CENTER_VERTICAL);
+        Drawable bg = drawable(a, "bg_card");
+        if (bg != null) row.setBackground(bg);
+        row.setPadding(dp(a, 16), dp(a, 16), dp(a, 16), dp(a, 16));
+        android.widget.ImageView ic = new android.widget.ImageView(a);
+        Drawable cart = drawable(a, "ic_cart");
+        if (cart != null) { ic.setImageDrawable(cart.mutate()); ic.setColorFilter(color(a, "orange", 0xffff8f1f)); }
+        row.addView(ic, new LinearLayout.LayoutParams(dp(a, 20), dp(a, 20)));
+        LinearLayout col = new LinearLayout(a);
+        col.setOrientation(LinearLayout.VERTICAL);
+        TextView t = new TextView(a);
+        t.setText(ARCH_TITLE);
+        t.setTextColor(color(a, "text", 0xfff2f4f8));
+        t.setTextSize(15f);
+        col.addView(t);
+        TextView s = new TextView(a);
+        s.setText(ARCH_SUB);
+        s.setTextColor(color(a, "gray", 0xff9aa1b0));
+        s.setTextSize(13f);
+        col.addView(s);
+        LinearLayout.LayoutParams cl = new LinearLayout.LayoutParams(0, -2, 1f);
+        cl.leftMargin = dp(a, 14);
+        row.addView(col, cl);
+        android.widget.ImageView ch = new android.widget.ImageView(a);
+        Drawable chev = drawable(a, "ic_chevron");
+        if (chev != null) ch.setImageDrawable(chev);
+        row.addView(ch, new LinearLayout.LayoutParams(dp(a, 20), dp(a, 20)));
+        row.setClickable(true);
+        row.setOnClickListener(new View.OnClickListener() {
+            @Override public void onClick(View v) { try { openArchive(a); } catch (Throwable ignore) {} }
+        });
+        return row;
+    }
+
+    /** Экран «Архив заявок» (окно на весь экран, как выбор города; «Назад» закрывает). */
+    static void openArchive(final Activity a) {
+        if (archDialog != null && archDialog.isShowing()) return;
+        int cBg = color(a, "bg", 0xff101217);
+        LinearLayout root = new LinearLayout(a);
+        root.setOrientation(LinearLayout.VERTICAL);
+        root.setBackgroundColor(cBg);
+        TextView back = new TextView(a);
+        back.setText("‹ Назад");
+        back.setTextColor(color(a, "orange", 0xffff8f1f));
+        back.setTextSize(15f);
+        back.setTypeface(null, Typeface.BOLD);
+        back.setPadding(dp(a, 16), dp(a, 16), dp(a, 16), dp(a, 8));
+        root.addView(back, new LinearLayout.LayoutParams(-2, -2));
+        TextView title = new TextView(a);
+        title.setText(ARCH_TITLE);
+        title.setTextColor(color(a, "text", 0xfff2f4f8));
+        title.setTextSize(21f);
+        title.setTypeface(null, Typeface.BOLD);
+        title.setPadding(dp(a, 16), 0, dp(a, 16), 0);
+        root.addView(title, new LinearLayout.LayoutParams(-2, -2));
+        TextView sub = new TextView(a);
+        sub.setText(ARCH_SUB);
+        sub.setTextColor(color(a, "gray2", 0xff6b7080));
+        sub.setTextSize(12f);
+        sub.setPadding(dp(a, 16), dp(a, 4), dp(a, 16), dp(a, 8));
+        root.addView(sub, new LinearLayout.LayoutParams(-2, -2));
+        ScrollView sc = new ScrollView(a);
+        LinearLayout list = new LinearLayout(a);
+        list.setOrientation(LinearLayout.VERTICAL);
+        list.setPadding(dp(a, 16), dp(a, 8), dp(a, 16), dp(a, 24));
+        sc.addView(list, new FrameLayout.LayoutParams(-1, -2));
+        root.addView(sc, new LinearLayout.LayoutParams(-1, 0, 1f));
+        final Dialog d = new Dialog(a, android.R.style.Theme_Material_NoActionBar);
+        d.setContentView(root, new ViewGroup.LayoutParams(-1, -1));
+        d.setCancelable(true);
+        android.view.Window w = d.getWindow();
+        if (w != null) {
+            w.setLayout(-1, -1);
+            w.setBackgroundDrawable(new ColorDrawable(cBg));
+            try {
+                w.addFlags(android.view.WindowManager.LayoutParams.FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS);
+                w.setStatusBarColor(cBg);
+                w.setNavigationBarColor(cBg);
+            } catch (Throwable ignore) {}
+        }
+        back.setOnClickListener(new View.OnClickListener() { @Override public void onClick(View v) { d.dismiss(); } });
+        d.setOnDismissListener(new DialogInterface.OnDismissListener() {
+            @Override public void onDismiss(DialogInterface x) { if (archDialog == d) { archDialog = null; archList = null; } }
+        });
+        archDialog = d;
+        archList = list;
+        archRender(a);
+        d.show();
+        ordFetch(a);   // свежие заявки и архив
+    }
+
+    static void archRender(Activity a) {
+        LinearLayout list = archList;
+        if (list == null || archDialog == null || !archDialog.isShowing()) return;
+        list.removeAllViews();
+        if (!ordMine(a)) { list.addView(ordHint(a, ordFailed ? "Не удалось загрузить заявки — проверьте интернет" : "Загрузка…")); return; }
+        if (archMissing) { list.addView(ordHint(a, ARCH_NO_DB)); return; }
+        int n = 0;
+        for (Map<String, String> r : ordRows) {
+            if (!ordArchived.contains(r.get("id"))) continue;
+            list.addView(ordCardView(a, r, true));
+            n++;
+        }
+        if (n == 0) list.addView(ordHint(a, ARCH_EMPTY));
+    }
+
+    // ── подробности заявки (шторка 85%) ──
 
     static void ordOpen(final Activity a, String key) {
         List<String> dates = new ArrayList<String>(), tools = new ArrayList<String>();
         for (Map<String, String> r : ordRows) { dates.add(ordNice(a, r.get("created_at"))); tools.add(r.get("tools")); }
         int i = ordFind(dates, tools, key);
-        if (i < 0) return;
+        if (i >= 0) ordOpenRow(a, ordRows.get(i), ordArchived.contains(ordRows.get(i).get("id")));
+    }
+
+    static void ordOpenRow(final Activity a, final Map<String, String> r, final boolean archived) {
         if (ordDialog != null && ordDialog.isShowing()) return;
-        Map<String, String> r = ordRows.get(i);
         int cBg = color(a, "bg", 0xff101217), cText = color(a, "text", 0xfff2f4f8), cGray = color(a, "gray", 0xff9aa1b0);
         int cLine = color(a, "line", 0xff262b35), cOrange = color(a, "orange", 0xffff8f1f);
 
@@ -1246,7 +1774,7 @@ public final class IvaOrderPatch {
         sh.addView(grip, gl);
 
         TextView title = new TextView(a);
-        title.setText("Заявка");
+        title.setText(archived ? "Заявка в архиве" : "Заявка");
         title.setTextColor(cText);
         title.setTextSize(18f);
         title.setTypeface(null, Typeface.BOLD);
@@ -1259,26 +1787,42 @@ public final class IvaOrderPatch {
         body.setPadding(dp(a, 16), 0, dp(a, 16), dp(a, 12));
         sc.addView(body, new FrameLayout.LayoutParams(-1, -2));
         sh.addView(sc, new LinearLayout.LayoutParams(-1, 0, 1f));
-        for (String[] f : ordFields(r, ordNice(a, r.get("created_at")))) {
-            TextView l = new TextView(a);
-            l.setText(f[0]);
-            l.setTextColor(cGray);
-            l.setTextSize(12f);
-            LinearLayout.LayoutParams ll = new LinearLayout.LayoutParams(-1, -2);
-            ll.topMargin = dp(a, 12);
-            body.addView(l, ll);
-            TextView v = new TextView(a);
-            v.setText(f[1]);
-            v.setTextSize(15f);
-            v.setTextIsSelectable(true);
-            boolean st = "Статус".equals(f[0]);
-            v.setTextColor(st ? cOrange : cText);
-            if (st) v.setTypeface(null, Typeface.BOLD);
-            LinearLayout.LayoutParams vl = new LinearLayout.LayoutParams(-1, -2);
-            vl.topMargin = dp(a, 2);
-            body.addView(v, vl);
+        for (String[] f : ordFields(r, ordNice(a, r.get("created_at")))) ordFieldView(a, body, f, "Статус".equals(f[0]));
+        final LinearLayout prokat = new LinearLayout(a);
+        prokat.setOrientation(LinearLayout.VERTICAL);
+        body.addView(prokat, new LinearLayout.LayoutParams(-1, -2));
+        final List<String> owners = ordOwners(a, r);
+        ordFillProkat(a, prokat, owners);
+        boolean missing = false;
+        for (String e : owners) if (!ordProkat.containsKey(e)) missing = true;
+        if (missing) {
+            new Thread(new Runnable() {
+                @Override public void run() {
+                    ordLoadProkat(a, owners);
+                    ordH().post(new Runnable() { @Override public void run() { try { ordFillProkat(a, prokat, owners); } catch (Throwable ignore) {} } });
+                }
+            }).start();
         }
 
+        final Dialog d = new Dialog(a, android.R.style.Theme_Material_NoActionBar);
+        if (archived || ordClosed(r)) {                        // «В архив» — только у закрытых; в архиве — «Вернуть»
+            TextView arch = new TextView(a);
+            arch.setText(archived ? ARCH_OFF : ARCH_ON);
+            arch.setGravity(Gravity.CENTER);
+            arch.setTextColor(cOrange);
+            arch.setTextSize(15f);
+            arch.setTypeface(null, Typeface.BOLD);
+            arch.setBackground(IvaClientPatch.choiceBg(a, "card", 0xff1a1d24, IvaClientPatch.CHOICE_RADIUS_DP));
+            LinearLayout.LayoutParams al = new LinearLayout.LayoutParams(-1, dp(a, 50));
+            al.setMargins(dp(a, 16), dp(a, 8), dp(a, 16), 0);
+            sh.addView(arch, al);
+            arch.setOnClickListener(new View.OnClickListener() {
+                @Override public void onClick(View v) {
+                    if (archMissing) { Toast.makeText(a, ARCH_NO_DB, Toast.LENGTH_LONG).show(); return; }
+                    ordArchive(a, r, !archived);
+                }
+            });
+        }
         TextView close = new TextView(a);
         close.setText("Закрыть");
         close.setGravity(Gravity.CENTER);
@@ -1291,7 +1835,6 @@ public final class IvaOrderPatch {
         cl.setMargins(dp(a, 16), dp(a, 8), dp(a, 16), dp(a, 16));
         sh.addView(close, cl);
 
-        final Dialog d = new Dialog(a, android.R.style.Theme_Material_NoActionBar);
         d.setContentView(root, new ViewGroup.LayoutParams(-1, -1));
         d.setCancelable(true);   // системная «Назад» закрывает шторку
         android.view.Window w = d.getWindow();
@@ -1309,5 +1852,63 @@ public final class IvaOrderPatch {
         d.show();
         sh.setTranslationY(screen);                  // выезжает снизу, как шторка фильтра
         sh.animate().translationY(0).setDuration(220).start();
+    }
+
+    static void ordFieldView(final Activity a, LinearLayout body, final String[] f, boolean accent) {
+        TextView l = new TextView(a);
+        l.setText(f[0]);
+        l.setTextColor(color(a, "gray", 0xff9aa1b0));
+        l.setTextSize(12f);
+        LinearLayout.LayoutParams ll = new LinearLayout.LayoutParams(-1, -2);
+        ll.topMargin = dp(a, 12);
+        body.addView(l, ll);
+        TextView v = new TextView(a);
+        v.setText(f[1]);
+        v.setTextSize(15f);
+        v.setTextIsSelectable(!"Телефон".equals(f[0]));
+        v.setTextColor(accent ? color(a, "orange", 0xffff8f1f) : color(a, "text", 0xfff2f4f8));
+        if (accent) v.setTypeface(null, Typeface.BOLD);
+        if ("Телефон".equals(f[0])) {                          // телефон проката — нажать, чтобы позвонить (набор номера)
+            v.setTextColor(color(a, "orange", 0xffff8f1f));
+            v.setOnClickListener(new View.OnClickListener() {
+                @Override public void onClick(View x) {
+                    try { a.startActivity(new android.content.Intent(android.content.Intent.ACTION_DIAL, android.net.Uri.parse("tel:" + f[1].replaceAll("[^0-9+]", "")))); }
+                    catch (Throwable ignore) {}
+                }
+            });
+        }
+        LinearLayout.LayoutParams vl = new LinearLayout.LayoutParams(-1, -2);
+        vl.topMargin = dp(a, 2);
+        body.addView(v, vl);
+    }
+
+    /** Блок «Прокат» в шторке: по каждому прокату заявки (обычно один). */
+    static void ordFillProkat(Activity a, LinearLayout box, List<String> owners) {
+        box.removeAllViews();
+        TextView h = new TextView(a);
+        h.setText("Прокат");
+        h.setTextColor(color(a, "text", 0xfff2f4f8));
+        h.setTextSize(16f);
+        h.setTypeface(null, Typeface.BOLD);
+        LinearLayout.LayoutParams hl = new LinearLayout.LayoutParams(-1, -2);
+        hl.topMargin = dp(a, 22);
+        box.addView(h, hl);
+        int shown = 0;
+        boolean loading = false;
+        for (String e : owners) {
+            Map<String, String> ad = ordProkat.get(e);
+            if (ad == null) { loading = true; continue; }
+            for (String[] f : ordProkatFields(ad)) ordFieldView(a, box, f, false);
+            shown++;
+        }
+        if (shown == 0) {
+            TextView t = new TextView(a);
+            t.setText(loading ? "Загрузка данных проката…" : "Данные проката не найдены. Напишите в «Чат» — прокат ответит.");
+            t.setTextColor(color(a, "gray", 0xff9aa1b0));
+            t.setTextSize(13f);
+            LinearLayout.LayoutParams tl = new LinearLayout.LayoutParams(-1, -2);
+            tl.topMargin = dp(a, 8);
+            box.addView(t, tl);
+        }
     }
 }

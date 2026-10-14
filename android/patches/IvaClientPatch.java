@@ -1649,6 +1649,7 @@ public final class IvaClientPatch {
         if (hubStyling) return;
         try { installClientNav(a); } catch (Throwable ignore) {}   // первый showTab при запуске — кнопки уже наши
         try { if ("profile".equals(tab)) profileContacts(a); } catch (Throwable ignore) {}
+        try { adminTabsFlat(a); } catch (Throwable ignore) {}
         try {
             String t = tab == null ? "" : tab;
             if (hubVisible) {
@@ -1686,6 +1687,85 @@ public final class IvaClientPatch {
             if (id != 0 && row.findViewById(id) != null) return false;
         }
         return true;
+    }
+
+    // ── 10.63: окно выбора в стиле приложения (просьба владельца 14.10.2026) ──
+    // Тёмная карточка (фон bg, рамка line), варианты — тёмные «пузыри» (card, рамка line) с оранжевым жирным текстом,
+    // «Отмена» — такой же пузырь с серым текстом. Нажатие мимо, «Отмена» и системная «Назад» — ничего не выбрано.
+    interface Choice { void pick(int index); }
+    static final String CHOICE_CANCEL = "Отмена";
+    static final int CHOICE_BUBBLE_DP = 50, CHOICE_RADIUS_DP = 14, CHOICE_CARD_RADIUS_DP = 20, CHOICE_MAX_DP = 360;
+
+    static GradientDrawable choiceBg(Activity a, String fill, int def, int radiusDp) {
+        GradientDrawable g = new GradientDrawable();
+        g.setColor(navColor(a, fill, def));
+        g.setStroke(Math.max(1, hubDp(a, 1)), navColor(a, "line", 0xff262b35));
+        g.setCornerRadius(hubDp(a, radiusDp));
+        return g;
+    }
+
+    static Dialog styledChoice(final Activity a, String title, String text, final String[] items, final Choice cb) {
+        int orange = navColor(a, "orange", 0xffff8f1f), gray = navColor(a, "gray", 0xff9aa1b0), white = navColor(a, "text", 0xfff2f4f8);
+        final Dialog d = new Dialog(a);
+        d.requestWindowFeature(android.view.Window.FEATURE_NO_TITLE);
+        LinearLayout card = new LinearLayout(a);
+        card.setOrientation(LinearLayout.VERTICAL);
+        card.setBackground(choiceBg(a, "bg", 0xff101217, CHOICE_CARD_RADIUS_DP));
+        card.setPadding(hubDp(a, 18), hubDp(a, 18), hubDp(a, 18), hubDp(a, 14));
+        if (title != null && !title.isEmpty()) {
+            TextView t = new TextView(a);
+            t.setText(title);
+            t.setTextColor(white);
+            t.setTextSize(17f);
+            t.setTypeface(null, android.graphics.Typeface.BOLD);
+            t.setGravity(Gravity.CENTER);
+            card.addView(t, new LinearLayout.LayoutParams(-1, -2));
+        }
+        if (text != null && !text.isEmpty()) {
+            TextView t = new TextView(a);
+            t.setText(text);
+            t.setTextColor(gray);
+            t.setTextSize(13f);
+            t.setGravity(Gravity.CENTER);
+            LinearLayout.LayoutParams tl = new LinearLayout.LayoutParams(-1, -2);
+            tl.topMargin = hubDp(a, 6);
+            card.addView(t, tl);
+        }
+        for (int i = 0; i <= items.length; i++) {
+            final int idx = i < items.length ? i : -1;
+            TextView b = new TextView(a);
+            b.setText(idx >= 0 ? items[i] : CHOICE_CANCEL);
+            b.setTextColor(idx >= 0 ? orange : gray);
+            b.setTextSize(15f);
+            b.setTypeface(null, idx >= 0 ? android.graphics.Typeface.BOLD : android.graphics.Typeface.NORMAL);
+            b.setGravity(Gravity.CENTER);
+            b.setBackground(choiceBg(a, "card", 0xff1a1d24, CHOICE_RADIUS_DP));
+            b.setClickable(true);
+            b.setOnClickListener(new View.OnClickListener() {
+                @Override public void onClick(View v) {
+                    try { d.dismiss(); } catch (Throwable ignore) {}
+                    if (idx >= 0 && cb != null) try { cb.pick(idx); } catch (Throwable ignore) {}
+                }
+            });
+            LinearLayout.LayoutParams bl = new LinearLayout.LayoutParams(-1, hubDp(a, CHOICE_BUBBLE_DP));
+            bl.topMargin = hubDp(a, i == 0 ? 16 : 8);
+            card.addView(b, bl);
+        }
+        d.setContentView(card);
+        d.setCancelable(true);
+        d.setCanceledOnTouchOutside(true);
+        android.view.Window w = d.getWindow();
+        if (w != null) {
+            w.setBackgroundDrawable(new android.graphics.drawable.ColorDrawable(Color.TRANSPARENT));
+            w.addFlags(android.view.WindowManager.LayoutParams.FLAG_DIM_BEHIND);
+            w.setDimAmount(0.6f);
+        }
+        d.show();
+        if (w != null) {                                       // ширина — после show (иначе её перекрывает тема окна)
+            int screen = a.getResources().getDisplayMetrics().widthPixels;
+            w.setLayout(Math.min(screen - hubDp(a, 48), hubDp(a, CHOICE_MAX_DP)), ViewGroup.LayoutParams.WRAP_CONTENT);
+        }
+        return d;
     }
 
     static ViewGroup hubPages(Activity a) {
@@ -1755,16 +1835,15 @@ public final class IvaClientPatch {
         LinearLayout root = new LinearLayout(a);
         root.setOrientation(LinearLayout.VERTICAL);
         root.setClickable(true);   // нажатия не проходят на спрятанные страницы под разделом
-        // 10.62: вкладки как у админа (штатные hubTabMy/hubTabAdd): карточка bg_card, две половины, текст 14sp
-        // и подчёркивание 3dp; у выбранной — оранжевый «пузырь»: сверху закруглён, снизу ровный, по ширине подчёркивания.
+        // 10.63: вкладки один в один как у админа (штатные hubTabMy/hubTabAdd): общая карточка-«пузырь» сверху
+        // закруглена, снизу ровная — по размеру подчёркивания; текст 14sp, выбранная — оранжевая жирная и с линией 3dp.
         LinearLayout tabs = new LinearLayout(a);
         tabs.setOrientation(LinearLayout.HORIZONTAL);
-        int cardId = a.getResources().getIdentifier("bg_card", "drawable", a.getPackageName());
-        if (cardId != 0) tabs.setBackgroundResource(cardId);
+        tabs.setBackground(tabCard(a));
         tabs.addView(hubTabButton(a, "Избранное", HUB_TAB_FAV_TAG, 0), new LinearLayout.LayoutParams(0, -2, 1f));
         tabs.addView(hubTabButton(a, "Мои инструменты", HUB_TAB_MINE_TAG, 1), new LinearLayout.LayoutParams(0, -2, 1f));
         LinearLayout.LayoutParams tl = new LinearLayout.LayoutParams(-1, -2);
-        tl.setMargins(hubDp(a, 16), hubDp(a, 12), hubDp(a, 16), hubDp(a, 8));
+        tl.setMargins(hubDp(a, 16), hubDp(a, 16), hubDp(a, 16), hubDp(a, 12));   // как у админа: поля страницы 16dp, снизу 12dp
         root.addView(tabs, tl);
         ScrollView scroll = new ScrollView(a);
         scroll.setFillViewport(true);
@@ -1785,7 +1864,7 @@ public final class IvaClientPatch {
     static LinearLayout hubTabButton(final Activity a, String text, String tag, final int index) {
         LinearLayout b = new LinearLayout(a);
         b.setOrientation(LinearLayout.VERTICAL);
-        b.setGravity(Gravity.CENTER_HORIZONTAL);
+        b.setGravity(Gravity.CENTER);                       // как штатные: gravity center, paddingTop 12dp
         b.setPadding(0, hubDp(a, HUB_TAB_TOP_DP), 0, 0);
         b.setTag(tag);
         b.setClickable(true);
@@ -1794,7 +1873,6 @@ public final class IvaClientPatch {
         t.setTag(tag + HUB_TAB_TEXT);
         t.setGravity(Gravity.CENTER);
         t.setTextSize(14f);
-        t.setSingleLine(true);
         b.addView(t, new LinearLayout.LayoutParams(-2, -2));
         View line = new View(a);
         line.setTag(tag + HUB_TAB_LINE);
@@ -1812,11 +1890,33 @@ public final class IvaClientPatch {
         return b;
     }
 
-    /** «Пузырь» выбранной вкладки: сверху закруглён как углы карточки, снизу ровный — стоит на подчёркивании. */
+    /** «Пузырь» вкладок: сверху закруглён как углы карточки, снизу ровный — заканчивается подчёркиванием. */
     static float[] hubBubbleRadii(float r) {
         return new float[]{r, r, r, r, 0, 0, 0, 0};
     }
 
+    /** Карточка вкладок: цвета штатной bg_card (фон card, рамка 1dp line), углы 16dp только сверху. */
+    static GradientDrawable tabCard(Activity a) {
+        GradientDrawable g = new GradientDrawable();
+        g.setColor(navColor(a, "card", 0xff1a1d24));
+        g.setStroke(Math.max(1, hubDp(a, 1)), navColor(a, "line", 0xff262b35));
+        g.setCornerRadii(hubBubbleRadii(hubDp(a, HUB_TAB_RADIUS_DP)));
+        return g;
+    }
+
+    /** 10.63: у админа (штатные вкладки «Мой инструмент / Добавить инструмент») карточка снизу ровная. */
+    static void adminTabsFlat(Activity a) {
+        int id = a.getResources().getIdentifier("hubTabMy", "id", a.getPackageName());
+        View my = id == 0 ? null : a.findViewById(id);
+        if (my == null || !(my.getParent() instanceof ViewGroup)) return;
+        ViewGroup card = (ViewGroup) my.getParent();
+        if (ADMIN_TABS_TAG.equals(card.getTag())) return;
+        card.setBackground(tabCard(a));
+        card.setTag(ADMIN_TABS_TAG);
+    }
+    static final String ADMIN_TABS_TAG = "iva_admin_tabs_flat";
+
+    /** Как штатный showAdmHub: выбранная — оранжевая жирная и линия, другая — серая обычная, линии нет. */
     static void styleHubTabs(Activity a, View hub) {
         int orange = navColor(a, "orange", 0xffff8f1f);
         int gray = navColor(a, "gray", 0xff9aa1b0);
@@ -1825,17 +1925,10 @@ public final class IvaClientPatch {
             View v = hub.findViewWithTag(tags[i]);
             if (v == null) continue;
             boolean on = hubTab == i;
-            if (on) {
-                GradientDrawable g = new GradientDrawable();
-                g.setColor(orange);
-                g.setCornerRadii(hubBubbleRadii(hubDp(a, HUB_TAB_RADIUS_DP)));
-                v.setBackground(g);
-            } else {
-                v.setBackground(null);
-            }
+            v.setBackground(null);
             View tv = v.findViewWithTag(tags[i] + HUB_TAB_TEXT);
             if (tv instanceof TextView) {
-                ((TextView) tv).setTextColor(on ? Color.WHITE : gray);
+                ((TextView) tv).setTextColor(on ? orange : gray);
                 ((TextView) tv).setTypeface(null, on ? android.graphics.Typeface.BOLD : android.graphics.Typeface.NORMAL);
             }
             View line = v.findViewWithTag(tags[i] + HUB_TAB_LINE);
