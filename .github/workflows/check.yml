@@ -46,7 +46,7 @@ jobs:
           mkdir -p "$C"
           javac -encoding UTF-8 -source 8 -target 8 -nowarn -bootclasspath "$JAR" -d "$C" \
             android/patches/IvaPatch.java android/patches/IvaClientPatch.java android/patches/IvaSearchPatch.java android/patches/IvaChatPatch.java android/patches/IvaOrderPatch.java android/patches/IvaNotifyPatch.java \
-            android/patches/IvaReviewPatch.java \
+            android/patches/IvaReviewPatch.java android/patches/IvaPushPatch.java \
             tools/catalog-audit/IvaCatalogAudit.java
           python3 tools/catalog-audit/fetch.py "$D" | tee "$RUNNER_TEMP/fetch.log"
           echo "::notice title=Каталог · Выгрузка::$(tr '\n' ' ' < "$RUNNER_TEMP/fetch.log" | cut -c1-900)"

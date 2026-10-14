@@ -62,11 +62,11 @@ concurrency:
 env:
   SRC_APK: ProkatInstrumenta-10.14.apk
   OLD_NAME: '10.14'
-  NEW_NAME: '10.73'
-  NEW_CODE: '147'
+  NEW_NAME: '10.74'
+  NEW_CODE: '148'
   APKTOOL_VER: '2.10.0'
   # Тестовый канал (жёлтая карточка владельца на сайте): описание сборки для app-test.json
-  TEST_NOTES: 'Тестовая сборка 10.73: у админов в «Настройки» → «Уведомления» появилось «Расписание» — в какие дни и часы приходят уведомления (у каждого дня свои часы, можно через полночь или круглосуточно). Что придёт в другое время, покажем в начале разрешённого. По умолчанию выключено — всё как раньше. Вернуться к 10.72 можно по просьбе.'
+  TEST_NOTES: 'Тестовая сборка 10.74: мгновенные уведомления для админов — о новых сообщениях и заявках сразу, даже когда приложение закрыто (через Firebase, нужны сервисы Google). Заработают, когда владелец настроит Firebase и применит SQL; до этого всё как в 10.73 (проверка раз в ~15 минут). Состояние — в «Настройки» → «Уведомления». У клиентов без изменений. Вернуться к 10.73 можно по просьбе.'
   TEST_REINSTALL: 'false'  # 10.15–10.57 подписаны одним ключом №6 — ставится поверх, удалять не нужно
   # Эталон ключа №6 (решение №22, 05.10.2026) — тот же, что в keystore-check.yml и docs/КЛЮЧ-ПОДПИСИ.md
   EXPECTED: 5D2B9F8BB54AD0B816A779B5991746957EBD6FA056D8A63D1D1635077BED5DDE
@@ -109,7 +109,7 @@ jobs:
           mkdir -p "$C"
           # Ошибки компилятора и проваленные проверки дублируются в аннотации задачи.
           fail() { grep -E "$2" "$1" 2>/dev/null | while IFS= read -r l; do echo "::error title=$3::$l"; done; exit 1; }
-          if ! javac -encoding UTF-8 -source 8 -target 8 -nowarn -bootclasspath "$ANDROID_JAR" -d "$C" android/patches/IvaPatch.java android/patches/IvaClientPatch.java android/patches/IvaSearchPatch.java android/patches/IvaChatPatch.java android/patches/IvaOrderPatch.java android/patches/IvaNotifyPatch.java android/patches/IvaReviewPatch.java 2>&1 | tee "$RUNNER_TEMP/j1.log"; then
+          if ! javac -encoding UTF-8 -source 8 -target 8 -nowarn -bootclasspath "$ANDROID_JAR" -d "$C" android/patches/IvaPatch.java android/patches/IvaClientPatch.java android/patches/IvaSearchPatch.java android/patches/IvaChatPatch.java android/patches/IvaOrderPatch.java android/patches/IvaNotifyPatch.java android/patches/IvaReviewPatch.java android/patches/IvaPushPatch.java 2>&1 | tee "$RUNNER_TEMP/j1.log"; then
             fail "$RUNNER_TEMP/j1.log" 'error:|ошибка:' 'Компиляция IvaPatch'
           fi
           T="$RUNNER_TEMP/tcls"
@@ -140,6 +140,9 @@ jobs:
           # 10.65: служба фоновой проверки уведомлений (этап 2, JobScheduler) + RECEIVE_BOOT_COMPLETED — после перезагрузки сама
           python3 android/patches/axml_service.py "$W/AndroidManifest.xml"
           echo "::notice title=Манифест::служба уведомлений IvaNotifyPatch\$Bg (BIND_JOB_SERVICE) и RECEIVE_BOOT_COMPLETED"
+          # 10.74: мгновенные уведомления админам (FCM): приёмник IvaPushPatch\$Rx, c2dm RECEIVE, queries com.google.android.gms
+          python3 android/patches/axml_push.py "$W/AndroidManifest.xml"
+          echo "::notice title=Манифест::приёмник push IvaPushPatch\$Rx (c2dm SEND/RECEIVE) и queries сервисов Google"
           N=$(ls -d "$W"/smali_classes* 2>/dev/null | wc -l)
           echo "дополнительных dex: $N"
           echo "::notice title=Разбор::подготовка к пересборке (дополнительных dex: $N)"
@@ -154,7 +157,7 @@ jobs:
           cp "$RUNNER_TEMP/dex/classes.dex" "$RUNNER_TEMP/add/classes$NEXT.dex"
           (cd "$RUNNER_TEMP/add" && zip -q -X "$RUNNER_TEMP/unsigned.apk" "classes$NEXT.dex")
           unzip -Z1 "$RUNNER_TEMP/unsigned.apk" | grep dex
-          echo "::notice title=Разбор::IvaPatch, IvaClientPatch, IvaSearchPatch, IvaChatPatch, IvaOrderPatch, IvaNotifyPatch и IvaReviewPatch добавлены в classes$NEXT.dex; на главной строка Ваш город и шторка фильтров, чат по инструментам (обновляется сам), заявка со сроком у каждого инструмента, настройки уведомлений с логотипом"
+          echo "::notice title=Разбор::IvaPatch, IvaClientPatch, IvaSearchPatch, IvaChatPatch, IvaOrderPatch, IvaNotifyPatch, IvaReviewPatch и IvaPushPatch добавлены в classes$NEXT.dex; на главной строка Ваш город и шторка фильтров, чат по инструментам (обновляется сам), заявка со сроком у каждого инструмента, настройки уведомлений с логотипом"
 
       - name: Выравнивание и подпись
         env:

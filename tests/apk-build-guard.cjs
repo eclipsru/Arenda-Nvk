@@ -47,7 +47,7 @@ try {
   // 10.40 — штатная строка «Клиент» остаётся единственной точкой входа, но открывает
   // отдельный полноэкранный экран настроек (не AlertDialog-форму); hook onActivityResult
   // в MainActivity по-прежнему отключён (с 10.39), фото возвращается во вспомогательный Fragment.
-  assert.match(code, /android\/patches\/IvaPatch\.java android\/patches\/IvaClientPatch\.java android\/patches\/IvaSearchPatch\.java android\/patches\/IvaChatPatch\.java android\/patches\/IvaOrderPatch\.java android\/patches\/IvaNotifyPatch\.java android\/patches\/IvaReviewPatch\.java 2>&1/,
+  assert.match(code, /android\/patches\/IvaPatch\.java android\/patches\/IvaClientPatch\.java android\/patches\/IvaSearchPatch\.java android\/patches\/IvaChatPatch\.java android\/patches\/IvaOrderPatch\.java android\/patches\/IvaNotifyPatch\.java android\/patches\/IvaReviewPatch\.java(?: android\/patches\/Iva\w+Patch\.java)* 2>&1/,
     `${f}: шаг 10.30 не компилирует IvaClientPatch`);
   assert.match(ap, /IvaClientPatch;->onProfile\(Landroid\/app\/Activity;\)V/,
     `${f}: hook onProfile не подключён`);
@@ -259,7 +259,7 @@ try {
   // 10.54: чат по инструментам — новый файл компилируется и в сборке, и в проверке; вход только через IvaPatch.onTab
   {
     const chat = R('android/patches/IvaChatPatch.java'), chk54 = R('.github/workflows/check.yml'), ip = R('android/patches/IvaPatch.java');
-    assert.ok(/javac [^\n]*android\/patches\/IvaSearchPatch\.java android\/patches\/IvaChatPatch\.java android\/patches\/IvaOrderPatch\.java android\/patches\/IvaNotifyPatch\.java android\/patches\/IvaReviewPatch\.java 2>&1/.test(code), 'build-apk.yml: IvaChatPatch.java не компилируется в сборку');
+    assert.ok(/javac [^\n]*android\/patches\/IvaSearchPatch\.java android\/patches\/IvaChatPatch\.java android\/patches\/IvaOrderPatch\.java android\/patches\/IvaNotifyPatch\.java android\/patches\/IvaReviewPatch\.java(?: android\/patches\/Iva\w+Patch\.java)* 2>&1/.test(code), 'build-apk.yml: IvaChatPatch.java не компилируется в сборку');
     assert.ok(chk54.includes('android/patches/IvaSearchPatch.java android/patches/IvaChatPatch.java android/patches/IvaOrderPatch.java android/patches/IvaNotifyPatch.java \\'), 'check.yml: IvaChatPatch.java не компилируется в проверке');
     const onTab = ip.slice(ip.indexOf('public static void onTab('), ip.indexOf('static boolean navSelected('));
     assert.ok(onTab.includes('try { IvaChatPatch.onShowTab(a, tab); } catch (Throwable ignore) {}'), 'IvaPatch.onTab: нет безопасного вызова IvaChatPatch');
@@ -373,7 +373,7 @@ try {
   // 10.56: «Настройки» в кабинете → уведомления с переключателями; свой опрос вместо штатного; без Firebase и новых разрешений.
   {
     const np = R('android/patches/IvaNotifyPatch.java'), chk56 = R('.github/workflows/check.yml');
-    assert.ok(code.includes('android/patches/IvaOrderPatch.java android/patches/IvaNotifyPatch.java android/patches/IvaReviewPatch.java 2>&1') && chk56.includes('android/patches/IvaNotifyPatch.java \\'),
+    assert.ok(/android\/patches\/IvaOrderPatch\.java android\/patches\/IvaNotifyPatch\.java android\/patches\/IvaReviewPatch\.java(?: android\/patches\/Iva\w+Patch\.java)* 2>&1/.test(code) && chk56.includes('android/patches/IvaNotifyPatch.java \\'),
       'IvaNotifyPatch.java не компилируется в сборке или в проверке');
     assert.ok(!R('android/patches/apply.py').includes('IvaNotifyPatch'), 'IvaNotifyPatch: новые smali-хуки не нужны (вход — IvaPatch.onTab)');
     // этап 1 — без фоновых служб; этап 2 (10.65) — отдельный раздел в конце файла, только JobScheduler (проверка в блоке 10.65)
@@ -768,6 +768,46 @@ try {
     for (const str of ['rowCall', 'rowMax', 'atSubKey', 'atCatKey', 'editToolSub', 'editToolCat', 'admParts', 'admDrill', 'admClientKey', 'partClientKey'])
       assert.ok(has(arsc14, str) || has(dex14, str), `APK 10.14: нет «${str}» — правка 10.67 не найдёт штатное поле`);
     assert.ok(/eq\("админ 10\.67: /.test(tp) && /eq\("подкатегория 10\.67: /.test(tp) && /eq\("кабинет 10\.67: /.test(tp), 'IvaPatchTest: проверки 10.67');
+  }
+  // 10.74 (решение владельца 14.10.2026, отменяет «без Firebase» от 13.10 — только для админов): мгновенные уведомления.
+  // Push — только сигнал «проверь сейчас»; показывает уведомление та же проверка, что и раньше (расписание, переключатели, «уже показано»).
+  {
+    const pp = R('android/patches/IvaPushPatch.java'), np = R('android/patches/IvaNotifyPatch.java'), tp = R('android/patches/test/IvaPatchTest.java');
+    const ax = R('android/patches/axml_push.py'), chk = R('.github/workflows/check.yml'), ap = R('android/patches/apply.py');
+    const fnp = (src, name) => { const mm = new RegExp(`static \\w+ ${name}\\(`).exec(src); const i = mm ? mm.index : -1; assert.ok(i > 0, `нет ${name}`); return src.slice(i, src.indexOf('\n    }\n', i)); };
+    assert.ok(!/^import com\.google|com\.google\.firebase|FirebaseMessaging|AlarmManager|WorkManager/m.test(pp), 'push 10.74: без библиотек Firebase и будильников — только API Android');
+    assert.ok(!/customer_profiles|passport|phone|surname/.test(pp), 'push 10.74: никаких персональных данных клиентов');
+    // приёмник: только сигнал → обычная проверка (окно открыто — wake, закрыто — bgRun), всегда finish
+    const rx = pp.slice(pp.indexOf('public static final class Rx'));
+    assert.ok(rx.includes('ACT_RECEIVE.equals(intent.getAction())') && rx.includes('IvaNotifyPatch.wake()') && rx.includes('IvaNotifyPatch.bgRun(app)')
+      && rx.includes('goAsync()') && /finally \{ try \{ pr\.finish\(\); \}/.test(rx) && rx.includes('setResultCode(-1)'),
+      'push 10.74: приёмник — только «проверь сейчас» через те же проверки, фоновый приём всегда завершается');
+    assert.ok(!/showNote|Notification\.Builder/.test(pp), 'push 10.74: уведомления показывает только IvaNotifyPatch (расписание 10.73 и «уже показано»)');
+    // токен у сервисов Google — как Firebase SDK (bindService + Messenger), всегда отвязываемся
+    const gt = fnp(pp, 'gmsToken');
+    assert.ok(gt.includes('new Intent(ACT_REGISTER).setPackage(GMS)') && gt.includes('m.what = 1;') && gt.includes('d.putString("pkg", app.getPackageName());')
+      && gt.includes('d.putBundle("data", extras);') && /\} finally \{\n\s+if \(bound\) try \{ app\.unbindService\(conn\); \}/.test(gt) && gt.includes('try { ht.quit(); }'),
+      'push 10.74: токен — протокол GmsRpc/MessengerIpcClient, соединение и поток всегда закрываются');
+    // только админам; вышли или вошёл клиент — токен убираем
+    const sy = fnp(pp, 'sync');
+    assert.ok(sy.includes('shouldForget(regEmail, tok, logged, admin)') && sy.includes('/rest/v1/rpc/iva_push_forget') && sy.includes('if (!logged || !admin || email == null'),
+      'push 10.74: регистрация только у админа; после выхода токен забывается');
+    assert.ok(fnp(pp, 'register').includes('IvaClientPatch.apiCall(a, "/rest/v1/rpc/iva_push_register"'), 'push 10.74: токен в базу — от имени вошедшего админа');
+    assert.ok(np.includes('try { IvaPushPatch.sync(a, email, logged, admin); } catch (Throwable ignore) {') && /IvaPushPatch\.sync[^]*?finally \{\n\s*busy = false;/.test(fnp(np, 'tick')),
+      'push 10.74: подключение — из обычного опроса, сбой не мешает уведомлениям');
+    assert.ok(fnp(np, 'wake').includes('if (busy) poll.postDelayed(TICK, 2000); else poll.post(TICK);'), 'push 10.74: приход push при открытом окне — проверка сразу');
+    const os = fnp(np, 'openSettings');
+    assert.ok(os.indexOf('IvaPushPatch.statusLine(a)') > os.indexOf('body.addView(note, nl);') && /if \(admin\) \{\s+\/\/ 10\.74/.test(os), 'push 10.74: строка состояния — только у админов');
+    assert.ok(!/com\.google\.firebase|FirebaseMessaging|com\.google\.android\.gms/.test(np), 'push 10.74: IvaNotifyPatch по-прежнему без Firebase (код push — отдельно)');
+    // манифест и сборка
+    assert.ok(ax.includes('RECEIVER = "ru.prokatnvsk.app.IvaPushPatch$Rx"') && ax.includes('SEND = "com.google.android.c2dm.permission.SEND"')
+      && ax.includes('(ns, exp_attr, NONE, TYPE_BOOL, 0xFFFFFFFF)') && ax.includes('GMS = "com.google.android.gms"'),
+      'push 10.74: приёмник в манифесте — exported, только от сервисов Google (c2dm SEND), queries для Android 11+');
+    assert.ok(code.indexOf('python3 android/patches/axml_push.py "$W/AndroidManifest.xml"') > code.indexOf('python3 android/patches/axml_service.py "$W/AndroidManifest.xml"'),
+      'push 10.74: axml_push.py — после axml_service.py');
+    assert.ok(/IvaReviewPatch\.java android\/patches\/IvaPushPatch\.java 2>&1/.test(code) && chk.includes('android/patches/IvaPushPatch.java'), 'push 10.74: IvaPushPatch компилируется в сборку и в проверку');
+    assert.ok(!ap.includes('IvaPushPatch'), 'push 10.74: новых вставок в smali нет');
+    assert.ok((tp.match(/eq\("push 10\.74: /g) || []).length >= 14, 'IvaPatchTest: проверки 10.74 (push)');
   }
   // 10.73 (решения владельца 14.10.2026): расписание уведомлений у админов — одно на все виды, у каждого дня свои часы,
   // пришедшее вне расписания показываем в начале разрешённого времени

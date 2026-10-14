@@ -366,6 +366,13 @@ public final class IvaNotifyPatch {
         poll.postDelayed(TICK, 5000);
     }
 
+    /** 10.74: пришёл push — проверить сейчас (идёт проверка — повторить через 2 с, чтобы не пропустить новое). */
+    static void wake() {
+        if (poll == null) poll = new Handler(Looper.getMainLooper());
+        poll.removeCallbacks(TICK);
+        if (busy) poll.postDelayed(TICK, 2000); else poll.post(TICK);
+    }
+
     static boolean loggedIn(Activity a) {
         Object t = get(a, "accessToken");
         return t instanceof String && !((String) t).trim().isEmpty();
@@ -399,6 +406,8 @@ public final class IvaNotifyPatch {
                     if (logged && !email.isEmpty()) checkMessages(a, email, admin, openWith);
                     checkUpdate(a, admin);
                 } catch (Throwable ignore) {
+                }
+                try { IvaPushPatch.sync(a, email, logged, admin); } catch (Throwable ignore) {   // 10.74: мгновенные (админам)
                 } finally {
                     busy = false;
                 }
@@ -1160,6 +1169,35 @@ public final class IvaNotifyPatch {
             LinearLayout.LayoutParams nl = new LinearLayout.LayoutParams(-1, -2);
             nl.topMargin = dp(a, 14);
             body.addView(note, nl);
+            if (admin) {                     // 10.74: мгновенные уведомления (push) — только у админов
+                final TextView push = new TextView(a);
+                push.setText(IvaPushPatch.statusLine(a));
+                push.setTextSize(12f);
+                push.setTextColor(cGray);
+                LinearLayout.LayoutParams pl = new LinearLayout.LayoutParams(-1, -2);
+                pl.topMargin = dp(a, 8);
+                body.addView(push, pl);
+                final int[] left = { 30 };
+                final Runnable upd = new Runnable() {
+                    @Override public void run() {
+                        try {
+                            push.setText(IvaPushPatch.statusLine(a));
+                            if (--left[0] > 0 && push.getWindowToken() != null) push.postDelayed(this, 2000);
+                        } catch (Throwable ignore) {}
+                    }
+                };
+                push.postDelayed(upd, 2000);
+                push.setOnClickListener(new View.OnClickListener() {
+                    @Override public void onClick(View v) {
+                        IvaPushPatch.retryNow(a);
+                        push.setText(IvaPushPatch.statusText("", ""));
+                        wake();
+                        left[0] = 30;
+                        push.removeCallbacks(upd);
+                        push.postDelayed(upd, 2000);
+                    }
+                });
+            }
 
             final Runnable refresh = new Runnable() {
                 @Override public void run() {

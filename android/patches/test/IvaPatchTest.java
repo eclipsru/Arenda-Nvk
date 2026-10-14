@@ -1025,6 +1025,53 @@ public class IvaPatchTest {
                 "Сейчас время по расписанию — уведомления приходят.|Сейчас вне расписания — уведомления придут в Пн в 09:00.");
             eq("расписание 10.73: часы с нулями", IvaNotifyPatch.hm(5) + "|" + IvaNotifyPatch.hm(1439), "00:05|23:59");
         }
+        {   // 10.74: мгновенные уведомления админам (FCM без библиотек Firebase)
+            byte[] p74ff = new byte[16], p74r = new byte[16];
+            for (int i = 0; i < 16; i++) { p74ff[i] = (byte) 0xff; p74r[i] = (byte) i; }
+            eq("push 10.74: FID как в firebase-installations (0111…, 22 знака base64url)",
+                IvaPushPatch.fid(p74ff) + "|" + IvaPushPatch.fid(p74r), "f_____________________|cAECAwQFBgcICQoLDA0ODw");
+            eq("push 10.74: base64url без «=» (0, 1, 2, 3 байта; знаки - и _)",
+                IvaPushPatch.b64url(new byte[0]) + "|" + IvaPushPatch.b64url(new byte[] { 'f' }) + "|" + IvaPushPatch.b64url(new byte[] { 'f', 'o' })
+                + "|" + IvaPushPatch.b64url(new byte[] { 'f', 'o', 'o' }) + "|" + IvaPushPatch.b64url(new byte[] { (byte) 0xfb, (byte) 0xff }), "|Zg|Zm8|Zm9v|-_8");
+            eq("push 10.74: хеш имени приложения Firebase [DEFAULT]", IvaPushPatch.appNameHash(), "R1dAH9Ui7M-ynoznwBdw01tLxhI");
+            eq("push 10.74: ответ сервисов Google — обычный и старый «|ID|n|:токен»",
+                IvaPushPatch.cleanReply("abc:DEF") + "|" + IvaPushPatch.cleanReply("|ID|3|:tok123") + "|" + IvaPushPatch.cleanReply("|ID|3|SERVICE_NOT_AVAILABLE") + "|" + IvaPushPatch.cleanReply(null),
+                "abc:DEF|tok123|SERVICE_NOT_AVAILABLE|null");
+            long d74 = IvaPushPatch.DAY_MS, r74 = IvaPushPatch.RETRY_MS, n74 = 100L * d74;
+            eq("push 10.74: когда регистрироваться (свежий токен — нет; другой аккаунт, старше суток, нет токена — да; не чаще 30 мин)",
+                IvaPushPatch.due("a@x.ru", "A@x.ru ", "T", n74 - 1000, n74 - 1000, n74) + "|" + IvaPushPatch.due("a@x.ru", "b@x.ru", "T", n74 - 1000, n74 - r74, n74)
+                + "|" + IvaPushPatch.due("a@x.ru", "a@x.ru", "T", n74 - d74, n74 - r74, n74) + "|" + IvaPushPatch.due("", "a@x.ru", "", 0, 0, n74)
+                + "|" + IvaPushPatch.due("", "a@x.ru", "", 0, n74 - r74 + 1, n74) + "|" + IvaPushPatch.due("a@x.ru", "a@x.ru", "T", n74 + d74, n74 + 5, n74),
+                "false|true|true|true|false|true");
+            eq("push 10.74: убрать токен с сервера — вышли или вошёл не админ; у админа — нет; токена нет — нечего",
+                IvaPushPatch.shouldForget("a@x.ru", "T", false, false) + "|" + IvaPushPatch.shouldForget("a@x.ru", "T", true, false)
+                + "|" + IvaPushPatch.shouldForget("a@x.ru", "T", true, true) + "|" + IvaPushPatch.shouldForget("", "T", false, false) + "|" + IvaPushPatch.shouldForget("a@x.ru", "", false, false),
+                "true|true|false|false|false");
+            String c74 = "{\"ready\":true,\"project_id\":\"iva-prokat\",\"sender_id\":\"123456789012\",\"app_id\":\"1:123456789012:android:0a1b2c3d\",\"api_key\":\"AIzaSyX\\/y\"}";
+            String[] p74 = IvaPushPatch.parseCfg(c74);
+            eq("push 10.74: настройки Firebase от функции", p74 == null ? "null" : p74[0] + "|" + p74[1] + "|" + p74[2] + "|" + p74[3],
+                "iva-prokat|123456789012|1:123456789012:android:0a1b2c3d|AIzaSyX/y");
+            eq("push 10.74: не настроено или битые настройки — null",
+                (IvaPushPatch.parseCfg("{\"ready\":false}") == null) + "|" + (IvaPushPatch.parseCfg(c74.replace("android:", "ios:")) == null)
+                + "|" + (IvaPushPatch.parseCfg(c74.replace("123456789012\",\"app", "12ab\",\"app")) == null) + "|" + (IvaPushPatch.parseCfg(null) == null), "true|true|true|true");
+            eq("push 10.74: срок токена Firebase", IvaPushPatch.expiresMs("604800s") + "|" + IvaPushPatch.expiresMs("x") + "|"
+                + IvaPushPatch.fisFresh("t", 10L * 3600000, 0) + "|" + IvaPushPatch.fisFresh("t", 3600000, 0) + "|" + IvaPushPatch.fisFresh("", 10L * 3600000, 0),
+                "604800000|3600000|true|false|false");
+            java.util.List<String[]> x74 = IvaPushPatch.extras(p74, "fidX", "authY", 243999000, 34, 148, "10.74");
+            StringBuilder s74 = new StringBuilder();
+            for (String[] kv : x74) s74.append(kv[0]).append('=').append(kv[1]).append(';');
+            eq("push 10.74: поля запроса токена — как firebase-messaging GmsRpc", s74.toString(),
+                "scope=*;sender=123456789012;subtype=123456789012;gmp_app_id=1:123456789012:android:0a1b2c3d;gmsv=243999000;osv=34;app_ver=148;app_ver_name=10.74;"
+                + "firebase-app-name-hash=R1dAH9Ui7M-ynoznwBdw01tLxhI;Goog-Firebase-Installations-Auth=authY;appid=fidX;cliv=fcm-24.0.0;");
+            eq("push 10.74: без токена Firebase поле не шлём", IvaPushPatch.extras(p74, "f", "", 1, 1, 1, null).size() + "|" + IvaPushPatch.extras(p74, "f", "", 1, 1, 1, null).get(7)[1], "11|");
+            eq("push 10.74: строки состояния",
+                IvaPushPatch.statusText("ok", "").startsWith("Мгновенные уведомления: подключены") + "|" + IvaPushPatch.statusText("off", "").contains("не настроил Firebase")
+                + "|" + IvaPushPatch.statusText("err", "TIMEOUT").contains("(TIMEOUT)") + "|" + IvaPushPatch.statusText("", ""), "true|true|true|Мгновенные уведомления: подключаем…");
+            eq("push 10.74: ошибка в строке состояния — без токенов и адресов, коротко",
+                IvaPushPatch.shortErr("сервер a@b.ru  токен " + "abcdefghij0123456789abcdefghij0123456789xyz") + "|" + IvaPushPatch.shortErr(null),
+                "сервер … токен …|");
+            eq("push 10.74: SHA-1 подписи — заглавные hex", IvaPushPatch.hexUpper(new byte[] { 0, (byte) 0xab, 15 }), "00AB0F");
+        }
         if (fail > 0) { System.out.println("ошибок: " + fail); System.exit(1); }
         System.out.println("все проверки IvaPatch пройдены");
     }
