@@ -656,6 +656,21 @@ public class IvaPatchTest {
                 eq("заявки 10.63: архив — подписи", IvaOrderPatch.ARCH_TITLE + "|" + IvaOrderPatch.ARCH_ON + "|" + IvaOrderPatch.ARCH_OFF + "|" + IvaOrderPatch.ARCH_ONLY_CLOSED,
                     "Архив заявок|В архив|Вернуть из архива|В архив можно убрать только закрытую заявку");
             }
+            // 10.64: «Заявки» — вкладки «Активные / Закрытые», всё нажимается
+            eq("заявки 10.64: активные — новые и в аренде, закрытые — закрытые; архив — нигде",
+                IvaOrderPatch.ordOnTab(false, false, 0) + "|" + IvaOrderPatch.ordOnTab(true, false, 0) + "|" + IvaOrderPatch.ordOnTab(true, false, 1)
+                + "|" + IvaOrderPatch.ordOnTab(false, false, 1) + "|" + IvaOrderPatch.ordOnTab(true, true, 1) + "|" + IvaOrderPatch.ordOnTab(false, true, 0),
+                "true|false|true|false|false|false");
+            eq("заявки 10.64: вкладки", String.join("|", IvaOrderPatch.ORD_TABS), "Активные заявки|Закрытые заявки");
+            eq("заявки 10.64: только свои — как на сайте", IvaOrderPatch.ordPath("/o?x=1", " Ivan+1@Mail.ru ") + "|" + IvaOrderPatch.ordPath("/o?x=1", "") + "|" + IvaOrderPatch.ordPath("/o?x=1", null),
+                "/o?x=1&user_email=eq.Ivan%2B1%40Mail.ru|/o?x=1|/o?x=1");
+            {
+                java.util.Map<String, String> cr = IvaOrderPatch.ordCardRow("14 окт, 12:00", "Дрель (3 дн.)", "Самовывоз");
+                StringBuilder cb = new StringBuilder();
+                for (String[] f : IvaOrderPatch.ordFields(cr, cr.get(IvaOrderPatch.ORD_NICE))) cb.append(f[0]).append('=').append(f[1]).append(';');
+                eq("заявки 10.64: по штатной карточке — что на ней, без выдуманного статуса", cb.toString(), "Дата=14 окт, 12:00;Инструменты=Дрель (3 дн.);Получение=Самовывоз;");
+                eq("заявки 10.64: по карточке прокат ищется по инструментам", String.join("|", IvaOrderPatch.ordToolNames(cr.get("tools"))), "дрель");
+            }
             // 10.63: «Назад» на телефоне
             eq("назад 10.63: фильтр, «Заявка отправлена», вход", IvaPatch.backAction(true, true, true, true, "home", true) + "|" + IvaPatch.backAction(false, true, true, true, "orders", false)
                 + "|" + IvaPatch.backAction(false, false, false, true, "orders", false), "panel|success|background");

@@ -1082,13 +1082,27 @@ public final class IvaOrderPatch {
             });
             ordHooked = new WeakReference<View>((View) o);
         }
-        ordRender(a);
+        ordSafeRender(a);
         ordFetch(a);   // раздел открыли — свежие статусы (штатный loadOrders тоже грузит заново)
+    }
+
+    /** Свой раздел не построился (любая ошибка) — штатный список, и его карточки всё равно нажимаются. */
+    static void ordSafeRender(Activity a) {
+        try { ordRender(a); }
+        catch (Throwable t) {
+            try { View sc = idView(a, "ordersScroll"); if (sc != null) sc.setVisibility(View.VISIBLE); } catch (Throwable ignore) {}
+            try {
+                Object po = get(a, "pageOrders");
+                View root = po instanceof View ? ((View) po).findViewWithTag(ORD_ROOT_TAG) : null;
+                if (root != null) root.setVisibility(View.GONE);
+            } catch (Throwable ignore) {}
+            try { ordAttach(a); } catch (Throwable ignore) {}
+        }
     }
 
     static void ordSchedule(final Activity a) {
         if (ordRun != null) ordH().removeCallbacks(ordRun);
-        ordRun = new Runnable() { @Override public void run() { try { ordRender(a); } catch (Throwable ignore) {} } };
+        ordRun = new Runnable() { @Override public void run() { ordSafeRender(a); } };
         ordH().postDelayed(ordRun, ORD_ATTACH_MS);
     }
 
@@ -1103,14 +1117,16 @@ public final class IvaOrderPatch {
         if (ordLoading) return;
         ordLoading = true;
         final String me = ordMe(a);
+        Object re = get(a, "userEmail");
+        final String raw = re instanceof String ? ((String) re).trim() : "";
         new Thread(new Runnable() {
             @Override public void run() {
                 List<Map<String, String>> rows = null;
                 java.util.Set<String> arch = null;
                 boolean noArch = false;
                 try {
-                    String[] r = IvaClientPatch.apiCall(a, ORD_PATH_PARTS, "GET", null, true);
-                    if (r == null || !"200".equals(r[0])) r = IvaClientPatch.apiCall(a, ORD_PATH, "GET", null, true);
+                    String[] r = IvaClientPatch.apiCall(a, ordPath(ORD_PATH_PARTS, raw), "GET", null, true);
+                    if (r == null || !"200".equals(r[0])) r = IvaClientPatch.apiCall(a, ordPath(ORD_PATH, raw), "GET", null, true);
                     if (r != null && r.length > 1 && "200".equals(r[0])) rows = ordParse(r[1]);
                 } catch (Throwable ignore) {}
                 if (rows != null) {
@@ -1138,7 +1154,7 @@ public final class IvaOrderPatch {
                             if (fa != null) { synchronized (ordArchived) { ordArchived.clear(); ordArchived.addAll(fa); } }
                             else if (fna) ordArchived.clear();
                         } else if (!me.equals(ordFor) || !ordReady) ordFailed = true;
-                        try { ordRender(a); } catch (Throwable ignore) {}
+                        ordSafeRender(a);
                         try { archRender(a); } catch (Throwable ignore) {}
                     }
                 });
@@ -1325,7 +1341,7 @@ public final class IvaOrderPatch {
     static List<String[]> ordFields(Map<String, String> r, String nice) {
         List<String[]> out = new ArrayList<String[]>();
         ordAdd(out, "Дата", nice == null || nice.trim().isEmpty() ? r.get("created_at") : nice);
-        out.add(new String[]{"Статус", ordStatus(ordStatusOf(r))});
+        if (!r.containsKey(ORD_PARTIAL)) out.add(new String[]{"Статус", ordStatus(ordStatusOf(r))});   // по карточке статус не известен
         ordAdd(out, "Инструменты", r.get("tools"));
         String days = r.get("days") == null ? "" : r.get("days").trim();
         ordAdd(out, "Срок", days.matches("\\d+") ? (days.equals("0") ? "" : days + " дн.") : days);
@@ -1391,45 +1407,140 @@ public final class IvaOrderPatch {
     }
 
     // ── список «Заявки» у клиента ──
+    // 10.64: штатный список лежит в PullScrollView (ordersScroll), а ScrollView держит только одного ребёнка — в 10.63
+    // наш список рядом с ним не вставлялся (ошибка глушилась) и оставались штатные ненажимаемые карточки. Теперь наш
+    // раздел — отдельный ребёнок страницы pageOrders (обычный LinearLayout) вместо ordersScroll, со своей прокруткой
+    // (тот же PullScrollView — «потянуть вниз, чтобы обновить») и двумя вкладками как в разделе логотипа:
+    // «Активные заявки» (новые и в аренде) и «Закрытые заявки» (кроме убранных в архив). Все карточки нажимаются.
+    static final String ORD_ROOT_TAG = "iva_ord_root", ORD_TAB_ACTIVE = "iva_ord_tab_active", ORD_TAB_CLOSED = "iva_ord_tab_closed";
+    static final String[] ORD_TABS = {"Активные заявки", "Закрытые заявки"};
+    static final String ORD_NO_ACTIVE = "Активных заявок нет.\nВыберите инструмент и отправьте заявку!";
+    static final String ORD_NO_CLOSED = "Закрытых заявок пока нет.";
+    static final String ORD_NO_CLOSED_ARCH = "Закрытых заявок нет.\nУбранные в архив — в «Кабинете» → «Архив заявок».";
+    static final String ORD_ARCH_TIP = "Удержите закрытую заявку, чтобы убрать её в архив";
+    static int ordTab = 0;
+
+    /** Какие заявки на вкладке: 0 — активные (не закрытые), 1 — закрытые; убранные в архив — нигде. */
+    static boolean ordOnTab(boolean closed, boolean archived, int tab) {
+        if (archived) return false;
+        return tab == 1 ? closed : !closed;
+    }
+
+    /** Запрос заявок только свои — как на сайте (cabinet.html: user_email=eq.почта). */
+    static String ordPath(String base, String email) {
+        String e = email == null ? "" : email.trim();
+        if (e.isEmpty()) return base;
+        try { return base + "&user_email=eq." + java.net.URLEncoder.encode(e, "UTF-8"); } catch (Throwable x) { return base; }
+    }
+
+    static View idView(Activity a, String name) {
+        int id = a.getResources().getIdentifier(name, "id", a.getPackageName());
+        return id == 0 ? null : a.findViewById(id);
+    }
 
     static void ordRender(final Activity a) {
-        Object o = get(a, "ordersList");
-        if (!(o instanceof LinearLayout) || !(((View) o).getParent() instanceof ViewGroup)) return;
-        LinearLayout nat = (LinearLayout) o;
-        ViewGroup parent = (ViewGroup) nat.getParent();
-        View found = null;
-        for (int i = 0; i < parent.getChildCount(); i++) if (ORD_LIST_TAG.equals(parent.getChildAt(i).getTag())) found = parent.getChildAt(i);
-        if (!IvaClientPatch.isClient(a)) {                 // админ / гость — штатный список как был
-            nat.setVisibility(View.VISIBLE);
-            if (found != null) found.setVisibility(View.GONE);
+        Object po = get(a, "pageOrders");
+        if (!(po instanceof LinearLayout)) return;
+        LinearLayout page = (LinearLayout) po;
+        View scroll = idView(a, "ordersScroll");
+        View root = null;
+        for (int i = 0; i < page.getChildCount(); i++) if (ORD_ROOT_TAG.equals(page.getChildAt(i).getTag())) root = page.getChildAt(i);
+        boolean client = IvaClientPatch.isClient(a);
+        if (!client || (!ordMine(a) && ordFailed)) {       // админ / гость — штатный список; не загрузилось — тоже (как 10.62)
+            if (scroll != null) scroll.setVisibility(View.VISIBLE);
+            if (root != null) root.setVisibility(View.GONE);
+            if (client) ordAttach(a);
             return;
         }
-        if (!ordMine(a) && ordFailed) {                     // не загрузилось — штатный список (как 10.62)
-            nat.setVisibility(View.VISIBLE);
-            if (found != null) found.setVisibility(View.GONE);
-            ordAttach(a);
-            return;
+        if (root == null) {
+            root = ordBuildRoot(a);
+            page.addView(root, new LinearLayout.LayoutParams(-1, 0, 1f));
         }
-        LinearLayout mine;
-        if (found instanceof LinearLayout) mine = (LinearLayout) found;
-        else {
-            mine = new LinearLayout(a);
-            mine.setOrientation(LinearLayout.VERTICAL);
-            mine.setTag(ORD_LIST_TAG);
-            parent.addView(mine, parent.indexOfChild(nat) + 1, parent instanceof LinearLayout
-                ? new LinearLayout.LayoutParams(-1, -2) : new ViewGroup.LayoutParams(-1, -2));
-        }
-        nat.setVisibility(View.GONE);
-        mine.setVisibility(View.VISIBLE);
+        if (scroll != null) scroll.setVisibility(View.GONE);
+        root.setVisibility(View.VISIBLE);
+        IvaClientPatch.styleTabs(a, root, new String[]{ORD_TAB_ACTIVE, ORD_TAB_CLOSED}, ordTab);
+        View lv = root.findViewWithTag(ORD_LIST_TAG);
+        if (!(lv instanceof LinearLayout)) return;
+        LinearLayout mine = (LinearLayout) lv;
         mine.removeAllViews();
         if (!ordMine(a)) { mine.addView(ordHint(a, "Загрузка заявок…")); return; }
-        int shown = 0;
+        int shown = 0, archived = 0;
+        List<View> cards = new ArrayList<View>();
         for (Map<String, String> r : ordRows) {
-            if (ordArchived.contains(r.get("id"))) continue;
-            mine.addView(ordCardView(a, r, false));
+            boolean arch = ordArchived.contains(r.get("id"));
+            if (arch) archived++;
+            if (!ordOnTab(ordClosed(r), arch, ordTab)) continue;
+            cards.add(ordCardView(a, r, false));
             shown++;
         }
-        if (shown == 0) mine.addView(ordHint(a, ordRows.isEmpty() ? ORD_EMPTY : ORD_ALL_ARCHIVED));
+        if (ordTab == 1 && shown > 0 && !archMissing) {
+            TextView tip = new TextView(a);
+            tip.setText(ORD_ARCH_TIP);
+            tip.setTextColor(color(a, "gray2", 0xff6b7080));
+            tip.setTextSize(12f);
+            tip.setGravity(Gravity.CENTER);
+            tip.setPadding(0, 0, 0, dp(a, 10));
+            mine.addView(tip, new LinearLayout.LayoutParams(-1, -2));
+        }
+        for (View c : cards) mine.addView(c);
+        if (shown == 0) mine.addView(ordHint(a, ordRows.isEmpty() ? ORD_EMPTY
+            : ordTab == 0 ? ORD_NO_ACTIVE : archived > 0 ? ORD_NO_CLOSED_ARCH : ORD_NO_CLOSED));
+    }
+
+    /** Раздел «Заявки» клиента: вкладки (карточка как в разделе логотипа) и прокручиваемый список. */
+    static View ordBuildRoot(final Activity a) {
+        LinearLayout root = new LinearLayout(a);
+        root.setOrientation(LinearLayout.VERTICAL);
+        root.setTag(ORD_ROOT_TAG);
+        LinearLayout tabs = new LinearLayout(a);
+        tabs.setOrientation(LinearLayout.HORIZONTAL);
+        tabs.setBackground(IvaClientPatch.tabCard(a));
+        String[] tags = {ORD_TAB_ACTIVE, ORD_TAB_CLOSED};
+        for (int i = 0; i < tags.length; i++) {
+            final int idx = i;
+            tabs.addView(IvaClientPatch.tabButton(a, ORD_TABS[i], tags[i], new View.OnClickListener() {
+                @Override public void onClick(View v) {
+                    if (ordTab == idx) return;
+                    ordTab = idx;
+                    ordSafeRender(a);
+                }
+            }), new LinearLayout.LayoutParams(0, -2, 1f));
+        }
+        LinearLayout.LayoutParams tl = new LinearLayout.LayoutParams(-1, -2);
+        tl.setMargins(dp(a, 16), dp(a, 12), dp(a, 16), dp(a, 12));   // как в разделе логотипа: поля 16dp, снизу 12dp
+        root.addView(tabs, tl);
+        ScrollView sc = ordScroll(a);
+        LinearLayout list = new LinearLayout(a);
+        list.setOrientation(LinearLayout.VERTICAL);
+        list.setTag(ORD_LIST_TAG);
+        list.setPadding(dp(a, 16), 0, dp(a, 16), dp(a, 24));
+        sc.addView(list, new FrameLayout.LayoutParams(-1, -2));
+        root.addView(sc, new LinearLayout.LayoutParams(-1, 0, 1f));
+        return root;
+    }
+
+    /** Прокрутка как у штатного списка: PullScrollView («потянуть — обновить»); нет — обычный ScrollView. */
+    static ScrollView ordScroll(final Activity a) {
+        ScrollView sc;
+        try {
+            sc = (ScrollView) Class.forName("ru.prokatnvsk.app.PullScrollView").getConstructor(android.content.Context.class).newInstance(a);
+            Runnable refresh = new Runnable() {
+                @Override public void run() {
+                    try { callNative(a, "loadOrders"); } catch (Throwable ignore) {}
+                    ordAt = 0;
+                    ordFetch(a);
+                }
+            };
+            java.lang.reflect.Field f = sc.getClass().getDeclaredField("onRefresh");
+            f.setAccessible(true);
+            f.set(sc, refresh);
+        } catch (Throwable e) {
+            sc = new ScrollView(a);
+        }
+        sc.setVerticalScrollBarEnabled(false);
+        sc.setOverScrollMode(View.OVER_SCROLL_NEVER);
+        sc.setFillViewport(true);
+        return sc;
     }
 
     static TextView ordHint(Activity a, String s) {
@@ -1478,7 +1589,7 @@ public final class IvaOrderPatch {
         foot.setGravity(Gravity.CENTER_VERTICAL);
         TextView st = new TextView(a);
         st.setText(ordStatus(ordStatusOf(r)));
-        st.setTextColor(color(a, "gray2", 0xff6b7080));
+        st.setTextColor(ordClosed(r) ? color(a, "gray2", 0xff6b7080) : color(a, "orange", 0xffff8f1f));   // активная — оранжевым
         st.setTextSize(12f);
         foot.addView(st, new LinearLayout.LayoutParams(0, -2, 1f));
         TextView more = new TextView(a);
@@ -1523,11 +1634,13 @@ public final class IvaOrderPatch {
             counts.put(base, nth + 1);
             final String key = ordKey(date, tl, nth);
             final int idx = ordFind(dates, tools, key);
-            if (idx < 0) { missing = true; continue; }
-            if (key.equals(card.getTag())) continue;
-            card.setTag(key);
+            if (idx < 0) missing = true;
+            String tagNow = idx < 0 ? key + "\u0001card" : key;
+            if (tagNow.equals(card.getTag())) continue;
+            card.setTag(tagNow);
             card.setClickable(true);
-            final Map<String, String> row = ordRows.get(idx);
+            final Map<String, String> row = idx >= 0 ? ordRows.get(idx)
+                : ordCardRow(date, tl, card.getChildCount() > 2 && card.getChildAt(2) instanceof TextView ? String.valueOf(((TextView) card.getChildAt(2)).getText()) : "");
             card.setOnClickListener(new View.OnClickListener() {
                 @Override public void onClick(View v) { try { ordOpenRow(a, row, ordArchived.contains(row.get("id"))); } catch (Throwable ignore) {} }
             });
@@ -1545,6 +1658,17 @@ public final class IvaOrderPatch {
         }
         if (missing && !ordLoading && System.currentTimeMillis() - ordAt > ORD_REFETCH_MS) ordFetch(a);
     }
+
+    /** Заявка только по тексту штатной карточки (данные не загрузились): дата, инструменты, получение. */
+    static Map<String, String> ordCardRow(String nice, String tools, String getMethod) {
+        Map<String, String> m = new LinkedHashMap<String, String>();
+        m.put("tools", tools == null ? "" : tools);
+        m.put("get_method", getMethod == null ? "" : getMethod);
+        m.put(ORD_NICE, nice == null ? "" : nice);
+        m.put(ORD_PARTIAL, "1");
+        return m;
+    }
+    static final String ORD_NICE = "_nice", ORD_PARTIAL = "_partial";
 
     /** Штатная карточка заявки клиента: вертикальная, первые два ребёнка — тексты (дата и инструменты). */
     static boolean ordCard(View c) {
@@ -1589,7 +1713,7 @@ public final class IvaOrderPatch {
                         if ("ok".equals(fc)) {
                             if (on) ordArchived.add(id); else ordArchived.remove(id);
                             try { if (ordDialog != null) ordDialog.dismiss(); } catch (Throwable ignore) {}
-                            try { ordRender(a); } catch (Throwable ignore) {}
+                            ordSafeRender(a);
                             try { archRender(a); } catch (Throwable ignore) {}
                             Toast.makeText(a, on ? "Заявка в архиве" : "Заявка снова в «Заявках»", Toast.LENGTH_SHORT).show();
                         } else if ("404".equals(fc)) {
@@ -1787,7 +1911,8 @@ public final class IvaOrderPatch {
         body.setPadding(dp(a, 16), 0, dp(a, 16), dp(a, 12));
         sc.addView(body, new FrameLayout.LayoutParams(-1, -2));
         sh.addView(sc, new LinearLayout.LayoutParams(-1, 0, 1f));
-        for (String[] f : ordFields(r, ordNice(a, r.get("created_at")))) ordFieldView(a, body, f, "Статус".equals(f[0]));
+        String nice = r.containsKey(ORD_NICE) ? r.get(ORD_NICE) : ordNice(a, r.get("created_at"));
+        for (String[] f : ordFields(r, nice)) ordFieldView(a, body, f, "Статус".equals(f[0]));
         final LinearLayout prokat = new LinearLayout(a);
         prokat.setOrientation(LinearLayout.VERTICAL);
         body.addView(prokat, new LinearLayout.LayoutParams(-1, -2));
@@ -1805,7 +1930,7 @@ public final class IvaOrderPatch {
         }
 
         final Dialog d = new Dialog(a, android.R.style.Theme_Material_NoActionBar);
-        if (archived || ordClosed(r)) {                        // «В архив» — только у закрытых; в архиве — «Вернуть»
+        if (!r.containsKey(ORD_PARTIAL) && (archived || ordClosed(r))) {   // «В архив» — только у закрытых; в архиве — «Вернуть»
             TextView arch = new TextView(a);
             arch.setText(archived ? ARCH_OFF : ARCH_ON);
             arch.setGravity(Gravity.CENTER);

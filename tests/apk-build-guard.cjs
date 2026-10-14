@@ -330,7 +330,7 @@ try {
     const keys = (snd.match(/body\.put\("(p_[a-z_]+)"/g) || []).map(x => x.slice(10, -1));
     assert.deepEqual(keys, ['p_name', 'p_phone', 'p_tools', 'p_get_method', 'p_address', 'p_comment', 'p_user_email', 'p_days'], 'IvaOrderPatch.send: поля submit_order как у штатной заявки');
     assert.ok(snd.includes('IvaClientPatch.apiCall(a, "/rest/v1/rpc/submit_order", "POST", body.toString(), true)') && (op.match(/apiCall\(/g) || []).length === 7
-      && op.includes('IvaClientPatch.apiCall(a, ORD_PATH, "GET", null, true)') && (op.match(/"POST"/g) || []).length === 3
+      && op.includes('IvaClientPatch.apiCall(a, ordPath(ORD_PATH, raw), "GET", null, true)') && (op.match(/"POST"/g) || []).length === 3
       && snd.includes('body.put("p_days", maxDays(ls));') && snd.includes('body.put("p_tools", toolsText(ls));')
       && snd.includes('callNative(a, "sendOrder");                       // штатные') && snd.includes('if (sending) return;'),
       'IvaOrderPatch.send: одна заявка submit_order, p_days — самый длинный срок, без повторной отправки');
@@ -650,7 +650,7 @@ try {
     // приложение: архив только у закрытых, только после ответа базы; без SQL — подсказка
     assert.ok(op.includes('if (on && !ordClosed(r)) { Toast.makeText(a, ARCH_ONLY_CLOSED, Toast.LENGTH_LONG).show(); return; }')
       && op.includes('IvaClientPatch.apiCall(a, ARCH_RPC, "POST", archBody(id, on), true)') && op.includes('if ("ok".equals(fc)) {')
-      && op.includes('} else if ("404".equals(fc)) {') && op.includes('if (archived || ordClosed(r)) {')
+      && op.includes('} else if ("404".equals(fc)) {') && op.includes('if (!r.containsKey(ORD_PARTIAL) && (archived || ordClosed(r))) {')
       && !/"DELETE"|"PATCH"/.test(op), 'заявки 10.63: в архив — только закрытые и только после ответа базы; заявки не удаляются и не меняются');
     // подробности: данные проката, без данных клиента
     assert.ok(op.includes('static final String[] ORD_COLS = {"id", "created_at", "status", "tools", "days", "get_method", "comment"};')
@@ -659,14 +659,45 @@ try {
       'заявки 10.63: в подробностях — прокат (как на странице проката), имени, телефона и адреса клиента нет');
     // свой список — только у клиента; не загрузился — штатный
     const rn = op.slice(op.indexOf('static void ordRender('), op.indexOf('static TextView ordHint('));
-    assert.ok(rn.includes('if (!IvaClientPatch.isClient(a)) {') && rn.includes('if (!ordMine(a) && ordFailed) {') && rn.includes('ordAttach(a);')
-      && (rn.match(/nat\.setVisibility\(View\.VISIBLE\);/g) || []).length === 2 && rn.includes('if (ordArchived.contains(r.get("id"))) continue;'),
-      'заявки 10.63: свой список только у клиента; не загрузилось — штатный; убранные в архив не показываются');
+    assert.ok(rn.includes('if (!client || (!ordMine(a) && ordFailed)) {') && rn.includes('if (client) ordAttach(a);')
+      && rn.includes('if (scroll != null) scroll.setVisibility(View.VISIBLE);') && rn.includes('if (!ordOnTab(ordClosed(r), arch, ordTab)) continue;')
+      && op.includes('if (archived) return false;'),
+      'заявки 10.63–10.64: свой список только у клиента; не загрузилось — штатный; убранные в архив не показываются');
     assert.ok(op.includes('if ("profile".equals(tab)) {\n            try { profileArchiveRow(a); } catch (Throwable ignore) {}')
       && op.includes('list.addView(row, list.indexOfChild(call), lp);') && op.includes('row.setVisibility(client ? View.VISIBLE : View.GONE);'),
       'кабинет 10.63: «Архив заявок» — только у клиента, перед штатной строкой (ничего не удаляется)');
     assert.ok(!/passport|birth|паспорт|getLastKnownLocation|ACCESS_FINE/i.test(op), 'заявки 10.63: лишних персональных данных нет');
     assert.ok(/eq\("заявки 10\.63: /.test(tp) && /eq\("назад 10\.63: /.test(tp) && /eq\("удаление 10\.63: /.test(tp), 'IvaPatchTest: проверки 10.63');
+  }
+  // 10.64 (просьба владельца 14.10.2026): заявки снова не нажимались — в 10.63 наш список вставлялся рядом со штатным
+  // внутрь PullScrollView (ScrollView держит одного ребёнка → исключение глушилось). Теперь раздел — ребёнок pageOrders;
+  // вкладки «Активные / Закрытые заявки» как в разделе логотипа; любая ошибка — штатный список, и он тоже нажимается.
+  {
+    const op = R('android/patches/IvaOrderPatch.java'), jc = R('android/patches/IvaClientPatch.java'), tp = R('android/patches/test/IvaPatchTest.java');
+    const rn = op.slice(op.indexOf('static void ordRender('), op.indexOf('static TextView ordHint('));
+    assert.ok(rn.includes('Object po = get(a, "pageOrders");') && rn.includes('page.addView(root, new LinearLayout.LayoutParams(-1, 0, 1f));')
+      && !/getParent\(\)/.test(rn)
+      && !/ordersList[^;]*getParent|\(ViewGroup\) nat\.getParent\(\)|parent\.addView/.test(op.slice(op.indexOf('// ───────────────────────── 10.62–10.63: заявки клиента'))),
+      'заявки 10.64: наш раздел — ребёнок pageOrders (LinearLayout), в PullScrollView и рядом со штатным списком ничего не вставляется');
+    assert.ok(op.includes('static void ordSafeRender(Activity a) {') && (op.match(/ordRender\(a\)/g) || []).length === 2
+      && op.includes('{ try { ordRender(a); } catch (Throwable ignore) {} return; }') && op.includes('        try { ordRender(a); }\n        catch (Throwable t) {')
+      && (op.match(/ordSafeRender\(a\);/g) || []).length === 5,
+      'заявки 10.64: любая ошибка своего раздела — штатный список (ordSafeRender), не пустота и не ненажимаемые карточки');
+    const att = op.slice(op.indexOf('static void ordAttach('), op.indexOf('static boolean ordCard('));
+    assert.ok(att.includes(': ordCardRow(date, tl, ') && !att.includes('if (idx < 0) { missing = true; continue; }'),
+      'заявки 10.64: штатные карточки нажимаются всегда — без данных открывается то, что на карточке, и прокат');
+    assert.ok(op.includes('static final String[] ORD_TABS = {"Активные заявки", "Закрытые заявки"};') && op.includes('tabs.setBackground(IvaClientPatch.tabCard(a));')
+      && op.includes('IvaClientPatch.styleTabs(a, root, new String[]{ORD_TAB_ACTIVE, ORD_TAB_CLOSED}, ordTab);')
+      && jc.includes('styleTabs(a, hub, new String[]{HUB_TAB_FAV_TAG, HUB_TAB_MINE_TAG}, hubTab);'),
+      'заявки 10.64: вкладки «Активные / Закрытые» — те же, что в разделе логотипа (tabCard, tabButton, styleTabs)');
+    assert.ok(op.includes('Class.forName("ru.prokatnvsk.app.PullScrollView").getConstructor(android.content.Context.class).newInstance(a);')
+      && op.includes('sc = new ScrollView(a);') && op.includes('getDeclaredField("onRefresh")'),
+      'заявки 10.64: «потянуть — обновить» как у штатного списка; нет PullScrollView — обычная прокрутка');
+    assert.ok(op.includes('return base + "&user_email=eq." + java.net.URLEncoder.encode(e, "UTF-8");'), 'заявки 10.64: только свои заявки, как на сайте');
+    for (const str of ['pageOrders', 'ordersScroll', 'ordersList'])
+      assert.ok(has(arsc14, str), `resources.arsc 10.14: нет «${str}» — раздел «Заявки» 10.64 не найдёт штатную страницу`);
+    assert.ok(has(dex14, 'Lru/prokatnvsk/app/PullScrollView;') && has(dex14, 'onRefresh'), 'classes.dex 10.14: нет PullScrollView.onRefresh');
+    assert.ok(/eq\("заявки 10\.64: /.test(tp), 'IvaPatchTest: проверки 10.64');
   }
   // радиус — только вид: варианты встречаются лишь в объявлении и в шторке, на фильтр/подсчёт не влияют
   assert.equal((js45.match(/RADIUS_TITLES/g) || []).length, 3, 'IvaSearchPatch: радиус не должен участвовать в фильтре (только заготовка в шторке)');

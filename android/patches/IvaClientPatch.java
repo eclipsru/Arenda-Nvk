@@ -1862,6 +1862,18 @@ public final class IvaClientPatch {
 
     /** Половина карточки: текст и подчёркивание под ним (как штатные hubTabMy / hubTabAdd). */
     static LinearLayout hubTabButton(final Activity a, String text, String tag, final int index) {
+        return tabButton(a, text, tag, new View.OnClickListener() {
+            @Override public void onClick(View v) {
+                if (hubTab == index) return;
+                hubTab = index;
+                hubCatalogWaits = 0;
+                renderClientHub(a);
+            }
+        });
+    }
+
+    /** 10.64: та же вкладка для любого раздела (раздел логотипа, «Заявки»): текст 14sp и линия 3dp под ним. */
+    static LinearLayout tabButton(Activity a, String text, String tag, View.OnClickListener click) {
         LinearLayout b = new LinearLayout(a);
         b.setOrientation(LinearLayout.VERTICAL);
         b.setGravity(Gravity.CENTER);                       // как штатные: gravity center, paddingTop 12dp
@@ -1879,14 +1891,7 @@ public final class IvaClientPatch {
         LinearLayout.LayoutParams ll = new LinearLayout.LayoutParams(-1, hubDp(a, HUB_TAB_LINE_DP));
         ll.topMargin = hubDp(a, HUB_TAB_LINE_TOP_DP);
         b.addView(line, ll);
-        b.setOnClickListener(new View.OnClickListener() {
-            @Override public void onClick(View v) {
-                if (hubTab == index) return;
-                hubTab = index;
-                hubCatalogWaits = 0;
-                renderClientHub(a);
-            }
-        });
+        b.setOnClickListener(click);
         return b;
     }
 
@@ -1918,13 +1923,16 @@ public final class IvaClientPatch {
 
     /** Как штатный showAdmHub: выбранная — оранжевая жирная и линия, другая — серая обычная, линии нет. */
     static void styleHubTabs(Activity a, View hub) {
+        styleTabs(a, hub, new String[]{HUB_TAB_FAV_TAG, HUB_TAB_MINE_TAG}, hubTab);
+    }
+
+    static void styleTabs(Activity a, View root, String[] tags, int selected) {
         int orange = navColor(a, "orange", 0xffff8f1f);
         int gray = navColor(a, "gray", 0xff9aa1b0);
-        String[] tags = {HUB_TAB_FAV_TAG, HUB_TAB_MINE_TAG};
         for (int i = 0; i < tags.length; i++) {
-            View v = hub.findViewWithTag(tags[i]);
+            View v = root.findViewWithTag(tags[i]);
             if (v == null) continue;
-            boolean on = hubTab == i;
+            boolean on = selected == i;
             v.setBackground(null);
             View tv = v.findViewWithTag(tags[i] + HUB_TAB_TEXT);
             if (tv instanceof TextView) {
