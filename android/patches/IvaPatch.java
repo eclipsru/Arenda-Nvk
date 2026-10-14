@@ -375,11 +375,13 @@ public final class IvaPatch {
         } catch (Throwable ignore) {
             // логотип и подсветка — только внешний вид: без них меню работает как раньше
         }
+        try { IvaClientPatch.authStart(a); } catch (Throwable ignore) {}   // 10.69: ключ обновляется заранее
         reloadProfile(a);
     }
 
     /** 8) Конец saveSession (вход и восстановление сессии): профиль админа → аватарка в меню. */
     public static void onSession(Activity a) {
+        try { IvaClientPatch.authBackup(a); } catch (Throwable ignore) {}   // 10.69: копия входа (вход, восстановление)
         reloadProfile(a);
     }
 
@@ -408,6 +410,7 @@ public final class IvaPatch {
         try { delSwitches(a); } catch (Throwable ignore) {}   // 10.65: «Доставка» в форме инструмента — выключатель
         try { condRows(a); } catch (Throwable ignore) {}      // 10.66: «Состояние» в форме инструмента
         try { pickColors(a); } catch (Throwable ignore) {}    // 10.67: выбранная (под)категория — белым, не серым
+        try { IvaClientPatch.authBackup(a); } catch (Throwable ignore) {}   // 10.69: копия входа (пишется, лишь когда ключ сменился)
         try {
             String t = tab == null ? "" : tab;
             int orange = navColor(a, "orange", 0xffff9800);
@@ -536,6 +539,8 @@ public final class IvaPatch {
 
     /** 10) Конец logoutLocal: аватарку убираем, иконка «Кабинета» снова видна. */
     public static void onLogout(final Activity a) {
+        // 10.69: штатная проверка при запуске не прошла (истёк ключ / нет связи) — это не выход: вход возвращается
+        try { if (IvaClientPatch.authRecover(a)) return; } catch (Throwable ignore) {}
         a.runOnUiThread(new Runnable() {
             @Override public void run() {
                 try {

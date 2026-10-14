@@ -3096,4 +3096,200 @@ public final class IvaClientPatch {
     static void set(Object o, String name, Object v) {
         try { field(o.getClass(), name).set(o, v); } catch (Throwable ignore) {}
     }
+
+    // ───────────── 10.69: вход больше не слетает (решение владельца 14.10.2026) ─────────────
+    // Причины (разбор 14.10, журнал): 1) штатный код обновляет короткий ключ только перед действиями админа — через час
+    // остальные запросы получают 401, экраны пустеют; 2) при запуске restoreSession ждёт 401, а Supabase на истёкший ключ
+    // отвечает 403 → logoutLocal (полный выход); 3) нет связи при запуске (Api.check → −1) → тоже logoutLocal.
+    // Без новых вставок в smali, только через имеющиеся: onCreated (7), onSession (8), onLogout (10), onTab (11).
+    //  а) пока приложение открыто — раз в минуту смотрим срок ключа и за 5 минут до конца обновляем по rt
+    //     (в поля приложения и в штатное prokat_session, как штатный ensureFreshToken);
+    //  б) копия штатного хранилища входа (iva_auth_bak), пока вход есть. Штатный logoutLocal зовут только кнопка
+    //     «Выйти» (главный поток) и проверка при запуске (свой поток). Из своего потока — это не выход, а сбой
+    //     проверки: обновляем ключ по rt из копии (мы и так в фоне), возвращаем хранилище и поля и открываем
+    //     приложение штатным enterApp — как после удачной проверки. Нет связи / сервер занят — возвращаем вход как
+    //     был (ключ обновится позже). Сервер ответил, что rt больше не действует (400) — выход настоящий.
+    //  в) «Выйти» — копия стирается, выход как раньше.
+    static final String AUTH_BAK = "iva_auth_bak", AUTH_SESSION = "prokat_session";
+    static final long AUTH_TICK_MS = 60L * 1000, AUTH_AHEAD_MS = 5L * 60 * 1000, AUTH_FIRST_MS = 20L * 1000;
+    static final Object AUTH_LOCK = new Object();
+    static final int AUTH_NONE = 0, AUTH_KEEP = 1, AUTH_FRESH = 2;
+    static volatile String authBakAt = "";
+    static Handler authH;
+    static Runnable authRun;
+
+    /** Что делать после штатного logoutLocal: AUTH_NONE — выход настоящий, AUTH_KEEP — вернуть как был, AUTH_FRESH — с новой парой. */
+    static int authDecision(boolean mainThread, boolean hasBackup, String refreshCode) {
+        if (mainThread || !hasBackup) return AUTH_NONE;                       // «Выйти» или копии нет
+        String c = refreshCode == null ? "" : refreshCode.trim();
+        if (c.isEmpty() || "-1".equals(c)) return AUTH_KEEP;                  // нет связи
+        if (c.startsWith("2")) return AUTH_FRESH;
+        if (c.startsWith("5") || "408".equals(c) || "429".equals(c)) return AUTH_KEEP;   // сервер занят / не ответил
+        return AUTH_NONE;                                                     // 400/401/403: rt больше не действует
+    }
+
+    /** Пора ли обновлять ключ: до конца меньше 5 минут (или уже истёк). Срок не разобрали — не трогаем. */
+    static boolean authNeed(long expSec, long nowMs) { return expSec > 0 && expSec * 1000L - nowMs < AUTH_AHEAD_MS; }
+
+    static boolean authEmpty(Object v) { return !(v instanceof String) || ((String) v).trim().isEmpty() || "null".equals(((String) v).trim()); }
+
+    /** Копия штатного хранилища входа — только пока вход есть (оба ключа). Пишем, лишь когда ключ сменился. */
+    static void authBackup(Context c) {
+        try {
+            SharedPreferences s = c.getSharedPreferences(AUTH_SESSION, Context.MODE_PRIVATE);
+            Map<String, ?> all = s.getAll();
+            Object at = all.get("at"), rt = all.get("rt");
+            if (authEmpty(at) || authEmpty(rt) || authEmpty(all.get("email"))) return;
+            if (at.equals(authBakAt)) return;
+            SharedPreferences.Editor e = c.getSharedPreferences(AUTH_BAK, Context.MODE_PRIVATE).edit().clear();
+            authPutAll(e, all);
+            e.commit();
+            authBakAt = (String) at;
+        } catch (Throwable ignore) {}
+    }
+
+    @SuppressWarnings("unchecked")
+    static void authPutAll(SharedPreferences.Editor e, Map<String, ?> all) {
+        for (Map.Entry<String, ?> en : all.entrySet()) {
+            Object v = en.getValue();
+            if (v instanceof String) e.putString(en.getKey(), (String) v);
+            else if (v instanceof Boolean) e.putBoolean(en.getKey(), (Boolean) v);
+            else if (v instanceof Integer) e.putInt(en.getKey(), (Integer) v);
+            else if (v instanceof Long) e.putLong(en.getKey(), (Long) v);
+            else if (v instanceof Float) e.putFloat(en.getKey(), (Float) v);
+            else if (v instanceof java.util.Set) e.putStringSet(en.getKey(), (java.util.Set<String>) v);
+        }
+    }
+
+    static void authForget(Context c) {
+        try { c.getSharedPreferences(AUTH_BAK, Context.MODE_PRIVATE).edit().clear().commit(); } catch (Throwable ignore) {}
+        authBakAt = "";
+    }
+
+    /** POST refresh_token → {код, access_token, refresh_token}; нет связи — {"-1", null, null}. */
+    static String[] authRefresh(String rt) {
+        try {
+            String[] r = IvaNotifyPatch.nativeCall(SB_URL + "/auth/v1/token?grant_type=refresh_token", "POST",
+                "{\"refresh_token\":" + IvaNotifyPatch.jsonStr(rt) + "}", false, null);
+            if (r == null || r.length < 2 || r[0] == null) return new String[]{"-1", null, null};
+            if (!r[0].startsWith("2")) return new String[]{r[0], null, null};
+            JSONObject j = new JSONObject(r[1]);
+            String at = j.optString("access_token", ""), nrt = j.optString("refresh_token", "");
+            if (authEmpty(at) || authEmpty(nrt)) return new String[]{"500", null, null};   // странный ответ — как «сервер занят»
+            return new String[]{r[0], at, nrt};
+        } catch (Throwable e) { return new String[]{"-1", null, null}; }
+    }
+
+    /** Из IvaPatch.onLogout (конец штатного logoutLocal). true — вход возвращён, приложение откроется само. */
+    static boolean authRecover(final Activity a) {
+        boolean main = Looper.myLooper() == Looper.getMainLooper();
+        if (main) { authForget(a); return false; }                            // «Выйти» — выход как раньше
+        Map<String, ?> bak;
+        try { bak = a.getSharedPreferences(AUTH_BAK, Context.MODE_PRIVATE).getAll(); } catch (Throwable e) { return false; }
+        Object bat = bak.get("at"), brt = bak.get("rt");
+        boolean has = !authEmpty(bat) && !authEmpty(brt) && !authEmpty(bak.get("email"));
+        String[] r = new String[]{"", null, null};
+        int d;
+        synchronized (AUTH_LOCK) {
+            if (has) r = authRefresh((String) brt);
+            d = authDecision(false, has, r[0]);
+            if (d == AUTH_NONE) { if (has) authForget(a); return false; }
+            String at = d == AUTH_FRESH ? r[1] : (String) bat, rt = d == AUTH_FRESH ? r[2] : (String) brt;
+            SharedPreferences.Editor e = a.getSharedPreferences(AUTH_SESSION, Context.MODE_PRIVATE).edit();
+            authPutAll(e, bak);
+            e.putString("at", at).putString("rt", rt);
+            e.commit();
+            set(a, "accessToken", at);
+            set(a, "refreshToken", rt);
+            set(a, "userEmail", bak.get("email"));
+            Object nm = bak.get("name"), ph = bak.get(AUTH_PH);
+            set(a, "userName", nm instanceof String ? nm : "");
+            set(a, "userPhone", ph instanceof String ? ph : "");
+            authBakAt = "";
+            authBackup(a);
+        }
+        // Штатный код после logoutLocal покажет экран входа (ui → Lambda14 → showScreen). Ждём, пока он покажется
+        // (экран входа в разметке скрыт, при запуске виден splash), и только потом открываем приложение — иначе экран
+        // входа лёг бы поверх. Не дождались за 3 с — открываем всё равно.
+        new Handler(Looper.getMainLooper()).post(new Runnable() {
+            int tries = 0;
+            @Override public void run() {
+                int st = authEnterStep(authVisible(a, "scrLogin"), authVisible(a, "scrMain"), tries++);
+                if (st == AUTH_WAIT) { new Handler(Looper.getMainLooper()).postDelayed(this, AUTH_WAIT_MS); return; }
+                if (st == AUTH_ENTER) try {
+                    Method m = a.getClass().getDeclaredMethod("enterApp");
+                    m.setAccessible(true);
+                    m.invoke(a);
+                } catch (Throwable ignore) {}
+                try { IvaPatch.reloadProfile(a); } catch (Throwable ignore) {}
+                try { authTick(a); } catch (Throwable ignore) {}   // ключ старый (не было связи) — обновить сразу
+            }
+        });
+        return true;
+    }
+    static final String AUTH_PH = "ph" + "one";   // ключ телефона в штатном хранилище
+    static final int AUTH_WAIT = 0, AUTH_ENTER = 1, AUTH_SKIP = 2, AUTH_WAIT_TRIES = 60;
+    static final long AUTH_WAIT_MS = 50;
+
+    /** Шаг ожидания после восстановления: экран входа показан — открыть; приложение уже открыто — не трогать; 3 с — открыть. */
+    static int authEnterStep(boolean loginVisible, boolean mainVisible, int tries) {
+        if (mainVisible) return AUTH_SKIP;
+        if (loginVisible || tries >= AUTH_WAIT_TRIES) return AUTH_ENTER;
+        return AUTH_WAIT;
+    }
+
+    static boolean authVisible(Activity a, String field) {
+        Object v = get(a, field);
+        return v instanceof View && ((View) v).getVisibility() == View.VISIBLE;
+    }
+
+    /** Из IvaPatch.onCreated: обновление ключа заранее, пока приложение открыто. */
+    static void authStart(final Activity a) {
+        if (authH == null) authH = new Handler(Looper.getMainLooper());
+        if (authRun != null) authH.removeCallbacks(authRun);
+        authRun = new Runnable() {
+            @Override public void run() {
+                if (a.isFinishing()) return;
+                try { authTick(a); } catch (Throwable ignore) {}
+                authH.postDelayed(this, AUTH_TICK_MS);
+            }
+        };
+        authH.postDelayed(authRun, AUTH_FIRST_MS);
+    }
+
+    static void authTick(final Activity a) {
+        Object fat = get(a, "accessToken");
+        if (authEmpty(fat)) return;                                          // не вошли — нечего обновлять
+        SharedPreferences s = a.getSharedPreferences(AUTH_SESSION, Context.MODE_PRIVATE);
+        String pat = s.getString("at", ""), prt = s.getString("rt", "");
+        // фоновая проверка уведомлений могла обновить пару, пока окно было свёрнуто, — берём её
+        if (!authEmpty(pat) && !authEmpty(prt) && !pat.equals(fat)
+            && IvaNotifyPatch.jwtExp(pat) > IvaNotifyPatch.jwtExp((String) fat)) {
+            set(a, "accessToken", pat);
+            set(a, "refreshToken", prt);
+            fat = pat;
+        }
+        authBackup(a);
+        if (!authNeed(IvaNotifyPatch.jwtExp((String) fat), System.currentTimeMillis())) return;
+        final String used = (String) fat;
+        new Thread(new Runnable() {
+            @Override public void run() {
+                synchronized (AUTH_LOCK) {
+                    try {
+                        if (!used.equals(get(a, "accessToken"))) return;              // уже обновили
+                        Object rt = get(a, "refreshToken");
+                        if (authEmpty(rt)) return;
+                        String[] r = authRefresh((String) rt);
+                        if (!r[0].startsWith("2")) return;                           // не вышло — попробуем через минуту; не выходим
+                        if (!rt.equals(get(a, "refreshToken"))) return;              // пока ходили — вышли
+                        set(a, "accessToken", r[1]);
+                        set(a, "refreshToken", r[2]);
+                        a.getSharedPreferences(AUTH_SESSION, Context.MODE_PRIVATE).edit()
+                            .putString("at", r[1]).putString("rt", r[2]).commit();
+                        authBackup(a);
+                    } catch (Throwable ignore) {}
+                }
+            }
+        }).start();
+    }
 }

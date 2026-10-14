@@ -769,6 +769,55 @@ try {
       assert.ok(has(arsc14, str) || has(dex14, str), `APK 10.14: нет «${str}» — правка 10.67 не найдёт штатное поле`);
     assert.ok(/eq\("админ 10\.67: /.test(tp) && /eq\("подкатегория 10\.67: /.test(tp) && /eq\("кабинет 10\.67: /.test(tp), 'IvaPatchTest: проверки 10.67');
   }
+  // 10.69 (решение владельца 14.10.2026): вход не слетает — без новых вставок в smali
+  {
+    const ip = R('android/patches/IvaPatch.java'), cp = R('android/patches/IvaClientPatch.java'), np = R('android/patches/IvaNotifyPatch.java');
+    const tp = R('android/patches/test/IvaPatchTest.java'), ap = R('android/patches/apply.py');
+    const au = cp.slice(cp.indexOf('// ───────────── 10.69: вход больше не слетает'));
+    assert.ok(cp.indexOf('// ───────────── 10.69: вход больше не слетает') > 0 && !/authRecover|authStart|authBackup|iva_auth_bak/.test(ap),
+      'вход 10.69: новых вставок в smali нет (только имеющиеся onCreated/onSession/onLogout/onTab)');
+    const lo = ip.slice(ip.indexOf('public static void onLogout('), ip.indexOf('public static void onLogout(') + 400);
+    assert.ok(lo.includes('try { if (IvaClientPatch.authRecover(a)) return; } catch (Throwable ignore) {}')
+      && ip.includes('try { IvaClientPatch.authStart(a); } catch (Throwable ignore) {}')
+      && ip.includes('try { IvaClientPatch.authBackup(a); } catch (Throwable ignore) {}   // 10.69: копия входа (вход, восстановление)')
+      && ip.includes('try { IvaClientPatch.authBackup(a); } catch (Throwable ignore) {}   // 10.69: копия входа (пишется, лишь когда ключ сменился)'),
+      'вход 10.69: подключено из onLogout, onCreated, onSession, onTab');
+    const rc = au.slice(au.indexOf('static boolean authRecover('), au.indexOf('static void authStart('));
+    // «Выйти» (главный поток) — копия стирается, выход как раньше; восстановление — только из фонового потока проверки
+    assert.ok(rc.includes('boolean main = Looper.myLooper() == Looper.getMainLooper();')
+      && rc.includes('if (main) { authForget(a); return false; }')
+      && rc.indexOf('if (main) { authForget(a); return false; }') < rc.indexOf('authRefresh(')
+      && rc.includes('if (d == AUTH_NONE) { if (has) authForget(a); return false; }'),
+      'вход 10.69: кнопка «Выйти» выходит как раньше; rt не действует — выход настоящий');
+    // открытие — штатным enterApp и только после штатного показа экрана входа (иначе он ляжет поверх)
+    assert.ok(rc.includes('int st = authEnterStep(authVisible(a, "scrLogin"), authVisible(a, "scrMain"), tries++);')
+      && rc.includes('if (st == AUTH_WAIT) { new Handler(Looper.getMainLooper()).postDelayed(this, AUTH_WAIT_MS); return; }')
+      && rc.includes('if (st == AUTH_ENTER) try {')
+      && rc.includes('a.getClass().getDeclaredMethod("enterApp")') && !/showScreen\(|logoutLocal\(|set\(a, "scr/.test(au),
+      'вход 10.69: приложение открывается штатным enterApp после штатного экрана входа');
+    // без новых данных: копируется только штатное хранилище входа, никуда не отправляется
+    assert.ok(au.includes('static final String AUTH_BAK = "iva_auth_bak", AUTH_SESSION = "prokat_session";')
+      && (au.match(/IvaNotifyPatch\.nativeCall\(/g) || []).length === 1
+      && au.includes('SB_URL + "/auth/v1/token?grant_type=refresh_token", "POST"')
+      && !/customer_profiles|passport|surname|\/rest\/v1|\/rpc\//.test(au),
+      'вход 10.69: единственный запрос — обновление ключа (как штатный); новых персональных данных нет');
+    // обновление заранее: не выходит при неудаче, не пишет после выхода, один за раз
+    const tk = au.slice(au.indexOf('static void authTick('));
+    assert.ok(tk.includes('synchronized (AUTH_LOCK)') && tk.includes('if (!r[0].startsWith("2")) return;')
+      && tk.includes('if (!rt.equals(get(a, "refreshToken"))) return;')
+      && tk.indexOf('if (!rt.equals(get(a, "refreshToken"))) return;') < tk.indexOf('set(a, "accessToken", r[1]);')
+      && rc.includes('synchronized (AUTH_LOCK)') && np.includes('synchronized (IvaClientPatch.AUTH_LOCK) { return bgRefreshLocked(s, rt); }'),
+      'вход 10.69: при неудаче не выходим; после «Выйти» пару не возвращаем; обновления не идут одновременно');
+    assert.ok(au.includes('if (a.isFinishing()) return;') && au.includes('if (authRun != null) authH.removeCallbacks(authRun);'),
+      'вход 10.69: проверка ключа — одна, останавливается с окном');
+    assert.ok(np.includes('return cur == null || cur.trim().isEmpty() || "null".equals(cur.trim()) ? null : cur;'),
+      'вход 10.69: фоновая проверка — пока ждали, вышли: пустой ключ не считается входом');
+    assert.ok(np.includes('if (logged) try { IvaClientPatch.authBackup(app); } catch (Throwable ignore) {}   // 10.69: копия входа'),
+      'вход 10.69: фоновая проверка обновляет копию входа');
+    assert.ok((tp.match(/eq\("вход 10\.69: /g) || []).length >= 18, 'IvaPatchTest: проверки 10.69 (вход)');
+    for (const m of ['enterApp', 'logoutLocal', 'restoreSession', 'scrLogin', 'scrMain', 'userPhone', 'userName', 'userEmail', 'refreshToken', 'accessToken'])
+      assert.ok(has(dex14, m), `classes.dex 10.14: нет «${m}»`);
+  }
   // 10.68 (решение владельца 14.10.2026): подробности заявки у админа — та же шторка, блок «Клиент» только у админа
   {
     const op = R('android/patches/IvaOrderPatch.java'), np = R('android/patches/IvaNotifyPatch.java'), tp = R('android/patches/test/IvaPatchTest.java');
@@ -810,7 +859,7 @@ try {
       'уведомления 10.65: те же проверки и переключатели, что у этапа 1; пока окно живо — не работает; заявки — только админу');
     const rf = bg.slice(bg.indexOf('static String bgRefresh('), bg.indexOf('static void bgRun('));
     assert.ok(rf.includes('"/auth/v1/token?grant_type=refresh_token", "POST"') && rf.includes('s.edit().putString("at", at).putString("rt", nrt).commit();')
-      && rf.includes('if (!rt.equals(s.getString("rt", "")) || activityAlive()) return null;') && !/\.clear\(\)|\.remove\(|logoutLocal/.test(bg),
+      && rf.includes('if (!rt.equals(s.getString("rt", ""))) return null;') && !rf.includes('activityAlive') && !/\.clear\(\)|\.remove\(|logoutLocal/.test(bg),
       'уведомления 10.65: истёкший токен — обновить и записать новую пару в штатное хранилище (rt одноразовый); выход из аккаунта — только штатный');
     assert.ok(np.includes('if (logged && !email.isEmpty()) try { prefs(a).edit().putBoolean(key("admin", email), admin).apply(); } catch (Throwable ignore) {}')
       && np.includes('try { scheduleBg(a.getApplicationContext()); } catch (Throwable ignore) {}   // 10.65'),

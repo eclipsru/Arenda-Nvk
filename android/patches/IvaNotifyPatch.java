@@ -1213,15 +1213,26 @@ public final class IvaNotifyPatch {
 
     /** Обновить токен по rt и записать новую пару в штатное хранилище (как saveSession). Не вышло — null. */
     static String bgRefresh(SharedPreferences s, String rt) {
+        synchronized (IvaClientPatch.AUTH_LOCK) { return bgRefreshLocked(s, rt); }   // 10.69: одно обновление за раз
+    }
+
+    static String bgRefreshLocked(SharedPreferences s, String rt) {
         try {
             if (rt == null || rt.trim().isEmpty()) return null;
+            if (!rt.equals(s.getString("rt", ""))) {                                  // 10.69: пока ждали — уже обновили (или вышли)
+                String cur = s.getString("at", "");
+                return cur == null || cur.trim().isEmpty() || "null".equals(cur.trim()) ? null : cur;
+            }
             String[] r = nativeCall(IvaClientPatch.SB_URL + "/auth/v1/token?grant_type=refresh_token", "POST",
                 "{\"refresh_token\":" + jsonStr(rt) + "}", false, null);
             if (r == null || r.length < 2 || r[0] == null || !r[0].startsWith("2")) return null;
             JSONObject j = new JSONObject(r[1]);
             String at = j.optString("access_token", ""), nrt = j.optString("refresh_token", "");
             if (at.isEmpty() || nrt.isEmpty() || "null".equals(at) || "null".equals(nrt)) return null;
-            if (!rt.equals(s.getString("rt", "")) || activityAlive()) return null;   // пока ходили — вошли/вышли/открыли приложение
+            // 10.69: сервер уже сменил пару — старая через несколько секунд не действует. Раньше новую выбрасывали,
+            // если окно успело открыться, — и вход слетал. Теперь сохраняем всегда, кроме случая «пока ходили — вошли/вышли»;
+            // открытое окно подхватит пару из хранилища (IvaClientPatch.authTick).
+            if (!rt.equals(s.getString("rt", ""))) return null;
             s.edit().putString("at", at).putString("rt", nrt).commit();
             return at;
         } catch (Throwable e) { return null; }
@@ -1239,6 +1250,7 @@ public final class IvaNotifyPatch {
             String fresh = bgRefresh(s, s.getString("rt", ""));
             if (fresh == null) logged = false; else at = fresh;
         }
+        if (logged) try { IvaClientPatch.authBackup(app); } catch (Throwable ignore) {}   // 10.69: копия входа
         BgCtx c = new BgCtx(app, logged ? at : null);
         boolean admin = logged && prefs(app).getBoolean(key("admin", email), false);
         if (logged && admin) try { checkOrders(c, email); } catch (Throwable ignore) {}

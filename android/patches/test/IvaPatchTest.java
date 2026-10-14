@@ -845,6 +845,35 @@ public class IvaPatchTest {
                 eq("переход 10.59: та же переписка, что в списке чатов", inList, true);
             }
         }
+        {   // 10.69: вход не слетает
+            int N = IvaClientPatch.AUTH_NONE, K = IvaClientPatch.AUTH_KEEP, F = IvaClientPatch.AUTH_FRESH;
+            eq("вход 10.69: «Выйти» (главный поток) — выход настоящий при любом ответе", IvaClientPatch.authDecision(true, true, "200") == N && IvaClientPatch.authDecision(true, true, "-1") == N, true);
+            eq("вход 10.69: копии нет — выход как раньше", IvaClientPatch.authDecision(false, false, "200") == N && IvaClientPatch.authDecision(false, false, "-1") == N, true);
+            eq("вход 10.69: ключ обновлён — вход с новой парой", IvaClientPatch.authDecision(false, true, "200") == F && IvaClientPatch.authDecision(false, true, "201") == F, true);
+            eq("вход 10.69: нет связи — вход как был", IvaClientPatch.authDecision(false, true, "-1") == K && IvaClientPatch.authDecision(false, true, "") == K && IvaClientPatch.authDecision(false, true, null) == K, true);
+            eq("вход 10.69: сервер занят — вход как был", IvaClientPatch.authDecision(false, true, "500") == K && IvaClientPatch.authDecision(false, true, "503") == K
+                && IvaClientPatch.authDecision(false, true, "429") == K && IvaClientPatch.authDecision(false, true, "408") == K, true);
+            eq("вход 10.69: rt больше не действует (400/401/403/404) — выход настоящий", IvaClientPatch.authDecision(false, true, "400") == N && IvaClientPatch.authDecision(false, true, "401") == N
+                && IvaClientPatch.authDecision(false, true, "403") == N && IvaClientPatch.authDecision(false, true, "404") == N, true);
+            long now = 1_800_000_000_000L;
+            eq("вход 10.69: до конца ключа 10 минут — не обновляем", IvaClientPatch.authNeed(now / 1000 + 600, now), false);
+            eq("вход 10.69: до конца 4 минуты — обновляем", IvaClientPatch.authNeed(now / 1000 + 240, now), true);
+            eq("вход 10.69: ровно 5 минут — ещё нет, 4:59 — да", !IvaClientPatch.authNeed(now / 1000 + 300, now) && IvaClientPatch.authNeed(now / 1000 + 299, now), true);
+            eq("вход 10.69: ключ уже истёк — обновляем", IvaClientPatch.authNeed(now / 1000 - 3600, now), true);
+            eq("вход 10.69: срок не разобран — не трогаем", IvaClientPatch.authNeed(0, now), false);
+            eq("вход 10.69: пустые значения", IvaClientPatch.authEmpty(null) && IvaClientPatch.authEmpty("") && IvaClientPatch.authEmpty(" ") && IvaClientPatch.authEmpty("null")
+                && IvaClientPatch.authEmpty(Boolean.TRUE) && !IvaClientPatch.authEmpty("eyJ"), true);
+            eq("вход 10.69: ключ телефона — штатный", IvaClientPatch.AUTH_PH, "phone");
+            eq("вход 10.69: экран входа ещё не показан — ждём", IvaClientPatch.authEnterStep(false, false, 0), IvaClientPatch.AUTH_WAIT);
+            eq("вход 10.69: штатный экран входа показан — открываем приложение", IvaClientPatch.authEnterStep(true, false, 3), IvaClientPatch.AUTH_ENTER);
+            eq("вход 10.69: приложение уже открыто — не трогаем", IvaClientPatch.authEnterStep(true, true, 0), IvaClientPatch.AUTH_SKIP);
+            eq("вход 10.69: ждём не дольше 3 с", IvaClientPatch.authEnterStep(false, false, 59) == IvaClientPatch.AUTH_WAIT
+                && IvaClientPatch.authEnterStep(false, false, 60) == IvaClientPatch.AUTH_ENTER && IvaClientPatch.AUTH_WAIT_TRIES * IvaClientPatch.AUTH_WAIT_MS == 3000L, true);
+            eq("вход 10.69: обновление заранее — 5 минут, проверка раз в минуту", IvaClientPatch.AUTH_AHEAD_MS == 300000L && IvaClientPatch.AUTH_TICK_MS == 60000L, true);
+            // настоящий ключ: срок из JWT разбирается тем же jwtExp, что у фоновой проверки
+            String jwt = "x." + java.util.Base64.getUrlEncoder().withoutPadding().encodeToString(("{\"exp\":" + (now / 1000 + 200) + "}").getBytes()) + ".y";
+            eq("вход 10.69: срок из ключа → пора обновлять", IvaClientPatch.authNeed(IvaNotifyPatch.jwtExp(jwt), now), true);
+        }
         if (fail > 0) { System.out.println("ошибок: " + fail); System.exit(1); }
         System.out.println("все проверки IvaPatch пройдены");
     }
