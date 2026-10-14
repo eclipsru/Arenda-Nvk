@@ -354,7 +354,11 @@ try {
     assert.ok(enf.includes('if (d.isChecked() && rp instanceof RadioButton) ((RadioButton) rp).setChecked(true);') && op.includes('if (!l.deliv) return false;'),
       'IvaOrderPatch: инструмент без доставки — только самовывоз');
     const opForm = op.slice(0, op.indexOf('// ───────────────────────── 10.62–10.63: заявки клиента'));
-    assert.ok(!/removeView\(|\.removeViewAt\(/.test(op) && opForm.length > 1000 && (opForm.match(/removeAllViews\(\)/g) || []).length === 1 && opForm.includes('box.removeAllViews();')
+    // 10.67: единственное исключение — карточка заявки у админа: дату и названия переносим в столбец рядом с картинками
+    // (не удаляем, на ошибке — обратно); проверяется блоком 10.67 ниже
+    const op67 = op.indexOf('// ── 10.67: картинки и в заявках у админа'), op67e = op.indexOf('/** Запасной путь (наш список не загрузился)');
+    const opNo67 = op67 > 0 && op67e > op67 ? op.slice(0, op67) + op.slice(op67e) : op;
+    assert.ok(op67 > 0 && op67e > op67 && !/removeView\(|\.removeViewAt\(/.test(opNo67) && opForm.length > 1000 && (opForm.match(/removeAllViews\(\)/g) || []).length === 1 && opForm.includes('box.removeAllViews();')
       && (op.match(/removeAllViews\(\)/g) || []).length === 4 && op.includes('mine.removeAllViews();') && op.includes('list.removeAllViews();')
       && op.includes('((View) ol).setVisibility(View.GONE);') && op.includes('dr.setVisibility(View.GONE);') && op.includes('if (j.optInt("qty", 1) != 1) j.put("qty", 1);'),
       'IvaOrderPatch: штатные строки заявки и общий срок только скрыты (не удаляются), количество — 1');
@@ -727,6 +731,42 @@ try {
       && !/apiCall|new Thread/.test(cv),
       'заявки 10.66: справа картинки (скруглённые, штатный loadPhoto, без своих запросов); вся карточка нажимается и удерживается, как раньше');
     assert.ok(/eq\("состояние 10\.66: /.test(tp) && /eq\("заявки 10\.66: /.test(tp), 'IvaPatchTest: проверки 10.66');
+  }
+  // 10.67 (просьбы владельца 14.10.2026): картинки в заявках у админа; выбранная подкатегория — белым;
+  // «Позвонить» / «Написать в МАКС» не возвращаются в кабинет клиента после обновления свайпом
+  {
+    const ip = R('android/patches/IvaPatch.java'), op = R('android/patches/IvaOrderPatch.java'), cp = R('android/patches/IvaClientPatch.java');
+    const tp = R('android/patches/test/IvaPatchTest.java');
+    const ad = op.slice(op.indexOf('// ── 10.67: картинки и в заявках у админа'), op.indexOf('/** Запасной путь (наш список не загрузился)'));
+    assert.ok(ad.length > 1000 && ad.includes('if (rows.isEmpty() || cards.size() != rows.size()) return;')
+      && ad.includes('keys.add(IvaNotifyPatch.clientKey(a, j));') && ad.includes('View pics = ordPicsView(a, r);')
+      && ad.includes('card.addView(pics, card.getChildCount() - 1, pl);')
+      && (ad.match(/removeView\(/g) || []).length === 5 && ad.includes('card.removeView(names);') && ad.includes('card.removeView(date);')
+      && ad.includes('col.addView(date);') && ad.includes('col.addView(names);')
+      && ad.includes('card.addView(date, 0);') && ad.includes('card.addView(names, 1);')
+      && !/removeAllViews|setOnClickListener|setOnLongClickListener|apiCall|new Thread|\.setVisibility\(/.test(ad),
+      'админ 10.67: картинки по порядку штатных карточек (число не совпало — не трогаем); дата и названия только переносятся (на ошибке — обратно); нажатия, кнопки и запросы не трогаем');
+    assert.ok(op.includes('else try { admPics(a); } catch (Throwable ignore) {}   // 10.67: картинки на карточках админа')
+      && (op.match(/setOnHierarchyChangeListener\(/g) || []).length === 1
+      && op.indexOf('if (o instanceof LinearLayout && ordHooked.get() != o) {') < op.indexOf('if (!(o instanceof LinearLayout) || !IvaClientPatch.isClient(a)) { try { ordRender(a); }'),
+      'админ 10.67: тот же один слушатель списка (и для админа), картинки — после штатного renderAdmOrders');
+    const pk = ip.slice(ip.indexOf('// ───────────── 10.67: выбранная подкатегория'));
+    assert.ok(pk.includes('{"atCat", "atCatKey"}, {"atSub", "atSubKey"},') && pk.includes('{"teCat", "editToolCat"}, {"teSub", "editToolSub"},')
+      && pk.includes('tv.setTextColor(on ? navColor(a, "text", 0xfff2f4f8) : navColor(a, "gray2", 0xff6b7080));')
+      && pk.includes('if (pickHooked.containsKey(tv)) continue;') && !/setText\(|removeView|apiCall/.test(pk)
+      && (ip.match(/try \{ pickColors\(a\); \} catch \(Throwable ignore\) \{\}/g) || []).length === 2,
+      'подкатегория 10.67: цвет по штатному ключу (выбрано — text, нет — gray2) в обеих формах, текст не меняем; из onTab и onHub');
+    const pc = cp.slice(cp.indexOf('static void profileContacts(Activity a) {'), cp.indexOf('static void watchContacts('));
+    const wc = cp.slice(cp.indexOf('static void watchContacts('), cp.indexOf('static void watchContacts(') + 2000);
+    assert.ok(pc.includes('contactsShow = show;') && pc.includes('try { watchContacts(a); } catch (Throwable ignore) {}')
+      && pc.includes('if (show || visible == null) return false;')
+      && wc.includes('if (contactsWatched.get() == a) return;') && wc.includes('addOnPreDrawListener(')
+      && wc.includes('if (contactsFixes >= CONTACTS_FIX_MAX) return true;') && wc.includes('} catch (Throwable ignore) { return true; }')
+      && cp.includes('static final int CONTACTS_FIX_MAX = 2;') && !/apiCall|new Thread|removeView/.test(pc + wc),
+      'кабинет 10.67: строки прячутся перед отрисовкой после любого штатного renderProfile (кадр пропускается не больше 2 раз подряд); админу не навязываем');
+    for (const str of ['rowCall', 'rowMax', 'atSubKey', 'atCatKey', 'editToolSub', 'editToolCat', 'admParts', 'admDrill', 'admClientKey', 'partClientKey'])
+      assert.ok(has(arsc14, str) || has(dex14, str), `APK 10.14: нет «${str}» — правка 10.67 не найдёт штатное поле`);
+    assert.ok(/eq\("админ 10\.67: /.test(tp) && /eq\("подкатегория 10\.67: /.test(tp) && /eq\("кабинет 10\.67: /.test(tp), 'IvaPatchTest: проверки 10.67');
   }
   // 10.65: уведомления, этап 2 — когда приложение закрыто (JobScheduler раз в ~15 мин, без Firebase; решение владельца 13.10.2026)
   {

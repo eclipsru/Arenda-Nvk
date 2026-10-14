@@ -678,6 +678,36 @@ public class IvaPatchTest {
             StringBuilder picPlan = new StringBuilder();
             for (int pn : new int[]{0, 1, 2, 3, 5}) { int[] pp = IvaOrderPatch.ordPicsPlan(pn); picPlan.append(pp[0]).append('/').append(pp[1]).append(' '); }
             eq("заявки 10.66: до двух картинок, на второй «+N»", picPlan.toString().trim(), "0/0 1/0 2/0 2/2 2/4");
+            // 10.67: картинки в заявках у админа — карточки в порядке штатного renderAdmOrders
+            java.util.List<String> admK = java.util.Arrays.asList("ivan", "petr", "ivan", null);
+            java.util.List<String> admT = java.util.Arrays.asList("Дрель (3 дня)", "Пила (1 день)", "Перфоратор (2 дня), Дрель (1 день)", "null");
+            java.util.List<String> admO = java.util.Arrays.asList("me@x.ru", "me@x.ru", "null", "me@x.ru");
+            StringBuilder admGot = new StringBuilder();
+            for (java.util.Map<String, String> admR : IvaOrderPatch.admPicRows(admK, admT, admO, false, ""))
+                admGot.append(admR.get("tools")).append(" / ").append(admR.get(IvaOrderPatch.ORD_OWNERS)).append(" | ");
+            eq("админ 10.67: по клиенту — инструменты всех его заявок, порядок клиентов как в списке",
+                admGot.toString(), "Дрель (3 дня), Перфоратор (2 дня), Дрель (1 день) / me@x.ru | Пила (1 день) / me@x.ru |  / me@x.ru | ");
+            StringBuilder admDr = new StringBuilder();
+            for (java.util.Map<String, String> admR : IvaOrderPatch.admPicRows(admK, admT, admO, true, "ivan")) admDr.append(admR.get("tools")).append(" | ");
+            eq("админ 10.67: заявки клиента — по карточке на заявку, по порядку",
+                admDr.toString(), "Дрель (3 дня) | Перфоратор (2 дня), Дрель (1 день) | ");
+            eq("админ 10.67: картинок — по разным названиям (дрель дважды — одна)",
+                IvaOrderPatch.ordToolNames(IvaOrderPatch.admPicRows(admK, admT, admO, false, "").get(0).get("tools")).toString(), "[дрель, перфоратор]");
+            eq("админ 10.67: нет такого клиента — ничего не рисуем",
+                IvaOrderPatch.admPicRows(admK, admT, admO, true, "nobody").size() + "/" + IvaOrderPatch.admPicRows(new java.util.ArrayList<String>(), admT, admO, false, "").size(), "0/0");
+            // 10.67: выбранная подкатегория — белым; подсказка — серым
+            eq("подкатегория 10.67: выбрано — только при непустом ключе",
+                IvaPatch.pickChosen("perf") + "/" + IvaPatch.pickChosen("") + "/" + IvaPatch.pickChosen("  ") + "/" + IvaPatch.pickChosen(null) + "/" + IvaPatch.pickChosen("null"),
+                "true/false/false/false/false");
+            StringBuilder pickF = new StringBuilder();
+            for (String[] f : IvaPatch.PICK_FIELDS) pickF.append(f[0]).append('=').append(f[1]).append(' ');
+            eq("подкатегория 10.67: обе формы — добавление и правка", pickF.toString().trim(), "atCat=atCatKey atSub=atSubKey teCat=editToolCat teSub=editToolSub");
+            // 10.67: кабинет клиента — «Позвонить» / «Написать в МАКС» прячем и после штатного renderProfile
+            eq("кабинет 10.67: у клиента видна строка — прятать; у админа — не трогать",
+                IvaClientPatch.contactsLeak(false, new boolean[]{false, true}) + "/" + IvaClientPatch.contactsLeak(false, new boolean[]{false, false})
+                + "/" + IvaClientPatch.contactsLeak(true, new boolean[]{false, false}) + "/" + IvaClientPatch.contactsLeak(true, new boolean[]{true, true})
+                + "/" + IvaClientPatch.contactsLeak(false, null),
+                "true/false/false/false/false");
             // 10.65: уведомления, этап 2 — когда приложение закрыто
             String bgJwt = "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiAidTEiLCAiZXhwIjogMTc2MDAwMDAwMCwgImVtYWlsIjogItCwQGIucnUifQ.sig";
             eq("уведомления 10.65: срок токена из JWT (base64url, кириллица, без «=»)", IvaNotifyPatch.jwtExp(bgJwt) + "|" + IvaNotifyPatch.jwtExp("плохой") + "|" + IvaNotifyPatch.jwtExp(null) + "|" + IvaNotifyPatch.jwtExp("a.%%%.b"),

@@ -1074,14 +1074,15 @@ public final class IvaOrderPatch {
 
     static void clientOrders(final Activity a) {
         Object o = get(a, "ordersList");
-        if (!(o instanceof LinearLayout) || !IvaClientPatch.isClient(a)) { try { ordRender(a); } catch (Throwable ignore) {} return; }
-        if (ordHooked.get() != o) {
+        if (o instanceof LinearLayout && ordHooked.get() != o) {
+            // 10.67: и у админа — штатный renderAdmOrders перестроил список → наши картинки (ordRender → admPics)
             ((LinearLayout) o).setOnHierarchyChangeListener(new ViewGroup.OnHierarchyChangeListener() {
                 @Override public void onChildViewAdded(View parent, View child) { ordSchedule(a); }
                 @Override public void onChildViewRemoved(View parent, View child) {}
             });
             ordHooked = new WeakReference<View>((View) o);
         }
+        if (!(o instanceof LinearLayout) || !IvaClientPatch.isClient(a)) { try { ordRender(a); } catch (Throwable ignore) {} return; }
         ordSafeRender(a);
         ordFetch(a);   // раздел открыли — свежие статусы (штатный loadOrders тоже грузит заново)
     }
@@ -1450,6 +1451,7 @@ public final class IvaOrderPatch {
             if (scroll != null) scroll.setVisibility(View.VISIBLE);
             if (root != null) root.setVisibility(View.GONE);
             if (client) ordAttach(a);
+            else try { admPics(a); } catch (Throwable ignore) {}   // 10.67: картинки на карточках админа
             return;
         }
         if (root == null) {
@@ -1695,6 +1697,123 @@ public final class IvaOrderPatch {
             row.addView(cell, cl);
         }
         return row;
+    }
+
+    // ── 10.67: картинки и в заявках у админа (просьба владельца 14.10.2026) ──
+    // Список админа штатный (renderAdmOrders): сначала карточки клиентов (имя, «N заявок · M активн.», кружок статуса),
+    // по нажатию — заявки клиента (дата, инструменты, комиссия, кнопки). Карточки идут в том же порядке, что admParts,
+    // сгруппированные по partClientKey (у клиента — все его заявки, без фильтров). Картинки те же, что у клиента
+    // (ordPicsView: до двух 56 dp, «+N»), каталог — сначала у проката заявки (owner_email части, т.е. у самого админа).
+    // Клиент — справа перед кружком (инструменты всех его заявок), заявка — справа от даты и названий.
+    // Число карточек не совпало с данными (другой вариант экрана) — ничего не трогаем.
+    static final String ADM_PICS_TAG = "iva_adm_pics";
+
+    /** Данные для карточек админа в порядке штатного экрана: по клиенту (все его заявки) или заявки одного клиента. */
+    static List<Map<String, String>> admPicRows(List<String> keys, List<String> tools, List<String> owners, boolean drill, String drillKey) {
+        LinkedHashMap<String, List<Integer>> groups = new LinkedHashMap<String, List<Integer>>();
+        for (int i = 0; i < keys.size(); i++) {
+            String k = keys.get(i) == null ? "" : keys.get(i);
+            List<Integer> g = groups.get(k);
+            if (g == null) { g = new ArrayList<Integer>(); groups.put(k, g); }
+            g.add(i);
+        }
+        List<Map<String, String>> out = new ArrayList<Map<String, String>>();
+        if (drill) {
+            List<Integer> g = groups.get(drillKey == null ? "" : drillKey);
+            if (g != null) for (Integer i : g) out.add(admPicRow(tools, owners, java.util.Collections.singletonList(i)));
+        } else {
+            for (List<Integer> g : groups.values()) out.add(admPicRow(tools, owners, g));
+        }
+        return out;
+    }
+
+    static Map<String, String> admPicRow(List<String> tools, List<String> owners, List<Integer> idx) {
+        StringBuilder t = new StringBuilder(), o = new StringBuilder();
+        for (Integer i : idx) {
+            String s = i < tools.size() ? admClean(tools.get(i)) : "";
+            if (!s.isEmpty()) { if (t.length() > 0) t.append(", "); t.append(s); }
+            String e = i < owners.size() ? admClean(owners.get(i)) : "";
+            if (!e.isEmpty() && !ordSplit(o.toString()).contains(e)) { if (o.length() > 0) o.append(","); o.append(e); }
+        }
+        Map<String, String> m = new LinkedHashMap<String, String>();
+        m.put("tools", t.toString());
+        m.put(ORD_OWNERS, o.toString());
+        return m;
+    }
+
+    static String admClean(String v) {
+        String s = v == null ? "" : v.trim();
+        return "null".equals(s) ? "" : s;      // optString у JSON null — «null»
+    }
+
+    /** Карточки штатного списка: LinearLayout с содержимым (подпись, «‹ Все клиенты», «Заявок ещё нет» — не они). */
+    static List<LinearLayout> admCards(ViewGroup list) {
+        List<LinearLayout> out = new ArrayList<LinearLayout>();
+        for (int i = 0; i < list.getChildCount(); i++) {
+            View c = list.getChildAt(i);
+            if (c instanceof LinearLayout && ((LinearLayout) c).getChildCount() >= 2) out.add((LinearLayout) c);
+        }
+        return out;
+    }
+
+    static void admPics(Activity a) {
+        Object ol = get(a, "ordersList"), parts = get(a, "admParts");
+        if (!(ol instanceof LinearLayout) || !(parts instanceof List)) return;
+        List<String> keys = new ArrayList<String>(), tools = new ArrayList<String>(), owners = new ArrayList<String>();
+        for (Object o : (List<?>) parts) {
+            if (!(o instanceof JSONObject)) return;
+            JSONObject j = (JSONObject) o;
+            keys.add(IvaNotifyPatch.clientKey(a, j));
+            tools.add(j.optString("tools_text", ""));
+            owners.add(j.optString("owner_email", ""));
+        }
+        boolean drill = Boolean.TRUE.equals(get(a, "admDrill"));
+        List<Map<String, String>> rows = admPicRows(keys, tools, owners, drill, String.valueOf(get(a, "admClientKey")));
+        List<LinearLayout> cards = admCards((ViewGroup) ol);
+        if (rows.isEmpty() || cards.size() != rows.size()) return;
+        for (int i = 0; i < cards.size(); i++) {
+            try { admPicCard(a, cards.get(i), rows.get(i), drill); } catch (Throwable ignore) {}
+        }
+    }
+
+    static void admPicCard(Activity a, LinearLayout card, Map<String, String> r, boolean drill) {
+        if (card.findViewWithTag(ADM_PICS_TAG) != null) return;       // уже есть (список не перестраивался)
+        if (drill) {
+            if (card.getOrientation() != LinearLayout.VERTICAL
+                || !(card.getChildAt(0) instanceof TextView) || !(card.getChildAt(1) instanceof TextView)) return;
+        } else if (card.getOrientation() != LinearLayout.HORIZONTAL) return;
+        View pics = ordPicsView(a, r);
+        if (pics == null) return;
+        pics.setTag(ADM_PICS_TAG);
+        LinearLayout.LayoutParams pl = new LinearLayout.LayoutParams(-2, -2);
+        pl.leftMargin = dp(a, 10);
+        if (!drill) {                                                  // клиент: [имя и счётчики | картинки | кружок]
+            pl.rightMargin = dp(a, 10);
+            pl.gravity = Gravity.CENTER_VERTICAL;
+            card.addView(pics, card.getChildCount() - 1, pl);
+            return;
+        }
+        // заявка: дата и инструменты — в столбец слева, картинки справа; комиссия, статус и кнопки — как были, ниже
+        View date = card.getChildAt(0), names = card.getChildAt(1);
+        LinearLayout row = new LinearLayout(a);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        LinearLayout col = new LinearLayout(a);
+        col.setOrientation(LinearLayout.VERTICAL);
+        card.removeView(names);
+        card.removeView(date);
+        try {
+            col.addView(date);
+            col.addView(names);
+            row.addView(col, new LinearLayout.LayoutParams(0, -2, 1f));
+            row.addView(pics, pl);
+            card.addView(row, 0, new LinearLayout.LayoutParams(-1, -2));
+        } catch (Throwable t) {                                         // не вышло — штатные строки на место
+            if (date.getParent() instanceof ViewGroup) ((ViewGroup) date.getParent()).removeView(date);
+            if (names.getParent() instanceof ViewGroup) ((ViewGroup) names.getParent()).removeView(names);
+            if (row.getParent() == card) card.removeView(row);
+            card.addView(date, 0);
+            card.addView(names, 1);
+        }
     }
 
     /** Запасной путь (наш список не загрузился): штатные карточки — нажатие и «Подробнее ›», как в 10.62. */

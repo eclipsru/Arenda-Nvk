@@ -199,6 +199,7 @@ public final class IvaPatch {
     public static void onHub(Activity a) {
         try { delSwitches(a); } catch (Throwable ignore) {}   // 10.65: «Доставка» — выключатель
         try { condRows(a); } catch (Throwable ignore) {}      // 10.66: «Состояние» — Новый / Хорошее / Рабочее
+        try { pickColors(a); } catch (Throwable ignore) {}    // 10.67: выбранная (под)категория — белым, не серым
         try {
             Object lim = get(a, "meLimited");
             if (!(lim instanceof Boolean) || !((Boolean) lim) || limitedShown) return;
@@ -406,6 +407,7 @@ public final class IvaPatch {
         try { installBack(a); } catch (Throwable ignore) {}   // 10.63: системная «Назад» — внутри приложения
         try { delSwitches(a); } catch (Throwable ignore) {}   // 10.65: «Доставка» в форме инструмента — выключатель
         try { condRows(a); } catch (Throwable ignore) {}      // 10.66: «Состояние» в форме инструмента
+        try { pickColors(a); } catch (Throwable ignore) {}    // 10.67: выбранная (под)категория — белым, не серым
         try {
             String t = tab == null ? "" : tab;
             int orange = navColor(a, "orange", 0xffff9800);
@@ -1015,6 +1017,51 @@ public final class IvaPatch {
             else b.setBackgroundColor(on ? color(a, "orange", 0xffff8f1f) : color(a, "card", 0xff1a1d24));
             b.setTextColor(on ? 0xffffffff : color(a, "text", 0xfff2f4f8));
             b.setTypeface(null, on ? android.graphics.Typeface.BOLD : android.graphics.Typeface.NORMAL);
+        }
+    }
+
+    // ───────────── 10.67: выбранная подкатегория — белым (просьба владельца 14.10.2026) ─────────────
+    // Поля «Категория» / «Подкатегория» — TextView с серым (gray2) текстом-подсказкой. Штатно после выбора белым
+    // становится не всё: в правке инструмента подкатегория остаётся серой (pickTeSub цвет не меняет), а в «Добавить
+    // инструмент» после смены категории подсказка «Подкатегория (необязательно)» остаётся белой, будто выбрана.
+    // Правило одно: выбрано значение (штатное поле-ключ не пустое) — цвет text, нет — gray2. Ключ штатный код пишет
+    // до setText, поэтому цвет считаем при каждой смене текста (и ещё раз следующим кадром — на случай другого порядка).
+    static final String[][] PICK_FIELDS = {
+        {"atCat", "atCatKey"}, {"atSub", "atSubKey"},            // «Добавить инструмент»
+        {"teCat", "editToolCat"}, {"teSub", "editToolSub"},      // правка инструмента
+    };
+    static final java.util.Map<View, Boolean> pickHooked = new java.util.WeakHashMap<View, Boolean>();
+
+    /** Выбрано ли значение: штатный ключ (категории / подкатегории) не пустой. */
+    static boolean pickChosen(Object key) {
+        if (!(key instanceof String)) return false;
+        String k = ((String) key).trim();
+        return !k.isEmpty() && !"null".equals(k);
+    }
+
+    static void pickColors(final Activity a) {
+        for (final String[] f : PICK_FIELDS) {
+            try {
+                Object o = get(a, f[0]);
+                if (!(o instanceof TextView)) continue;
+                final TextView tv = (TextView) o;
+                final Runnable paint = new Runnable() {
+                    @Override public void run() {
+                        try {
+                            boolean on = pickChosen(get(a, f[1]));
+                            tv.setTextColor(on ? navColor(a, "text", 0xfff2f4f8) : navColor(a, "gray2", 0xff6b7080));
+                        } catch (Throwable ignore) {}
+                    }
+                };
+                paint.run();
+                if (pickHooked.containsKey(tv)) continue;
+                pickHooked.put(tv, Boolean.TRUE);
+                tv.addTextChangedListener(new android.text.TextWatcher() {
+                    @Override public void beforeTextChanged(CharSequence s, int st, int c, int n) {}
+                    @Override public void onTextChanged(CharSequence s, int st, int b, int c) {}
+                    @Override public void afterTextChanged(android.text.Editable s) { paint.run(); tv.post(paint); }
+                });
+            } catch (Throwable ignore) {}
         }
     }
 }

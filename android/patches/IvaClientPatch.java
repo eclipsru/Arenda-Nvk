@@ -1668,16 +1668,64 @@ public final class IvaClientPatch {
 
     static void profileContacts(Activity a) {
         boolean show = !isClient(a);
+        java.util.List<WeakReference<View>> seen = new ArrayList<WeakReference<View>>();
         for (String n : PROFILE_HIDE_IDS) {
             int id = a.getResources().getIdentifier(n, "id", a.getPackageName());
             View v = id == 0 ? null : a.findViewById(id);
-            if (v != null) v.setVisibility(show ? View.VISIBLE : View.GONE);
+            if (v != null) { v.setVisibility(show ? View.VISIBLE : View.GONE); seen.add(new WeakReference<View>(v)); }
         }
         Object t = get(a, "addrInfoTxt");                       // «Адрес выдачи»: строка = родитель родителя текста адреса
         if (t instanceof View && ((View) t).getParent() instanceof View) {
             ViewParent row = ((View) ((View) t).getParent()).getParent();
-            if (row instanceof ViewGroup && isSingleRow(a, (ViewGroup) row)) ((View) row).setVisibility(show ? View.VISIBLE : View.GONE);
+            if (row instanceof ViewGroup && isSingleRow(a, (ViewGroup) row)) {
+                ((View) row).setVisibility(show ? View.VISIBLE : View.GONE);
+                seen.add(new WeakReference<View>((View) row));
+            }
         }
+        contactViews = seen;
+        contactsShow = show;
+        try { watchContacts(a); } catch (Throwable ignore) {}
+    }
+
+    // ── 10.67: после «потянуть вниз» в кабинете клиента снова появлялись «Позвонить» и «Написать в МАКС» ──
+    // Штатный renderProfile сам делает rowCall / rowMax видимыми, а зовут его не только при открытии вкладки (тогда
+    // мы их прячем), но и обновление свайпом, фоновая проверка админа (checkSelfAdmin), выход. Ловить каждого — хрупко,
+    // поэтому перед каждой отрисовкой окна (OnPreDrawListener) сверяем: у клиента строка видна — прячем и пропускаем
+    // этот кадр, так что мигания нет. Только прячем: админу видимость не навязываем (как решит штатный код).
+    static java.util.List<WeakReference<View>> contactViews = new ArrayList<WeakReference<View>>();
+    static boolean contactsShow = true;
+    static int contactsFixes = 0;
+    static WeakReference<Activity> contactsWatched = new WeakReference<Activity>(null);
+    static final int CONTACTS_FIX_MAX = 2;    // не вышло спрятать за 2 кадра — рисуем как есть, кадр не держим
+
+    /** Надо ли спрятать: строки должны быть скрыты (клиент), а какая-то из них видна. */
+    static boolean contactsLeak(boolean show, boolean[] visible) {
+        if (show || visible == null) return false;
+        for (boolean v : visible) if (v) return true;
+        return false;
+    }
+
+    static void watchContacts(final Activity a) {
+        if (contactsWatched.get() == a) return;
+        View decor = a.getWindow().getDecorView();
+        decor.getViewTreeObserver().addOnPreDrawListener(new android.view.ViewTreeObserver.OnPreDrawListener() {
+            @Override public boolean onPreDraw() {
+                try {
+                    java.util.List<WeakReference<View>> views = contactViews;
+                    boolean[] vis = new boolean[views.size()];
+                    for (int i = 0; i < vis.length; i++) {
+                        View v = views.get(i).get();
+                        vis[i] = v != null && v.getVisibility() == View.VISIBLE;
+                    }
+                    if (!contactsLeak(contactsShow, vis)) { contactsFixes = 0; return true; }
+                    if (contactsFixes >= CONTACTS_FIX_MAX) return true;
+                    contactsFixes++;
+                    profileContacts(a);           // заново: вдруг вошёл админ — тогда покажем, как при открытии вкладки
+                    return false;                 // этот кадр не рисуем — строки не мелькнут
+                } catch (Throwable ignore) { return true; }
+            }
+        });
+        contactsWatched = new WeakReference<Activity>(a);
     }
 
     /** Это одна строка «Адрес выдачи», а не весь список кабинета: в ней нет других пунктов (версия, «Позвонить», «Инструкция»). */
