@@ -954,6 +954,44 @@ public class IvaPatchTest {
             eq("мат 10.71: замена букв — одной длины (как translate в базе)", IvaReviewPatch.MAT_FROM.length() == IvaReviewPatch.MAT_TO.length(), true);
             eq("мат 10.71: подготовка текста", IvaReviewPatch.matNorm("ЁЖ x.y-й 3@0"), "еж хуй зао");
         }
+        {   // 10.72: переписка «Хочу сдавать инструмент» — отдельная, у владельца смайлик
+            eq("сдавать 10.72: тема из базы — tool_id важнее, topic='lend' → LEND, иначе общий чат",
+                IvaChatPatch.msgTool("", "lend") + "|" + IvaChatPatch.msgTool("t1", "lend") + "|" + IvaChatPatch.msgTool("", "") + "|" + IvaChatPatch.msgTool(null, "spam") + "|" + IvaChatPatch.msgTool("null", " lend "),
+                "lend|t1|||lend");
+            java.util.Set<String> q72ad = new java.util.HashSet<String>(java.util.Arrays.asList("eclips.ru@mail.ru", "adm@x.ru"));
+            java.util.List<IvaChatPatch.Msg> q72 = new java.util.ArrayList<IvaChatPatch.Msg>();
+            q72.add(IvaChatPatch.msg("1", "Kli@x.ru", "eclips.ru@mail.ru", "вопрос", "", "", 0, true, "2026-10-14T10:00:00Z", ""));
+            q72.add(IvaChatPatch.msg("2", "kli@x.ru", "eclips.ru@mail.ru", "хочу сдавать перфоратор", "", "", 0, false, "2026-10-14T10:01:00Z", "lend"));
+            q72.add(IvaChatPatch.msg("3", "kli@x.ru", "eclips.ru@mail.ru", "", "", "a.m4a", 5, false, "2026-10-14T10:02:00Z", ""));
+            q72.add(IvaChatPatch.msg("4", "kli@x.ru", "adm@x.ru", "про дрель", "", "", 0, true, "2026-10-14T10:03:00Z", "t1"));
+            java.util.Map<String, Long> q72h = new java.util.HashMap<String, Long>();
+            java.util.Set<String> q72i = new java.util.HashSet<String>();
+            java.util.List<IvaChatPatch.Chat> q72o = IvaChatPatch.buildChats(q72, "eclips.ru@mail.ru", q72ad, true, null, q72h, q72i);
+            StringBuilder q72s = new StringBuilder();
+            for (IvaChatPatch.Chat c : q72o) q72s.append(c.partner).append('|').append(c.tool).append(':').append(c.count).append('/').append(c.unread).append(' ');
+            eq("сдавать 10.72: у владельца — отдельная переписка «Хочу сдавать» (голосовое после неё — туда же), общий чат и чат по инструменту отдельно",
+                q72s.toString().trim(), "kli@x.ru|t1:1/0 kli@x.ru|lend:2/2 kli@x.ru|:1/0");
+            java.util.List<IvaChatPatch.Chat> q72c = IvaChatPatch.buildChats(q72, "kli@x.ru", q72ad, false, null, q72h, q72i);
+            StringBuilder q72cs = new StringBuilder();
+            for (IvaChatPatch.Chat c : q72c) q72cs.append(c.partner).append('|').append(c.tool).append(' ');
+            eq("сдавать 10.72: у клиента — тоже отдельная переписка с владельцем", q72cs.toString().trim(), "adm@x.ru|t1 eclips.ru@mail.ru|lend eclips.ru@mail.ru|");
+            eq("сдавать 10.72: переписка открывается своими сообщениями",
+                IvaChatPatch.thread(q72, "kli@x.ru", q72ad, false, null, "eclips.ru@mail.ru", "lend", q72h, q72i).size() + "|"
+                + IvaChatPatch.thread(q72, "kli@x.ru", q72ad, false, null, "eclips.ru@mail.ru", "", q72h, q72i).size(), "2|1");
+            q72h.put(IvaChatPatch.chatKey("kli@x.ru", "lend"), IvaChatPatch.parseIso("2026-10-14T10:05:00Z"));
+            eq("сдавать 10.72: «Удалить чат» у себя — по своей переписке, общий чат остаётся",
+                IvaChatPatch.buildChats(q72, "eclips.ru@mail.ru", q72ad, true, null, q72h, q72i).size(), 2);
+            java.util.Set<String> q72seen = new java.util.HashSet<String>(java.util.Arrays.asList("1", "2"));
+            eq("сдавать 10.72: своё голосовое в переписке «Хочу сдавать» — на пометку темой",
+                String.join(",", IvaChatPatch.voiceToTag(q72, "kli@x.ru", "eclips.ru@mail.ru", "lend", q72seen, null)), "3");
+            eq("сдавать 10.72: смайлик — только у владельца и только в этой переписке",
+                IvaChatPatch.lendSmile("eclips.ru@mail.ru", "lend") + "|" + IvaChatPatch.lendSmile("Eclips.RU@mail.ru", "lend") + "|" + IvaChatPatch.lendSmile("kli@x.ru", "lend")
+                + "|" + IvaChatPatch.lendSmile("eclips.ru@mail.ru", "t1") + "|" + IvaChatPatch.lendSmile("adm@x.ru", "lend"), "true|true|false|false|false");
+            eq("сдавать 10.72: подпись в списке", IvaChatPatch.chatSub("lend", "") + "|" + IvaChatPatch.chatSub("", "x") + "|" + IvaChatPatch.chatSub("t1", "Дрель") + "|" + IvaChatPatch.chatSub("t1", ""),
+                "Хочу сдавать инструмент|Общий чат|Дрель|Инструмент");
+            eq("сдавать 10.72: тема не путается с инструментом", IvaChatPatch.isLend("lend") && IvaChatPatch.isLend(" lend ") && !IvaChatPatch.isLend("") && !IvaChatPatch.isLend("t1"), true);
+            eq("сдавать 10.72: в базу — topic, список читает topic", IvaChatPatch.MSG_SELECT_TOPIC.endsWith(",tool_id,topic"), true);
+        }
         if (fail > 0) { System.out.println("ошибок: " + fail); System.exit(1); }
         System.out.println("все проверки IvaPatch пройдены");
     }

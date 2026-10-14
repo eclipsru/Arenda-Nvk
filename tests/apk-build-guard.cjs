@@ -279,7 +279,7 @@ try {
     // отправка: только нажатие (запись голоса — штатная), tool_id открытой переписки, при отказе базы — без него
     const snd = chat.slice(chat.indexOf('static void hookSend('), chat.indexOf('static boolean ok('));
     assert.ok(snd.includes('send.setOnClickListener(') && !/setOnLongClickListener|setOnTouchListener/.test(snd)
-      && snd.includes('b.put("tool_id", tool);') && snd.includes('b.remove("tool_id");')
+      && snd.includes('JSONObject b = sendBody(from, partner, text, tool, toolColumn, topicColumn);') && chat.includes('else if (!clean(tool).isEmpty() && toolCol) b.put("tool_id", tool);') && snd.includes('b.remove("tool_id");')
       && snd.includes('if (input.getText().toString().trim().isEmpty()) input.setText(text);'),
       'IvaChatPatch.send: только нажатие, tool_id, повтор без него и возврат текста при ошибке');
     // свои — справа, собеседника — слева; аватарка у каждого сообщения
@@ -768,6 +768,47 @@ try {
     for (const str of ['rowCall', 'rowMax', 'atSubKey', 'atCatKey', 'editToolSub', 'editToolCat', 'admParts', 'admDrill', 'admClientKey', 'partClientKey'])
       assert.ok(has(arsc14, str) || has(dex14, str), `APK 10.14: нет «${str}» — правка 10.67 не найдёт штатное поле`);
     assert.ok(/eq\("админ 10\.67: /.test(tp) && /eq\("подкатегория 10\.67: /.test(tp) && /eq\("кабинет 10\.67: /.test(tp), 'IvaPatchTest: проверки 10.67');
+  }
+  // 10.72 (просьба владельца 14.10.2026): «Хочу сдавать инструмент» → «Чат с владельцем» — отдельная переписка;
+  // у владельца в карточке — подмигивающий кислотно-зелёный смайлик, у клиента — аватарка владельца
+  {
+    const cp = R('android/patches/IvaChatPatch.java'), tp = R('android/patches/test/IvaPatchTest.java');
+    const sql = R('supabase/migrations/20261014_chat_lend_topic.sql');
+    // кнопка lendChat есть в 10.14 и перехватывается так же, как «Спросить…»; без входа / владелец / без SQL — штатно
+    assert.ok(has(arsc14, 'lendChat') && has(dex14, 'lendChatSend'), '10.14: нет кнопки lendChat / lendChatSend');
+    const hl = cp.slice(cp.indexOf('static void hookLend('), cp.indexOf('static void nativeAsk('));
+    assert.ok(hl.includes('IvaClientPatch.id(a, "lendChat")') && hl.includes('openThread(a, OWNER, LEND, lendObj());')
+      && hl.includes('if (!loggedIn(a) || superView(str(IvaClientPatch.get(a, "userEmail"))) || !topicColumn) { callNative(a, "lendChatSend"); return; }')
+      && (hl.match(/callNative\(a, "lendChatSend"\)/g) || []).length === 2 && !/setOnLongClickListener/.test(hl),
+      'сдавать 10.72: «Чат с владельцем» открывает переписку «Хочу сдавать»; без входа, у владельца, без SQL и при сбое — штатно');
+    assert.ok(cp.includes('        hookAsk(a);\n        hookSend(a);\n        hookLend(a);'), 'сдавать 10.72: кнопка подключается вместе с остальными (install)');
+    // в базу — только topic='lend' и только из этой переписки; без колонки — общий чат, как раньше
+    const sb = cp.slice(cp.indexOf('static JSONObject sendBody('), cp.indexOf('static boolean topicColumn'));
+    assert.ok(sb.includes('if (isLend(tool)) { if (topicCol) b.put("topic", LEND); }') && sb.includes('else if (!clean(tool).isEmpty() && toolCol) b.put("tool_id", tool);'),
+      'сдавать 10.72: topic пишется только в переписке «Хочу сдавать», вместо tool_id');
+    assert.ok(cp.includes('if (!ok(r) && b.has("topic")) {') && cp.includes('b.remove("topic");')
+      && cp.includes('if (isLend(openTool) && !topicColumn) {') && cp.includes('if (!topicColumn && now - topicAt > HIDDEN_RETRY_MS) topicColumn = true;'),
+      'сдавать 10.72: без SQL — отправка без topic и общий чат; колонку проверяем снова раз в 10 минут');
+    assert.ok(cp.includes('String tid = isLendObj(tool) ? LEND : toolIdOf(tool);') && cp.includes('return isLend(tool) ? lendObj() : toolCache.get(tool);')
+      && cp.includes('openThread(a, t[1].isEmpty() ? t[0] : t[1], t[2], toolObjFor(t[2]));') && cp.includes('c.tool, toolObjFor(c.tool));'),
+      'сдавать 10.72: переписка узнаётся по метке в штатном chatTool (из списка и из уведомления); штатное «Написать» — общий чат');
+    assert.ok(cp.includes('msgTool(o.isNull("tool_id") ? "" : o.optString("tool_id", ""), o.isNull("topic") ? "" : o.optString("topic", ""))')
+      && cp.includes('static final String MSG_SELECT_TOPIC = MSG_SELECT + ",topic";'), 'сдавать 10.72: список читает topic');
+    assert.ok(cp.includes('if (!t.isEmpty() && !isLend(t) && !toolCache.containsKey(t)') && cp.includes('if (!tool.isEmpty() && !isLend(tool) && !toolCache.containsKey(tool)'),
+      'сдавать 10.72: тема не запрашивается как инструмент');
+    assert.ok(cp.includes('"/rest/v1/rpc/iva_tag_my_topic"') && sql.includes('create or replace function public.iva_tag_my_topic(p_ids text[], p_topic text)'),
+      'сдавать 10.72: голосовые помечаются темой функцией из SQL');
+    // смайлик — только у владельца, в списке на месте картинки инструмента и в шапке переписки
+    assert.ok(cp.includes('return isLend(tool) && superView(me);') && cp.includes('if (lendSmile(my, c.tool)) {') && cp.includes('row.addView(smiley(a), pl);')
+      && cp.includes('card.addView(lendSmile(myH, openTool) ? smiley(a) : avatar(a, openPartner, partnerTitle(openPartner), HEAD_TOOL_DP),')
+      && cp.includes('static final int SMILE_COLOR = 0xffa6ff00;'),
+      'сдавать 10.72: у владельца — кислотно-зелёный смайлик вместо картинки инструмента, у клиента — аватарка владельца');
+    // SQL: только колонка, ограничение и функция; ничего не удаляет, anon без доступа
+    assert.ok(sql.includes('alter table public.app_messages add column if not exists topic text;')
+      && sql.includes("check (topic is null or (topic = 'lend' and tool_id is null))")
+      && sql.includes('revoke all on function public.iva_tag_my_topic(text[], text) from public, anon;')
+      && !/^\s*(drop|delete|truncate)\b/im.test(sql), 'сдавать 10.72: SQL — колонка topic, ограничение, функция; ничего не удаляет');
+    assert.ok((tp.match(/eq\("сдавать 10\.72: /g) || []).length >= 10, 'IvaPatchTest: проверки 10.72');
   }
   // 10.71 (просьба владельца 14.10.2026): рейтинг на картинке, «Нет отзывов», ряды ровные; мат запрещён (приложение + база)
   {

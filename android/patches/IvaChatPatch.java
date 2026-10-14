@@ -164,6 +164,108 @@ final class IvaChatPatch {
         return low(partner) + "|" + clean(tool);
     }
 
+    // ── 10.72: переписка «Хочу сдавать инструмент» (просьба владельца 14.10.2026) ──
+    // Клиент жмёт в кабинете «Хочу сдавать инструмент» → «Чат с владельцем»: отдельная переписка с владельцем.
+    // В базе — app_messages.topic = 'lend' (SQL 20261014_chat_lend_topic.sql, применяет владелец); внутри приложения
+    // это «инструмент» переписки LEND — ключ, удаление у себя, голосовые работают как у переписок по инструменту.
+    // У владельца в карточке переписки вместо картинки инструмента — подмигивающий кислотно-зелёный смайлик,
+    // у клиента — аватарка владельца (решение владельца 14.10.2026). Пока SQL не применён — общий чат, как раньше.
+    static final String LEND = "lend";
+    static final String LEND_TITLE = "Хочу сдавать инструмент";
+    static final String LEND_HINT = "Напишите владельцу, какой инструмент хотите сдавать, — ответим и всё подключим. "
+        + "После первого сообщения чат появится в списке «Чаты».";
+    static final String MSG_SELECT_TOPIC = MSG_SELECT + ",topic";
+    static final int SMILE_COLOR = 0xffa6ff00;     // кислотно-зелёный
+    static final int SMILE_INK = 0xff101217;       // черты лица — фон приложения
+
+    static boolean isLend(String tool) {
+        return LEND.equals(clean(tool));
+    }
+
+    /** «Инструмент» сообщения из базы: tool_id, иначе тема переписки (topic = 'lend'), иначе общий чат. */
+    static String msgTool(String toolId, String topic) {
+        String t = clean(toolId);
+        if (!t.isEmpty()) return t;
+        return LEND.equals(clean(topic)) ? LEND : "";
+    }
+
+    /** Смайлик — только у владельца (у клиента в этой переписке — аватарка владельца). */
+    static boolean lendSmile(String me, String tool) {
+        return isLend(tool) && superView(me);
+    }
+
+    /** Подпись переписки в списке: название инструмента / «Хочу сдавать инструмент» / «Общий чат». */
+    static String chatSub(String tool, String toolName) {
+        if (isLend(tool)) return LEND_TITLE;
+        if (clean(tool).isEmpty()) return "Общий чат";
+        return clean(toolName).isEmpty() ? "Инструмент" : clean(toolName);
+    }
+
+    /** Тело отправки текста: tool_id — переписка по инструменту, topic — «Хочу сдавать», без них — общий чат. */
+    static JSONObject sendBody(String from, String to, String text, String tool, boolean toolCol, boolean topicCol) throws Exception {
+        JSONObject b = new JSONObject();
+        b.put("from_email", from);
+        b.put("to_email", to);
+        b.put("text", text);
+        if (isLend(tool)) { if (topicCol) b.put("topic", LEND); }
+        else if (!clean(tool).isEmpty() && toolCol) b.put("tool_id", tool);
+        return b;
+    }
+
+    static boolean topicColumn = true;     // колонки topic ещё нет (SQL не применён) — «Хочу сдавать» идёт в общий чат
+    static long topicAt;
+    static boolean topicTagMissing = false;
+    static JSONObject lendObj;
+
+    /** Метка в штатном chatTool для переписки «Хочу сдавать»: штатные «Написать» кладут null — переписка сменится на общую. */
+    static JSONObject lendObj() {
+        if (lendObj == null) {
+            try {
+                JSONObject o = new JSONObject();
+                o.put("iva_topic", LEND);
+                o.put("name", LEND_TITLE);
+                lendObj = o;
+            } catch (Throwable ignore) {}
+        }
+        return lendObj;
+    }
+
+    static boolean isLendObj(Object o) {
+        return o instanceof JSONObject && LEND.equals(((JSONObject) o).optString("iva_topic", ""));
+    }
+
+    /** Объект для штатного chatTool по «инструменту» переписки. */
+    static JSONObject toolObjFor(String tool) {
+        return isLend(tool) ? lendObj() : toolCache.get(tool);
+    }
+
+    /** Подмигивающий кислотно-зелёный смайлик (рисуется сам, без картинок). */
+    static View smiley(Activity a) {
+        return new View(a) {
+            final android.graphics.Paint fill = new android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG);
+            final android.graphics.Paint ink = new android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG);
+            final android.graphics.RectF rf = new android.graphics.RectF();
+            @Override protected void onDraw(android.graphics.Canvas c) {
+                float w = getWidth(), h = getHeight(), cx = w / 2f, cy = h / 2f, r = Math.min(w, h) / 2f * 0.94f;
+                if (r <= 0) return;
+                fill.setStyle(android.graphics.Paint.Style.FILL);
+                fill.setColor(SMILE_COLOR);
+                c.drawCircle(cx, cy, r, fill);
+                ink.setColor(SMILE_INK);
+                ink.setStyle(android.graphics.Paint.Style.FILL);
+                rf.set(cx - r * 0.44f, cy - r * 0.44f, cx - r * 0.20f, cy - r * 0.08f);   // левый глаз открыт
+                c.drawOval(rf, ink);
+                ink.setStyle(android.graphics.Paint.Style.STROKE);
+                ink.setStrokeCap(android.graphics.Paint.Cap.ROUND);
+                ink.setStrokeWidth(r * 0.12f);
+                rf.set(cx + r * 0.14f, cy - r * 0.38f, cx + r * 0.50f, cy - r * 0.06f);   // правый — подмигивает
+                c.drawArc(rf, 200f, 140f, false, ink);
+                rf.set(cx - r * 0.56f, cy - r * 0.30f, cx + r * 0.56f, cy + r * 0.58f);   // улыбка
+                c.drawArc(rf, 25f, 130f, false, ink);
+            }
+        };
+    }
+
     // ── 10.61: «удалить чат» — только у себя (решение владельца 14.10.2026) ──
     // Таблица app_chat_hidden: (кто, собеседник, инструмент) → hidden_until = время последнего сообщения на момент
     // удаления (из базы, а не часы телефона). Сообщения не позже него не показываются; новое — чат появляется,
@@ -516,6 +618,7 @@ final class IvaChatPatch {
     static WeakReference<Activity> act = new WeakReference<Activity>(null);
     static WeakReference<View> hookedAsk = new WeakReference<View>(null);
     static WeakReference<View> hookedSend = new WeakReference<View>(null);
+    static WeakReference<View> hookedLend = new WeakReference<View>(null);
     static WeakReference<View> hookedList = new WeakReference<View>(null);
     static LinearLayout root, header, body;
     static ScrollView scroll;
@@ -583,6 +686,7 @@ final class IvaChatPatch {
     static void install(Activity a) {
         hookAsk(a);
         hookSend(a);
+        hookLend(a);
         Object page = IvaClientPatch.get(a, "pageChat");
         Object sc = IvaClientPatch.get(a, "chatScroll");
         if (!(page instanceof LinearLayout) || !(sc instanceof View)) return;
@@ -695,6 +799,27 @@ final class IvaChatPatch {
         hookedAsk = new WeakReference<View>(ask);
     }
 
+    /** Кабинет → «Хочу сдавать инструмент» → «Чат с владельцем»: отдельная переписка (10.72). */
+    static void hookLend(final Activity a) {
+        final View b = a.findViewById(IvaClientPatch.id(a, "lendChat"));
+        if (b == null || hookedLend.get() == b) return;
+        b.setOnClickListener(new View.OnClickListener() {
+            @Override public void onClick(View v) {
+                try {
+                    // Без входа — штатная подсказка и экран входа; сам владелец себе не пишет; без SQL — общий чат, как раньше.
+                    if (!loggedIn(a) || superView(str(IvaClientPatch.get(a, "userEmail"))) || !topicColumn) { callNative(a, "lendChatSend"); return; }
+                    openThread(a, OWNER, LEND, lendObj());
+                    callTab(a, "chat");
+                    callNative(a, "loadChat");
+                    render(a);
+                } catch (Throwable e) {
+                    callNative(a, "lendChatSend");
+                }
+            }
+        });
+        hookedLend = new WeakReference<View>(b);
+    }
+
     static void nativeAsk(Activity a, View v) {
         try {
             Method m = a.getClass().getDeclaredMethod("lambda$setupChat$88$ru-prokatnvsk-app-MainActivity", View.class);
@@ -704,7 +829,7 @@ final class IvaChatPatch {
     }
 
     static void openThread(Activity a, String partnerRaw, String tool, JSONObject toolObj) {
-        if (toolObj != null && !clean(tool).isEmpty() && !toolCache.containsKey(tool)) toolCache.put(tool, toolObj);
+        if (toolObj != null && !clean(tool).isEmpty() && !isLend(tool) && !toolCache.containsKey(tool)) toolCache.put(tool, toolObj);
         IvaClientPatch.set(a, "chatWith", partnerRaw);
         IvaClientPatch.set(a, "chatTool", toolObj);
         lastToolObj = toolObj;
@@ -767,7 +892,7 @@ final class IvaChatPatch {
         }
         flashMsg = noteMsg;
         noteMsg = "";
-        openThread(a, t[1].isEmpty() ? t[0] : t[1], t[2], toolCache.get(t[2]));
+        openThread(a, t[1].isEmpty() ? t[0] : t[1], t[2], toolObjFor(t[2]));
         callNative(a, "loadChat");           // как нажатие в списке: штатно отмечает переписку прочитанной
     }
 
@@ -811,12 +936,13 @@ final class IvaChatPatch {
             @Override public void run() {
                 String err = null;
                 try {
-                    JSONObject b = new JSONObject();
-                    b.put("from_email", from);
-                    b.put("to_email", partner);
-                    b.put("text", text);
-                    if (!tool.isEmpty() && toolColumn) b.put("tool_id", tool);
+                    JSONObject b = sendBody(from, partner, text, tool, toolColumn, topicColumn);
                     String[] r = IvaClientPatch.apiCall(a, "/rest/v1/app_messages", "POST", b.toString(), true);
+                    if (!ok(r) && b.has("topic")) {
+                        // Колонки topic нет (SQL не применён) — общий чат, как раньше.
+                        b.remove("topic");
+                        r = IvaClientPatch.apiCall(a, "/rest/v1/app_messages", "POST", b.toString(), true);
+                    }
                     if (!ok(r) && b.has("tool_id")) {
                         // Инструмент не принят базой (например, услуга вместо инструмента) — общий чат, как раньше.
                         b.remove("tool_id");
@@ -867,8 +993,8 @@ final class IvaChatPatch {
         }
         if (!low(with).equals(lastWith) || ct != lastToolObj) {
             JSONObject tool = ct instanceof JSONObject ? (JSONObject) ct : null;
-            String tid = toolIdOf(tool);
-            if (tool != null && !tid.isEmpty() && !toolCache.containsKey(tid)) toolCache.put(tid, tool);
+            String tid = isLendObj(tool) ? LEND : toolIdOf(tool);
+            if (tool != null && !tid.isEmpty() && !isLend(tid) && !toolCache.containsKey(tid)) toolCache.put(tid, tool);
             openPartner = low(with); openPartnerRaw = with; openTool = tid;
             lastWith = low(with); lastToolObj = ct;
             stickBottom = true;
@@ -899,6 +1025,12 @@ final class IvaChatPatch {
                 a.runOnUiThread(new Runnable() {
                     @Override public void run() {
                         loading = false;
+                        if (isLend(openTool) && !topicColumn) {   // SQL «Хочу сдавать» не применён — общий чат, как раньше
+                            IvaClientPatch.set(a, "chatTool", null);
+                            lastToolObj = null;
+                            openTool = "";
+                            renderedSig = "";
+                        }
                         try { render(a); } catch (Throwable e) { fallback(a); }
                         if (pending) refresh(a);
                     }
@@ -1051,13 +1183,25 @@ final class IvaChatPatch {
         boolean sup = superView(my);
         String filter = msgFilter(my, sup);
         JSONArray rows;
+        if (!topicColumn && now - topicAt > HIDDEN_RETRY_MS) topicColumn = true;       // SQL могут применить в любой момент
         try {
-            rows = getArr(a, "/rest/v1/app_messages?select=" + (toolColumn ? MSG_SELECT : MSG_SELECT_OLD) + filter
+            rows = getArr(a, "/rest/v1/app_messages?select=" + (!toolColumn ? MSG_SELECT_OLD : topicColumn ? MSG_SELECT_TOPIC : MSG_SELECT) + filter
                 + "&order=created_at.desc&limit=300");
         } catch (Throwable e) {
             if (!toolColumn) throw e;
-            rows = getArr(a, "/rest/v1/app_messages?select=" + MSG_SELECT_OLD + filter + "&order=created_at.desc&limit=300");
-            toolColumn = false;
+            if (topicColumn) {
+                topicColumn = false;                                                    // колонки topic нет — как до 10.72
+                topicAt = now;
+                try {
+                    rows = getArr(a, "/rest/v1/app_messages?select=" + MSG_SELECT + filter + "&order=created_at.desc&limit=300");
+                } catch (Throwable e2) {
+                    rows = getArr(a, "/rest/v1/app_messages?select=" + MSG_SELECT_OLD + filter + "&order=created_at.desc&limit=300");
+                    toolColumn = false;
+                }
+            } else {
+                rows = getArr(a, "/rest/v1/app_messages?select=" + MSG_SELECT_OLD + filter + "&order=created_at.desc&limit=300");
+                toolColumn = false;
+            }
         }
         ArrayList<Msg> asc = new ArrayList<Msg>();
         for (int i = rows.length() - 1; i >= 0; i--) {
@@ -1066,22 +1210,28 @@ final class IvaChatPatch {
             asc.add(msg(o.optString("id", ""), o.optString("from_email", ""), o.optString("to_email", ""),
                 o.optString("text", ""), o.optString("img", ""), o.optString("audio", ""),
                 o.optInt("audio_dur", 0), o.optBoolean("is_read", false), o.optString("created_at", ""),
-                o.isNull("tool_id") ? "" : o.optString("tool_id", "")));
+                msgTool(o.isNull("tool_id") ? "" : o.optString("tool_id", ""), o.isNull("topic") ? "" : o.optString("topic", ""))));
         }
         // Голосовые, записанные в открытой переписке по инструменту, — метка на телефоне и (если есть SQL) в базе.
         if (seenReady && my.equals(msgsFor)) {
             List<String> tag = voiceToTag(asc, my, partner, tool, seenIds, localTags);
             if (!tag.isEmpty()) {
                 synchronized (localTags) { for (String id : tag) localTags.put(id, tool); }
-                if (!tagMissing) {
+                if (isLend(tool) ? !topicTagMissing : !tagMissing) {
                     try {
                         JSONObject b = new JSONObject();
                         JSONArray ids = new JSONArray();
                         for (String id : tag) ids.put(id);
                         b.put("p_ids", ids);
-                        b.put("p_tool", tool);
-                        String[] r = IvaClientPatch.apiCall(a, "/rest/v1/rpc/iva_tag_my_messages", "POST", b.toString(), true);
-                        if (r != null && "404".equals(r[0])) tagMissing = true;
+                        if (isLend(tool)) {                 // «Хочу сдавать» — тема, а не инструмент (10.72)
+                            b.put("p_topic", LEND);
+                            String[] r = IvaClientPatch.apiCall(a, "/rest/v1/rpc/iva_tag_my_topic", "POST", b.toString(), true);
+                            if (r != null && "404".equals(r[0])) topicTagMissing = true;
+                        } else {
+                            b.put("p_tool", tool);
+                            String[] r = IvaClientPatch.apiCall(a, "/rest/v1/rpc/iva_tag_my_messages", "POST", b.toString(), true);
+                            if (r != null && "404".equals(r[0])) tagMissing = true;
+                        }
                     } catch (Throwable ignore) {}
                 }
             }
@@ -1089,8 +1239,8 @@ final class IvaChatPatch {
         // Инструменты переписок (название и картинка)
         HashSet<String> need = new HashSet<String>();
         Map<String, String> tools = assignTools(asc, my, adminEmails(), sup, localTags);
-        for (String t : tools.values()) if (!t.isEmpty() && !toolCache.containsKey(t) && !toolMissing.contains(t)) need.add(t);
-        if (!tool.isEmpty() && !toolCache.containsKey(tool) && !toolMissing.contains(tool)) need.add(tool);
+        for (String t : tools.values()) if (!t.isEmpty() && !isLend(t) && !toolCache.containsKey(t) && !toolMissing.contains(t)) need.add(t);
+        if (!tool.isEmpty() && !isLend(tool) && !toolCache.containsKey(tool) && !toolMissing.contains(tool)) need.add(tool);
         if (!need.isEmpty()) {
             StringBuilder ids = new StringBuilder();
             for (String t : need) { if (ids.length() > 0) ids.append(','); ids.append(enc(t)); }
@@ -1222,7 +1372,13 @@ final class IvaChatPatch {
         setBg(a, card, "bg_card");
         card.setPadding(dp(a, 10), dp(a, 10), dp(a, 12), dp(a, 10));
         String small, title;
-        if (!openTool.isEmpty()) {
+        String myH = low(str(IvaClientPatch.get(a, "userEmail")));
+        if (isLend(openTool)) {                          // 10.72: «Хочу сдавать» — у владельца смайлик, у клиента аватарка владельца
+            card.addView(lendSmile(myH, openTool) ? smiley(a) : avatar(a, openPartner, partnerTitle(openPartner), HEAD_TOOL_DP),
+                new LinearLayout.LayoutParams(dp(a, HEAD_TOOL_DP), dp(a, HEAD_TOOL_DP)));
+            small = LEND_TITLE;
+            title = partnerTitle(openPartner);
+        } else if (!openTool.isEmpty()) {
             JSONObject t = toolCache.get(openTool);
             card.addView(toolPic(a, t, openTool, HEAD_TOOL_DP), new LinearLayout.LayoutParams(dp(a, HEAD_TOOL_DP), dp(a, HEAD_TOOL_DP)));
             small = "Чат по инструменту · " + partnerTitle(openPartner);
@@ -1272,7 +1428,7 @@ final class IvaChatPatch {
         Set<String> ad = adminEmails();
         List<Msg> list = thread(msgs, my, ad, sup, localTags, openPartner, openTool);
         if (list.isEmpty()) {
-            body.addView(hint(a, !openTool.isEmpty()
+            body.addView(hint(a, isLend(openTool) ? LEND_HINT : !openTool.isEmpty()
                 ? "Напишите вопрос об этом инструменте — после первого сообщения чат появится в списке «Чаты»."
                 : "Сообщений пока нет. Напишите первое сообщение."));
             return;
@@ -2216,9 +2372,8 @@ final class IvaChatPatch {
         n.setSingleLine(true); n.setEllipsize(TextUtils.TruncateAt.END);
         col.addView(n);
         String sub;
-        JSONObject tool = c.tool.isEmpty() ? null : toolCache.get(c.tool);
-        if (!c.tool.isEmpty()) sub = tool == null ? "Инструмент" : clean(tool.optString("name", "Инструмент"));
-        else sub = "Общий чат";
+        JSONObject tool = c.tool.isEmpty() || isLend(c.tool) ? null : toolCache.get(c.tool);
+        sub = chatSub(c.tool, tool == null ? "" : tool.optString("name", ""));
         TextView tl = text(a, sub, 12, "orange", false);
         tl.setSingleLine(true); tl.setEllipsize(TextUtils.TruncateAt.END);
         col.addView(tl);
@@ -2249,7 +2404,11 @@ final class IvaChatPatch {
             when.addView(badge, bl);
         }
         row.addView(when, new LinearLayout.LayoutParams(-2, -2));
-        if (!c.tool.isEmpty()) {
+        if (lendSmile(my, c.tool)) {                    // 10.72: у владельца — подмигивающий кислотно-зелёный смайлик
+            LinearLayout.LayoutParams pl = new LinearLayout.LayoutParams(dp(a, LIST_TOOL_DP), dp(a, LIST_TOOL_DP));
+            pl.leftMargin = dp(a, 10);
+            row.addView(smiley(a), pl);
+        } else if (!c.tool.isEmpty() && !isLend(c.tool)) {
             LinearLayout.LayoutParams pl = new LinearLayout.LayoutParams(dp(a, LIST_TOOL_DP), dp(a, LIST_TOOL_DP));
             pl.leftMargin = dp(a, 10);
             row.addView(toolPic(a, tool, c.tool, LIST_TOOL_DP), pl);
@@ -2257,7 +2416,7 @@ final class IvaChatPatch {
         row.setOnClickListener(new View.OnClickListener() {
             @Override public void onClick(View v) {
                 try {
-                    openThread(a, c.partnerRaw.isEmpty() ? c.partner : c.partnerRaw, c.tool, toolCache.get(c.tool));
+                    openThread(a, c.partnerRaw.isEmpty() ? c.partner : c.partnerRaw, c.tool, toolObjFor(c.tool));
                     callNative(a, "loadChat");
                     render(a);
                 } catch (Throwable e) { fallback(a); }
