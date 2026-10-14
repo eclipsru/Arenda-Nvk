@@ -1555,14 +1555,27 @@ public final class IvaOrderPatch {
 
     /** Карточка как штатная (renderOrders): bg_card, 14dp, дата оранжевая 13sp, инструменты 14sp, получение 12sp. */
     static View ordCardView(final Activity a, final Map<String, String> r, final boolean archived) {
-        LinearLayout c = new LinearLayout(a);
-        c.setOrientation(LinearLayout.VERTICAL);
+        // 10.66: карточка — строка: слева текст (как было), справа скруглённые картинки инструментов заявки
+        LinearLayout card = new LinearLayout(a);
+        card.setOrientation(LinearLayout.HORIZONTAL);
+        card.setGravity(Gravity.CENTER_VERTICAL);
         Drawable bg = drawable(a, "bg_card");
-        if (bg != null) c.setBackground(bg);
-        c.setPadding(dp(a, 14), dp(a, 14), dp(a, 14), dp(a, 14));
+        if (bg != null) card.setBackground(bg);
+        card.setPadding(dp(a, 14), dp(a, 14), dp(a, 14), dp(a, 14));
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2);
         lp.bottomMargin = dp(a, 10);
-        c.setLayoutParams(lp);
+        card.setLayoutParams(lp);
+        LinearLayout c = new LinearLayout(a);
+        c.setOrientation(LinearLayout.VERTICAL);
+        card.addView(c, new LinearLayout.LayoutParams(0, -2, 1f));
+        try {
+            View pics = ordPicsView(a, r);
+            if (pics != null) {
+                LinearLayout.LayoutParams pl = new LinearLayout.LayoutParams(-2, -2);
+                pl.leftMargin = dp(a, 12);
+                card.addView(pics, pl);
+            }
+        } catch (Throwable ignore) {}   // без картинок карточка остаётся как была
         TextView d = new TextView(a);
         d.setText(ordNice(a, r.get("created_at")));
         d.setTextColor(color(a, "orange", 0xffff8f1f));
@@ -1602,14 +1615,86 @@ public final class IvaOrderPatch {
         LinearLayout.LayoutParams fl = new LinearLayout.LayoutParams(-1, -2);
         fl.topMargin = dp(a, 6);
         c.addView(foot, fl);
-        c.setClickable(true);
-        c.setOnClickListener(new View.OnClickListener() {
+        card.setClickable(true);
+        card.setOnClickListener(new View.OnClickListener() {
             @Override public void onClick(View v) { try { ordOpenRow(a, r, archived); } catch (Throwable ignore) {} }
         });
-        c.setOnLongClickListener(new View.OnLongClickListener() {
+        card.setOnLongClickListener(new View.OnLongClickListener() {
             @Override public boolean onLongClick(View v) { try { ordAskArchive(a, r, !archived); } catch (Throwable ignore) {} return true; }
         });
-        return c;
+        return card;
+    }
+
+    // ── 10.66: картинки инструментов на карточке заявки (просьба владельца 14.10.2026) ──
+    // В заявке инструменты — текстом («Дрель (3 дня), Пила (5 дней)»), без id; картинку берём из каталога по названию
+    // (сначала у проката этой заявки), как ordOwners. Не нашли (снят с публикации, каталог ещё не загрузился) — гаечный
+    // ключ, как в чате. Справа до двух картинок 56 dp со скруглением 12 dp; инструментов больше — на второй «+N».
+    static final int ORD_PICS_MAX = 2, ORD_PIC_DP = 56;
+
+    /** Для каждого названия из заявки — номер инструмента в каталоге (у проката заявки — в первую очередь), -1 — нет. */
+    static List<Integer> ordPicIdx(List<String> names, List<String> catNames, List<String> catOwners, List<String> owners) {
+        List<Integer> out = new ArrayList<Integer>();
+        for (String n : names) {
+            int any = -1, own = -1;
+            for (int i = 0; i < catNames.size(); i++) {
+                String cn = catNames.get(i) == null ? "" : catNames.get(i).trim().toLowerCase(Locale.ROOT);
+                if (!cn.equals(n)) continue;
+                if (any < 0) any = i;
+                String ce = catOwners.get(i) == null ? "" : catOwners.get(i).trim().toLowerCase(Locale.ROOT);
+                if (owners != null && owners.contains(ce)) { own = i; break; }
+            }
+            out.add(own >= 0 ? own : any);
+        }
+        return out;
+    }
+
+    /** Сколько картинок рисовать и что написать на последней: {картинок, «+N» (0 — не писать)}. */
+    static int[] ordPicsPlan(int tools) {
+        if (tools <= 0) return new int[]{0, 0};
+        if (tools <= ORD_PICS_MAX) return new int[]{tools, 0};
+        return new int[]{ORD_PICS_MAX, tools - ORD_PICS_MAX + 1};
+    }
+
+    static View ordPicsView(Activity a, Map<String, String> r) {
+        List<String> names = ordToolNames(r.get("tools"));
+        int[] plan = ordPicsPlan(names.size());
+        if (plan[0] == 0) return null;
+        List<JSONObject> cat = new ArrayList<JSONObject>();
+        List<String> cn = new ArrayList<String>(), co = new ArrayList<String>();
+        for (Object t : IvaSearchPatch.allTools(a)) {
+            if (!(t instanceof JSONObject)) continue;
+            JSONObject j = (JSONObject) t;
+            cat.add(j);
+            cn.add(j.optString("name", ""));
+            co.add(j.optString("owner_email", ""));
+        }
+        List<String> owners = new ArrayList<String>();
+        for (String e : ordSplit(r.get(ORD_OWNERS))) owners.add(e.trim().toLowerCase(Locale.ROOT));
+        List<Integer> idx = ordPicIdx(names, cn, co, owners);
+        LinearLayout row = new LinearLayout(a);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        for (int i = 0; i < plan[0]; i++) {
+            JSONObject tool = idx.get(i) >= 0 ? cat.get(idx.get(i)) : null;
+            String id = tool == null ? "" : tool.optString("id", "");
+            View pic = IvaChatPatch.toolPic(a, tool, id, ORD_PIC_DP);   // штатный loadPhoto, тот же кэш, что в чате
+            FrameLayout cell = new FrameLayout(a);
+            cell.addView(pic, new FrameLayout.LayoutParams(-1, -1));
+            if (i == plan[0] - 1 && plan[1] > 0) {
+                TextView more = new TextView(a);
+                more.setText("+" + plan[1]);
+                more.setTextColor(0xffffffff);
+                more.setTextSize(15f);
+                more.setTypeface(null, Typeface.BOLD);
+                more.setGravity(Gravity.CENTER);
+                more.setBackgroundColor(0x99000000);
+                IvaChatPatch.round(more, dp(a, 12), false);
+                cell.addView(more, new FrameLayout.LayoutParams(-1, -1));
+            }
+            LinearLayout.LayoutParams cl = new LinearLayout.LayoutParams(dp(a, ORD_PIC_DP), dp(a, ORD_PIC_DP));
+            if (i > 0) cl.leftMargin = dp(a, 6);
+            row.addView(cell, cl);
+        }
+        return row;
     }
 
     /** Запасной путь (наш список не загрузился): штатные карточки — нажатие и «Подробнее ›», как в 10.62. */

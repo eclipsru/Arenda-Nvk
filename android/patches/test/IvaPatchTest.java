@@ -656,6 +656,28 @@ public class IvaPatchTest {
                 eq("заявки 10.63: архив — подписи", IvaOrderPatch.ARCH_TITLE + "|" + IvaOrderPatch.ARCH_ON + "|" + IvaOrderPatch.ARCH_OFF + "|" + IvaOrderPatch.ARCH_ONLY_CLOSED,
                     "Архив заявок|В архив|Вернуть из архива|В архив можно убрать только закрытую заявку");
             }
+            // 10.66: «Состояние» в форме инструмента — строкой условий, как на сайте
+            eq("состояние 10.66: дописывается последней строкой, старая заменяется, «Адрес выдачи» остаётся",
+                IvaPatch.condApply("Паспорт\nАдрес выдачи: ул. Ленина 1\nСостояние: Новый", 2) + "#" + IvaPatch.condApply("", 0) + "#" + IvaPatch.condApply("Паспорт\n\n", -1)
+                + "#" + IvaPatch.condApply(null, 1),
+                "Паспорт\nАдрес выдачи: ул. Ленина 1\nСостояние: Рабочее#Состояние: Новый#Паспорт\nСостояние: Хорошее#Состояние: Хорошее");
+            eq("состояние 10.66: читается тем же разбором, что фильтр и сайт",
+                IvaPatch.condIndex(IvaPatch.condApply("x", 0)) + "|" + IvaPatch.condIndex(IvaPatch.condApply("x", 1)) + "|" + IvaPatch.condIndex(IvaPatch.condApply("x", 2))
+                + "|" + IvaPatch.condIndex("") + "|" + IvaPatch.condIndex(null) + "|" + IvaPatch.condIndex("состояние:   рабочее"),
+                "0|1|2|-1|-1|2");
+            eq("состояние 10.66: из поля убирается только строка состояния", IvaPatch.condStrip("Состояние: Новый") + "|" + IvaPatch.condStrip("А\n  состояние: хорошее\nБ") + "|" + IvaPatch.condStrip(null),
+                "|А\nБ|");
+            eq("состояние 10.66: кнопки — как на сайте, по умолчанию «Хорошее»", String.join("/", IvaPatch.COND_TITLES) + "|" + IvaPatch.COND_TITLES[IvaPatch.COND_DEFAULT], "Новый/Хорошее/Рабочее|Хорошее");
+            // 10.66: картинки инструментов на карточке заявки
+            eq("заявки 10.66: картинка — по названию, у проката заявки в первую очередь",
+                IvaOrderPatch.ordPicIdx(java.util.Arrays.asList("дрель", "пила", "лестница"), java.util.Arrays.asList("Дрель", "Пила", "дрель ", "ПИЛА"),
+                    java.util.Arrays.asList("a@x.ru", "b@x.ru", "B@x.ru", "a@x.ru"), java.util.Arrays.asList("b@x.ru")).toString()
+                + IvaOrderPatch.ordPicIdx(java.util.Arrays.asList("дрель", "пила"), java.util.Arrays.asList("Дрель", "Пила", "дрель"),
+                    java.util.Arrays.asList("a@x.ru", "b@x.ru", "b@x.ru"), new java.util.ArrayList<String>()).toString(),
+                "[2, 1, -1][0, 1]");
+            StringBuilder picPlan = new StringBuilder();
+            for (int pn : new int[]{0, 1, 2, 3, 5}) { int[] pp = IvaOrderPatch.ordPicsPlan(pn); picPlan.append(pp[0]).append('/').append(pp[1]).append(' '); }
+            eq("заявки 10.66: до двух картинок, на второй «+N»", picPlan.toString().trim(), "0/0 1/0 2/0 2/2 2/4");
             // 10.65: уведомления, этап 2 — когда приложение закрыто
             String bgJwt = "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiAidTEiLCAiZXhwIjogMTc2MDAwMDAwMCwgImVtYWlsIjogItCwQGIucnUifQ.sig";
             eq("уведомления 10.65: срок токена из JWT (base64url, кириллица, без «=»)", IvaNotifyPatch.jwtExp(bgJwt) + "|" + IvaNotifyPatch.jwtExp("плохой") + "|" + IvaNotifyPatch.jwtExp(null) + "|" + IvaNotifyPatch.jwtExp("a.%%%.b"),

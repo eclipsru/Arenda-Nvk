@@ -198,6 +198,7 @@ public final class IvaPatch {
     // ── 4. Кабинет админа (showAdmHub): объяснить, почему нет вкладки «Добавить» ──
     public static void onHub(Activity a) {
         try { delSwitches(a); } catch (Throwable ignore) {}   // 10.65: «Доставка» — выключатель
+        try { condRows(a); } catch (Throwable ignore) {}      // 10.66: «Состояние» — Новый / Хорошее / Рабочее
         try {
             Object lim = get(a, "meLimited");
             if (!(lim instanceof Boolean) || !((Boolean) lim) || limitedShown) return;
@@ -404,6 +405,7 @@ public final class IvaPatch {
     public static void onTab(Activity a, String tab) {
         try { installBack(a); } catch (Throwable ignore) {}   // 10.63: системная «Назад» — внутри приложения
         try { delSwitches(a); } catch (Throwable ignore) {}   // 10.65: «Доставка» в форме инструмента — выключатель
+        try { condRows(a); } catch (Throwable ignore) {}      // 10.66: «Состояние» в форме инструмента
         try {
             String t = tab == null ? "" : tab;
             int orange = navColor(a, "orange", 0xffff9800);
@@ -857,6 +859,162 @@ public final class IvaPatch {
                 s.setThumbTintList(android.content.res.ColorStateList.valueOf(on ? orange : gray));
                 s.setTrackTintList(android.content.res.ColorStateList.valueOf(on ? (orange & 0x00ffffff) | 0x80000000 : color(a, "line", 0xff262b35)));
             } catch (Throwable ignore) {}   // Android 5: без раскраски — системный вид
+        }
+    }
+
+    // ───────────── 10.66: «Состояние» в форме инструмента — Новый / Хорошее / Рабочее (просьба владельца 14.10.2026) ─────────────
+    // Отдельного столбца в базе нет: сайт (new.html) пишет состояние последней строкой условий аренды — «Состояние: Хорошее»,
+    // каталог сайта (sb.js) и наш фильтр (IvaSearchPatch.condFromTerms) читают его оттуда. Делаем так же — база не меняется.
+    // В поле «Условие аренды» строки не видно: при открытии правки она убирается из поля и выбирает кнопку, а при нажатии
+    // «Опубликовать» / «Сохранить» дописывается в поле (штатный код читает поле позже, в своём потоке после загрузки фото).
+    // Не опубликовалось (ошибка в форме) — строка снова убирается, как только поле получит фокус или откроется вкладка.
+    static final String COND_ROW_TAG = "iva_cond_row", COND_LABEL = "Состояние", COND_PREFIX = "Состояние: ";
+    static final String[] COND_TITLES = IvaSearchPatch.COND_TITLES;    // Новый, Хорошее, Рабочее — как на сайте
+    static final int COND_DEFAULT = 1;                                  // «Хорошее» — как по умолчанию на сайте
+    static final int[] condSel = {COND_DEFAULT, COND_DEFAULT};           // 0 — «Добавить инструмент», 1 — правка
+    static final String[] condSeen = {null, null};
+
+    /** Номер состояния в условиях (0 Новый, 1 Хорошее, 2 Рабочее) или -1 — не указано. Разбор — как у фильтра. */
+    static int condIndex(String terms) {
+        int bit = IvaSearchPatch.condFromTerms(terms);
+        for (int i = 0; i < IvaSearchPatch.COND_BITS.length; i++) if (IvaSearchPatch.COND_BITS[i] == bit) return i;
+        return -1;
+    }
+
+    /** Условия без строк «Состояние: …» (остальные строки, в т.ч. «Адрес выдачи: …», — как были). */
+    static String condStrip(String terms) {
+        StringBuilder b = new StringBuilder();
+        for (String line : (terms == null ? "" : terms).split("\n", -1)) {
+            if (line.trim().toLowerCase(Locale.ROOT).startsWith("состояние:")) continue;
+            if (b.length() > 0) b.append('\n');
+            b.append(line);
+        }
+        return b.toString().replaceAll("\\s+$", "");
+    }
+
+    /** Условия + последней строкой «Состояние: …» — как сайт при публикации. */
+    static String condApply(String terms, int idx) {
+        String t = condStrip(terms);
+        int i = idx < 0 || idx >= COND_TITLES.length ? COND_DEFAULT : idx;
+        return (t.isEmpty() ? "" : t + "\n") + COND_PREFIX + COND_TITLES[i];
+    }
+
+    static void condRows(Activity a) {
+        condRow(a, "atTerms", "atSave", 0);
+        condRow(a, "teTerms", "teSave", 1);
+    }
+
+    static void condRow(final Activity a, String termsField, String saveField, final int k) {
+        Object to = get(a, termsField), so = get(a, saveField);
+        if (!(to instanceof android.widget.EditText) || !(((View) to).getParent() instanceof LinearLayout)) return;
+        final android.widget.EditText terms = (android.widget.EditText) to;
+        final View save = so instanceof View ? (View) so : null;
+        LinearLayout form = (LinearLayout) terms.getParent();
+        final String tag = COND_ROW_TAG + ":" + termsField;
+        View row = form.findViewWithTag(tag);
+        if (row == null) {
+            row = condBuild(a, tag, k);
+            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2);
+            lp.topMargin = dp(a, 12);
+            form.addView(row, form.indexOfChild(terms), lp);          // перед «Условием аренды»
+            if (save != null) save.setOnTouchListener(new View.OnTouchListener() {
+                @Override public boolean onTouch(View v, android.view.MotionEvent e) {
+                    // до штатного нажатия: строка состояния — в поле условий (штатный код его прочтёт); нажатие не трогаем
+                    if (e.getActionMasked() == android.view.MotionEvent.ACTION_DOWN && v.isEnabled()) condPut(terms, k);
+                    return false;
+                }
+            });
+            terms.setOnFocusChangeListener(new View.OnFocusChangeListener() {
+                @Override public void onFocusChange(View v, boolean has) {
+                    if (has && (save == null || save.isEnabled())) { condTake(terms, k); condPaint(a, terms, k); }
+                }
+            });
+        }
+        condTake(terms, k);
+        condPaint(a, terms, k);
+    }
+
+    static void condPut(android.widget.EditText terms, int k) {
+        try {
+            String t = condApply(String.valueOf(terms.getText()), condSel[k]);
+            terms.setText(t);
+            condSeen[k] = t;
+        } catch (Throwable ignore) {}
+    }
+
+    /** Строка состояния в поле (открыли правку / не опубликовалось) → выбрать кнопку и убрать строку из поля. */
+    static void condTake(android.widget.EditText terms, int k) {
+        String t = String.valueOf(terms.getText());
+        int i = condIndex(t);
+        if (i >= 0) {
+            condSel[k] = i;
+            String s = condStrip(t);
+            if (!s.equals(t)) { terms.setText(s); try { terms.setSelection(s.length()); } catch (Throwable ignore) {} }
+            t = s;
+        } else if (k == 1 && !t.equals(condSeen[k])) {
+            condSel[k] = COND_DEFAULT;                                // открыли другой инструмент без состояния
+        }
+        condSeen[k] = t;
+    }
+
+    static View condBuild(final Activity a, final String tag, final int k) {
+        LinearLayout box = new LinearLayout(a);
+        box.setTag(tag);
+        box.setOrientation(LinearLayout.VERTICAL);
+        TextView l = new TextView(a);
+        l.setText(COND_LABEL);
+        l.setTextColor(color(a, "gray", 0xff9aa1b0));
+        l.setTextSize(13f);
+        box.addView(l, new LinearLayout.LayoutParams(-2, -2));
+        LinearLayout pills = new LinearLayout(a);
+        pills.setOrientation(LinearLayout.HORIZONTAL);
+        for (int i = 0; i < COND_TITLES.length; i++) {
+            final int idx = i;
+            TextView b = new TextView(a);
+            b.setTag(tag + ":" + i);
+            b.setText(COND_TITLES[i]);
+            b.setTextSize(14f);
+            b.setGravity(Gravity.CENTER);
+            b.setSingleLine(true);
+            b.setClickable(true);
+            b.setOnClickListener(new View.OnClickListener() {
+                @Override public void onClick(View v) {
+                    condSel[k] = idx;
+                    View root = v.getRootView();
+                    View r = root == null ? null : root.findViewWithTag(tag);
+                    if (r != null) condPaintRow(a, r, tag, k);
+                }
+            });
+            LinearLayout.LayoutParams bl = new LinearLayout.LayoutParams(0, dp(a, 44), 1f);
+            bl.leftMargin = i == 0 ? 0 : dp(a, 4);
+            bl.rightMargin = i == COND_TITLES.length - 1 ? 0 : dp(a, 4);
+            pills.addView(b, bl);
+        }
+        LinearLayout.LayoutParams pl = new LinearLayout.LayoutParams(-1, -2);
+        pl.topMargin = dp(a, 6);
+        box.addView(pills, pl);
+        return box;
+    }
+
+    static void condPaint(Activity a, View terms, int k) {
+        View form = (View) terms.getParent();
+        String tag = COND_ROW_TAG + ":" + (k == 0 ? "atTerms" : "teTerms");
+        View r = form == null ? null : form.findViewWithTag(tag);
+        if (r != null) condPaintRow(a, r, tag, k);
+    }
+
+    /** Выбранное — оранжевое (bg_btn_orange, белый жирный), остальные — как поля формы (bg_field). */
+    static void condPaintRow(Activity a, View row, String tag, int k) {
+        for (int i = 0; i < COND_TITLES.length; i++) {
+            View v = row.findViewWithTag(tag + ":" + i);
+            if (!(v instanceof TextView)) continue;
+            TextView b = (TextView) v;
+            boolean on = i == condSel[k];
+            android.graphics.drawable.Drawable bg = drawable(a, on ? "bg_btn_orange" : "bg_field");
+            if (bg != null) b.setBackground(bg);
+            else b.setBackgroundColor(on ? color(a, "orange", 0xffff8f1f) : color(a, "card", 0xff1a1d24));
+            b.setTextColor(on ? 0xffffffff : color(a, "text", 0xfff2f4f8));
+            b.setTypeface(null, on ? android.graphics.Typeface.BOLD : android.graphics.Typeface.NORMAL);
         }
     }
 }

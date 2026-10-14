@@ -702,6 +702,32 @@ try {
     assert.ok(has(dex14, 'Lru/prokatnvsk/app/PullScrollView;') && has(dex14, 'onRefresh'), 'classes.dex 10.14: нет PullScrollView.onRefresh');
     assert.ok(/eq\("заявки 10\.64: /.test(tp), 'IvaPatchTest: проверки 10.64');
   }
+  // 10.66 (просьбы владельца 14.10.2026): «Состояние» в форме инструмента; картинки инструментов на карточках заявок
+  {
+    const ip = R('android/patches/IvaPatch.java'), op = R('android/patches/IvaOrderPatch.java'), tp = R('android/patches/test/IvaPatchTest.java');
+    const cs = ip.slice(ip.indexOf('// ───────────── 10.66: «Состояние»'));
+    assert.ok(cs.includes('condRow(a, "atTerms", "atSave", 0);') && cs.includes('condRow(a, "teTerms", "teSave", 1);')
+      && cs.includes('form.addView(row, form.indexOfChild(terms), lp);          // перед «Условием аренды»')
+      && cs.includes('if (e.getActionMasked() == android.view.MotionEvent.ACTION_DOWN && v.isEnabled()) condPut(terms, k);\n                    return false;')
+      && cs.includes('static final String[] COND_TITLES = IvaSearchPatch.COND_TITLES;') && cs.includes('int bit = IvaSearchPatch.condFromTerms(terms);')
+      && !/removeView|setOnClickListener\(null\)|apiCall|"PATCH"|"POST"/.test(cs),
+      'состояние 10.66: строка перед «Условием аренды» в обеих формах; строка «Состояние: …» в условиях — при нажатии публикации (само нажатие не перехватываем), разбор — как у фильтра; ничего не удаляет и в базу само не пишет');
+    assert.ok(ip.includes('try { condRows(a); } catch (Throwable ignore) {}      // 10.66: «Состояние» — Новый / Хорошее / Рабочее')
+      && ip.includes('try { condRows(a); } catch (Throwable ignore) {}      // 10.66: «Состояние» в форме инструмента'),
+      'состояние 10.66: ставится из onTab и onHub (новых вставок в smali нет)');
+    assert.ok(/'Состояние: ' \+ condTitle\(F\.cond\)/.test(R('new.html')) && /Состояние:\\s\*Новый/.test(R('assets/sb.js')),
+      'состояние 10.66: формат — тот же, что пишет и читает сайт');
+    for (const str of ['atTerms', 'teTerms', 'atSave', 'teSave', 'bg_btn_orange', 'bg_field'])
+      assert.ok(has(arsc14, str), `resources.arsc 10.14: нет «${str}» — строка «Состояние» не найдёт форму`);
+    const cv = op.slice(op.indexOf('static View ordCardView('), op.indexOf('/** Запасной путь'));
+    assert.ok(cv.includes('card.addView(c, new LinearLayout.LayoutParams(0, -2, 1f));') && cv.includes('View pics = ordPicsView(a, r);')
+      && cv.includes('} catch (Throwable ignore) {}   // без картинок карточка остаётся как была')
+      && cv.includes('card.setOnClickListener(') && cv.includes('card.setOnLongClickListener(') && cv.includes('return card;')
+      && cv.includes('View pic = IvaChatPatch.toolPic(a, tool, id, ORD_PIC_DP);') && cv.includes('static final int ORD_PICS_MAX = 2, ORD_PIC_DP = 56;')
+      && !/apiCall|new Thread/.test(cv),
+      'заявки 10.66: справа картинки (скруглённые, штатный loadPhoto, без своих запросов); вся карточка нажимается и удерживается, как раньше');
+    assert.ok(/eq\("состояние 10\.66: /.test(tp) && /eq\("заявки 10\.66: /.test(tp), 'IvaPatchTest: проверки 10.66');
+  }
   // 10.65: уведомления, этап 2 — когда приложение закрыто (JobScheduler раз в ~15 мин, без Firebase; решение владельца 13.10.2026)
   {
     const np = R('android/patches/IvaNotifyPatch.java'), tp = R('android/patches/test/IvaPatchTest.java'), ax = R('android/patches/axml_service.py');
