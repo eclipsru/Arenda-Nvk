@@ -490,7 +490,7 @@ try {
       && oo.includes('!"orders".equals(String.valueOf(get(a, "curTab")))') && !/apiCall|"POST"|"PATCH"/.test(oo),
       'переход 10.59: заявка — ждём штатную загрузку, открываем клиента как штатное нажатие, подсветка только при совпадении карточек, ушли — не мешаем, в базу не пишем');
     const ou = np.slice(np.indexOf('static void openUpdate('), np.indexOf('static ViewGroup updateBox('));
-    assert.ok(ou.includes('su.getDeclaredMethod("checkInBackground", Activity.class, View.class);') && ou.includes('box.removeView(old);')
+    assert.ok(ou.includes('if (old == null) releaseCheck(a, true);') && ou.includes('box.removeView(old);')   // 10.78: проверка релиза, как у кнопки в кабинете
       && ou.includes('if (b != null) { reveal(b); return; }') && !ou.includes('onButtonTap'),
       'переход 10.59: обновление — штатная кнопка SelfUpdate (проверка ещё раз), само не скачивает и не ставит');
     assert.ok(cp.includes('try { applyNote(a); } catch (Throwable ignore) {}\n        String sig = signature(a);') && cp.includes('load(a, my, adm, partner, tool);\n                    loadDone = Math.max(loadDone, gen);')
@@ -602,9 +602,9 @@ try {
       && !/#[0-9A-Fa-f]{6}|0x[0-9A-Fa-f]{8}/.test(tabs.replace(/0xffff8f1f|0xff9aa1b0|0xff1a1d24|0xff262b35/g, '')),
       'вкладки 10.62–10.63: как у админа (цвета bg_card, линия 3dp, выбранная — оранжевая), без новых цветов');
     const pc = jc.slice(jc.indexOf('static void profileContacts('), jc.indexOf('// ── 10.63: окно выбора в стиле приложения'));
-    assert.ok(jc.includes('try { if ("profile".equals(tab)) profileContacts(a); } catch (Throwable ignore) {}') && pc.includes('boolean show = !isClient(a);')
+    assert.ok(jc.includes('try { if ("profile".equals(tab)) profileContacts(a); } catch (Throwable ignore) {}') && pc.includes('boolean show = PROFILE_CONTACTS_SHOW;')
       && pc.includes('isSingleRow(a, (ViewGroup) row)') && !/removeView|removeAllViews|setText|setOnClick/.test(pc),
-      'кабинет 10.62: у клиента строки только скрываются (у админа — видны), ничего не удаляется; строка адреса — только если это одна строка');
+      'кабинет 10.62/10.78: строки только скрываются (с 10.78 — и у админа), ничего не удаляется; строка адреса — только если это одна строка');
     const att = op.slice(op.indexOf('static void ordAttach('), op.indexOf('static boolean ordCard('));
     assert.ok(op.includes('if ("orders".equals(tab)) {\n            try { clientOrders(a); } catch (Throwable ignore) {}') && att.includes('!IvaClientPatch.isClient(a)) return;')
       && !/removeView|removeAllViews|setText\(|setVisibility/.test(att.replace('more.setText(ORD_MORE);', '')),
@@ -769,6 +769,73 @@ try {
       assert.ok(has(arsc14, str) || has(dex14, str), `APK 10.14: нет «${str}» — правка 10.67 не найдёт штатное поле`);
     assert.ok(/eq\("админ 10\.67: /.test(tp) && /eq\("подкатегория 10\.67: /.test(tp) && /eq\("кабинет 10\.67: /.test(tp), 'IvaPatchTest: проверки 10.67');
   }
+  // 10.78 (просьба владельца 14.10.2026): таймер «чч.мм.сс» (каждую секунду); раздел настроек «Срок аренды»; в кабинете и у админа
+  // нет «Позвонить», «Написать в МАКС», «Адрес выдачи»; над «О приложении» — оранжевая «Обновить до версии N» (только если
+  // выпущенный релиз новее установленного), ещё выше у админов — «Чат поддержки» (переписка с создателем); у создателя в чатах
+  // с админами справа — «Админ» вместо картинки инструмента
+  {
+    const rp = R('android/patches/IvaRentPatch.java'), np = R('android/patches/IvaNotifyPatch.java'), jc = R('android/patches/IvaClientPatch.java');
+    const cp = R('android/patches/IvaChatPatch.java'), tp = R('android/patches/test/IvaPatchTest.java'), wf = R('.github/workflows/build-apk.yml');
+    const ap = R('android/patches/apply.py');
+    const fnx = (src, name) => { const mm = new RegExp(`static (?:final )?[\\w.<>, \\[\\]]+ ${name}\\(`).exec(src); assert.ok(mm, `нет ${name}`); return src.slice(mm.index, src.indexOf('\n    }\n', mm.index)); };
+    // 1. таймер: часы.минуты.секунды, часы не ограничены сутками; тик — со сменой секунды
+    assert.ok(/String\.format\(Locale\.ROOT, "%02d\.%02d\.%02d", s \/ 3600, \(s \/ 60\) % 60, s % 60\)/.test(fnx(rp, 'hms'))
+      && fnx(rp, 'seconds').includes('return now < end ? (end - now + 999) / 1000 : (now - end) / 1000;')
+      && fnx(rp, 'timer').includes('hms(seconds(end, now))') && !/\bdhm\(|\bminutes\(/.test(rp)
+      && rp.includes('l.setText(TIMER_LABEL + " (чч.мм.сс)");') && !rp.includes('(дд.чч.мм)"'),
+      'таймер 10.78: «чч.мм.сс», часы без ограничения сутками, ровно в срок — 00.00.00');
+    const nt = fnx(rp, 'nextTick');
+    assert.ok(nt.includes('long best = 1000;') && nt.includes('long d = Math.abs(e.end - now) % 1000;') && nt.includes('return Math.max(200, best + 20);')
+      && fnx(rp, 'timerView').includes('box.postDelayed(this, nextTick(es, now));'),
+      'таймер 10.78: тикает каждую секунду (со сменой секунды), не чаще раза в 200 мс, только на экране');
+    // 2. раздел настроек
+    assert.ok(rp.includes('static final String HEAD_TITLE = "Срок аренды";') && fnx(rp, 'settingsSection').includes('ht.setText(HEAD_TITLE);'),
+      'настройки 10.78: раздел называется «Срок аренды»');
+    // 3. кабинет: контакты скрыты у всех, строки не удаляются
+    const pc = fnx(jc, 'profileContacts');
+    assert.ok(jc.includes('static final boolean PROFILE_CONTACTS_SHOW = false;') && pc.includes('boolean show = PROFILE_CONTACTS_SHOW;')
+      && !pc.includes('isClient(') && !/removeView|removeAllViews|setText|setOnClick/.test(pc),
+      'кабинет 10.78: «Позвонить», «Написать в МАКС», «Адрес выдачи» скрыты и у админа; только скрываются');
+    // 4. «Обновить до версии N»: выпущенный релиз (app_releases, как у сайта), штатная кнопка, только если новее установленного
+    const rel = fnx(np, 'released'), apr = fnx(np, 'applyRelease'), es = fnx(np, 'ensureSupport');
+    assert.ok(np.includes('static final String RELEASE_PATH = "/rest/v1/app_releases?select=version_code,version_name,apk_url&order=version_code.desc&limit=1";')
+      && rel.includes('nativeCall(IvaClientPatch.SB_URL + RELEASE_PATH, "GET", null, false, null);') && rel.includes('String body = httpGet(UPDATE_URL);')
+      && rel.includes('return null;                                              // нет сети / сбой базы — не знаем'),
+      'обновление 10.78: выпущенная версия — последняя строка app_releases (без входа, только номер и ссылка); строк нет — app-update.json');
+    assert.ok(fnx(np, 'updateWanted').includes('return released > 0 && installed > 0 && released > installed && apk != null && !apk.isEmpty();')
+      && apr.includes('boolean want = updateWanted(code, installedCode(a), apk);') && apr.includes('if (old != null && (!want || relShown != code)) { box.removeView(old); old = null; }')
+      && apr.includes('su.getDeclaredMethod("showButtonOnUi", Activity.class, View.class, String.class, int.class, String.class);')
+      && apr.includes('m.invoke(null, a, anchor, apk, code, name.isEmpty() ? String.valueOf(code) : name);') && apr.includes('if (code <= 0) return;') && !/onButtonTap|downloadApk|commitInstall/.test(np) && has(dex14, 'showButtonOnUi'),
+      'обновление 10.78: штатная оранжевая кнопка над «О приложении»; релиз не новее установленного — кнопки нет; сами не качаем');
+    const ra = fnx(np, 'releaseApk');
+    assert.ok(ra.includes('if (u.matches("ProkatInstrumenta-[0-9]+\\\\.[0-9]+\\\\.apk")) return APK_BASE + u;') && ra.includes('!u.contains("..")')
+      && np.includes('static final String APK_BASE = "https://eclipsru.github.io/Arenda-Nvk/";') && np.includes('static final String APK_RAW = "https://github.com/eclipsru/Arenda-Nvk/raw/";'),
+      'обновление 10.78: качаем только APK этого проекта (как проверка в базе)');
+    assert.ok(fnx(np, 'checkUpdate').includes('JSONObject j = released();') && fnx(np, 'openUpdate').includes('if (old == null) releaseCheck(a, true);')
+      && fnx(np, 'releaseCheck').includes('if (relBusy || (!force && relAt > 0 && now - relAt < RELEASE_EVERY_MS)) return;') && np.includes('static final long RELEASE_EVERY_MS = 60000L;'),
+      'обновление 10.78: уведомление и переход по нему — тот же выпущенный релиз; база — не чаще раза в минуту');
+    // 5. «Чат поддержки»: только вошедшим админам (не создателю), над кнопкой обновления / «О приложении», открывает переписку с создателем
+    assert.ok(np.includes('try { cabinet(a, tab); } catch (Throwable ignore) {}') && fnx(np, 'cabinet').includes('ensureSupport(a);')
+      && fnx(np, 'supportFor').includes('return logged && admin && !IvaChatPatch.OWNER.equalsIgnoreCase(')
+      && es.includes('int at = box.indexOfChild(upd != null && upd.getParent() == box ? upd : ver);') && es.includes('row.setVisibility(want ? View.VISIBLE : View.GONE);')
+      && fnx(np, 'supportRow').includes('ok = IvaChatPatch.openWith(a, IvaChatPatch.OWNER);') && fnx(np, 'supportRow').includes('drawable(a, "bg_card")')
+      && cp.includes('static final String OWNER = "eclips.ru@mail.ru";'),
+      'кабинет 10.78: «Чат поддержки» — админам, выше «Обновить…» и «О приложении», переписка с создателем, в стиле строк кабинета');
+    assert.ok(!/AlarmManager|WorkManager|customer_profiles|passport|phone|surname|com\.google/.test(np), 'кабинет 10.78: без личных данных и сервисов Google');
+    // 6. «Админ» у создателя
+    const row = fnx(cp, 'chatRow');
+    assert.ok(fnx(cp, 'adminMark').includes('return superView(me) && !p.isEmpty() && !p.equals(low(me)) && admins != null && admins.contains(p);')
+      && row.indexOf('} else if (adminMark(my, c.partner, adminEmails())) {') > 0 && row.indexOf('} else if (adminMark(my, c.partner, adminEmails())) {') < row.indexOf('toolPic(a, tool, c.tool, LIST_TOOL_DP)')
+      && fnx(cp, 'renderHeader').includes('if (adminMark(myH, openPartner, adminEmails())) {'),
+      'чат 10.78: у создателя в переписке с админом справа «Админ» вместо картинки инструмента (и в шапке)');
+    const ab = fnx(cp, 'adminBadge');
+    assert.ok(ab.includes('setBg(a, t, "bg_chip_on");') && ab.includes('text(a, ADMIN_BADGE, 12, "white", true)') && !/#[0-9A-Fa-f]{6}|0x[0-9A-Fa-f]{8}/.test(ab)
+      && cp.includes('static final String ADMIN_BADGE = "Админ", SUPPORT_SUB = "Чат поддержки";') && has(arsc14, 'bg_chip_on') && has(arsc14, 'ic_chat'),
+      'чат 10.78: «Админ» — оранжевая таблетка приложения, без новых цветов');
+    assert.ok(!/IvaRentPatch|cabinet|adminMark/.test(ap), '10.78: новых вставок в smali нет');
+    assert.ok(/NEW_NAME: '10\.78'/.test(wf) && /NEW_CODE: '152'/.test(wf), 'версия 10.78 (152)');
+    assert.ok((tp.match(/eq\("(аренда|кабинет|чат) 10\.78: /g) || []).length >= 14, 'IvaPatchTest: проверки 10.78');
+  }
   // 10.77 (просьба владельца 14.10.2026): «Аренда» в настройках админа — конец аренды «Сутки» (14:30 → 14:30) или «До закрытия
   // пункта» (время закрытия по дням недели, выходной → следующий рабочий день); смена режима — и для выданных; напоминание клиенту
   // по этому концу; живой таймер «дд.чч.мм» в выданных активных заявках у клиента и у админа
@@ -817,7 +884,6 @@ try {
     assert.ok(tv.includes('if (box.getWindowToken() != null) box.postDelayed(this, nextTick(es, now));') && tv.includes('v.removeCallbacks(tick);')
       && tv.includes('setTextColor(now < e.end ? cOrange : cRed)'),
       'таймер 10.77: тикает только на экране, после срока — красным');
-    assert.ok(/String\.format\(Locale\.ROOT, "%02d\.%02d\.%02d", m \/ 1440, \(m \/ 60\) % 24, m % 60\)/.test(rp), 'таймер 10.77: формат дд.чч.мм');
     const an = fnx(rp, 'admNeed');
     assert.ok(an.includes('if (admLoading || now < admMissingUntil) return;') && an.includes('if (!(lack && now - admAt > 5000) && now - admAt < 60000) return;')
       && an.includes('admMissingUntil = System.currentTimeMillis() + 10 * 60000L;') && an.includes('changed = !sig(byPart).equals(sig(g));'),
@@ -841,8 +907,7 @@ try {
     assert.ok(!/client_name|phone|address/.test(sql.slice(sql.indexOf('CREATE OR REPLACE FUNCTION public.iva_admin_rentals'), sql.indexOf('-- 6. Проверка'))),
       'SQL 10.77: админу — без имени, телефона и адреса клиента');
     assert.ok(chk.includes('tools/rent-mode-stand.py'), 'SQL 10.77: стенд на PostgreSQL — в check.sh');
-    assert.ok(/NEW_NAME: '10\.77'/.test(wf) && /NEW_CODE: '151'/.test(wf), 'версия 10.77 (151)');
-    assert.ok((tp.match(/eq\("аренда 10\.77: /g) || []).length >= 22, 'IvaPatchTest: проверки 10.77');
+    assert.ok((tp.match(/eq\("аренда 10\.77: /g) || []).length >= 19, 'IvaPatchTest: проверки 10.77 (4 — с 10.78 под меткой 10.78)');
   }
   // 10.76 (просьба владельца 14.10.2026): 1) в активной заявке — «Написать» и «Позвонить» (клиенту — прокату, админу — клиенту,
   // первым может любой); 2) клиентам — напоминание об окончании аренды за 1/2/3 часа (конец = «Выдал» + сутки, по умолчанию выключено)

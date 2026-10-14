@@ -1662,12 +1662,13 @@ public final class IvaClientPatch {
     }
 
     // ── 10.62: в кабинете клиента нет «Позвонить», «Написать в МАКС» и «Адрес выдачи» (просьба владельца 14.10.2026) ──
-    // Строки штатные (rowCall, rowMax, строка с addrInfoTxt) — только скрываются; у админа (и после смены входа
-    // на админа) возвращаются. Сами строки, их нажатия и текст адреса не меняются.
+    // 10.78: и у админа тоже (просьба владельца). Строки штатные (rowCall, rowMax, строка с addrInfoTxt) — только
+    // скрываются, не удаляются: сами строки, их нажатия и текст адреса не меняются («Архив заявок» встаёт перед rowCall).
     static final String[] PROFILE_HIDE_IDS = {"rowCall", "rowMax"};
+    static final boolean PROFILE_CONTACTS_SHOW = false;     // 10.78: ни у клиента, ни у админа
 
     static void profileContacts(Activity a) {
-        boolean show = !isClient(a);
+        boolean show = PROFILE_CONTACTS_SHOW;               // 10.78: раньше у админа строки были видны
         java.util.List<WeakReference<View>> seen = new ArrayList<WeakReference<View>>();
         for (String n : PROFILE_HIDE_IDS) {
             int id = a.getResources().getIdentifier(n, "id", a.getPackageName());
@@ -1698,7 +1699,7 @@ public final class IvaClientPatch {
     static WeakReference<Activity> contactsWatched = new WeakReference<Activity>(null);
     static final int CONTACTS_FIX_MAX = 2;    // не вышло спрятать за 2 кадра — рисуем как есть, кадр не держим
 
-    /** Надо ли спрятать: строки должны быть скрыты (клиент), а какая-то из них видна. */
+    /** Надо ли спрятать: строки должны быть скрыты (с 10.78 — всегда), а какая-то из них видна. */
     static boolean contactsLeak(boolean show, boolean[] visible) {
         if (show || visible == null) return false;
         for (boolean v : visible) if (v) return true;
@@ -1720,7 +1721,7 @@ public final class IvaClientPatch {
                     if (!contactsLeak(contactsShow, vis)) { contactsFixes = 0; return true; }
                     if (contactsFixes >= CONTACTS_FIX_MAX) return true;
                     contactsFixes++;
-                    profileContacts(a);           // заново: вдруг вошёл админ — тогда покажем, как при открытии вкладки
+                    profileContacts(a);           // заново прячем (с 10.78 — и у админа)
                     return false;                 // этот кадр не рисуем — строки не мелькнут
                 } catch (Throwable ignore) { return true; }
             }

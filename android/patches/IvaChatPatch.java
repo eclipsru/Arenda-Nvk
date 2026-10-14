@@ -195,6 +195,23 @@ final class IvaChatPatch {
     }
 
     /** Подпись переписки в списке: название инструмента / «Хочу сдавать инструмент» / «Общий чат». */
+    // ── 10.78 (просьба владельца 14.10.2026): у админов в кабинете «Чат поддержки» — общая переписка с создателем.
+    // У создателя в списке такие чаты (собеседник — админ) справа, где обычно картинка инструмента, помечены «Админ». ──
+    static final String ADMIN_BADGE = "Админ", SUPPORT_SUB = "Чат поддержки";
+
+    /** Создатель смотрит переписку с админом — справа «Админ» вместо картинки инструмента. */
+    static boolean adminMark(String me, String partner, Set<String> admins) {
+        String p = low(partner);
+        return superView(me) && !p.isEmpty() && !p.equals(low(me)) && admins != null && admins.contains(p);
+    }
+
+    /** Общая переписка админа с создателем — «Чат поддержки» (у обоих) вместо «Общий чат». */
+    static boolean supportChat(String me, String partner, Set<String> admins, String tool) {
+        if (!clean(tool).isEmpty()) return false;
+        if (adminMark(me, partner, admins)) return true;
+        return !superView(me) && OWNER.equalsIgnoreCase(clean(partner)) && admins != null && admins.contains(low(me));
+    }
+
     static String chatSub(String tool, String toolName) {
         if (isLend(tool)) return LEND_TITLE;
         if (clean(tool).isEmpty()) return "Общий чат";
@@ -1403,7 +1420,7 @@ final class IvaChatPatch {
         } else {
             card.addView(avatar(a, openPartner, partnerTitle(openPartner), HEAD_TOOL_DP),
                 new LinearLayout.LayoutParams(dp(a, HEAD_TOOL_DP), dp(a, HEAD_TOOL_DP)));
-            small = "Общий чат";
+            small = supportChat(myH, openPartner, adminEmails(), openTool) ? SUPPORT_SUB : "Общий чат";
             title = partnerTitle(openPartner);
         }
         LinearLayout col = new LinearLayout(a);
@@ -1416,6 +1433,11 @@ final class IvaChatPatch {
         LinearLayout.LayoutParams cl = new LinearLayout.LayoutParams(0, -2, 1f);
         cl.leftMargin = dp(a, 12);
         card.addView(col, cl);
+        if (adminMark(myH, openPartner, adminEmails())) {        // 10.78: у создателя справа — «Админ»
+            LinearLayout.LayoutParams bl = new LinearLayout.LayoutParams(-2, dp(a, 26));
+            bl.leftMargin = dp(a, 10);
+            card.addView(adminBadge(a), bl);
+        }
         header.addView(card, new LinearLayout.LayoutParams(-1, -2));
         TextView back = text(a, BACK_TITLE, 15, "orange", true);
         back.setPadding(dp(a, 2), dp(a, 10), dp(a, 12), dp(a, 6));
@@ -2390,7 +2412,7 @@ final class IvaChatPatch {
         col.addView(n);
         String sub;
         JSONObject tool = c.tool.isEmpty() || isLend(c.tool) ? null : toolCache.get(c.tool);
-        sub = chatSub(c.tool, tool == null ? "" : tool.optString("name", ""));
+        sub = supportChat(my, c.partner, adminEmails(), c.tool) ? SUPPORT_SUB : chatSub(c.tool, tool == null ? "" : tool.optString("name", ""));
         TextView tl = text(a, sub, 12, "orange", false);
         tl.setSingleLine(true); tl.setEllipsize(TextUtils.TruncateAt.END);
         col.addView(tl);
@@ -2425,6 +2447,10 @@ final class IvaChatPatch {
             LinearLayout.LayoutParams pl = new LinearLayout.LayoutParams(dp(a, LIST_TOOL_DP), dp(a, LIST_TOOL_DP));
             pl.leftMargin = dp(a, 10);
             row.addView(smiley(a), pl);
+        } else if (adminMark(my, c.partner, adminEmails())) {    // 10.78: у создателя — «Админ» вместо картинки инструмента
+            LinearLayout.LayoutParams pl = new LinearLayout.LayoutParams(-2, dp(a, 26));
+            pl.leftMargin = dp(a, 10);
+            row.addView(adminBadge(a), pl);
         } else if (!c.tool.isEmpty() && !isLend(c.tool)) {
             LinearLayout.LayoutParams pl = new LinearLayout.LayoutParams(dp(a, LIST_TOOL_DP), dp(a, LIST_TOOL_DP));
             pl.leftMargin = dp(a, 10);
@@ -2584,6 +2610,18 @@ final class IvaChatPatch {
     }
 
     /** Скруглённая картинка инструмента (штатный ключ кэша "ctool"+id), иначе гаечный ключ. */
+    /** 10.78: «Админ» — оранжевая «таблетка» приложения (bg_chip_on), белый жирный текст. */
+    static TextView adminBadge(Activity a) {
+        TextView t = text(a, ADMIN_BADGE, 12, "white", true);
+        t.setGravity(Gravity.CENTER);
+        t.setSingleLine(true);
+        setBg(a, t, "bg_chip_on");
+        t.setPadding(dp(a, 12), 0, dp(a, 12), 0);
+        t.setLetterSpacing(0.05f);
+        t.setContentDescription("Собеседник — админ");
+        return t;
+    }
+
     static View toolPic(Activity a, JSONObject tool, String id, int sizeDp) {
         ImageView iv = new ImageView(a);
         iv.setScaleType(ImageView.ScaleType.CENTER_CROP);

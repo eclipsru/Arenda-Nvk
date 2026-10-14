@@ -1140,7 +1140,7 @@ public class IvaPatchTest {
                 IvaNotifyPatch.defOn(IvaNotifyPatch.K_RENT) + "," + IvaNotifyPatch.defOn(IvaNotifyPatch.K_SCHED_ON) + "," + IvaNotifyPatch.defOn(IvaNotifyPatch.K_MSG), "false,false,true");
             eq("аренда 10.76: текст — инструменты и куда нажать", IvaNotifyPatch.rentText("Дрель").startsWith("Дрель. ") && IvaNotifyPatch.rentText("Дрель").contains("«Написать» или «Позвонить»"), true);
             eq("аренда 10.76: свой канал «Окончание аренды»", IvaNotifyPatch.channelName(IvaNotifyPatch.CH_RENT), "Окончание аренды");
-            // 10.77: режим окончания аренды (сутки / до закрытия пункта), живой таймер «дд.чч.мм»
+            // 10.77: режим окончания аренды (сутки / до закрытия пункта), живой таймер (с 10.78 — «чч.мм.сс»)
             {
                 java.util.TimeZone utc = java.util.TimeZone.getTimeZone("UTC");
                 java.util.Calendar cu = java.util.Calendar.getInstance(utc);
@@ -1179,23 +1179,59 @@ public class IvaPatchTest {
                     "{\"p_mode\":\"close\",\"p_close\":[1080,1080,1080,1080,1080,900,-1],\"p_tz\":\"Europe/Moscow\"}");
                 eq("аренда 10.77: подпись под «Аренда»", IvaRentPatch.summary(day) + "|" + IvaRentPatch.summary(week),
                     "Сутки: с 14:30 до 14:30|До закрытия пункта: с 14:30 до закрытия");
-                eq("аренда 10.77: дд.чч.мм", IvaRentPatch.dhm(1440 + 5 * 60 + 32) + "|" + IvaRentPatch.dhm(0) + "|" + IvaRentPatch.dhm(120 * 1440L + 59) + "|" + IvaRentPatch.dhm(-5),
-                    "01.05.32|00.00.00|120.00.59|00.00.00");
-                eq("аренда 10.77: до конца — минуты вверх (61 с → 2 мин, 60 с → 1 мин)",
-                    IvaRentPatch.minutes(wed + 61000, wed) + "," + IvaRentPatch.minutes(wed + 60000, wed) + "," + IvaRentPatch.minutes(wed, wed + 119000), "2,1,1");
-                eq("аренда 10.77: таймер до и после срока",
-                    IvaRentPatch.timer(wed + d + 5 * h + 32 * 60000L, wed) + "|" + IvaRentPatch.timer(wed, wed + 2 * h + 15 * 60000L),
-                    "Осталось 01.05.32|Просрочено 00.02.15");
+                eq("аренда 10.78: чч.мм.сс, часы не ограничены сутками", IvaRentPatch.hms(29 * 3600 + 32 * 60 + 7) + "|" + IvaRentPatch.hms(0) + "|" + IvaRentPatch.hms(120 * 86400L + 59) + "|" + IvaRentPatch.hms(-5),
+                    "29.32.07|00.00.00|2880.00.59|00.00.00");
+                eq("аренда 10.78: до конца — секунды вверх (1,001 с → 2 с, 1 с → 1 с), после — сколько прошло",
+                    IvaRentPatch.seconds(wed + 1001, wed) + "," + IvaRentPatch.seconds(wed + 1000, wed) + "," + IvaRentPatch.seconds(wed, wed + 1999) + "," + IvaRentPatch.seconds(wed, wed), "2,1,1,0");
+                eq("аренда 10.78: таймер до и после срока",
+                    IvaRentPatch.timer(wed + d + 5 * h + 32 * 60000L + 7000, wed) + "|" + IvaRentPatch.timer(wed, wed + 2 * h + 15 * 60000L + 4000) + "|" + IvaRentPatch.timer(wed + 500, wed),
+                    "Осталось 29.32.07|Просрочено 02.15.04|Осталось 00.00.01");
                 eq("аренда 10.77: срок — дата и время", IvaRentPatch.until(IvaRentPatch.end(wed, 1, all19), java.util.TimeZone.getTimeZone("Europe/Moscow")), "до 15.10 в 19:00");
                 java.util.List<IvaNotifyPatch.RentEnd> es = IvaNotifyPatch.rentEnds("11", "5", "Дрель (3 дня), Пила (1 день)", 3, wed, all19);
                 eq("аренда 10.77: у каждого инструмента свой срок — по правилу проката (и для напоминания)",
                     (es.get(0).end - wed) + "|" + (es.get(1).end - wed), (3 * d + 4 * h + 30 * 60000L) + "|" + (d + 4 * h + 30 * 60000L));
                 eq("аренда 10.77: ключ «уже напомнили» меняется вместе со сроком (сменили режим — напомним по новому)",
                     es.get(1).key.equals(IvaNotifyPatch.rentEnds("11", "5", "Дрель (3 дня), Пила (1 день)", 3, wed, day).get(1).key), false);
-                eq("аренда 10.77: таймер тикает со сменой минуты", IvaRentPatch.nextTick(es.subList(1, 2), es.get(1).end - 90000) + "," + IvaRentPatch.nextTick(es.subList(1, 2), es.get(1).end + 10000)
-                    + "," + IvaRentPatch.nextTick(es.subList(1, 2), es.get(1).end - 120000) + "," + IvaRentPatch.nextTick(es.subList(1, 2), es.get(1).end - 300), "30050,50050,60050,1000");
+                java.util.List<IvaNotifyPatch.RentEnd> e1 = es.subList(1, 2);
+                long e1e = es.get(1).end;
+                eq("аренда 10.78: таймер тикает каждую секунду — со сменой секунды (+20 мс), не чаще раза в 200 мс",
+                    IvaRentPatch.nextTick(e1, e1e - 90000) + "," + IvaRentPatch.nextTick(e1, e1e + 10000) + "," + IvaRentPatch.nextTick(e1, e1e - 1500) + ","
+                    + IvaRentPatch.nextTick(e1, e1e - 300) + "," + IvaRentPatch.nextTick(e1, e1e - 10) + "," + IvaRentPatch.nextTick(e1, e1e + 999) + "," + IvaRentPatch.nextTick(es, e1e - 90000),
+                    "1020,1020,520,320,200,200,1020");
                 eq("аренда 10.77: подпись сроков меняется вместе со сроком", IvaRentPatch.sig(es).equals(IvaRentPatch.sig(IvaNotifyPatch.rentEnds("11", "5", "Дрель (3 дня), Пила (1 день)", 3, wed, day))), false);
-                eq("аренда 10.77: заголовок раздела", IvaRentPatch.HEAD_TITLE, "Аренда");
+                eq("аренда 10.78: заголовок раздела", IvaRentPatch.HEAD_TITLE, "Срок аренды");
+            }
+            // 10.78: кабинет — без контактов и у админа; «Чат поддержки» админам; «Обновить до версии …» по выпущенному релизу
+            {
+                eq("кабинет 10.78: «Позвонить», «Написать в МАКС», «Адрес выдачи» не показываем никому", IvaClientPatch.PROFILE_CONTACTS_SHOW, false);
+                eq("кабинет 10.78: штатная отрисовка вернула строку — снова прячем (и у админа)",
+                    IvaClientPatch.contactsLeak(IvaClientPatch.PROFILE_CONTACTS_SHOW, new boolean[]{false, true}) + "," + IvaClientPatch.contactsLeak(IvaClientPatch.PROFILE_CONTACTS_SHOW, new boolean[]{false, false}), "true,false");
+                eq("кабинет 10.78: ссылка из «Подтвердить релиз» — имя файла → сайт",
+                    IvaNotifyPatch.releaseApk(" ProkatInstrumenta-10.78.apk "), "https://eclipsru.github.io/Arenda-Nvk/ProkatInstrumenta-10.78.apk");
+                eq("кабинет 10.78: ссылка на GitHub этого проекта — как есть",
+                    IvaNotifyPatch.releaseApk("https://github.com/eclipsru/Arenda-Nvk/raw/main/ProkatInstrumenta-10.78.apk"), "https://github.com/eclipsru/Arenda-Nvk/raw/main/ProkatInstrumenta-10.78.apk");
+                eq("кабинет 10.78: чужие и странные ссылки — не качаем",
+                    IvaNotifyPatch.releaseApk("https://evil.example/ProkatInstrumenta-10.78.apk") + "|" + IvaNotifyPatch.releaseApk("https://github.com/other/Arenda-Nvk/raw/main/ProkatInstrumenta-10.78.apk")
+                    + "|" + IvaNotifyPatch.releaseApk("https://github.com/eclipsru/Arenda-Nvk/raw/../x/ProkatInstrumenta-10.78.apk") + "|" + IvaNotifyPatch.releaseApk("../ProkatInstrumenta-10.78.apk")
+                    + "|" + IvaNotifyPatch.releaseApk("ProkatInstrumenta-10.78.apk.exe") + "|" + IvaNotifyPatch.releaseApk(null) + "|" + IvaNotifyPatch.releaseApk(""), "||||||");
+                String rel = "https://eclipsru.github.io/Arenda-Nvk/ProkatInstrumenta-10.78.apk";
+                eq("кабинет 10.78: кнопка — только если выпущенная новее установленной",
+                    IvaNotifyPatch.updateWanted(152, 151, rel) + "," + IvaNotifyPatch.updateWanted(152, 152, rel) + "," + IvaNotifyPatch.updateWanted(88, 151, rel)
+                    + "," + IvaNotifyPatch.updateWanted(152, 151, "") + "," + IvaNotifyPatch.updateWanted(0, 151, rel) + "," + IvaNotifyPatch.updateWanted(152, 0, rel), "true,false,false,false,false,false");
+                eq("кабинет 10.78: «Чат поддержки» — вошедшим админам, кроме создателя",
+                    IvaNotifyPatch.supportFor(true, true, "a@b.ru") + "," + IvaNotifyPatch.supportFor(true, false, "a@b.ru") + "," + IvaNotifyPatch.supportFor(false, true, "a@b.ru")
+                    + "," + IvaNotifyPatch.supportFor(true, true, " Eclips.Ru@mail.ru ") + "," + IvaNotifyPatch.supportFor(true, true, null), "true,false,false,false,true");
+                eq("кабинет 10.78: чат поддержки — с создателем", IvaChatPatch.OWNER, "eclips.ru@mail.ru");
+                java.util.Set<String> ad = new java.util.HashSet<String>(java.util.Arrays.asList("eclips.ru@mail.ru", "adm@x.ru"));
+                eq("чат 10.78: у создателя переписка с админом — «Админ»; с клиентом — нет; у админа — нет",
+                    IvaChatPatch.adminMark("eclips.ru@mail.ru", "Adm@X.ru", ad) + "," + IvaChatPatch.adminMark("eclips.ru@mail.ru", "client@y.ru", ad)
+                    + "," + IvaChatPatch.adminMark("adm@x.ru", "eclips.ru@mail.ru", ad) + "," + IvaChatPatch.adminMark("eclips.ru@mail.ru", "eclips.ru@mail.ru", ad)
+                    + "," + IvaChatPatch.adminMark("eclips.ru@mail.ru", "adm@x.ru", null), "true,false,false,false,false");
+                eq("чат 10.78: «Чат поддержки» — общая переписка админа с создателем (у обоих), не по инструменту и не с клиентом",
+                    IvaChatPatch.supportChat("eclips.ru@mail.ru", "adm@x.ru", ad, "") + "," + IvaChatPatch.supportChat("adm@x.ru", "eclips.ru@mail.ru", ad, "")
+                    + "," + IvaChatPatch.supportChat("adm@x.ru", "eclips.ru@mail.ru", ad, "15") + "," + IvaChatPatch.supportChat("client@y.ru", "eclips.ru@mail.ru", ad, "")
+                    + "," + IvaChatPatch.supportChat("adm@x.ru", "client@y.ru", ad, ""), "true,true,false,false,false");
+                eq("чат 10.78: надписи", IvaChatPatch.ADMIN_BADGE + "|" + IvaChatPatch.SUPPORT_SUB + "|" + IvaNotifyPatch.SUPPORT_TITLE, "Админ|Чат поддержки|Чат поддержки");
             }
         }
         if (fail > 0) { System.out.println("ошибок: " + fail); System.exit(1); }

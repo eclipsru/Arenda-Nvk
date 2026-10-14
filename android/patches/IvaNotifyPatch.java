@@ -437,6 +437,7 @@ public final class IvaNotifyPatch {
         try { scheduleBg(a.getApplicationContext()); } catch (Throwable ignore) {}   // 10.65: этап 2 — когда приложение закрыто
         try { openFromNotification(a); } catch (Throwable ignore) {}
         try { ensureRow(a); } catch (Throwable ignore) {}
+        try { cabinet(a, tab); } catch (Throwable ignore) {}   // 10.78: «Чат поддержки» и «Обновить до версии …»
     }
 
     static Object get(Object o, String f) { return IvaClientPatch.get(o, f); }
@@ -636,16 +637,15 @@ public final class IvaNotifyPatch {
         try { return c.getPackageManager().getPackageInfo(c.getPackageName(), 0).versionCode; } catch (Throwable e) { return 0; }
     }
 
-    /** Вышла новая версия (тот же app-update.json, что у штатной кнопки «Обновить»). */
+    /** Вышла новая версия: 10.78 — выпущенный релиз («Подтвердить релиз», как у сайта и кнопки в кабинете), иначе app-update.json. */
     static void checkUpdate(Context a, boolean admin) throws Exception {
         if (!on(a, K_UPD, admin) || quiet(a, admin)) return;
         SharedPreferences p = prefs(a);
         long now = System.currentTimeMillis();
         if (!updateDue(p.getLong("upd_checked", 0), now)) return;
-        String body = httpGet(UPDATE_URL);
+        JSONObject j = released();
         p.edit().putLong("upd_checked", now).apply();
-        if (body == null) return;
-        JSONObject j = new JSONObject(body.trim());
+        if (j == null) return;
         int remote = j.optInt("versionCode", 0);
         if (!updateNews(remote, installedCode(a), p.getInt("upd_notified", 0))) return;
         p.edit().putInt("upd_notified", remote).apply();
@@ -982,7 +982,7 @@ public final class IvaNotifyPatch {
         } catch (Throwable e) { return ""; }
     }
 
-    /** Обновление: «Кабинет» → штатная кнопка «Обновить до версии …» (SelfUpdate); нет — штатная проверка ещё раз. */
+    /** Обновление: «Кабинет» → штатная кнопка «Обновить до версии …» (SelfUpdate); нет — проверка релиза ещё раз (10.78). */
     static void openUpdate(final Activity a, final String target) {
         tab(a, "profile");
         final Object anchor = get(a, "profVer");
@@ -995,18 +995,7 @@ public final class IvaNotifyPatch {
             box.removeView(old);             // кнопка со старой версией: штатная проверка вторую не добавит
             old = null;
         }
-        if (old == null) {
-            new Thread(new Runnable() {
-                @Override public void run() {
-                    try {
-                        Class<?> su = Class.forName(a.getPackageName() + ".SelfUpdate");
-                        Method m = su.getDeclaredMethod("checkInBackground", Activity.class, View.class);
-                        m.setAccessible(true);
-                        m.invoke(null, a, anchor);
-                    } catch (Throwable ignore) {}
-                }
-            }).start();
-        }
+        if (old == null) releaseCheck(a, true);   // 10.78: та же проверка выпущенного релиза, что у кнопки в кабинете
         final long until = System.currentTimeMillis() + ROUTE_WAIT_MS;
         final Handler h = new Handler(Looper.getMainLooper());
         h.post(new Runnable() {
@@ -1077,6 +1066,194 @@ public final class IvaNotifyPatch {
             });
             an.start();
         } catch (Throwable ignore) {}
+    }
+
+    // ───────────────────────── 10.78: кабинет — «Чат поддержки» и «Обновить до версии …» ─────────────────────────
+    // Просьба владельца 14.10.2026. Порядок в кабинете снизу: «О приложении» (строка profVer) ← над ней оранжевая
+    // «Обновить до версии N» ← ещё выше (только у админов) «Чат поддержки» — переписка с создателем.
+    // Кнопка — штатная (SelfUpdate.showButtonOnUi: оранжевая, скачивание и установка — штатные), но «какая версия
+    // выпущена» берём там же, где сайт: последняя строка app_releases («Подтвердить релиз» создателя); строк нет —
+    // app-update.json (старая 10.14, как у сайта). Выпущенная не новее установленной — кнопки нет совсем.
+    static final String RELEASE_PATH = "/rest/v1/app_releases?select=version_code,version_name,apk_url&order=version_code.desc&limit=1";
+    static final String APK_BASE = "https://eclipsru.github.io/Arenda-Nvk/";
+    static final String APK_RAW = "https://github.com/eclipsru/Arenda-Nvk/raw/";
+    static final long RELEASE_EVERY_MS = 60000L;      // при открытии кабинета — не чаще раза в минуту
+    static final String SUPPORT_TAG = "iva_support_row", SUPPORT_TITLE = "Чат поддержки";
+    static volatile int relCode, relShown;            // выпущенный код (0 — неизвестен); какой код мы показали кнопкой
+    static volatile String relName = "", relApk = "";
+    static volatile long relAt;
+    static volatile boolean relBusy;
+
+    /** Ссылка на APK из app_releases: только файлы этого проекта (как проверка в базе); иначе "". */
+    static String releaseApk(String raw) {
+        String u = raw == null ? "" : raw.trim();
+        if (u.matches("ProkatInstrumenta-[0-9]+\\.[0-9]+\\.apk")) return APK_BASE + u;
+        if (u.startsWith(APK_RAW) && u.matches("https://github\\.com/eclipsru/Arenda-Nvk/raw/[A-Za-z0-9._/-]+/ProkatInstrumenta-[0-9]+\\.[0-9]+\\.apk")
+            && !u.contains("..")) return u;
+        return "";
+    }
+
+    /** Показывать ли «Обновить до версии …»: есть ссылка и выпущенная версия новее установленной. */
+    static boolean updateWanted(int released, int installed, String apk) {
+        return released > 0 && installed > 0 && released > installed && apk != null && !apk.isEmpty();
+    }
+
+    /** «Чат поддержки» — вошедшим админам, кроме самого создателя (писать самому себе некуда). */
+    static boolean supportFor(boolean logged, boolean admin, String email) {
+        return logged && admin && !IvaChatPatch.OWNER.equalsIgnoreCase(email == null ? "" : email.trim());
+    }
+
+    /** Выпущенная версия {versionCode, versionName, apk}: последняя строка app_releases, строк нет — app-update.json; сбой — null. */
+    static JSONObject released() {
+        try {
+            String[] r = nativeCall(IvaClientPatch.SB_URL + RELEASE_PATH, "GET", null, false, null);
+            String t = r != null && r.length > 1 && r[1] != null ? r[1].trim() : "";
+            if (r != null && r[0].startsWith("2") && t.startsWith("[")) {
+                JSONArray arr = new JSONArray(t);
+                if (arr.length() > 0) {
+                    JSONObject o = arr.getJSONObject(0);
+                    String apk = releaseApk(o.optString("apk_url", ""));
+                    int code = o.optInt("version_code", 0);
+                    if (code <= 0 || apk.isEmpty()) return null;          // строка есть, но странная — ничего не показываем
+                    String name = o.optString("version_name", "");
+                    JSONObject j = new JSONObject();
+                    j.put("versionCode", code);
+                    j.put("versionName", "null".equals(name) ? "" : name);
+                    j.put("apk", apk);
+                    return j;
+                }
+            } else if (r == null || !(r[0].startsWith("4"))) {
+                return null;                                              // нет сети / сбой базы — не знаем
+            }
+        } catch (Throwable e) {
+            return null;
+        }
+        try {                                                             // релизов ещё нет (или нет таблицы) — как у сайта
+            String body = httpGet(UPDATE_URL);
+            if (body == null) return null;
+            JSONObject j = new JSONObject(body.trim());
+            j.put("apk", j.optString("apk", "").startsWith(APK_BASE) ? j.optString("apk", "") : "");
+            return j;
+        } catch (Throwable e) {
+            return null;
+        }
+    }
+
+    static void cabinet(Activity a, String tab) {
+        ensureSupport(a);
+        if ("profile".equals(tab)) releaseCheck(a, false);
+    }
+
+    /** Сразу — по последнему известному релизу; затем (не чаще раза в минуту, force — сейчас) спрашиваем базу в фоне. */
+    static void releaseCheck(final Activity a, boolean force) {
+        applyRelease(a);
+        long now = System.currentTimeMillis();
+        if (relBusy || (!force && relAt > 0 && now - relAt < RELEASE_EVERY_MS)) return;
+        relBusy = true;
+        new Thread(new Runnable() {
+            @Override public void run() {
+                try {
+                    JSONObject j = released();
+                    if (j != null) {
+                        relName = j.optString("versionName", "");
+                        relApk = j.optString("apk", "");
+                        relCode = j.optInt("versionCode", 0);
+                        relAt = System.currentTimeMillis();
+                    }
+                } catch (Throwable ignore) {
+                } finally {
+                    relBusy = false;
+                }
+                try {
+                    a.runOnUiThread(new Runnable() {
+                        @Override public void run() { try { applyRelease(a); } catch (Throwable ignore) {} }
+                    });
+                } catch (Throwable ignore) {}
+            }
+        }).start();
+    }
+
+    /** Кнопка над «О приложении»: нужна — штатная SelfUpdate.showButtonOnUi; не нужна или другая версия — убираем. */
+    static void applyRelease(Activity a) {
+        if (a.isFinishing()) return;
+        Object anchor = get(a, "profVer");
+        if (!(anchor instanceof View)) return;
+        ViewGroup box = updateBox((View) anchor);
+        if (box == null) return;
+        int code = relCode;
+        String apk = relApk, name = relName;
+        if (code <= 0) return;                                            // ещё не знаем — ничего не трогаем
+        boolean want = updateWanted(code, installedCode(a), apk);
+        View old = box.findViewWithTag(UPDATE_BTN_TAG);
+        if (old != null && (!want || relShown != code)) { box.removeView(old); old = null; }
+        if (!want || old != null) return;
+        try {
+            Class<?> su = Class.forName(a.getPackageName() + ".SelfUpdate");
+            Method m = su.getDeclaredMethod("showButtonOnUi", Activity.class, View.class, String.class, int.class, String.class);
+            m.setAccessible(true);
+            m.invoke(null, a, anchor, apk, code, name.isEmpty() ? String.valueOf(code) : name);
+            relShown = code;
+        } catch (Throwable ignore) {}
+    }
+
+    /** «Чат поддержки» — как строки кабинета (bg_card, 16dp, значок 20dp оранжевый, 15sp, ›), над «Обновить…» / «О приложении». */
+    static void ensureSupport(final Activity a) {
+        Object anchor = get(a, "profVer");
+        if (!(anchor instanceof View) || !(((View) anchor).getParent() instanceof View)) return;
+        View ver = (View) ((View) anchor).getParent();
+        ViewGroup box = updateBox((View) anchor);
+        if (!(box instanceof LinearLayout)) return;
+        boolean want = supportFor(loggedIn(a), isAdmin(a), String.valueOf(get(a, "userEmail")));
+        View row = box.findViewWithTag(SUPPORT_TAG);
+        if (row == null) {
+            if (!want) return;
+            row = supportRow(a);
+            View upd = box.findViewWithTag(UPDATE_BTN_TAG);
+            int at = box.indexOfChild(upd != null && upd.getParent() == box ? upd : ver);
+            if (at < 0) return;
+            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2);
+            lp.topMargin = dp(a, 12);
+            box.addView(row, at, lp);
+        }
+        row.setVisibility(want ? View.VISIBLE : View.GONE);
+    }
+
+    static View supportRow(final Activity a) {
+        LinearLayout row = new LinearLayout(a);
+        row.setTag(SUPPORT_TAG);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setGravity(Gravity.CENTER_VERTICAL);
+        Drawable bg = drawable(a, "bg_card");
+        if (bg != null) row.setBackground(bg);
+        row.setPadding(dp(a, 16), dp(a, 16), dp(a, 16), dp(a, 16));
+        row.setClickable(true);
+        ImageView ic = new ImageView(a);
+        Drawable chat = drawable(a, "ic_chat");
+        if (chat != null) ic.setImageDrawable(chat);
+        ic.setColorFilter(color(a, "orange", 0xffff8f1f));
+        row.addView(ic, new LinearLayout.LayoutParams(dp(a, 20), dp(a, 20)));
+        TextView t = new TextView(a);
+        t.setText(SUPPORT_TITLE);
+        t.setTextSize(15f);
+        t.setTextColor(color(a, "text", 0xfff2f4f8));
+        LinearLayout.LayoutParams tl = new LinearLayout.LayoutParams(0, -2, 1f);
+        tl.leftMargin = dp(a, 14);
+        row.addView(t, tl);
+        ImageView chev = new ImageView(a);
+        Drawable ch = drawable(a, "ic_chevron");
+        if (ch != null) {
+            chev.setImageDrawable(ch);
+            chev.setColorFilter(color(a, "gray", 0xff9aa1b0));
+            row.addView(chev, new LinearLayout.LayoutParams(dp(a, 18), dp(a, 18)));
+        }
+        row.setOnClickListener(new View.OnClickListener() {
+            @Override public void onClick(View v) {
+                boolean ok = false;
+                try { ok = IvaChatPatch.openWith(a, IvaChatPatch.OWNER); } catch (Throwable ignore) {}
+                if (!ok) try { Toast.makeText(a, "Не удалось открыть чат — войдите в аккаунт", Toast.LENGTH_SHORT).show(); } catch (Throwable ignore) {}
+            }
+        });
+        return row;
     }
 
     // ───────────────────────── «Настройки» в кабинете ─────────────────────────

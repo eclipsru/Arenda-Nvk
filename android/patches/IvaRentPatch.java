@@ -1,7 +1,7 @@
 /*
  * Ива 10.77 — окончание аренды (просьба владельца 14.10.2026).
  *
- *  • «Аренда» в настройках админа: как считать конец аренды —
+ *  • «Срок аренды» (10.78; было «Аренда») в настройках админа: как считать конец аренды —
  *      «Сутки»              — выдали в 14:30 → вернуть в 14:30 через столько суток, сколько в заявке;
  *      «До закрытия пункта» — выдали в 14:30 → вернуть до закрытия пункта через столько дней, сколько в заявке
  *                             (время закрытия — своё у каждого дня недели; выходной → до закрытия следующего
@@ -9,7 +9,7 @@
  *    Хранится в базе (SQL 20261014_rent_end_mode.sql), у каждого проката своё. Смена режима действует и на уже
  *    выданные инструменты (решение владельца): база отдаёт текущие настройки, конец считается здесь.
  *  • По этому концу клиент получает напоминание «за 1–3 часа» (10.76, IvaNotifyPatch.checkRent).
- *  • Живой таймер «дд.чч.мм» в активных заявках, отмеченных «Выдал»: у клиента — на карточке и в подробностях,
+ *  • Живой таймер «чч.мм.сс» (10.78; было «дд.чч.мм») в активных заявках, отмеченных «Выдал»: у клиента — на карточке и в подробностях,
  *    у админа — на карточке заявки клиента и в подробностях. После конца срока — «Просрочено …» красным.
  *
  * Новых вставок в smali нет: вызывается из IvaNotifyPatch (настройки, напоминание) и IvaOrderPatch (заявки).
@@ -51,7 +51,7 @@ public class IvaRentPatch {
     static final String ADM_RPC = "/rest/v1/rpc/iva_admin_rentals";
     static final String K_MODE = "rent_mode", K_CLOSE = "rent_close", K_TZ = "rent_tz";
     static final String TIMER_TAG = "iva_rent_timer";
-    static final String HEAD_TITLE = "Аренда";
+    static final String HEAD_TITLE = "Срок аренды";   // 10.78: было «Аренда»
     static final String DAY_TITLE = "Сутки", DAY_SUB = "Выдали в 14:30 — вернуть в 14:30 через столько суток, сколько в заявке";
     static final String CLOSE_TITLE = "До закрытия пункта",
         CLOSE_SUB = "Выдали в 14:30 — вернуть до закрытия пункта через столько дней, сколько в заявке";
@@ -139,16 +139,16 @@ public class IvaRentPatch {
         return plain;
     }
 
-    /** Сколько минут показывать: до конца — с округлением вверх (00.00.00 ровно в срок), после — сколько прошло. */
-    static long minutes(long end, long now) { return now < end ? (end - now + 59999) / 60000 : (now - end) / 60000; }
+    /** 10.78: сколько секунд показывать: до конца — с округлением вверх (00.00.00 ровно в срок), после — сколько прошло. */
+    static long seconds(long end, long now) { return now < end ? (end - now + 999) / 1000 : (now - end) / 1000; }
 
-    /** «дд.чч.мм»: 1 день 5 ч 32 мин → «01.05.32». */
-    static String dhm(long min) {
-        long m = Math.max(0, min);
-        return String.format(Locale.ROOT, "%02d.%02d.%02d", m / 1440, (m / 60) % 24, m % 60);
+    /** 10.78 (просьба владельца): «чч.мм.сс», часы не ограничены сутками: 1 день 5 ч 32 мин 7 с → «29.32.07». */
+    static String hms(long sec) {
+        long s = Math.max(0, sec);
+        return String.format(Locale.ROOT, "%02d.%02d.%02d", s / 3600, (s / 60) % 60, s % 60);
     }
 
-    static String timer(long end, long now) { return (now < end ? "Осталось " : "Просрочено ") + dhm(minutes(end, now)); }
+    static String timer(long end, long now) { return (now < end ? "Осталось " : "Просрочено ") + hms(seconds(end, now)); }
 
     /** «до 15.10 в 19:00» — по часам телефона. */
     static String until(long end, TimeZone tz) {
@@ -158,19 +158,19 @@ public class IvaRentPatch {
             c.get(Calendar.HOUR_OF_DAY), c.get(Calendar.MINUTE));
     }
 
-    /** Через сколько перерисовать: когда сменится минута у любого из сроков (+50 мс), не чаще раза в секунду. */
+    /** 10.78: через сколько перерисовать — когда сменится секунда у любого из сроков (+20 мс), не чаще 5 раз в секунду. */
     static long nextTick(List<IvaNotifyPatch.RentEnd> ends, long now) {
-        long best = 60000;
+        long best = 1000;
         for (IvaNotifyPatch.RentEnd e : ends) {
-            long d = Math.abs(e.end - now) % 60000;
-            if (now < e.end) { if (d == 0) d = 60000; }
-            else d = 60000 - d;
+            long d = Math.abs(e.end - now) % 1000;
+            if (now < e.end) { if (d == 0) d = 1000; }
+            else d = 1000 - d;
             best = Math.min(best, d);
         }
-        return Math.max(1000, best + 50);
+        return Math.max(200, best + 20);
     }
 
-    /** Подпись под «Аренда» в настройках. */
+    /** Подпись под «Срок аренды» в настройках. */
     static String summary(Rule r) {
         return r != null && r.byClose() ? CLOSE_TITLE + ": с 14:30 до закрытия" : DAY_TITLE + ": с 14:30 до 14:30";
     }
@@ -354,7 +354,7 @@ public class IvaRentPatch {
             : byOrder.get(IvaOrderPatch.ordVal(r.get("id")));
         if (es == null || es.isEmpty()) return;
         TextView l = new TextView(a);
-        l.setText(TIMER_LABEL + " (дд.чч.мм)");
+        l.setText(TIMER_LABEL + " (чч.мм.сс)");
         l.setTextColor(IvaOrderPatch.color(a, "gray", 0xff9aa1b0));
         l.setTextSize(12f);
         LinearLayout.LayoutParams ll = new LinearLayout.LayoutParams(-1, -2);
@@ -365,7 +365,7 @@ public class IvaRentPatch {
         body.addView(timerView(a, es, 15f, true), vl);
     }
 
-    // ───────────── «Аренда» в настройках админа ─────────────
+    // ───────────── «Срок аренды» в настройках админа ─────────────
 
     static Rule cached(Activity a) {
         android.content.SharedPreferences p = IvaNotifyPatch.prefs(a);
@@ -415,7 +415,7 @@ public class IvaRentPatch {
         return g;
     }
 
-    /** Раскрывающаяся «Аренда» под «Уведомлениями» (только у админов). Сохраняется в базу сразу после изменения. */
+    /** Раскрывающаяся «Срок аренды» под «Уведомлениями» (только у админов). Сохраняется в базу сразу после изменения. */
     static void settingsSection(final Activity a, LinearLayout page, final int cText, final int cGray, final int cOrange) {
         final Rule st = cached(a);
         final boolean[] edited = new boolean[1];
