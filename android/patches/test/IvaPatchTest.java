@@ -874,6 +874,59 @@ public class IvaPatchTest {
             String jwt = "x." + java.util.Base64.getUrlEncoder().withoutPadding().encodeToString(("{\"exp\":" + (now / 1000 + 200) + "}").getBytes()) + ".y";
             eq("вход 10.69: срок из ключа → пора обновлять", IvaClientPatch.authNeed(IvaNotifyPatch.jwtExp(jwt), now), true);
         }
+        {   // 10.70: отзывы и оценки, этап 1
+            eq("отзывы 10.70: рейтинг с запятой", IvaReviewPatch.fmtRating(4.75) + "|" + IvaReviewPatch.fmtRating(5) + "|" + IvaReviewPatch.fmtRating(3.04), "4,8|5,0|3,0");
+            eq("отзывы 10.70: склонение", IvaReviewPatch.reviewsWord(1) + " " + IvaReviewPatch.reviewsWord(2) + " " + IvaReviewPatch.reviewsWord(5) + " " + IvaReviewPatch.reviewsWord(11)
+                + " " + IvaReviewPatch.reviewsWord(12) + " " + IvaReviewPatch.reviewsWord(21) + " " + IvaReviewPatch.reviewsWord(104) + " " + IvaReviewPatch.reviewsWord(111), "отзыв отзыва отзывов отзывов отзывов отзыв отзыва отзывов");
+            eq("отзывы 10.70: карточка ленты — «★ 4,8 (12)»", IvaReviewPatch.cardLine(4.8, 12), "★ 4,8 (12)");
+            eq("отзывы 10.70: отзывов нет — на карточке ничего", IvaReviewPatch.cardLine(0, 0) + IvaReviewPatch.cardLine(4.5, 0) + IvaReviewPatch.cardLine(0, 3) + IvaReviewPatch.cardLine(Double.NaN, 3), "");
+            eq("отзывы 10.70: страница инструмента", IvaReviewPatch.summaryLine(4.8, 12) + "|" + IvaReviewPatch.summaryLine(5, 1) + "|" + IvaReviewPatch.summaryLine(0, 0), "★ 4,8 · 12 отзывов|★ 5,0 · 1 отзыв|Отзывов пока нет");
+            eq("отзывы 10.70: прокат — рейтинг или штатный текст", IvaReviewPatch.sellerLine(4.6, 3) + "|" + IvaReviewPatch.sellerLine(0, 0), "★ 4,6 · 3 отзыва об инструментах проката|null");
+            eq("отзывы 10.70: штатный «Отзывы: пока нет» узнаётся (и с «рейтинг не сформирован»)", IvaReviewPatch.nativeNoReviews("Отзывы: пока нет") && IvaReviewPatch.nativeNoReviews("Отзывы: пока нет · рейтинг не сформирован")
+                && !IvaReviewPatch.nativeNoReviews("★ 4,6 · 3 отзыва об инструментах проката") && !IvaReviewPatch.nativeNoReviews(null), true);
+            java.util.List<java.util.Map<String, String>> q70rv = new java.util.ArrayList<java.util.Map<String, String>>();
+            String[][] q70rows = {{"r1", "5", "published"}, {"r2", "4", "published"}, {"r3", "1", "hidden"}, {"r4", "4", "published"}, {"r5", "x", "published"}};
+            for (String[] q70x : q70rows) { java.util.Map<String, String> q70m = new java.util.HashMap<String, String>(); q70m.put("id", q70x[0]); q70m.put("rating", q70x[1]); q70m.put("status", q70x[2]); q70rv.add(q70m); }
+            double[] q70sm = IvaReviewPatch.summary(q70rv);
+            eq("отзывы 10.70: сводка — только опубликованные (как сайт и триггер)", q70sm[0] + "|" + (int) q70sm[1], "4.3|3");
+            eq("отзывы 10.70: пустая сводка", IvaReviewPatch.summary(null)[1] == 0 && IvaReviewPatch.summary(new java.util.ArrayList<java.util.Map<String, String>>())[0] == 0, true);
+            String q70vis = ""; for (java.util.Map<String, String> q70m : IvaReviewPatch.visible(q70rv, false, "r2")) q70vis += q70m.get("id");
+            String q70visC = ""; for (java.util.Map<String, String> q70m : IvaReviewPatch.visible(q70rv, true, "")) q70visC += q70m.get("id");
+            eq("отзывы 10.70: список — опубликованные, свой отдельно", q70vis, "r1r4r5");
+            eq("отзывы 10.70: главному админу — и скрытые", q70visC, "r1r2r3r4r5");
+            eq("отзывы 10.70: звёзды", IvaReviewPatch.stars(4) + "|" + IvaReviewPatch.stars(0) + "|" + IvaReviewPatch.stars(9), "★★★★☆|☆☆☆☆☆|★★★★★");
+            eq("отзывы 10.70: дата", IvaReviewPatch.fmtDate("2026-10-14T09:30:00+00:00") + "|" + IvaReviewPatch.fmtDate("2026-01-02") + "|" + IvaReviewPatch.fmtDate("null") + "|" + IvaReviewPatch.fmtDate("2026-13-01x"), "14 октября 2026|2 января 2026||2026-13-01");
+            java.util.Map<String, String> q70dr = new java.util.HashMap<String, String>(); q70dr.put("created_at", "2026-10-01T10:00:00+00:00"); q70dr.put("updated_at", "2026-10-01T10:00:00+00:00");
+            java.util.Map<String, String> q70de = new java.util.HashMap<String, String>(); q70de.put("created_at", "2026-10-01T10:00:00+00:00"); q70de.put("updated_at", "2026-10-05T10:00:00+00:00");
+            eq("отзывы 10.70: дата изменения и «(изменён)» — как на сайте", IvaReviewPatch.dateLine(q70dr) + "|" + IvaReviewPatch.dateLine(q70de), "1 октября 2026|5 октября 2026 (изменён)");
+            eq("отзывы 10.70: не вошёл — подсказка войти", IvaReviewPatch.formHint(false, false, false, ""), IvaReviewPatch.HINT_GUEST);
+            eq("отзывы 10.70: свой инструмент — ничего; нет заявки — подсказка; можно — кнопка", "[" + IvaReviewPatch.formHint(true, true, false, "own_tool") + "]"
+                + IvaReviewPatch.formHint(true, true, false, "no_order") + "|" + IvaReviewPatch.formHint(true, true, true, null), "[]" + IvaReviewPatch.HINT_NO_ORDER + "|null");
+            eq("отзывы 10.70: право не проверилось — кнопки нет", IvaReviewPatch.formHint(true, false, false, ""), "");
+            eq("отзывы 10.70: причины для шторки заявки", IvaReviewPatch.reasonText("own_tool").startsWith("Нельзя") && IvaReviewPatch.reasonText("no_order").equals(IvaReviewPatch.HINT_NO_ORDER)
+                && IvaReviewPatch.reasonText("tool_not_found").contains("не опубликован"), true);
+            eq("отзывы 10.70: название как у штатного shorten(34)", IvaReviewPatch.shorten34("Перфоратор") + "|" + IvaReviewPatch.shorten34("123456789012345678901234567890123456").length()
+                + "|" + IvaReviewPatch.shorten34("1234567890123456789012345678901234").length(), "Перфоратор|34|34");
+            java.util.List<String[]> q70cs = new java.util.ArrayList<String[]>();
+            q70cs.add(new String[]{"от 500 ₽/сут", "★ 4,0 (2)"}); q70cs.add(new String[]{"от 700 ₽/сут", "★ 5,0 (1)"});
+            eq("отзывы 10.70: одинаковые названия — по цене", IvaReviewPatch.chooseLine(q70cs, "от 700 ₽/сут"), "★ 5,0 (1)");
+            eq("отзывы 10.70: не различить — не пишем", IvaReviewPatch.chooseLine(q70cs, "Цену уточняйте"), "");
+            q70cs.add(new String[]{"от 700 ₽/сут", "★ 3,0 (4)"});
+            eq("отзывы 10.70: и цена совпала — не пишем", IvaReviewPatch.chooseLine(q70cs, "от 700 ₽/сут"), "");
+            java.util.List<String[]> q70c1 = new java.util.ArrayList<String[]>(); q70c1.add(new String[]{"x", "★ 4,8 (12)"}); q70c1.add(new String[]{"y", "★ 4,8 (12)"});
+            eq("отзывы 10.70: строка одинакова у всех — пишем", IvaReviewPatch.chooseLine(q70c1, "z") + "|" + IvaReviewPatch.chooseLine(null, "z"), "★ 4,8 (12)|");
+            eq("отзывы 10.70: сообщение базы", IvaReviewPatch.errMessage("400", "{\"code\":\"P0001\",\"message\":\"Отзыв могут оставить только арендаторы\"}"), "Отзыв могут оставить только арендаторы");
+            eq("отзывы 10.70: сообщение \\u и кавычки", IvaReviewPatch.errMessage("400", "{\"message\":\"\\u041e\\u0448 \\\"x\\\"\"}"), "Ош \"x\"");
+            eq("отзывы 10.70: нет связи / нет сообщения", IvaReviewPatch.errMessage("-1", null) + "|" + IvaReviewPatch.errMessage("500", "oops"), "нет связи с сервером|ошибка сервера (500)");
+            eq("отзывы 10.70: тело submit_review", IvaReviewPatch.submitBody("t-1", 9, "  Хорошо \"ок\" ", null),
+                "{\"p_tool_id\":\"t-1\",\"p_rating\":5,\"p_text\":\"Хорошо \\\"ок\\\"\",\"p_author_name\":\"\"}");
+            eq("отзывы 10.70: оценка 0 → 1", IvaReviewPatch.submitBody("t", 0, "", "Иван").contains("\"p_rating\":1,") && IvaReviewPatch.submitBody("t", 0, "", "Иван").endsWith("\"p_author_name\":\"Иван\"}"), true);
+            eq("отзывы 10.70: e-mail авторов не запрашивается", IvaReviewPatch.REVIEW_COLS.contains("email"), false);
+            eq("отзывы 10.70: ответ сервера 2xx", IvaReviewPatch.ok(new String[]{"200", "[]"}) && IvaReviewPatch.ok(new String[]{"204", ""}) && !IvaReviewPatch.ok(new String[]{"400", ""})
+                && !IvaReviewPatch.ok(new String[]{"-1", null}) && !IvaReviewPatch.ok(null), true);
+            java.util.Map<String, String> q70rr = new java.util.HashMap<String, String>(); q70rr.put("rating", "null");
+            eq("отзывы 10.70: оценка из строки", IvaReviewPatch.ratingOf(q70rr) + "|" + IvaReviewPatch.ratingOf(q70rv.get(0)), "0|5");
+        }
         if (fail > 0) { System.out.println("ошибок: " + fail); System.exit(1); }
         System.out.println("все проверки IvaPatch пройдены");
     }

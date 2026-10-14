@@ -2134,6 +2134,8 @@ public final class IvaOrderPatch {
         if (!adm) body.addView(prokat, new LinearLayout.LayoutParams(-1, -2));
         final List<String> owners = adm ? new ArrayList<String>() : ordOwners(a, r);
         if (!adm) ordFillProkat(a, prokat, owners);
+        // 10.70: закрытая заявка клиента — «Оставить отзыв» по каждому инструменту (право проверяет база, как на сайте)
+        if (!adm && !r.containsKey(ORD_PARTIAL) && (archived || ordClosed(r))) try { IvaReviewPatch.orderBlock(a, body, r); } catch (Throwable ignore) {}
         boolean missing = false;
         for (String e : owners) if (!ordProkat.containsKey(e)) missing = true;
         if (missing) {

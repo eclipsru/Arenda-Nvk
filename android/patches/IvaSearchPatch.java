@@ -914,6 +914,7 @@ public final class IvaSearchPatch {
                     ((TextView) child).setText("Ничего не найдено. Измените поиск, категорию, город или фильтры.");
                 }
             }
+            try { IvaReviewPatch.onFeedChild(a); } catch (Throwable ignore) {}   // 10.70: «★ 4,8 (12)» на карточках
             Object t = IvaClientPatch.get(a, "tools");
             if (t instanceof ArrayList && t != appliedTools && t != fullTools && !catalogCheckPosted) {
                 // Штатный loadCatalog положил свежий каталог и рисует его целиком — после него применяем условия снова.

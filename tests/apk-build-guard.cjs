@@ -47,7 +47,7 @@ try {
   // 10.40 — штатная строка «Клиент» остаётся единственной точкой входа, но открывает
   // отдельный полноэкранный экран настроек (не AlertDialog-форму); hook onActivityResult
   // в MainActivity по-прежнему отключён (с 10.39), фото возвращается во вспомогательный Fragment.
-  assert.match(code, /android\/patches\/IvaPatch\.java android\/patches\/IvaClientPatch\.java android\/patches\/IvaSearchPatch\.java android\/patches\/IvaChatPatch\.java android\/patches\/IvaOrderPatch\.java android\/patches\/IvaNotifyPatch\.java 2>&1/,
+  assert.match(code, /android\/patches\/IvaPatch\.java android\/patches\/IvaClientPatch\.java android\/patches\/IvaSearchPatch\.java android\/patches\/IvaChatPatch\.java android\/patches\/IvaOrderPatch\.java android\/patches\/IvaNotifyPatch\.java android\/patches\/IvaReviewPatch\.java 2>&1/,
     `${f}: шаг 10.30 не компилирует IvaClientPatch`);
   assert.match(ap, /IvaClientPatch;->onProfile\(Landroid\/app\/Activity;\)V/,
     `${f}: hook onProfile не подключён`);
@@ -259,7 +259,7 @@ try {
   // 10.54: чат по инструментам — новый файл компилируется и в сборке, и в проверке; вход только через IvaPatch.onTab
   {
     const chat = R('android/patches/IvaChatPatch.java'), chk54 = R('.github/workflows/check.yml'), ip = R('android/patches/IvaPatch.java');
-    assert.ok(/javac [^\n]*android\/patches\/IvaSearchPatch\.java android\/patches\/IvaChatPatch\.java android\/patches\/IvaOrderPatch\.java android\/patches\/IvaNotifyPatch\.java 2>&1/.test(code), 'build-apk.yml: IvaChatPatch.java не компилируется в сборку');
+    assert.ok(/javac [^\n]*android\/patches\/IvaSearchPatch\.java android\/patches\/IvaChatPatch\.java android\/patches\/IvaOrderPatch\.java android\/patches\/IvaNotifyPatch\.java android\/patches\/IvaReviewPatch\.java 2>&1/.test(code), 'build-apk.yml: IvaChatPatch.java не компилируется в сборку');
     assert.ok(chk54.includes('android/patches/IvaSearchPatch.java android/patches/IvaChatPatch.java android/patches/IvaOrderPatch.java android/patches/IvaNotifyPatch.java \\'), 'check.yml: IvaChatPatch.java не компилируется в проверке');
     const onTab = ip.slice(ip.indexOf('public static void onTab('), ip.indexOf('static boolean navSelected('));
     assert.ok(onTab.includes('try { IvaChatPatch.onShowTab(a, tab); } catch (Throwable ignore) {}'), 'IvaPatch.onTab: нет безопасного вызова IvaChatPatch');
@@ -373,7 +373,7 @@ try {
   // 10.56: «Настройки» в кабинете → уведомления с переключателями; свой опрос вместо штатного; без Firebase и новых разрешений.
   {
     const np = R('android/patches/IvaNotifyPatch.java'), chk56 = R('.github/workflows/check.yml');
-    assert.ok(code.includes('android/patches/IvaOrderPatch.java android/patches/IvaNotifyPatch.java 2>&1') && chk56.includes('android/patches/IvaNotifyPatch.java \\'),
+    assert.ok(code.includes('android/patches/IvaOrderPatch.java android/patches/IvaNotifyPatch.java android/patches/IvaReviewPatch.java 2>&1') && chk56.includes('android/patches/IvaNotifyPatch.java \\'),
       'IvaNotifyPatch.java не компилируется в сборке или в проверке');
     assert.ok(!R('android/patches/apply.py').includes('IvaNotifyPatch'), 'IvaNotifyPatch: новые smali-хуки не нужны (вход — IvaPatch.onTab)');
     // этап 1 — без фоновых служб; этап 2 (10.65) — отдельный раздел в конце файла, только JobScheduler (проверка в блоке 10.65)
@@ -768,6 +768,54 @@ try {
     for (const str of ['rowCall', 'rowMax', 'atSubKey', 'atCatKey', 'editToolSub', 'editToolCat', 'admParts', 'admDrill', 'admClientKey', 'partClientKey'])
       assert.ok(has(arsc14, str) || has(dex14, str), `APK 10.14: нет «${str}» — правка 10.67 не найдёт штатное поле`);
     assert.ok(/eq\("админ 10\.67: /.test(tp) && /eq\("подкатегория 10\.67: /.test(tp) && /eq\("кабинет 10\.67: /.test(tp), 'IvaPatchTest: проверки 10.67');
+  }
+  // 10.70 (решения владельца 14.10.2026): отзывы и оценки, этап 1 — те же отзывы, что на сайте; база и сайт не меняются
+  {
+    const rp = R('android/patches/IvaReviewPatch.java'), ip = R('android/patches/IvaPatch.java'), sp = R('android/patches/IvaSearchPatch.java');
+    const op = R('android/patches/IvaOrderPatch.java'), tp = R('android/patches/test/IvaPatchTest.java'), ap = R('android/patches/apply.py');
+    const mig = R('supabase/migrations/20260924_reviews.sql');
+    assert.ok(!ap.includes('IvaReviewPatch'), 'отзывы 10.70: новых вставок в smali нет');
+    const onTab = ip.slice(ip.indexOf('public static void onTab('), ip.indexOf('static boolean navSelected('));
+    assert.ok(onTab.includes('try { IvaReviewPatch.onTab(a, tab); } catch (Throwable ignore) {}')
+      && sp.includes('try { IvaReviewPatch.onFeedChild(a); } catch (Throwable ignore) {}')
+      && op.includes('if (!adm && !r.containsKey(ORD_PARTIAL) && (archived || ordClosed(r))) try { IvaReviewPatch.orderBlock(a, body, r); } catch (Throwable ignore) {}'),
+      'отзывы 10.70: подключено безопасно — onTab (инструмент, прокат), лента, шторка закрытой заявки клиента (не у админа)');
+    assert.equal((ip.match(/IvaReviewPatch\./g) || []).length + (sp.match(/IvaReviewPatch\./g) || []).length + (op.match(/IvaReviewPatch\./g) || []).length, 3,
+      'отзывы 10.70: вход только из трёх мест');
+    // запросы: только те же, что у сайта (sb.js), и без e-mail авторов
+    const calls = rp.match(/IvaClientPatch\.apiCall\(/g) || [];
+    assert.equal(calls.length, 6, 'отзывы 10.70: запросов — 6 (список, право ×2, отзыв, модерация, рейтинг проката)');
+    assert.ok(rp.includes('static final String REVIEW_COLS = "id,tool_id,author_id,author_name,rating,text,status,created_at,updated_at";')
+      && !/author_email|select=\*|"PATCH"|"DELETE"/.test(rp)
+      && rp.includes('"/rest/v1/reviews?select=" + REVIEW_COLS + "&tool_id=eq." + enc(id)'),
+      'отзывы 10.70: отзывы читаются без e-mail авторов; таблица напрямую не меняется (только RPC базы, как на сайте)');
+    for (const fn of ['can_user_review', 'submit_review', 'toggle_review_status', 'get_landlord_rating']) {
+      assert.ok(rp.includes(`"/rest/v1/rpc/${fn}"`) && mig.includes(`FUNCTION public.${fn}(`), `отзывы 10.70: RPC ${fn} — тот же, что в миграции сайта`);
+    }
+    for (const col of 'id,tool_id,author_id,author_name,rating,text,status,created_at,updated_at'.split(','))
+      assert.ok(new RegExp(`\\n  ${col} `).test(mig.slice(mig.indexOf('CREATE TABLE IF NOT EXISTS public.reviews'), mig.indexOf('CONSTRAINT uq_reviews_tool_author'))), `отзывы 10.70: колонки ${col} нет в таблице reviews`);
+    // модерация — только кнопки главного админа (право всё равно проверяет база)
+    assert.ok(rp.includes('} else if (chief && item != null) {') && rp.includes('final boolean ch = chief(a);')
+      && rp.includes('return logged(a) && e instanceof String && CHIEF_EMAIL.equalsIgnoreCase(((String) e).trim());'),
+      'отзывы 10.70: «Скрыть спам» / «Восстановить» — только главному админу');
+    // прокат: штатный текст заменяется, только если это «Отзывы: пока нет», и только когда отзывы есть
+    assert.ok(rp.includes('if (sellerText == null || !nativeNoReviews(String.valueOf(t.getText()))) return;')
+      && rp.includes('if (sellerApplying || sellerText == null || !nativeNoReviews(String.valueOf(s))) return;'),
+      'отзывы 10.70: на странице проката меняется только «Отзывы: пока нет»');
+    // лента: только своя строка с меткой, штатные подписи не трогаются
+    const dc = rp.slice(rp.indexOf('static void decorateCard('), rp.indexOf('static String priceText('));
+    assert.ok(dc.includes('tv.setTag(CARD_TAG);') && !/removeView|setText\(\s*"|\.setVisibility\(View\.GONE\);\s*\}\s*$/.test(dc.replace('if (old != null) old.setVisibility(View.GONE); return;', ''))
+      && !/getChildAt\(\d\)\)\.setText|info\.removeView/.test(dc), 'отзывы 10.70: на карточке — только своя строка');
+    assert.ok(!/removeView\(|removeViewAt\(/.test(rp) && (rp.match(/removeAllViews\(\)/g) || []).length === 2
+      && (rp.match(/block\.removeAllViews\(\)/g) || []).length === 2, 'отзывы 10.70: очищается только свой блок отзывов');
+    // ошибки не роняют экраны
+    assert.ok(rp.includes('if ("detail".equals(tab)) { try { onDetail(a); } catch (Throwable ignore) {} }')
+      && rp.includes('else if ("seller".equals(tab)) { try { onSeller(a); } catch (Throwable ignore) {} }')
+      && rp.includes('try { decorateFeed(a); } catch (Throwable ignore) {}'), 'отзывы 10.70: ошибки отзывов не трогают штатные экраны');
+    assert.ok(rp.includes('if (gen != detGen || !id.equals(detTool)) return;'), 'отзывы 10.70: ответ для прошлого инструмента не рисуется на новом');
+    assert.ok((tp.match(/eq\("отзывы 10\.70: /g) || []).length >= 30, 'IvaPatchTest: проверки 10.70 (отзывы)');
+    for (const m of ['detItem', 'detName', 'detIsSrv', 'pageDetail', 'sellerRating', 'sellerEmail', 'feedGrid', 'userName', 'userEmail', 'money', 'Отзывы: пока нет', 'Цену уточняйте', ' ₽/сут'])
+      assert.ok(has(dex14, m), `classes.dex 10.14: нет «${m}»`);
   }
   // 10.69 (решение владельца 14.10.2026): вход не слетает — без новых вставок в smali
   {
