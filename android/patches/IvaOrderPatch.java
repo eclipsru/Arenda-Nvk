@@ -7,7 +7,10 @@ import android.app.Activity;
 import android.app.AlertDialog;
 import android.app.Dialog;
 import android.content.DialogInterface;
+import android.graphics.Color;
+import android.graphics.Typeface;
 import android.graphics.drawable.ColorDrawable;
+import android.graphics.drawable.GradientDrawable;
 import android.graphics.drawable.Drawable;
 import android.os.Handler;
 import android.os.Looper;
@@ -23,6 +26,7 @@ import android.widget.Space;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import org.json.JSONArray;
 import org.json.JSONObject;
 
 import java.lang.ref.WeakReference;
@@ -416,6 +420,9 @@ public final class IvaOrderPatch {
         if ("order".equals(tab)) {
             try { refresh(a); } catch (Throwable ignore) {}
             try { fillFio(a, true); } catch (Throwable ignore) {}
+        }
+        if ("orders".equals(tab)) {
+            try { clientOrders(a); } catch (Throwable ignore) {}
         }
     }
 
@@ -1012,4 +1019,295 @@ public final class IvaOrderPatch {
         Toast.makeText(a, "Не удалось отправить: " + msg, Toast.LENGTH_LONG).show();
     }
 
+
+    // ───────────────────────── 10.62: заявки клиента нажимаются ─────────────────────────
+    // Штатный renderOrders рисует у клиента карточку: дата (niceDate), инструменты, способ получения. Карточки
+    // не меняем и не пересоздаём — только делаем их нажимаемыми и добавляем «Подробнее ›». Полные данные заявки —
+    // тот же запрос, что у штатного loadOrders (RLS отдаёт клиенту только его заявки), но select=*.
+    // Нажатие открывает шторку на 85% экрана (как фильтр) со всеми полями заявки. У админа — ничего не меняется.
+    static final String ORD_PATH = "/rest/v1/orders?select=*&order=created_at.desc&limit=30";
+    static final String ORD_KEY = "iva_ord:", ORD_MORE_TAG = "iva_ord_more", ORD_MORE = "Подробнее ›";
+    static final String[] ORD_COLS = {"id", "created_at", "status", "tools", "days", "get_method", "address", "name", "phone", "comment"};
+    static final long ORD_ATTACH_MS = 250, ORD_REFETCH_MS = 5000;
+    static final float ORD_SHEET = 0.85f;
+    static WeakReference<View> ordHooked = new WeakReference<View>(null);
+    static List<Map<String, String>> ordRows = new ArrayList<Map<String, String>>();
+    static String ordFor = "";
+    static long ordAt = 0;
+    static boolean ordLoading = false;
+    static Handler ordH;                 // создаётся при первом обращении (не в статическом блоке класса)
+
+    static Handler ordH() {
+        if (ordH == null) ordH = new Handler(Looper.getMainLooper());
+        return ordH;
+    }
+    static Runnable ordRun;
+    static Dialog ordDialog;
+
+    static void clientOrders(final Activity a) {
+        Object o = get(a, "ordersList");
+        if (!(o instanceof LinearLayout) || !IvaClientPatch.isClient(a)) return;
+        if (ordHooked.get() != o) {
+            ((LinearLayout) o).setOnHierarchyChangeListener(new ViewGroup.OnHierarchyChangeListener() {
+                @Override public void onChildViewAdded(View parent, View child) { ordSchedule(a); }
+                @Override public void onChildViewRemoved(View parent, View child) {}
+            });
+            ordHooked = new WeakReference<View>((View) o);
+        }
+        ordFetch(a);   // раздел открыли — свежие статусы (штатный loadOrders тоже грузит заново)
+    }
+
+    static void ordSchedule(final Activity a) {
+        if (ordRun != null) ordH().removeCallbacks(ordRun);
+        ordRun = new Runnable() { @Override public void run() { try { ordAttach(a); } catch (Throwable ignore) {} } };
+        ordH().postDelayed(ordRun, ORD_ATTACH_MS);
+    }
+
+    static String ordMe(Activity a) {
+        Object e = get(a, "userEmail");
+        return e instanceof String ? ((String) e).trim().toLowerCase(Locale.ROOT) : "";
+    }
+
+    static void ordFetch(final Activity a) {
+        if (ordLoading) return;
+        ordLoading = true;
+        final String me = ordMe(a);
+        new Thread(new Runnable() {
+            @Override public void run() {
+                List<Map<String, String>> rows = null;
+                try {
+                    String[] r = IvaClientPatch.apiCall(a, ORD_PATH, "GET", null, true);
+                    if (r != null && r.length > 1 && "200".equals(r[0])) rows = ordParse(r[1]);
+                } catch (Throwable ignore) {}
+                final List<Map<String, String>> got = rows;
+                ordH().post(new Runnable() {
+                    @Override public void run() {
+                        ordLoading = false;
+                        ordAt = System.currentTimeMillis();
+                        if (got != null) { ordRows = got; ordFor = me; }
+                        try { ordAttach(a); } catch (Throwable ignore) {}
+                    }
+                });
+            }
+        }).start();
+    }
+
+    static List<Map<String, String>> ordParse(String body) throws Exception {
+        JSONArray arr = new JSONArray(body == null ? "[]" : body.trim());
+        List<Map<String, String>> out = new ArrayList<Map<String, String>>();
+        for (int i = 0; i < arr.length(); i++) {
+            JSONObject o = arr.optJSONObject(i);
+            if (o == null) continue;
+            Map<String, String> m = new LinkedHashMap<String, String>();
+            for (String k : ORD_COLS) m.put(k, o.isNull(k) ? "" : String.valueOf(o.opt(k)));
+            out.add(m);
+        }
+        return out;
+    }
+
+    /** Штатная дата карточки (niceDate) — по ней и тексту инструментов карточка находит свою заявку. */
+    static String ordNice(Activity a, String at) {
+        try {
+            Method m = a.getClass().getDeclaredMethod("niceDate", String.class);
+            m.setAccessible(true);
+            return String.valueOf(m.invoke(a, at));
+        } catch (Throwable e) { return at == null ? "" : at; }
+    }
+
+    /** Ключ карточки: дата, инструменты и номер среди одинаковых (две заявки в одну минуту на одно и то же). */
+    static String ordKey(String date, String tools, int nth) {
+        return ORD_KEY + nth + "\u0001" + (date == null ? "" : date.trim()) + "\u0001" + (tools == null ? "" : tools.trim());
+    }
+
+    /** Заявка по ключу карточки: nth-я заявка с такой же датой и инструментами; нет — -1. */
+    static int ordFind(List<String> dates, List<String> tools, String key) {
+        java.util.Map<String, Integer> counts = new java.util.HashMap<String, Integer>();
+        for (int i = 0; i < dates.size() && i < tools.size(); i++) {
+            String base = ordKey(dates.get(i), tools.get(i), 0);
+            Integer c = counts.get(base);
+            int nth = c == null ? 0 : c;
+            counts.put(base, nth + 1);
+            if (ordKey(dates.get(i), tools.get(i), nth).equals(key)) return i;
+        }
+        return -1;
+    }
+
+    static void ordAttach(final Activity a) {
+        Object o = get(a, "ordersList");
+        if (!(o instanceof LinearLayout) || !IvaClientPatch.isClient(a)) return;
+        LinearLayout list = (LinearLayout) o;
+        boolean mine = ordMe(a).equals(ordFor);
+        List<String> dates = new ArrayList<String>(), tools = new ArrayList<String>();
+        if (mine) for (Map<String, String> r : ordRows) { dates.add(ordNice(a, r.get("created_at"))); tools.add(r.get("tools")); }
+        java.util.Map<String, Integer> counts = new java.util.HashMap<String, Integer>();
+        boolean missing = false;
+        for (int i = 0; i < list.getChildCount(); i++) {
+            View c = list.getChildAt(i);
+            if (!ordCard(c)) continue;
+            LinearLayout card = (LinearLayout) c;
+            String date = String.valueOf(((TextView) card.getChildAt(0)).getText());
+            String tl = String.valueOf(((TextView) card.getChildAt(1)).getText());
+            String base = ordKey(date, tl, 0);
+            Integer n = counts.get(base);
+            int nth = n == null ? 0 : n;
+            counts.put(base, nth + 1);
+            final String key = ordKey(date, tl, nth);
+            if (ordFind(dates, tools, key) < 0) { missing = true; continue; }
+            if (key.equals(card.getTag())) continue;
+            card.setTag(key);
+            card.setClickable(true);
+            card.setOnClickListener(new View.OnClickListener() {
+                @Override public void onClick(View v) { try { ordOpen(a, key); } catch (Throwable ignore) {} }
+            });
+            if (card.findViewWithTag(ORD_MORE_TAG) == null) {
+                TextView more = new TextView(a);
+                more.setTag(ORD_MORE_TAG);
+                more.setText(ORD_MORE);
+                more.setTextColor(color(a, "orange", 0xffff8f1f));
+                more.setTextSize(12f);
+                more.setTypeface(null, Typeface.BOLD);
+                LinearLayout.LayoutParams ml = new LinearLayout.LayoutParams(-2, -2);
+                ml.topMargin = dp(a, 6);
+                card.addView(more, ml);
+            }
+        }
+        // новая заявка или другой вход — данные ещё старые: один раз догружаем (не чаще раза в 5 с)
+        if (missing && !ordLoading && System.currentTimeMillis() - ordAt > ORD_REFETCH_MS) ordFetch(a);
+    }
+
+    /** Штатная карточка заявки клиента: вертикальная, первые два ребёнка — тексты (дата и инструменты). */
+    static boolean ordCard(View c) {
+        if (!(c instanceof LinearLayout)) return false;
+        LinearLayout l = (LinearLayout) c;
+        return l.getOrientation() == LinearLayout.VERTICAL && l.getChildCount() >= 2
+            && l.getChildAt(0) instanceof TextView && l.getChildAt(1) instanceof TextView;
+    }
+
+    /** Статус как на сайте (cabinet.html badge): пусто/new — «Новая», rented — «В аренде», иначе — «Закрыта». */
+    static String ordStatus(String st) {
+        String s = st == null || st.trim().isEmpty() ? "new" : st.trim();
+        return "new".equals(s) ? "Новая" : "rented".equals(s) ? "В аренде" : "Закрыта";
+    }
+
+    /** Строки шторки «подпись — значение»; пустые поля не показываются. */
+    static List<String[]> ordFields(Map<String, String> r, String nice) {
+        List<String[]> out = new ArrayList<String[]>();
+        ordAdd(out, "Дата", nice == null || nice.trim().isEmpty() ? r.get("created_at") : nice);
+        out.add(new String[]{"Статус", ordStatus(r.get("status"))});
+        ordAdd(out, "Инструменты", r.get("tools"));
+        String days = r.get("days") == null ? "" : r.get("days").trim();
+        ordAdd(out, "Срок", days.matches("\\d+") ? (days.equals("0") ? "" : days + " дн.") : days);
+        ordAdd(out, "Получение", r.get("get_method"));
+        ordAdd(out, "Адрес", r.get("address"));
+        ordAdd(out, "Имя", r.get("name"));
+        ordAdd(out, "Телефон", r.get("phone"));
+        ordAdd(out, "Комментарий", r.get("comment"));
+        ordAdd(out, "Номер заявки", r.get("id"));
+        return out;
+    }
+
+    static void ordAdd(List<String[]> out, String label, String v) {
+        if (v != null && !v.trim().isEmpty() && !"null".equals(v.trim())) out.add(new String[]{label, v.trim()});
+    }
+
+    static void ordOpen(final Activity a, String key) {
+        List<String> dates = new ArrayList<String>(), tools = new ArrayList<String>();
+        for (Map<String, String> r : ordRows) { dates.add(ordNice(a, r.get("created_at"))); tools.add(r.get("tools")); }
+        int i = ordFind(dates, tools, key);
+        if (i < 0) return;
+        if (ordDialog != null && ordDialog.isShowing()) return;
+        Map<String, String> r = ordRows.get(i);
+        int cBg = color(a, "bg", 0xff101217), cText = color(a, "text", 0xfff2f4f8), cGray = color(a, "gray", 0xff9aa1b0);
+        int cLine = color(a, "line", 0xff262b35), cOrange = color(a, "orange", 0xffff8f1f);
+
+        final FrameLayout root = new FrameLayout(a);
+        final View scrim = new View(a);
+        scrim.setBackgroundColor(0x8c000000);
+        root.addView(scrim, new FrameLayout.LayoutParams(-1, -1));
+        final LinearLayout sh = new LinearLayout(a);
+        sh.setOrientation(LinearLayout.VERTICAL);
+        sh.setClickable(true);
+        GradientDrawable sbg = new GradientDrawable();
+        sbg.setColor(cBg);
+        float rr = dp(a, 18);
+        sbg.setCornerRadii(new float[]{rr, rr, rr, rr, 0, 0, 0, 0});
+        sh.setBackground(sbg);
+        int screen = a.getResources().getDisplayMetrics().heightPixels;
+        root.addView(sh, new FrameLayout.LayoutParams(-1, Math.round(screen * ORD_SHEET), Gravity.BOTTOM));
+
+        View grip = new View(a);                     // «язычок» как у шторки фильтра
+        GradientDrawable gbg = new GradientDrawable();
+        gbg.setColor(cLine);
+        gbg.setCornerRadius(dp(a, 2));
+        grip.setBackground(gbg);
+        LinearLayout.LayoutParams gl = new LinearLayout.LayoutParams(dp(a, 36), dp(a, 4));
+        gl.gravity = Gravity.CENTER_HORIZONTAL;
+        gl.topMargin = dp(a, 10);
+        sh.addView(grip, gl);
+
+        TextView title = new TextView(a);
+        title.setText("Заявка");
+        title.setTextColor(cText);
+        title.setTextSize(18f);
+        title.setTypeface(null, Typeface.BOLD);
+        title.setPadding(dp(a, 16), dp(a, 12), dp(a, 16), dp(a, 8));
+        sh.addView(title, new LinearLayout.LayoutParams(-1, -2));
+
+        ScrollView sc = new ScrollView(a);
+        LinearLayout body = new LinearLayout(a);
+        body.setOrientation(LinearLayout.VERTICAL);
+        body.setPadding(dp(a, 16), 0, dp(a, 16), dp(a, 12));
+        sc.addView(body, new FrameLayout.LayoutParams(-1, -2));
+        sh.addView(sc, new LinearLayout.LayoutParams(-1, 0, 1f));
+        for (String[] f : ordFields(r, ordNice(a, r.get("created_at")))) {
+            TextView l = new TextView(a);
+            l.setText(f[0]);
+            l.setTextColor(cGray);
+            l.setTextSize(12f);
+            LinearLayout.LayoutParams ll = new LinearLayout.LayoutParams(-1, -2);
+            ll.topMargin = dp(a, 12);
+            body.addView(l, ll);
+            TextView v = new TextView(a);
+            v.setText(f[1]);
+            v.setTextSize(15f);
+            v.setTextIsSelectable(true);
+            boolean st = "Статус".equals(f[0]);
+            v.setTextColor(st ? cOrange : cText);
+            if (st) v.setTypeface(null, Typeface.BOLD);
+            LinearLayout.LayoutParams vl = new LinearLayout.LayoutParams(-1, -2);
+            vl.topMargin = dp(a, 2);
+            body.addView(v, vl);
+        }
+
+        TextView close = new TextView(a);
+        close.setText("Закрыть");
+        close.setGravity(Gravity.CENTER);
+        close.setTextColor(Color.WHITE);
+        close.setTextSize(15f);
+        close.setTypeface(null, Typeface.BOLD);
+        Drawable btn = drawable(a, "bg_btn_orange");
+        if (btn != null) close.setBackground(btn); else close.setBackgroundColor(cOrange);
+        LinearLayout.LayoutParams cl = new LinearLayout.LayoutParams(-1, dp(a, 50));
+        cl.setMargins(dp(a, 16), dp(a, 8), dp(a, 16), dp(a, 16));
+        sh.addView(close, cl);
+
+        final Dialog d = new Dialog(a, android.R.style.Theme_Material_NoActionBar);
+        d.setContentView(root, new ViewGroup.LayoutParams(-1, -1));
+        d.setCancelable(true);   // системная «Назад» закрывает шторку
+        android.view.Window w = d.getWindow();
+        if (w != null) {
+            w.setLayout(-1, -1);
+            w.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
+        }
+        View.OnClickListener dismiss = new View.OnClickListener() { @Override public void onClick(View v) { d.dismiss(); } };
+        scrim.setOnClickListener(dismiss);
+        close.setOnClickListener(dismiss);
+        d.setOnDismissListener(new DialogInterface.OnDismissListener() {
+            @Override public void onDismiss(DialogInterface x) { if (ordDialog == d) ordDialog = null; }
+        });
+        ordDialog = d;
+        d.show();
+        sh.setTranslationY(screen);                  // выезжает снизу, как шторка фильтра
+        sh.animate().translationY(0).setDuration(220).start();
+    }
 }

@@ -250,6 +250,62 @@ final class IvaChatPatch {
         return b.toString();
     }
 
+    // ── 10.62: «Удалить у меня» для одного сообщения (просьба владельца 14.10.2026) ──
+    // Таблица app_msg_hidden: (кто, id сообщения). Скрытое сообщение не показывается только этому человеку;
+    // у собеседника и в базе оно остаётся. «Удалить у всех» — как раньше (DELETE), только для своих сообщений.
+    static final Set<String> hiddenMsgs = Collections.synchronizedSet(new HashSet<String>());       // id → скрыто у меня
+    static final Set<String> hiddenMsgsLocal = Collections.synchronizedSet(new HashSet<String>());  // скрытые за этот запуск
+    static long hiddenMsgsAt;
+    static boolean hiddenMsgsMissing;    // таблицы ещё нет (SQL не применён) — «Удалить у меня» недоступно
+    static String hiddenMsgsFor = "";
+    static final String HIDDEN_MSG_PREFS = "iva_msg_hidden";
+    static final String DEL_TITLE = "Удалить сообщение?";
+    static final String DEL_ME = "Удалить у меня", DEL_ALL = "Удалить у всех";
+    static final String DEL_NO_DB = "«Удалить у меня» заработает после обновления базы";
+
+    /** Копия на телефоне: id через запятую (id сообщений — числа/uuid, запятых в них нет). */
+    static String msgIdsToStr(Set<String> ids) {
+        StringBuilder b = new StringBuilder();
+        if (ids != null) for (String id : new java.util.TreeSet<String>(ids)) {
+            String c = clean(id);
+            if (c.isEmpty() || c.indexOf(',') >= 0) continue;
+            if (b.length() > 0) b.append(',');
+            b.append(c);
+        }
+        return b.toString();
+    }
+
+    static Set<String> msgIdsFromStr(String s) {
+        HashSet<String> out = new HashSet<String>();
+        for (String p : clean(s).split(",")) { String c = clean(p); if (!c.isEmpty()) out.add(c); }
+        return out;
+    }
+
+    /** Ответ app_msg_hidden → набор id. */
+    static Set<String> parseHiddenMsgs(JSONArray arr) {
+        HashSet<String> out = new HashSet<String>();
+        if (arr == null) return out;
+        for (int i = 0; i < arr.length(); i++) {
+            JSONObject o = arr.optJSONObject(i);
+            String id = o == null || o.isNull("msg_id") ? "" : clean(o.optString("msg_id", ""));
+            if (!id.isEmpty()) out.add(id);
+        }
+        return out;
+    }
+
+    static void saveHiddenMsgs(Activity a, String my) {
+        try {
+            String v;
+            synchronized (hiddenMsgs) { v = msgIdsToStr(hiddenMsgs); }
+            a.getSharedPreferences(HIDDEN_MSG_PREFS, 0).edit().putString(low(my), v).apply();
+        } catch (Throwable ignore) {}
+    }
+
+    /** Варианты удаления: своё — у меня и у всех; чужое — только у меня. */
+    static String[] deleteChoices(boolean own) {
+        return own ? new String[]{DEL_ME, DEL_ALL} : new String[]{DEL_ME};
+    }
+
     static List<Chat> buildChats(List<Msg> asc, String me, Set<String> admins, boolean sup,
                                  Map<String, String> localTags) {
         return buildChats(asc, me, admins, sup, localTags, hidden);
@@ -258,6 +314,11 @@ final class IvaChatPatch {
     /** Список переписок: по паре «собеседник + инструмент», свежие сверху; удалённое у себя — не показываем. */
     static List<Chat> buildChats(List<Msg> asc, String me, Set<String> admins, boolean sup,
                                  Map<String, String> localTags, Map<String, Long> hid) {
+        return buildChats(asc, me, admins, sup, localTags, hid, hiddenMsgs);
+    }
+
+    static List<Chat> buildChats(List<Msg> asc, String me, Set<String> admins, boolean sup,
+                                 Map<String, String> localTags, Map<String, Long> hid, Set<String> ids) {
         Map<String, String> tools = assignTools(asc, me, admins, sup, localTags);   // по всем сообщениям — как до удаления
         LinkedHashMap<String, Chat> map = new LinkedHashMap<String, Chat>();
         String my = low(me);
@@ -265,7 +326,7 @@ final class IvaChatPatch {
             if (!tools.containsKey(m.id)) continue;
             String p = partnerOf(m, me, admins, sup);
             String t = tools.get(m.id);
-            if (hiddenMsg(hid, p, t, m.at)) continue;
+            if (hiddenMsg(hid, p, t, m.at) || (ids != null && ids.contains(m.id))) continue;
             String k = chatKey(p, t);
             Chat c = map.get(k);
             if (c == null) { c = new Chat(); c.partner = p; c.tool = t; map.put(k, c); }
@@ -293,11 +354,17 @@ final class IvaChatPatch {
 
     static List<Msg> thread(List<Msg> asc, String me, Set<String> admins, boolean sup,
                             Map<String, String> localTags, String partner, String tool, Map<String, Long> hid) {
+        return thread(asc, me, admins, sup, localTags, partner, tool, hid, hiddenMsgs);
+    }
+
+    static List<Msg> thread(List<Msg> asc, String me, Set<String> admins, boolean sup,
+                            Map<String, String> localTags, String partner, String tool, Map<String, Long> hid, Set<String> ids) {
         Map<String, String> tools = assignTools(asc, me, admins, sup, localTags);
         ArrayList<Msg> out = new ArrayList<Msg>();
         String p = low(partner), t = clean(tool);
         for (Msg m : asc) {
             if (!tools.containsKey(m.id)) continue;
+            if (ids != null && ids.contains(m.id)) continue;
             if (partnerOf(m, me, admins, sup).equals(p) && t.equals(tools.get(m.id)) && !hiddenMsg(hid, p, t, m.at)) out.add(m);
         }
         return out;
@@ -678,7 +745,7 @@ final class IvaChatPatch {
         for (Msg m : asc) {
             if (!m.id.equals(id) || !tools.containsKey(m.id)) continue;
             String p = partnerOf(m, me, admins, sup);
-            if (p.isEmpty() || hiddenMsg(hidden, p, tools.get(m.id), m.at)) return null;
+            if (p.isEmpty() || hiddenMsg(hidden, p, tools.get(m.id), m.at) || hiddenMsgs.contains(m.id)) return null;
             return new String[]{p, partnerRawOf(m, p), tools.get(m.id)};
         }
         return null;
@@ -932,6 +999,7 @@ final class IvaChatPatch {
             msgs = new ArrayList<Msg>(); msgsReady = false; seenIds.clear(); seenReady = false;
             clientNames.clear(); ordersAt = 0; peerPaths.clear(); peerBitmaps.clear(); peersAt = 0;
             hidden.clear(); hiddenLocal.clear(); hiddenAt = 0; hiddenFor = ""; hiddenVer++;
+            hiddenMsgs.clear(); hiddenMsgsLocal.clear(); hiddenMsgsAt = 0; hiddenMsgsFor = "";
             renderedSig = "";
         }
         if (now - adminsAt > CACHE_MS || admins.isEmpty()) {
@@ -975,6 +1043,7 @@ final class IvaChatPatch {
                 } else hiddenAt = 0;                                            // не ответил — спросим при следующей загрузке
             } catch (Throwable e) { hiddenAt = 0; }
         }
+        loadHiddenMsgs(a, my, now);
         boolean sup = superView(my);
         String filter = msgFilter(my, sup);
         JSONArray rows;
@@ -1223,7 +1292,34 @@ final class IvaChatPatch {
         if (!lastError.isEmpty()) body.addView(hint(a, lastError));
     }
 
-    static View bubbleRow(final Activity a, final Msg m, boolean mine, boolean deletable, TimeZone tz) {
+    /** 10.62: скрытые у меня сообщения — копия с телефона при первой загрузке аккаунта, затем из базы. */
+    static void loadHiddenMsgs(Activity a, String my, long now) {
+        if (!my.equals(hiddenMsgsFor)) {
+            hiddenMsgsFor = my;
+            try {
+                Set<String> cached = msgIdsFromStr(a.getSharedPreferences(HIDDEN_MSG_PREFS, 0).getString(my, ""));
+                if (!cached.isEmpty()) { hiddenMsgs.addAll(cached); hiddenVer++; }
+            } catch (Throwable ignore) {}
+        }
+        if (now - hiddenMsgsAt <= (hiddenMsgsMissing ? HIDDEN_RETRY_MS : CACHE_MS)) return;
+        hiddenMsgsAt = now;
+        try {
+            String[] r = IvaClientPatch.apiCall(a, "/rest/v1/app_msg_hidden?select=msg_id&limit=5000", "GET", null, true);
+            if (r != null && "404".equals(r[0])) hiddenMsgsMissing = true;   // SQL ещё не применён
+            else if (ok(r)) {
+                hiddenMsgsMissing = false;
+                String t = r.length > 1 && r[1] != null ? r[1].trim() : "";
+                Set<String> next = parseHiddenMsgs(t.startsWith("[") ? new JSONArray(t) : new JSONArray());
+                synchronized (hiddenMsgsLocal) { next.addAll(hiddenMsgsLocal); }
+                synchronized (hiddenMsgs) {
+                    if (!hiddenMsgs.equals(next)) { hiddenMsgs.clear(); hiddenMsgs.addAll(next); hiddenVer++; }
+                }
+                saveHiddenMsgs(a, my);
+            } else hiddenMsgsAt = 0;
+        } catch (Throwable e) { hiddenMsgsAt = 0; }
+    }
+
+    static View bubbleRow(final Activity a, final Msg m, boolean mine, final boolean deletable, TimeZone tz) {
         LinearLayout row = new LinearLayout(a);
         row.setOrientation(LinearLayout.HORIZONTAL);
         row.setGravity(mine ? Gravity.END | Gravity.BOTTOM : Gravity.START | Gravity.BOTTOM);
@@ -1266,16 +1362,18 @@ final class IvaChatPatch {
         meta.setGravity(Gravity.CENTER_VERTICAL);
         TextView tt = text(a, time, 10, mine && m.read ? "orange" : "gray2", false);
         meta.addView(tt);
-        if (deletable && !m.id.isEmpty()) {
-            TextView x = text(a, "×", 14, "gray2", true);
-            x.setPadding(dp(a, 8), 0, dp(a, 2), 0);
-            View.OnClickListener del = new View.OnClickListener() {
-                @Override public void onClick(View v) { confirmDelete(a, m); }
-            };
-            x.setOnClickListener(del);
-            meta.addView(x);
+        // 10.62: долгое нажатие — на любом сообщении («Удалить у меня»; у своих ещё «Удалить у всех»), × — только у своих
+        if (!m.id.isEmpty()) {
+            if (deletable) {
+                TextView x = text(a, "×", 14, "gray2", true);
+                x.setPadding(dp(a, 8), 0, dp(a, 2), 0);
+                x.setOnClickListener(new View.OnClickListener() {
+                    @Override public void onClick(View v) { confirmDelete(a, m, true); }
+                });
+                meta.addView(x);
+            }
             View.OnLongClickListener hold = new View.OnLongClickListener() {
-                @Override public boolean onLongClick(View v) { confirmDelete(a, m); return true; }
+                @Override public boolean onLongClick(View v) { confirmDelete(a, m, deletable); return true; }
             };
             col.setOnLongClickListener(hold);
             if (voice != null) voice.setOnLongClickListener(hold);   // пузырь голосового сам ловит нажатия
@@ -1977,33 +2075,79 @@ final class IvaChatPatch {
         }
     };
 
-    static void confirmDelete(final Activity a, final Msg m) {
+    /** 10.62: выбор «Удалить у меня» / «Удалить у всех» (у чужого сообщения — только «у меня»). */
+    static void confirmDelete(final Activity a, final Msg m, final boolean own) {
         try {
+            final String[] items = deleteChoices(own);
             new AlertDialog.Builder(a)
-                .setMessage("Удалить сообщение?")
-                .setNegativeButton("Отмена", null)
-                .setPositiveButton("Удалить", new DialogInterface.OnClickListener() {
+                .setTitle(DEL_TITLE)
+                .setItems(items, new DialogInterface.OnClickListener() {
                     @Override public void onClick(DialogInterface d, int w) {
-                        new Thread(new Runnable() {
-                            @Override public void run() {
-                                boolean done = false;
-                                try {
-                                    done = ok(IvaClientPatch.apiCall(a, "/rest/v1/app_messages?id=eq." + enc(m.id), "DELETE", null, true));
-                                } catch (Throwable ignore) {}
-                                final boolean fd = done;
-                                a.runOnUiThread(new Runnable() {
-                                    @Override public void run() {
-                                        if (!fd) Toast.makeText(a, "Не удалось удалить", Toast.LENGTH_SHORT).show();
-                                        callNative(a, "loadChat");
-                                        refresh(a);
-                                    }
-                                });
-                            }
-                        }).start();
+                        if (w < 0 || w >= items.length) return;
+                        if (DEL_ALL.equals(items[w])) deleteForAll(a, m);
+                        else hideMsg(a, m);
                     }
                 })
+                .setNegativeButton("Отмена", null)
                 .show();
         } catch (Throwable ignore) {}
+    }
+
+    /** «Удалить у всех» — как до 10.62: сообщение удаляется из базы (только своё — RLS и кнопка только у своих). */
+    static void deleteForAll(final Activity a, final Msg m) {
+        new Thread(new Runnable() {
+            @Override public void run() {
+                boolean done = false;
+                try {
+                    done = ok(IvaClientPatch.apiCall(a, "/rest/v1/app_messages?id=eq." + enc(m.id), "DELETE", null, true));
+                } catch (Throwable ignore) {}
+                final boolean fd = done;
+                a.runOnUiThread(new Runnable() {
+                    @Override public void run() {
+                        if (!fd) Toast.makeText(a, "Не удалось удалить", Toast.LENGTH_SHORT).show();
+                        callNative(a, "loadChat");
+                        refresh(a);
+                    }
+                });
+            }
+        }).start();
+    }
+
+    /** «Удалить у меня»: запись в app_msg_hidden через iva_hide_msg (почта — из входа); у собеседника остаётся. */
+    static void hideMsg(final Activity a, final Msg m) {
+        if (hiddenMsgsMissing) { Toast.makeText(a, DEL_NO_DB, Toast.LENGTH_LONG).show(); return; }
+        final String id = m.id;
+        final String my = low(str(IvaClientPatch.get(a, "userEmail")));
+        new Thread(new Runnable() {
+            @Override public void run() {
+                String code = "";
+                try {
+                    JSONObject b = new JSONObject();
+                    b.put("p_id", id);
+                    String[] r = IvaClientPatch.apiCall(a, "/rest/v1/rpc/iva_hide_msg", "POST", b.toString(), true);
+                    code = r == null ? "" : String.valueOf(r[0]);
+                    if (ok(r) && r.length > 1 && r[1] != null && r[1].trim().equals("1")) code = "ok";
+                } catch (Throwable ignore) {}
+                final String fc = code;
+                a.runOnUiThread(new Runnable() {
+                    @Override public void run() {
+                        if ("ok".equals(fc)) {
+                            hiddenMsgsLocal.add(id);
+                            hiddenMsgs.add(id);
+                            hiddenVer++;
+                            saveHiddenMsgs(a, my);
+                            renderedSig = "";
+                            render(a);
+                        } else if ("404".equals(fc)) {
+                            hiddenMsgsMissing = true;
+                            Toast.makeText(a, DEL_NO_DB, Toast.LENGTH_LONG).show();
+                        } else {
+                            Toast.makeText(a, "Не удалось удалить — проверьте интернет", Toast.LENGTH_LONG).show();
+                        }
+                    }
+                });
+            }
+        }).start();
     }
 
     static void renderList(final Activity a, String my) {

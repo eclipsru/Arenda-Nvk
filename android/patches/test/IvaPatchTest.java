@@ -538,6 +538,75 @@ public class IvaPatchTest {
                     "Удалить чат? Переписка пропадёт только у вас — у собеседника она останется. Если вам напишут снова, чат появится с новыми сообщениями.");
                 eq("чат 10.61: без SQL — понятная подсказка, проверка раз в 10 мин", IvaChatPatch.HIDE_NO_DB + "|" + IvaChatPatch.HIDDEN_RETRY_MS, "Удаление чатов заработает после обновления базы|600000");
             }
+            // 10.62: «Удалить у меня» / «Удалить у всех» для сообщения
+            {
+                String dme = "client@x.ru", d1 = "adm@x.ru";
+                java.util.Set<String> dads = new java.util.HashSet<String>(java.util.Arrays.asList(d1));
+                java.util.Map<String, String> dnt = new java.util.HashMap<String, String>();
+                java.util.Map<String, Long> dnone = new java.util.HashMap<String, Long>();
+                java.util.List<IvaChatPatch.Msg> dm = new java.util.ArrayList<IvaChatPatch.Msg>();
+                dm.add(IvaChatPatch.msg("11", dme, d1, "Есть перфоратор?", "", "", 0, true, "2026-10-14T09:00:00+00:00", "T7"));
+                dm.add(IvaChatPatch.msg("12", d1, dme, "Есть", "", "", 0, false, "2026-10-14T09:01:00+00:00", "T7"));
+                dm.add(IvaChatPatch.msg("13", dme, d1, "Беру", "", "", 0, true, "2026-10-14T09:02:00+00:00", "T7"));
+                java.util.Set<String> dids = new java.util.HashSet<String>(java.util.Arrays.asList("12"));
+                java.util.List<IvaChatPatch.Msg> dt = IvaChatPatch.thread(dm, dme, dads, false, dnt, d1, "T7", dnone, dids);
+                eq("сообщения 10.62: скрытое у меня — не в переписке, остальные на месте",
+                    dt.size() + "|" + dt.get(0).id + "|" + dt.get(1).id, "2|11|13");
+                java.util.List<IvaChatPatch.Chat> dc = IvaChatPatch.buildChats(dm, dme, dads, false, dnt, dnone, dids);
+                eq("сообщения 10.62: в списке — без скрытого (непрочитанное скрытое не считается)",
+                    dc.size() + "|" + dc.get(0).count + "|" + dc.get(0).unread + "|" + dc.get(0).last.id, "1|2|0|13");
+                java.util.Set<String> dall = new java.util.HashSet<String>(java.util.Arrays.asList("11", "12", "13"));
+                eq("сообщения 10.62: скрыл все — чата нет в списке", IvaChatPatch.buildChats(dm, dme, dads, false, dnt, dnone, dall).size(), 0);
+                eq("сообщения 10.62: без скрытых — всё как было", IvaChatPatch.thread(dm, dme, dads, false, dnt, d1, "T7", dnone, null).size()
+                    + "|" + IvaChatPatch.buildChats(dm, dme, dads, false, dnt, dnone, new java.util.HashSet<String>()).get(0).count, "3|3");
+                IvaChatPatch.hiddenMsgs.add("12");
+                eq("сообщения 10.62: старые вызовы берут общий набор; уведомление о скрытом — в список",
+                    IvaChatPatch.thread(dm, dme, dads, false, dnt, d1, "T7", dnone).size() + "|" + (IvaChatPatch.locate(dm, dme, dads, false, dnt, "12") == null)
+                    + "|" + IvaChatPatch.locate(dm, dme, dads, false, dnt, "13")[2], "2|true|T7");
+                IvaChatPatch.hiddenMsgs.clear();
+                eq("сообщения 10.62: своё — у меня и у всех, чужое — только у меня",
+                    String.join("|", IvaChatPatch.deleteChoices(true)) + " / " + String.join("|", IvaChatPatch.deleteChoices(false)),
+                    "Удалить у меня|Удалить у всех / Удалить у меня");
+                java.util.Set<String> dset = new java.util.HashSet<String>(java.util.Arrays.asList("b2", " a1 ", "", "x,y", "c3"));
+                eq("сообщения 10.62: копия на телефоне — по порядку, без пустых и запятых", IvaChatPatch.msgIdsToStr(dset), "a1,b2,c3");
+                eq("сообщения 10.62: копия читается обратно", new java.util.TreeSet<String>(IvaChatPatch.msgIdsFromStr(" a1, ,b2,c3,")).toString()
+                    + IvaChatPatch.msgIdsFromStr("").size() + IvaChatPatch.msgIdsFromStr(null).size() + IvaChatPatch.msgIdsToStr(null), "[a1, b2, c3]00");
+                eq("сообщения 10.62: тексты", IvaChatPatch.DEL_TITLE + "|" + IvaChatPatch.DEL_NO_DB + "|" + IvaChatPatch.HIDDEN_MSG_PREFS,
+                    "Удалить сообщение?|«Удалить у меня» заработает после обновления базы|iva_msg_hidden");
+            }
+            // 10.62: вкладки раздела логотипа как у админа; «пузырь» сверху закруглён, снизу ровный
+            eq("вкладки 10.62: пузырь — верх закруглён, низ ровный", java.util.Arrays.toString(IvaClientPatch.hubBubbleRadii(5f)), "[5.0, 5.0, 5.0, 5.0, 0.0, 0.0, 0.0, 0.0]");
+            eq("вкладки 10.62: размеры как у штатных hubTabMy (12dp сверху, линия 3dp через 10dp, углы как bg_card 16dp)",
+                IvaClientPatch.HUB_TAB_TOP_DP + "|" + IvaClientPatch.HUB_TAB_LINE_DP + "|" + IvaClientPatch.HUB_TAB_LINE_TOP_DP + "|" + IvaClientPatch.HUB_TAB_RADIUS_DP, "12|3|10|16");
+            // 10.62: кабинет клиента без «Позвонить», «Написать в МАКС» (и «Адрес выдачи» — по addrInfoTxt)
+            eq("кабинет 10.62: скрываемые строки", String.join("|", IvaClientPatch.PROFILE_HIDE_IDS), "rowCall|rowMax");
+            // 10.62: заявки клиента нажимаются — полные данные
+            {
+                eq("заявки 10.62: статус как на сайте", IvaOrderPatch.ordStatus("") + "|" + IvaOrderPatch.ordStatus(null) + "|" + IvaOrderPatch.ordStatus("new")
+                    + "|" + IvaOrderPatch.ordStatus("rented") + "|" + IvaOrderPatch.ordStatus("done") + "|" + IvaOrderPatch.ordStatus(" rented "), "Новая|Новая|Новая|В аренде|Закрыта|В аренде");
+                java.util.Map<String, String> or = new java.util.LinkedHashMap<String, String>();
+                or.put("id", "42"); or.put("created_at", "2026-10-14T09:00:00+00:00"); or.put("status", "rented");
+                or.put("tools", "Перфоратор (3 дн.)"); or.put("days", "3"); or.put("get_method", "Доставка"); or.put("address", "ул. Мира, 1");
+                or.put("name", "Иванов Иван"); or.put("phone", "+7 900 000-00-00"); or.put("comment", "Чек: 1500 ₽"); 
+                StringBuilder ob = new StringBuilder();
+                for (String[] f : IvaOrderPatch.ordFields(or, "14 окт, 12:00")) ob.append(f[0]).append('=').append(f[1]).append(';');
+                eq("заявки 10.62: все поля по порядку", ob.toString(), "Дата=14 окт, 12:00;Статус=В аренде;Инструменты=Перфоратор (3 дн.);Срок=3 дн.;Получение=Доставка;"
+                    + "Адрес=ул. Мира, 1;Имя=Иванов Иван;Телефон=+7 900 000-00-00;Комментарий=Чек: 1500 ₽;Номер заявки=42;");
+                or.put("address", ""); or.put("comment", "null"); or.put("days", "0"); or.put("status", "");
+                ob.setLength(0);
+                for (String[] f : IvaOrderPatch.ordFields(or, " ")) ob.append(f[0]).append('=').append(f[1]).append(';');
+                eq("заявки 10.62: пустое не показывается; нет даты — как в базе; статус всегда", ob.toString(), "Дата=2026-10-14T09:00:00+00:00;Статус=Новая;Инструменты=Перфоратор (3 дн.);"
+                    + "Получение=Доставка;Имя=Иванов Иван;Телефон=+7 900 000-00-00;Номер заявки=42;");
+                or.put("days", "по инструментам");
+                eq("заявки 10.62: срок не числом — как есть", IvaOrderPatch.ordFields(or, "x").get(3)[0] + "=" + IvaOrderPatch.ordFields(or, "x").get(3)[1], "Срок=по инструментам");
+                java.util.List<String> od = java.util.Arrays.asList("14 окт", "14 окт", "13 окт"), ot = java.util.Arrays.asList("Дрель", "Дрель", "Дрель");
+                eq("заявки 10.62: карточка находит свою заявку, одинаковые — по номеру среди одинаковых",
+                    IvaOrderPatch.ordFind(od, ot, IvaOrderPatch.ordKey("14 окт", "Дрель", 0)) + "|" + IvaOrderPatch.ordFind(od, ot, IvaOrderPatch.ordKey("14 окт", "Дрель", 1))
+                    + "|" + IvaOrderPatch.ordFind(od, ot, IvaOrderPatch.ordKey("13 окт", "Дрель", 0)) + "|" + IvaOrderPatch.ordFind(od, ot, IvaOrderPatch.ordKey("14 окт", "Дрель", 2))
+                    + "|" + IvaOrderPatch.ordFind(od, ot, IvaOrderPatch.ordKey("12 окт", "Пила", 0)) + "|" + IvaOrderPatch.ordFind(od, ot, IvaOrderPatch.ordKey(" 13 окт ", "Дрель ", 0)), "0|1|2|-1|-1|2");
+                eq("заявки 10.62: запрос как у штатного loadOrders, но все поля; шторка 85%", IvaOrderPatch.ORD_PATH + "|" + IvaOrderPatch.ORD_SHEET,
+                    "/rest/v1/orders?select=*&order=created_at.desc&limit=30|0.85");
+            }
             // 10.60: голосовые как в ВК — кнопка, волна по громкости, длительность; цвета приложения
             eq("голосовые 10.60: волна растёт с длительностью (1080 px, 2.75)", IvaChatPatch.voiceWavePx(0, 1080, 2.75f) + "|" + IvaChatPatch.voiceWavePx(10, 1080, 2.75f) + "|" + IvaChatPatch.voiceWavePx(120, 1080, 2.75f), "198|281|454");
             eq("голосовые 10.60: волна не шире 190dp и 42% экрана, не уже 72dp", IvaChatPatch.voiceWavePx(600, 3000, 1f) + "|" + IvaChatPatch.voiceWavePx(600, 300, 1f) + "|" + IvaChatPatch.voiceWavePx(-5, 100, 1f), "190|126|72");

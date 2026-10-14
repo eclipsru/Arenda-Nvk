@@ -329,7 +329,8 @@ try {
     const snd = op.slice(op.indexOf('static void send(final Activity a)'), op.indexOf('static void sent(Activity a)'));
     const keys = (snd.match(/body\.put\("(p_[a-z_]+)"/g) || []).map(x => x.slice(10, -1));
     assert.deepEqual(keys, ['p_name', 'p_phone', 'p_tools', 'p_get_method', 'p_address', 'p_comment', 'p_user_email', 'p_days'], 'IvaOrderPatch.send: поля submit_order как у штатной заявки');
-    assert.ok(snd.includes('IvaClientPatch.apiCall(a, "/rest/v1/rpc/submit_order", "POST", body.toString(), true)') && (op.match(/apiCall\(/g) || []).length === 1
+    assert.ok(snd.includes('IvaClientPatch.apiCall(a, "/rest/v1/rpc/submit_order", "POST", body.toString(), true)') && (op.match(/apiCall\(/g) || []).length === 2
+      && op.includes('IvaClientPatch.apiCall(a, ORD_PATH, "GET", null, true)') && (op.match(/"POST"/g) || []).length === 1
       && snd.includes('body.put("p_days", maxDays(ls));') && snd.includes('body.put("p_tools", toolsText(ls));')
       && snd.includes('callNative(a, "sendOrder");                       // штатные') && snd.includes('if (sending) return;'),
       'IvaOrderPatch.send: одна заявка submit_order, p_days — самый длинный срок, без повторной отправки');
@@ -544,7 +545,7 @@ try {
     assert.ok(cp.includes('b.put("p_until", c.last == null ? "" : c.last.created);') && cp.includes('long at = parseIso(o.optString("hidden_until", ""));')
       && cp.includes('"/rest/v1/app_chat_hidden?select=partner,tool_id,hidden_until&limit=1000", "GET", null, true)'),
       'чат 10.61: граница — время последнего сообщения из базы (не часы телефона); список удалённого — свой');
-    assert.ok(cp.includes('if (hiddenMsg(hid, p, t, m.at)) continue;') && cp.includes('&& !hiddenMsg(hid, p, t, m.at)) out.add(m);')
+    assert.ok(cp.includes('if (hiddenMsg(hid, p, t, m.at) || (ids != null && ids.contains(m.id))) continue;') && cp.includes('&& !hiddenMsg(hid, p, t, m.at)) out.add(m);')
       && cp.includes('Map<String, String> tools = assignTools(asc, me, admins, sup, localTags);   // по всем сообщениям — как до удаления')
       && cp.includes('.append(hiddenVer).append(\'|\');'),
       'чат 10.61: скрытое не в списке и не в переписке; инструменты переписок считаются по всем сообщениям (новые попадают в тот же чат)');
@@ -552,6 +553,54 @@ try {
       && cp.includes('hidden.clear(); hiddenLocal.clear(); hiddenAt = 0; hiddenFor = ""; hiddenVer++;'),
       'чат 10.61: копия на телефоне (без интернета удалённое не возвращается), при смене аккаунта — сброс');
     assert.ok(/eq\("чат 10\.61: /.test(tp), 'IvaPatchTest: проверки 10.61');
+  }
+  // 10.62 (просьба владельца 14.10.2026): «Удалить у меня» / «Удалить у всех»; вкладки раздела логотипа как у админа;
+  // заявки клиента нажимаются; в кабинете клиента нет «Позвонить», «Написать в МАКС», «Адрес выдачи».
+  {
+    const cp = R('android/patches/IvaChatPatch.java'), tp = R('android/patches/test/IvaPatchTest.java');
+    const jc = R('android/patches/IvaClientPatch.java'), op = R('android/patches/IvaOrderPatch.java');
+    const sql = R('supabase/migrations/20261014_msg_hidden.sql'), body = sql.replace(/^--.*$/gm, '');
+    assert.ok(body.includes('primary key (user_email, msg_id)') && body.includes('alter table public.app_msg_hidden enable row level security;')
+      && body.includes('revoke all on public.app_msg_hidden from anon;') && body.includes('revoke all on public.app_msg_hidden from authenticated;')
+      && body.includes('grant select on public.app_msg_hidden to authenticated;')
+      && body.includes("using (user_email = lower(coalesce(auth.jwt() ->> 'email', '')));")
+      && !/grant\s+(insert|update|delete|all)[^;]*app_msg_hidden/i.test(body) && !/for\s+(insert|update|delete|all)\b/i.test(body),
+      '20261014_msg_hidden.sql: каждый видит только свои строки; писать напрямую нельзя');
+    assert.ok(body.includes("me text := lower(coalesce(auth.jwt() ->> 'email', ''));") && body.includes('values (me, mid)')
+      && /security definer\s+set search_path = public/.test(body) && body.includes('revoke all on function public.iva_hide_msg(text) from public, anon;')
+      && !/delete\s+from|\bupdate\s+public\.app_messages|insert\s+into\s+public\.app_messages/i.test(body),
+      '20261014_msg_hidden.sql: iva_hide_msg — только за себя (почта из входа); app_messages только читает');
+    assert.ok(sql.includes('--   drop function if exists public.iva_hide_msg(text);') && sql.includes('--   drop table if exists public.app_msg_hidden;'),
+      '20261014_msg_hidden.sql: откат записан');
+    const br = cp.slice(cp.indexOf('static View bubbleRow('), cp.indexOf('static View voiceBubble('));
+    assert.ok(br.includes('if (!m.id.isEmpty()) {\n            if (deletable) {') && br.includes('confirmDelete(a, m, true); }')
+      && br.includes('@Override public boolean onLongClick(View v) { confirmDelete(a, m, deletable); return true; }'),
+      'сообщения 10.62: долгое нажатие — на любом сообщении, × — только у своих');
+    const del = cp.slice(cp.indexOf('static void confirmDelete('), cp.indexOf('static void renderList('));
+    assert.ok(del.includes('final String[] items = deleteChoices(own);') && del.includes('.setNegativeButton("Отмена", null)')
+      && del.includes('if (DEL_ALL.equals(items[w])) deleteForAll(a, m);') && cp.includes('return own ? new String[]{DEL_ME, DEL_ALL} : new String[]{DEL_ME};')
+      && (del.match(/"DELETE"/g) || []).length === 1 && del.includes('"/rest/v1/rpc/iva_hide_msg", "POST", b.toString(), true)')
+      && del.includes('if ("ok".equals(fc)) {') && del.includes('} else if ("404".equals(fc)) {'),
+      'сообщения 10.62: «Удалить у всех» — только у своих (DELETE как раньше); «Удалить у меня» — отметка в базе, скрываем после ответа');
+    assert.ok(cp.includes('if (ids != null && ids.contains(m.id)) continue;') && cp.includes('|| hiddenMsgs.contains(m.id)) return null;')
+      && cp.includes('loadHiddenMsgs(a, my, now);') && cp.includes('"/rest/v1/app_msg_hidden?select=msg_id&limit=5000", "GET", null, true)')
+      && cp.includes('hiddenMsgs.clear(); hiddenMsgsLocal.clear(); hiddenMsgsAt = 0; hiddenMsgsFor = "";') && cp.includes('saveHiddenMsgs(a, my);'),
+      'сообщения 10.62: скрытое не в списке, не в переписке и не по уведомлению; копия на телефоне; при смене аккаунта — сброс');
+    const tabs = jc.slice(jc.indexOf('static LinearLayout hubTabButton('), jc.indexOf('static void renderClientHub('));
+    assert.ok(jc.includes('if (cardId != 0) tabs.setBackgroundResource(cardId);') && tabs.includes('g.setCornerRadii(hubBubbleRadii(hubDp(a, HUB_TAB_RADIUS_DP)));')
+      && tabs.includes('line.setBackgroundColor(on ? orange : Color.TRANSPARENT);') && tabs.includes('setTextColor(on ? Color.WHITE : gray)')
+      && !/#[0-9A-Fa-f]{6}|0x[0-9A-Fa-f]{8}/.test(tabs.replace(/0xffff8f1f|0xff9aa1b0/g, '')),
+      'вкладки 10.62: как у админа (bg_card, линия 3dp), пузырь — цвет темы, без новых цветов');
+    const pc = jc.slice(jc.indexOf('static void profileContacts('), jc.indexOf('static ViewGroup hubPages('));
+    assert.ok(jc.includes('try { if ("profile".equals(tab)) profileContacts(a); } catch (Throwable ignore) {}') && pc.includes('boolean show = !isClient(a);')
+      && pc.includes('isSingleRow(a, (ViewGroup) row)') && !/removeView|removeAllViews|setText|setOnClick/.test(pc),
+      'кабинет 10.62: у клиента строки только скрываются (у админа — видны), ничего не удаляется; строка адреса — только если это одна строка');
+    const ord = op.slice(op.indexOf('static void clientOrders('), op.indexOf('static void ordOpen('));
+    assert.ok(op.includes('if ("orders".equals(tab)) {\n            try { clientOrders(a); } catch (Throwable ignore) {}') && (ord.match(/!IvaClientPatch\.isClient\(a\)\) return;/g) || []).length === 2
+      && !/removeView|removeAllViews|setText\(|setVisibility/.test(ord.replace('more.setText(ORD_MORE);', '')),
+      'заявки 10.62: только у клиента; штатные карточки не пересоздаются и не прячутся — только нажатие и «Подробнее ›»');
+    assert.ok(!/passport|birth|паспорт/i.test(op), 'заявки 10.62: лишних персональных данных нет');
+    assert.ok(/eq\("сообщения 10\.62: /.test(tp) && /eq\("заявки 10\.62: /.test(tp) && /eq\("вкладки 10\.62: /.test(tp) && /eq\("кабинет 10\.62: /.test(tp), 'IvaPatchTest: проверки 10.62');
   }
   // радиус — только вид: варианты встречаются лишь в объявлении и в шторке, на фильтр/подсчёт не влияют
   assert.equal((js45.match(/RADIUS_TITLES/g) || []).length, 3, 'IvaSearchPatch: радиус не должен участвовать в фильтре (только заготовка в шторке)');

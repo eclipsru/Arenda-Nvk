@@ -1648,6 +1648,7 @@ public final class IvaClientPatch {
     public static void onShowTab(Activity a, String tab) {
         if (hubStyling) return;
         try { installClientNav(a); } catch (Throwable ignore) {}   // первый showTab при запуске — кнопки уже наши
+        try { if ("profile".equals(tab)) profileContacts(a); } catch (Throwable ignore) {}
         try {
             String t = tab == null ? "" : tab;
             if (hubVisible) {
@@ -1657,6 +1658,34 @@ public final class IvaClientPatch {
                 detailFromHub = false;
             }
         } catch (Throwable ignore) {}
+    }
+
+    // ── 10.62: в кабинете клиента нет «Позвонить», «Написать в МАКС» и «Адрес выдачи» (просьба владельца 14.10.2026) ──
+    // Строки штатные (rowCall, rowMax, строка с addrInfoTxt) — только скрываются; у админа (и после смены входа
+    // на админа) возвращаются. Сами строки, их нажатия и текст адреса не меняются.
+    static final String[] PROFILE_HIDE_IDS = {"rowCall", "rowMax"};
+
+    static void profileContacts(Activity a) {
+        boolean show = !isClient(a);
+        for (String n : PROFILE_HIDE_IDS) {
+            int id = a.getResources().getIdentifier(n, "id", a.getPackageName());
+            View v = id == 0 ? null : a.findViewById(id);
+            if (v != null) v.setVisibility(show ? View.VISIBLE : View.GONE);
+        }
+        Object t = get(a, "addrInfoTxt");                       // «Адрес выдачи»: строка = родитель родителя текста адреса
+        if (t instanceof View && ((View) t).getParent() instanceof View) {
+            ViewParent row = ((View) ((View) t).getParent()).getParent();
+            if (row instanceof ViewGroup && isSingleRow(a, (ViewGroup) row)) ((View) row).setVisibility(show ? View.VISIBLE : View.GONE);
+        }
+    }
+
+    /** Это одна строка «Адрес выдачи», а не весь список кабинета: в ней нет других пунктов (версия, «Позвонить», «Инструкция»). */
+    static boolean isSingleRow(Activity a, ViewGroup row) {
+        for (String n : new String[]{"profVer", "rowCall", "rowMax", "profHelp", "profLend"}) {
+            int id = a.getResources().getIdentifier(n, "id", a.getPackageName());
+            if (id != 0 && row.findViewById(id) != null) return false;
+        }
+        return true;
     }
 
     static ViewGroup hubPages(Activity a) {
@@ -1726,12 +1755,17 @@ public final class IvaClientPatch {
         LinearLayout root = new LinearLayout(a);
         root.setOrientation(LinearLayout.VERTICAL);
         root.setClickable(true);   // нажатия не проходят на спрятанные страницы под разделом
+        // 10.62: вкладки как у админа (штатные hubTabMy/hubTabAdd): карточка bg_card, две половины, текст 14sp
+        // и подчёркивание 3dp; у выбранной — оранжевый «пузырь»: сверху закруглён, снизу ровный, по ширине подчёркивания.
         LinearLayout tabs = new LinearLayout(a);
         tabs.setOrientation(LinearLayout.HORIZONTAL);
-        tabs.setPadding(hubDp(a, 16), hubDp(a, 12), hubDp(a, 16), hubDp(a, 8));
-        tabs.addView(hubTabButton(a, "Избранное", HUB_TAB_FAV_TAG, 0), hubTabParams(a, 0));
-        tabs.addView(hubTabButton(a, "Мои инструменты", HUB_TAB_MINE_TAG, 1), hubTabParams(a, 1));
-        root.addView(tabs, new LinearLayout.LayoutParams(-1, -2));
+        int cardId = a.getResources().getIdentifier("bg_card", "drawable", a.getPackageName());
+        if (cardId != 0) tabs.setBackgroundResource(cardId);
+        tabs.addView(hubTabButton(a, "Избранное", HUB_TAB_FAV_TAG, 0), new LinearLayout.LayoutParams(0, -2, 1f));
+        tabs.addView(hubTabButton(a, "Мои инструменты", HUB_TAB_MINE_TAG, 1), new LinearLayout.LayoutParams(0, -2, 1f));
+        LinearLayout.LayoutParams tl = new LinearLayout.LayoutParams(-1, -2);
+        tl.setMargins(hubDp(a, 16), hubDp(a, 12), hubDp(a, 16), hubDp(a, 8));
+        root.addView(tabs, tl);
         ScrollView scroll = new ScrollView(a);
         scroll.setFillViewport(true);
         scroll.setVerticalScrollBarEnabled(false);
@@ -1744,20 +1778,29 @@ public final class IvaClientPatch {
         return root;
     }
 
-    static LinearLayout.LayoutParams hubTabParams(Activity a, int index) {
-        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(0, hubDp(a, 40), 1f);
-        if (index == 0) lp.rightMargin = hubDp(a, 5); else lp.leftMargin = hubDp(a, 5);
-        return lp;
-    }
+    static final int HUB_TAB_TOP_DP = 12, HUB_TAB_LINE_TOP_DP = 10, HUB_TAB_LINE_DP = 3, HUB_TAB_RADIUS_DP = 16;
+    static final String HUB_TAB_TEXT = "_text", HUB_TAB_LINE = "_line";
 
-    static TextView hubTabButton(final Activity a, String text, String tag, final int index) {
-        TextView b = new TextView(a);
-        b.setText(text);
+    /** Половина карточки: текст и подчёркивание под ним (как штатные hubTabMy / hubTabAdd). */
+    static LinearLayout hubTabButton(final Activity a, String text, String tag, final int index) {
+        LinearLayout b = new LinearLayout(a);
+        b.setOrientation(LinearLayout.VERTICAL);
+        b.setGravity(Gravity.CENTER_HORIZONTAL);
+        b.setPadding(0, hubDp(a, HUB_TAB_TOP_DP), 0, 0);
         b.setTag(tag);
-        b.setGravity(Gravity.CENTER);
-        b.setTextSize(14.5f);
-        b.setSingleLine(true);
         b.setClickable(true);
+        TextView t = new TextView(a);
+        t.setText(text);
+        t.setTag(tag + HUB_TAB_TEXT);
+        t.setGravity(Gravity.CENTER);
+        t.setTextSize(14f);
+        t.setSingleLine(true);
+        b.addView(t, new LinearLayout.LayoutParams(-2, -2));
+        View line = new View(a);
+        line.setTag(tag + HUB_TAB_LINE);
+        LinearLayout.LayoutParams ll = new LinearLayout.LayoutParams(-1, hubDp(a, HUB_TAB_LINE_DP));
+        ll.topMargin = hubDp(a, HUB_TAB_LINE_TOP_DP);
+        b.addView(line, ll);
         b.setOnClickListener(new View.OnClickListener() {
             @Override public void onClick(View v) {
                 if (hubTab == index) return;
@@ -1769,20 +1812,34 @@ public final class IvaClientPatch {
         return b;
     }
 
+    /** «Пузырь» выбранной вкладки: сверху закруглён как углы карточки, снизу ровный — стоит на подчёркивании. */
+    static float[] hubBubbleRadii(float r) {
+        return new float[]{r, r, r, r, 0, 0, 0, 0};
+    }
+
     static void styleHubTabs(Activity a, View hub) {
         int orange = navColor(a, "orange", 0xffff8f1f);
-        int card = navColor(a, "card", 0xff1a1d24);
-        int line = navColor(a, "line", 0xff262b35);
         int gray = navColor(a, "gray", 0xff9aa1b0);
         String[] tags = {HUB_TAB_FAV_TAG, HUB_TAB_MINE_TAG};
         for (int i = 0; i < tags.length; i++) {
             View v = hub.findViewWithTag(tags[i]);
-            if (!(v instanceof TextView)) continue;
-            TextView t = (TextView) v;
+            if (v == null) continue;
             boolean on = hubTab == i;
-            t.setBackground(hubPill(a, on ? orange : card, on ? 0 : line));
-            t.setTextColor(on ? Color.WHITE : gray);
-            t.setTypeface(null, on ? android.graphics.Typeface.BOLD : android.graphics.Typeface.NORMAL);
+            if (on) {
+                GradientDrawable g = new GradientDrawable();
+                g.setColor(orange);
+                g.setCornerRadii(hubBubbleRadii(hubDp(a, HUB_TAB_RADIUS_DP)));
+                v.setBackground(g);
+            } else {
+                v.setBackground(null);
+            }
+            View tv = v.findViewWithTag(tags[i] + HUB_TAB_TEXT);
+            if (tv instanceof TextView) {
+                ((TextView) tv).setTextColor(on ? Color.WHITE : gray);
+                ((TextView) tv).setTypeface(null, on ? android.graphics.Typeface.BOLD : android.graphics.Typeface.NORMAL);
+            }
+            View line = v.findViewWithTag(tags[i] + HUB_TAB_LINE);
+            if (line != null) line.setBackgroundColor(on ? orange : Color.TRANSPARENT);
         }
     }
 
