@@ -149,6 +149,19 @@ else
   skip "стенд напоминания об аренде: нет pgserver (PG_PY=<python с pgserver> bash tools/check.sh)"
 fi
 
+head_ "4.5.2. Стенд режима окончания аренды (локальный PostgreSQL)"
+# 10.77: настройки «Аренда» меняет только админ проката и только свои; клиент и админ получают выданные инструменты
+# с текущими настройками проката; гостю недоступно; SQL идёт и поверх 10.76, и без него.
+if "$PG_PY" -c "import pgserver" >/dev/null 2>&1; then
+  if "$PG_PY" tools/rent-mode-stand.py >/tmp/iva-test-rent-mode.log 2>&1; then
+    ok "режим окончания аренды: $(grep -c '✔' /tmp/iva-test-rent-mode.log) проверок SQL на PostgreSQL"
+  else
+    bad "стенд режима окончания аренды"; grep -E '✘|ИТОГ' /tmp/iva-test-rent-mode.log | head -8 | sed 's/^/      /'
+  fi
+else
+  skip "стенд режима окончания аренды: нет pgserver (PG_PY=<python с pgserver> bash tools/check.sh)"
+fi
+
 head_ "4.6. Скачивание приложения у всех: файл выпущенной версии на месте"
 # Выпущенная версия живёт строкой в базе (app_releases) и ссылается на файл в корне сайта.
 # Если файл убрать, у всех пользователей ломается «Скачать APK». Код 2 = проверить не удалось (нет сети).

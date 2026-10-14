@@ -374,6 +374,11 @@ public final class IvaNotifyPatch {
 
     /** Окончания аренды части заявки: инструменты с одинаковым сроком — одно напоминание. Нет времени выдачи — пусто. */
     static List<RentEnd> rentEnds(String partId, String orderId, String toolsText, int days, long rentedAt) {
+        return rentEnds(partId, orderId, toolsText, days, rentedAt, null);
+    }
+
+    /** 10.77: то же по правилу проката («Сутки» или «До закрытия пункта», IvaRentPatch.end); правила нет — «Сутки». */
+    static List<RentEnd> rentEnds(String partId, String orderId, String toolsText, int days, long rentedAt, IvaRentPatch.Rule rule) {
         List<RentEnd> out = new ArrayList<RentEnd>();
         if (rentedAt <= 0) return out;
         LinkedHashMap<Integer, StringBuilder> byDays = new LinkedHashMap<Integer, StringBuilder>();
@@ -387,7 +392,7 @@ public final class IvaNotifyPatch {
         }
         for (java.util.Map.Entry<Integer, StringBuilder> e : byDays.entrySet()) {
             RentEnd r = new RentEnd();
-            r.end = rentedAt + e.getKey() * DAY_MS;
+            r.end = IvaRentPatch.end(rentedAt, e.getKey(), rule);
             r.key = "r" + (partId == null ? "" : partId.trim()) + "@" + r.end;
             r.order = orderId == null ? "" : orderId.trim();
             r.names = e.getValue().toString();
@@ -548,7 +553,7 @@ public final class IvaNotifyPatch {
             JSONObject o = rows.optJSONObject(i);
             if (o == null) continue;
             long at = IvaChatPatch.parseIso(o.optString("rented_at", ""));
-            for (RentEnd e : rentEnds(o.optString("part_id", ""), o.optString("order_id", ""), o.optString("tools_text", ""), o.optInt("days", 0), at)) {
+            for (RentEnd e : rentEnds(o.optString("part_id", ""), o.optString("order_id", ""), o.optString("tools_text", ""), o.optInt("days", 0), at, IvaRentPatch.ruleOf(o))) {
                 if (rentDue(e.end, now, hours) && !seen.contains(e.key)) { due.add(e); keys.add(e.key); }
             }
         }
@@ -1203,6 +1208,8 @@ public final class IvaNotifyPatch {
             body.setVisibility(View.GONE);
             page.addView(body, new LinearLayout.LayoutParams(-1, -2));
             try { page.setLayoutTransition(new android.animation.LayoutTransition()); } catch (Throwable ignore) {}
+            // 10.77: «Аренда» — только админам: как считать окончание аренды (сутки / до закрытия пункта)
+            if (admin) try { IvaRentPatch.settingsSection(a, page, cText, cGray, cOrange); } catch (Throwable ignore) {}
             head.setContentDescription(NOTIF_TITLE + ", развернуть");
             head.setOnClickListener(new View.OnClickListener() {
                 @Override public void onClick(View v) {

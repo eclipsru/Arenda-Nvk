@@ -1140,6 +1140,63 @@ public class IvaPatchTest {
                 IvaNotifyPatch.defOn(IvaNotifyPatch.K_RENT) + "," + IvaNotifyPatch.defOn(IvaNotifyPatch.K_SCHED_ON) + "," + IvaNotifyPatch.defOn(IvaNotifyPatch.K_MSG), "false,false,true");
             eq("аренда 10.76: текст — инструменты и куда нажать", IvaNotifyPatch.rentText("Дрель").startsWith("Дрель. ") && IvaNotifyPatch.rentText("Дрель").contains("«Написать» или «Позвонить»"), true);
             eq("аренда 10.76: свой канал «Окончание аренды»", IvaNotifyPatch.channelName(IvaNotifyPatch.CH_RENT), "Окончание аренды");
+            // 10.77: режим окончания аренды (сутки / до закрытия пункта), живой таймер «дд.чч.мм»
+            {
+                java.util.TimeZone utc = java.util.TimeZone.getTimeZone("UTC");
+                java.util.Calendar cu = java.util.Calendar.getInstance(utc);
+                cu.clear(); cu.set(2026, 9, 14, 11, 30, 0);              // ср 14.10.2026 14:30 по Москве
+                long wed = cu.getTimeInMillis(), h = 3600000L, d = 24 * h;
+                cu.clear(); cu.set(2026, 9, 16, 11, 30, 0);              // пт 16.10.2026 14:30 по Москве
+                long fri = cu.getTimeInMillis();
+                IvaRentPatch.Rule day = IvaRentPatch.rule("day", "", "");
+                IvaRentPatch.Rule all19 = IvaRentPatch.rule("close", "[1140,1140,1140,1140,1140,1140,1140]", "Europe/Moscow");
+                IvaRentPatch.Rule week = IvaRentPatch.rule("close", "[1080,1080,1080,1080,1080,900,-1]", "Europe/Moscow");
+                eq("аренда 10.77: «Сутки» — 14:30 → 14:30 через столько суток, сколько в заявке", IvaRentPatch.end(wed, 3, day) - wed, 3 * d);
+                eq("аренда 10.77: правила нет — как «Сутки» (как 10.76)", IvaRentPatch.end(wed, 2, null) - wed, 2 * d);
+                eq("аренда 10.77: «До закрытия» — выдали в ср 14:30 на 1 день → чт до 19:00", IvaRentPatch.end(wed, 1, all19) - wed, d + 4 * h + 30 * 60000L);
+                eq("аренда 10.77: на 3 дня → сб до 19:00", IvaRentPatch.end(wed, 3, all19) - wed, 3 * d + 4 * h + 30 * 60000L);
+                eq("аренда 10.77: своё время у дня — пт 14:30 на 1 день → сб до 15:00", IvaRentPatch.end(fri, 1, week) - fri, d + 30 * 60000L);
+                eq("аренда 10.77: срок в выходной (вс) → до закрытия понедельника 18:00", IvaRentPatch.end(fri, 2, week) - fri, 3 * d + 3 * h + 30 * 60000L);
+                eq("аренда 10.77: выдали после закрытия (ср 20:00) на 1 день → чт до 19:00",
+                    IvaRentPatch.end(wed + 5 * h + 30 * 60000L, 1, all19) - wed, d + 4 * h + 30 * 60000L);
+                eq("аренда 10.77: часовой пояс проката — 19:00 по Самаре = 15:00 UTC",
+                    IvaRentPatch.end(wed, 1, IvaRentPatch.rule("close", "[1140,1140,1140,1140,1140,1140,1140]", "Europe/Samara")) - wed, d + 3 * h + 30 * 60000L);
+                eq("аренда 10.77: все дни выходные — как «Сутки»",
+                    IvaRentPatch.end(wed, 2, IvaRentPatch.rule("close", "[-1,-1,-1,-1,-1,-1,-1]", "Europe/Moscow")) - wed, 2 * d);
+                eq("аренда 10.77: нет времени выдачи или срока — конца нет", IvaRentPatch.end(-1, 2, all19) + IvaRentPatch.end(wed, 0, all19), 0L);
+                eq("аренда 10.77: время закрытия из базы — [..], {..} и просто через запятую",
+                    IvaRentPatch.closeJson(IvaRentPatch.parseClose("{1080,1080,1080,1080,1080,900,-1}")) + IvaRentPatch.closeJson(IvaRentPatch.parseClose(" 600, 600,600,600,600,600,600 ")),
+                    "[1080,1080,1080,1080,1080,900,-1][600,600,600,600,600,600,600]");
+                eq("аренда 10.77: неверное время закрытия — по умолчанию 19:00",
+                    IvaRentPatch.closeJson(IvaRentPatch.parseClose("[1080,1080]")) + IvaRentPatch.closeJson(IvaRentPatch.parseClose("[1,1,1,1,1,1,1440]"))
+                    + IvaRentPatch.closeJson(IvaRentPatch.parseClose("[1,1,1,1,1,1,-2]")) + IvaRentPatch.closeJson(IvaRentPatch.parseClose("null")),
+                    "[1140,1140,1140,1140,1140,1140,1140][1140,1140,1140,1140,1140,1140,1140][1140,1140,1140,1140,1140,1140,1140][1140,1140,1140,1140,1140,1140,1140]");
+                eq("аренда 10.77: неизвестный режим — «Сутки», пустой пояс — Москва",
+                    IvaRentPatch.rule("week", "", "null").mode + "|" + IvaRentPatch.rule(null, null, null).tz + "|" + IvaRentPatch.rule(" close ", "", "Asia/Omsk").byClose(),
+                    "day|Europe/Moscow|true");
+                eq("аренда 10.77: сохранение в базу — режим, 7 значений, пояс (без лишних символов)",
+                    IvaRentPatch.setBody(IvaRentPatch.rule("close", "[1080,1080,1080,1080,1080,900,-1]", "Europe/Moscow\"}")),
+                    "{\"p_mode\":\"close\",\"p_close\":[1080,1080,1080,1080,1080,900,-1],\"p_tz\":\"Europe/Moscow\"}");
+                eq("аренда 10.77: подпись под «Аренда»", IvaRentPatch.summary(day) + "|" + IvaRentPatch.summary(week),
+                    "Сутки: с 14:30 до 14:30|До закрытия пункта: с 14:30 до закрытия");
+                eq("аренда 10.77: дд.чч.мм", IvaRentPatch.dhm(1440 + 5 * 60 + 32) + "|" + IvaRentPatch.dhm(0) + "|" + IvaRentPatch.dhm(120 * 1440L + 59) + "|" + IvaRentPatch.dhm(-5),
+                    "01.05.32|00.00.00|120.00.59|00.00.00");
+                eq("аренда 10.77: до конца — минуты вверх (61 с → 2 мин, 60 с → 1 мин)",
+                    IvaRentPatch.minutes(wed + 61000, wed) + "," + IvaRentPatch.minutes(wed + 60000, wed) + "," + IvaRentPatch.minutes(wed, wed + 119000), "2,1,1");
+                eq("аренда 10.77: таймер до и после срока",
+                    IvaRentPatch.timer(wed + d + 5 * h + 32 * 60000L, wed) + "|" + IvaRentPatch.timer(wed, wed + 2 * h + 15 * 60000L),
+                    "Осталось 01.05.32|Просрочено 00.02.15");
+                eq("аренда 10.77: срок — дата и время", IvaRentPatch.until(IvaRentPatch.end(wed, 1, all19), java.util.TimeZone.getTimeZone("Europe/Moscow")), "до 15.10 в 19:00");
+                java.util.List<IvaNotifyPatch.RentEnd> es = IvaNotifyPatch.rentEnds("11", "5", "Дрель (3 дня), Пила (1 день)", 3, wed, all19);
+                eq("аренда 10.77: у каждого инструмента свой срок — по правилу проката (и для напоминания)",
+                    (es.get(0).end - wed) + "|" + (es.get(1).end - wed), (3 * d + 4 * h + 30 * 60000L) + "|" + (d + 4 * h + 30 * 60000L));
+                eq("аренда 10.77: ключ «уже напомнили» меняется вместе со сроком (сменили режим — напомним по новому)",
+                    es.get(1).key.equals(IvaNotifyPatch.rentEnds("11", "5", "Дрель (3 дня), Пила (1 день)", 3, wed, day).get(1).key), false);
+                eq("аренда 10.77: таймер тикает со сменой минуты", IvaRentPatch.nextTick(es.subList(1, 2), es.get(1).end - 90000) + "," + IvaRentPatch.nextTick(es.subList(1, 2), es.get(1).end + 10000)
+                    + "," + IvaRentPatch.nextTick(es.subList(1, 2), es.get(1).end - 120000) + "," + IvaRentPatch.nextTick(es.subList(1, 2), es.get(1).end - 300), "30050,50050,60050,1000");
+                eq("аренда 10.77: подпись сроков меняется вместе со сроком", IvaRentPatch.sig(es).equals(IvaRentPatch.sig(IvaNotifyPatch.rentEnds("11", "5", "Дрель (3 дня), Пила (1 день)", 3, wed, day))), false);
+                eq("аренда 10.77: заголовок раздела", IvaRentPatch.HEAD_TITLE, "Аренда");
+            }
         }
         if (fail > 0) { System.out.println("ошибок: " + fail); System.exit(1); }
         System.out.println("все проверки IvaPatch пройдены");

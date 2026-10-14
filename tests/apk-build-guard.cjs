@@ -769,6 +769,81 @@ try {
       assert.ok(has(arsc14, str) || has(dex14, str), `APK 10.14: нет «${str}» — правка 10.67 не найдёт штатное поле`);
     assert.ok(/eq\("админ 10\.67: /.test(tp) && /eq\("подкатегория 10\.67: /.test(tp) && /eq\("кабинет 10\.67: /.test(tp), 'IvaPatchTest: проверки 10.67');
   }
+  // 10.77 (просьба владельца 14.10.2026): «Аренда» в настройках админа — конец аренды «Сутки» (14:30 → 14:30) или «До закрытия
+  // пункта» (время закрытия по дням недели, выходной → следующий рабочий день); смена режима — и для выданных; напоминание клиенту
+  // по этому концу; живой таймер «дд.чч.мм» в выданных активных заявках у клиента и у админа
+  {
+    const rp = R('android/patches/IvaRentPatch.java'), op = R('android/patches/IvaOrderPatch.java'), np = R('android/patches/IvaNotifyPatch.java');
+    const tp = R('android/patches/test/IvaPatchTest.java'), wf = R('.github/workflows/build-apk.yml'), ap = R('android/patches/apply.py');
+    const ck = R('.github/workflows/check.yml'), sql = R('supabase/migrations/20261014_rent_end_mode.sql'), chk = R('tools/check.sh');
+    const fnx = (src, name) => { const mm = new RegExp(`static (?:final )?[\\w.<>, \\[\\]]+ ${name}\\(`).exec(src); assert.ok(mm, `нет ${name}`); return src.slice(mm.index, src.indexOf('\n    }\n', mm.index)); };
+    // расчёт: «Сутки» — +дни×24 ч; «До закрытия» — в часовом поясе проката, день выдачи + дни, время закрытия дня, выходной — дальше
+    const end = fnx(rp, 'end');
+    assert.ok(end.includes('long plain = rentedAt + days * DAY_MS;') && end.includes('if (r == null || !r.byClose() || !anyOpen(r.close)) return plain;')
+      && end.includes('Calendar.getInstance(TimeZone.getTimeZone(') && end.includes('c.add(Calendar.DAY_OF_MONTH, days);')
+      && /int m = r\.close\[IvaNotifyPatch\.dowMon\(c\.get\(Calendar\.DAY_OF_WEEK\)\)\];\s+if \(m >= 0\) \{/.test(end) && end.includes('for (int i = 0; i < 7; i++) {'),
+      'аренда 10.77: конец — «Сутки» или до закрытия пункта по дням недели (выходной — следующий рабочий день), пояс проката');
+    assert.ok(/if \(v < -1 \|\| v > 1439\) return defClose\(\);/.test(fnx(rp, 'parseClose')) && /if \(xs\.length != 7\) return defClose\(\);/.test(fnx(rp, 'parseClose')),
+      'аренда 10.77: время закрытия — 7 дней, 00:00–23:59 или выходной; иначе 19:00');
+    // одна формула — и для таймера, и для напоминания клиенту (10.76)
+    assert.ok(np.includes('r.end = IvaRentPatch.end(rentedAt, e.getKey(), rule);') && !/r\.end = rentedAt \+/.test(np)
+      && fnx(np, 'checkRent').includes('o.optInt("days", 0), at, IvaRentPatch.ruleOf(o))) {'),
+      'аренда 10.77: напоминание клиенту — по режиму проката (та же формула, что у таймера)');
+    assert.ok(fnx(rp, 'group').includes('IvaNotifyPatch.rentEnds(pid, oid, o.optString("tools_text", ""), o.optInt("days", 0),') && fnx(rp, 'group').includes('ruleOf(o)'),
+      'аренда 10.77: таймер — те же сроки инструментов, что напоминание');
+    // настройки: только админам, раскрывающаяся «Аренда» под «Уведомлениями», сбой не ломает настройки
+    const os = fnx(np, 'openSettings');
+    assert.ok(os.includes('if (admin) try { IvaRentPatch.settingsSection(a, page, cText, cGray, cOrange); } catch (Throwable ignore) {}')
+      && os.indexOf('IvaRentPatch.settingsSection') > os.indexOf('page.addView(body, new LinearLayout.LayoutParams(-1, -2));'),
+      'аренда 10.77: «Аренда» — только у админов, под «Уведомлениями»');
+    const ss = fnx(rp, 'settingsSection');
+    assert.ok(ss.includes('body.setVisibility(View.GONE);') && ss.includes('drawable(a, "bg_card")') && ss.includes('IvaNotifyPatch.tint(ds, cOrange);')
+      && ss.includes('closeBox.setVisibility(byClose ? View.VISIBLE : View.GONE);') && ss.includes('"Хотя бы один день должен быть рабочим"')
+      && ss.includes('status.postDelayed(doSave, 700)') && ss.includes('st.tz = TimeZone.getDefault().getID();') && ss.includes('|| edited[0]) return;'),
+      'аренда 10.77: свёрнуто, в стиле приложения; время закрытия — только в режиме «до закрытия»; сохраняется в базу; загрузка не затирает правку');
+    assert.ok(rp.includes('DAY_TITLE = "Сутки"') && rp.includes('CLOSE_TITLE = "До закрытия пункта"') && rp.includes('static final String MODE_DAY = "day", MODE_CLOSE = "close";'),
+      'аренда 10.77: два режима');
+    // таймер: клиенту — карточка и подробности; админу — карточка заявки и подробности; только выданные активные
+    assert.ok(op.includes('IvaRentPatch.loadMine(a);') && op.includes('if (!archived) try { IvaRentPatch.clientCard(a, c, r); } catch (Throwable ignore) {}')
+      && op.includes('try { IvaRentPatch.admCard(a, cards.get(i), (JSONObject) ((List<?>) parts).get(mine.get(i))); } catch (Throwable ignore) {}')
+      && op.includes('try { IvaRentPatch.admNeed(a, (List<?>) parts); } catch (Throwable ignore) {}')
+      && op.includes('try { IvaRentPatch.sheet(a, body, r, adm, archived); } catch (Throwable ignore) {}'),
+      'таймер 10.77: у клиента и у админа — на карточке и в подробностях; сбой не ломает «Заявки»');
+    assert.ok(fnx(rp, 'clientCard').includes('IvaOrderPatch.ordActive(r, false)') && fnx(rp, 'sheet').includes('IvaOrderPatch.ordActive(r, archived)')
+      && /"rented"\.equalsIgnoreCase\(part\.optString\("status", ""\)\.trim\(\)\) \? byPart\.get/.test(fnx(rp, 'admCard'))
+      && fnx(rp, 'sheet').includes('"rented".equalsIgnoreCase(IvaOrderPatch.ordVal(r.get("status")))'),
+      'таймер 10.77: только активные заявки «в аренде» (у админа — статус его части)');
+    const tv = fnx(rp, 'timerView');
+    assert.ok(tv.includes('if (box.getWindowToken() != null) box.postDelayed(this, nextTick(es, now));') && tv.includes('v.removeCallbacks(tick);')
+      && tv.includes('setTextColor(now < e.end ? cOrange : cRed)'),
+      'таймер 10.77: тикает только на экране, после срока — красным');
+    assert.ok(/String\.format\(Locale\.ROOT, "%02d\.%02d\.%02d", m \/ 1440, \(m \/ 60\) % 24, m % 60\)/.test(rp), 'таймер 10.77: формат дд.чч.мм');
+    const an = fnx(rp, 'admNeed');
+    assert.ok(an.includes('if (admLoading || now < admMissingUntil) return;') && an.includes('if (!(lack && now - admAt > 5000) && now - admAt < 60000) return;')
+      && an.includes('admMissingUntil = System.currentTimeMillis() + 10 * 60000L;') && an.includes('changed = !sig(byPart).equals(sig(g));'),
+      'таймер 10.77: админ — не чаще раза в минуту (новая выдача — через 5 с); без SQL — тихо; перерисовка только при изменении');
+    // сборка и проверка
+    assert.ok(/IvaPushPatch\.java android\/patches\/IvaRentPatch\.java 2>&1/.test(wf) && ck.includes('android/patches/IvaRentPatch.java'), 'аренда 10.77: IvaRentPatch компилируется в сборку и в проверку');
+    assert.ok(!ap.includes('IvaRentPatch'), 'аренда 10.77: новых вставок в smali нет');
+    assert.ok(!/AlarmManager|WorkManager|customer_profiles|passport|surname|com\.google/.test(rp) && !/AlarmManager|WorkManager|customer_profiles|passport|phone|surname/.test(np),
+      'аренда 10.77: без будильников и личных данных');
+    // SQL: настройки меняет только админ и только свои, таблица закрыта, функции — вошедшим, ничего не удаляется
+    assert.ok(sql.includes('ALTER TABLE public.iva_rent_settings ENABLE ROW LEVEL SECURITY;') && sql.includes('REVOKE ALL ON TABLE public.iva_rent_settings FROM public, anon, authenticated;')
+      && /where a\.active and a\.role in \('admin', 'chief'\) and lower\(a\.email\) = em\) then\s+raise exception/.test(sql)
+      && sql.includes("on conflict (email) do update set mode = excluded.mode")
+      && (sql.match(/REVOKE ALL ON FUNCTION public\.iva_\w+\([^)]*\) FROM public, anon;/g) || []).length === 4
+      && (sql.match(/GRANT EXECUTE ON FUNCTION public\.iva_\w+\([^)]*\) TO authenticated;/g) || []).length === 4
+      && sql.includes("and lower(btrim(coalesce(p.owner_email, ''))) = lower(btrim(auth.jwt() ->> 'email'))")
+      && sql.includes("and lower(coalesce(o.user_email, '')) = lower(auth.jwt() ->> 'email')")
+      && !/DROP\s+(TABLE|COLUMN)|DELETE\s+FROM|TRUNCATE/i.test(sql.replace(/^\s*--.*$/mg, ''))
+      && sql.includes('CREATE TRIGGER trg_iva_part_rented_at BEFORE INSERT OR UPDATE ON public.order_parts'),
+      'SQL 10.77: только админ и свои; таблица закрыта; гостям — нет; включает 10.76; ничего не удаляется');
+    assert.ok(!/client_name|phone|address/.test(sql.slice(sql.indexOf('CREATE OR REPLACE FUNCTION public.iva_admin_rentals'), sql.indexOf('-- 6. Проверка'))),
+      'SQL 10.77: админу — без имени, телефона и адреса клиента');
+    assert.ok(chk.includes('tools/rent-mode-stand.py'), 'SQL 10.77: стенд на PostgreSQL — в check.sh');
+    assert.ok(/NEW_NAME: '10\.77'/.test(wf) && /NEW_CODE: '151'/.test(wf), 'версия 10.77 (151)');
+    assert.ok((tp.match(/eq\("аренда 10\.77: /g) || []).length >= 22, 'IvaPatchTest: проверки 10.77');
+  }
   // 10.76 (просьба владельца 14.10.2026): 1) в активной заявке — «Написать» и «Позвонить» (клиенту — прокату, админу — клиенту,
   // первым может любой); 2) клиентам — напоминание об окончании аренды за 1/2/3 часа (конец = «Выдал» + сутки, по умолчанию выключено)
   {
@@ -815,7 +890,6 @@ try {
     assert.ok(/static final int\[\] RENT_HOURS = \{1, 2, 3\};/.test(np), 'аренда 10.76: выбор — 1, 2 или 3 часа');
     assert.ok(!/AlarmManager|WorkManager|customer_profiles|passport|phone|surname/.test(np), 'аренда 10.76: без будильников и личных данных в IvaNotifyPatch');
     assert.ok(!ap.includes('openWith') && !ap.includes('checkRent') && !ap.includes('openById'), 'связь/аренда 10.76: новых вставок в smali нет');
-    assert.ok(/NEW_NAME: '10\.76'/.test(wf) && /NEW_CODE: '150'/.test(wf), 'версия 10.76 (150)');
     assert.ok((tp.match(/eq\("связь 10\.76: /g) || []).length >= 12 && (tp.match(/eq\("аренда 10\.76: /g) || []).length >= 16, 'IvaPatchTest: проверки 10.76');
   }
   // 10.75 (просьба владельца 14.10.2026): в «Настройках» — раскрывающаяся кнопка «Уведомления», по умолчанию свёрнута;
@@ -835,8 +909,9 @@ try {
     assert.ok(sys < at('switchRow(a, card, "Все уведомления"') && at('switchRow(a, card, "Все уведомления"') < at('schedSw[0] = switchRow(')
       && at('schedSw[0] = switchRow(') < at('body.addView(status, sl);') && at('body.addView(status, sl);') < at('body.addView(note, nl);'),
       'настройки 10.75: порядок — Android, какие присылать, расписание, остальное');
-    assert.ok(!/(?:page|root)\.addView\((?:status|test|note|push|card|sc|sys)\b/.test(os) && (os.match(/page\.addView\(/g) || []).length === 2
-      && (os.match(/\bpage\b/g) || []).length === 7 && !/\(a, page\b/.test(os),
+    const os75 = os.replace('IvaRentPatch.settingsSection(a, page, cText, cGray, cOrange)', '');   // 10.77: «Аренда» — отдельная кнопка ниже
+    assert.ok(!/(?:page|root)\.addView\((?:status|test|note|push|card|sc|sys)\b/.test(os75) && (os75.match(/page\.addView\(/g) || []).length === 2
+      && (os75.match(/\bpage\b/g) || []).length === 7 && !/\(a, page\b/.test(os75),
       'настройки 10.75: всё про уведомления — внутри списка, снаружи только кнопка');
     assert.ok(os.includes('hsub.setText(headSummary(master, ok, schedSw[0] != null && schedSw[0].isChecked()));'), 'настройки 10.75: под кнопкой — коротко о состоянии');
     assert.ok(os.includes('drawable(a, "bg_card")') && os.includes('bellIcon(cOrange)') && !/#[0-9A-Fa-f]{6}|0xff(?!101217|f2f4f8|9aa1b0|ff8f1f)[0-9a-f]{6}/i.test(os),
@@ -879,7 +954,7 @@ try {
       'push 10.74: приёмник в манифесте — exported, только от сервисов Google (c2dm SEND), queries для Android 11+');
     assert.ok(code.indexOf('python3 android/patches/axml_push.py "$W/AndroidManifest.xml"') > code.indexOf('python3 android/patches/axml_service.py "$W/AndroidManifest.xml"'),
       'push 10.74: axml_push.py — после axml_service.py');
-    assert.ok(/IvaReviewPatch\.java android\/patches\/IvaPushPatch\.java 2>&1/.test(code) && chk.includes('android/patches/IvaPushPatch.java'), 'push 10.74: IvaPushPatch компилируется в сборку и в проверку');
+    assert.ok(/IvaReviewPatch\.java android\/patches\/IvaPushPatch\.java(?: android\/patches\/Iva\w+Patch\.java)* 2>&1/.test(code) && chk.includes('android/patches/IvaPushPatch.java'), 'push 10.74: IvaPushPatch компилируется в сборку и в проверку');
     assert.ok(!ap.includes('IvaPushPatch'), 'push 10.74: новых вставок в smali нет');
     assert.ok((tp.match(/eq\("push 10\.74: /g) || []).length >= 14, 'IvaPatchTest: проверки 10.74 (push)');
   }
@@ -1103,7 +1178,7 @@ try {
       && ad.includes('@Override public void onClick(View v) { try { ordOpenRow(a, row, false); } catch (Throwable ignore) {} }'),
       'админ 10.68: данные — из уже загруженного списка (без запросов и без адреса из базы), нажатие — на карточку, ничего не удаляется');
     assert.ok(op.includes('List<Integer> mine = drill ? admDrillIdx(keys, String.valueOf(get(a, "admClientKey"))) : null;')
-      && op.includes('if (mine != null && i < mine.size())   // 10.68: нажатие на заявку — подробности')
+      && /if \(mine != null && i < mine\.size\(\)\)(?: \{)?   \/\/ 10\.68: нажатие на заявку — подробности/.test(op)
       && op.includes('try { admMore(a, cards.get(i), (JSONObject) ((List<?>) parts).get(mine.get(i))); } catch (Throwable ignore) {}'),
       'админ 10.68: подробности — только на карточках заявок клиента, по тому же порядку, что картинки');
     assert.ok(np.includes('try { IvaOrderPatch.ordOpenRow(a, IvaOrderPatch.admRow(part), false); } catch (Throwable ignore) {}   // 10.68: сразу подробности'),

@@ -1141,6 +1141,7 @@ public final class IvaOrderPatch {
                         else if (r != null && r.length > 1 && "200".equals(r[0])) arch = ordParseArch(r[1]);
                     } catch (Throwable ignore) {}
                     ordLoadProkat(a, ordOwnersOf(rows));
+                    IvaRentPatch.loadMine(a);          // 10.77: выданные инструменты — для таймера (нет SQL — без таймера)
                 }
                 final List<Map<String, String>> got = rows;
                 final java.util.Set<String> fa = arch;
@@ -1599,6 +1600,7 @@ public final class IvaOrderPatch {
             g.setTextSize(12f);
             c.addView(g);
         }
+        if (!archived) try { IvaRentPatch.clientCard(a, c, r); } catch (Throwable ignore) {}   // 10.77: таймер «дд.чч.мм»
         LinearLayout foot = new LinearLayout(a);
         foot.setOrientation(LinearLayout.HORIZONTAL);
         foot.setGravity(Gravity.CENTER_VERTICAL);
@@ -1773,9 +1775,12 @@ public final class IvaOrderPatch {
         List<Integer> mine = drill ? admDrillIdx(keys, String.valueOf(get(a, "admClientKey"))) : null;
         for (int i = 0; i < cards.size(); i++) {
             try { admPicCard(a, cards.get(i), rows.get(i), drill); } catch (Throwable ignore) {}
-            if (mine != null && i < mine.size())   // 10.68: нажатие на заявку — подробности
+            if (mine != null && i < mine.size()) {   // 10.68: нажатие на заявку — подробности
                 try { admMore(a, cards.get(i), (JSONObject) ((List<?>) parts).get(mine.get(i))); } catch (Throwable ignore) {}
+                try { IvaRentPatch.admCard(a, cards.get(i), (JSONObject) ((List<?>) parts).get(mine.get(i))); } catch (Throwable ignore) {}   // 10.77
+            }
         }
+        try { IvaRentPatch.admNeed(a, (List<?>) parts); } catch (Throwable ignore) {}   // 10.77: сроки выданных — для таймера
     }
 
     /** Номера частей (в admParts) одного клиента — в порядке штатных карточек его заявок. */
@@ -2128,6 +2133,7 @@ public final class IvaOrderPatch {
         String nice = r.containsKey(ORD_NICE) ? r.get(ORD_NICE) : ordNice(a, r.get("created_at"));
         final boolean adm = r.containsKey(ADM_ROW);           // 10.68: заявка у админа — вместо «Прокат» блок «Клиент»
         for (String[] f : adm ? admFields(r, nice) : ordFields(r, nice)) ordFieldView(a, body, f, "Статус".equals(f[0]));
+        try { IvaRentPatch.sheet(a, body, r, adm, archived); } catch (Throwable ignore) {}   // 10.77: «До конца аренды» — живой таймер
         if (adm) admClientBlock(a, body, r);
         final LinearLayout prokat = new LinearLayout(a);
         prokat.setOrientation(LinearLayout.VERTICAL);
