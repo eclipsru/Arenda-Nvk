@@ -699,6 +699,22 @@ try {
     assert.ok(has(dex14, 'Lru/prokatnvsk/app/PullScrollView;') && has(dex14, 'onRefresh'), 'classes.dex 10.14: нет PullScrollView.onRefresh');
     assert.ok(/eq\("заявки 10\.64: /.test(tp), 'IvaPatchTest: проверки 10.64');
   }
+  // 10.65 (просьба владельца 14.10.2026): «Доставка» в форме инструмента — выключатель вместо серой полосы
+  {
+    const ip = R('android/patches/IvaPatch.java'), tp = R('android/patches/test/IvaPatchTest.java');
+    const ds = ip.slice(ip.indexOf('// ───────────── 10.65: «Доставка»'));
+    assert.ok(ds.includes('delSwitch(a, "atDelToggle", "atDeliv");') && ds.includes('delSwitch(a, "teDelToggle", "teDeliv");')
+      && ds.includes('try { btn.performClick(); } catch (Throwable ignore) {}') && ds.includes('btn.setVisibility(View.GONE);')
+      && !/removeView|set\(a, "(at|te)Deliv"|paintDelToggle\(/.test(ds) && ds.includes('sw.setClickable(false);'),
+      'доставка 10.65: штатная кнопка только скрыта, переключает штатный код (atDeliv/teDeliv не пишем), выключатель — по штатному значению');
+    assert.ok(ip.includes('try { delSwitches(a); } catch (Throwable ignore) {}   // 10.65: «Доставка» — выключатель')
+      && ip.includes('try { delSwitches(a); } catch (Throwable ignore) {}   // 10.65: «Доставка» в форме инструмента — выключатель'),
+      'доставка 10.65: ставится из onTab и onHub (новых вставок в smali нет)');
+    for (const str of ['atDelToggle', 'teDelToggle', 'bg_field'])
+      assert.ok(has(arsc14, str), `resources.arsc 10.14: нет «${str}»`);
+    assert.ok(has(dex14, 'atDeliv') && has(dex14, 'teDeliv'), 'classes.dex 10.14: нет atDeliv / teDeliv');
+    assert.ok(/eq\("доставка 10\.65: /.test(tp), 'IvaPatchTest: проверки 10.65 (доставка)');
+  }
   // радиус — только вид: варианты встречаются лишь в объявлении и в шторке, на фильтр/подсчёт не влияют
   assert.equal((js45.match(/RADIUS_TITLES/g) || []).length, 3, 'IvaSearchPatch: радиус не должен участвовать в фильтре (только заготовка в шторке)');
   assert.ok(!/radius|радиус/i.test(js45.slice(js45.indexOf('static boolean extraMatch('), js45.indexOf('static long[] normRange('))), 'IvaSearchPatch: радиус попал в extraMatch');

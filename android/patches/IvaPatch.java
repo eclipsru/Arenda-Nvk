@@ -197,6 +197,7 @@ public final class IvaPatch {
 
     // ── 4. Кабинет админа (showAdmHub): объяснить, почему нет вкладки «Добавить» ──
     public static void onHub(Activity a) {
+        try { delSwitches(a); } catch (Throwable ignore) {}   // 10.65: «Доставка» — выключатель
         try {
             Object lim = get(a, "meLimited");
             if (!(lim instanceof Boolean) || !((Boolean) lim) || limitedShown) return;
@@ -402,6 +403,7 @@ public final class IvaPatch {
 
     public static void onTab(Activity a, String tab) {
         try { installBack(a); } catch (Throwable ignore) {}   // 10.63: системная «Назад» — внутри приложения
+        try { delSwitches(a); } catch (Throwable ignore) {}   // 10.65: «Доставка» в форме инструмента — выключатель
         try {
             String t = tab == null ? "" : tab;
             int orange = navColor(a, "orange", 0xffff9800);
@@ -759,5 +761,102 @@ public final class IvaPatch {
         else if (BACK_BUTTON.equals(act)) btn.performClick();
         else if (BACK_HOME.equals(act)) IvaNotifyPatch.tab(a, "home");
         else a.moveTaskToBack(true);
+    }
+
+    // ───────────── 10.65: «Доставка» в форме инструмента — выключатель вместо серой полосы (просьба владельца 14.10.2026) ─────────────
+    // В 10.14 кнопка atDelToggle (и teDelToggle в правке инструмента) раскрашивается штатным paintDelToggle только после
+    // нажатия — до этого это голая серая кнопка без текста, а после — оранжевая с обрезанной подписью. Теперь штатная кнопка
+    // скрыта (не удалена): на её месте строка в виде полей формы (bg_field) — «Доставка» с подписью и выключатель.
+    // Нажатие на строку нажимает штатную кнопку (performClick): штатный код сам меняет atDeliv/teDeliv и показывает
+    // или прячет поле «Доставка, ₽ за 1 км» — логика публикации и правки не меняется.
+    static int color(Activity a, String n, int f) { return IvaClientPatch.navColor(a, n, f); }
+    static int dp(Activity a, float v) { return IvaSearchPatch.dp(a, v); }
+    static android.graphics.drawable.Drawable drawable(Activity a, String n) { return IvaSearchPatch.drawable(a, n); }
+    static final String DEL_ROW_TAG = "iva_del_row", DEL_TITLE = "Доставка";
+    static final String DEL_SUB_ON = "Есть — укажите цену ниже, ₽ за 1 км (в одну сторону)";
+    static final String DEL_SUB_OFF = "Нет — только самовывоз. Включите, чтобы указать цену";
+
+    static String delSub(boolean on) { return on ? DEL_SUB_ON : DEL_SUB_OFF; }
+
+    static void delSwitches(Activity a) {
+        delSwitch(a, "atDelToggle", "atDeliv");
+        delSwitch(a, "teDelToggle", "teDeliv");
+    }
+
+    static void delSwitch(final Activity a, String btnField, final String flagField) {
+        Object bo = get(a, btnField);
+        if (!(bo instanceof View) || !(((View) bo).getParent() instanceof LinearLayout)) return;
+        final View btn = (View) bo;
+        LinearLayout form = (LinearLayout) btn.getParent();
+        final String tag = DEL_ROW_TAG + ":" + btnField;
+        View row = form.findViewWithTag(tag);
+        if (row == null) {
+            row = delRow(a, tag);
+            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2);
+            lp.topMargin = dp(a, 10);
+            form.addView(row, form.indexOfChild(btn) + 1, lp);
+            final View fr = row;
+            row.setOnClickListener(new View.OnClickListener() {
+                @Override public void onClick(View v) {
+                    try { btn.performClick(); } catch (Throwable ignore) {}   // штатный переключатель доставки
+                    delSync(a, fr, flagField);
+                }
+            });
+        }
+        btn.setVisibility(View.GONE);
+        delSync(a, row, flagField);
+    }
+
+    static View delRow(Activity a, String tag) {
+        LinearLayout row = new LinearLayout(a);
+        row.setTag(tag);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setGravity(Gravity.CENTER_VERTICAL);
+        android.graphics.drawable.Drawable bg = drawable(a, "bg_field");
+        if (bg != null) row.setBackground(bg);
+        row.setPadding(dp(a, 14), dp(a, 12), dp(a, 10), dp(a, 12));
+        row.setClickable(true);
+        LinearLayout col = new LinearLayout(a);
+        col.setOrientation(LinearLayout.VERTICAL);
+        TextView t = new TextView(a);
+        t.setText(DEL_TITLE);
+        t.setTextColor(color(a, "text", 0xfff2f4f8));
+        t.setTextSize(15f);
+        col.addView(t, new LinearLayout.LayoutParams(-2, -2));
+        TextView sub = new TextView(a);
+        sub.setTag(tag + ":sub");
+        sub.setTextColor(color(a, "gray", 0xff9aa1b0));
+        sub.setTextSize(12f);
+        LinearLayout.LayoutParams sl = new LinearLayout.LayoutParams(-1, -2);
+        sl.topMargin = dp(a, 2);
+        col.addView(sub, sl);
+        row.addView(col, new LinearLayout.LayoutParams(0, -2, 1f));
+        android.widget.Switch sw = new android.widget.Switch(a);
+        sw.setTag(tag + ":sw");
+        sw.setClickable(false);          // нажатие — на всю строку (иначе выключатель и штатное значение разойдутся)
+        sw.setFocusable(false);
+        LinearLayout.LayoutParams wl = new LinearLayout.LayoutParams(-2, -2);
+        wl.leftMargin = dp(a, 10);
+        row.addView(sw, wl);
+        return row;
+    }
+
+    /** Выключатель и подпись — по штатному значению atDeliv / teDeliv. */
+    static void delSync(Activity a, View row, String flagField) {
+        Object f = get(a, flagField);
+        boolean on = f instanceof Boolean && (Boolean) f;
+        Object tg = row.getTag();
+        View sub = row.findViewWithTag(tg + ":sub");
+        if (sub instanceof TextView) ((TextView) sub).setText(delSub(on));
+        View sw = row.findViewWithTag(tg + ":sw");
+        if (sw instanceof android.widget.Switch) {
+            android.widget.Switch s = (android.widget.Switch) sw;
+            s.setChecked(on);
+            try {
+                int orange = color(a, "orange", 0xffff8f1f), gray = color(a, "gray", 0xff9aa1b0);
+                s.setThumbTintList(android.content.res.ColorStateList.valueOf(on ? orange : gray));
+                s.setTrackTintList(android.content.res.ColorStateList.valueOf(on ? (orange & 0x00ffffff) | 0x80000000 : color(a, "line", 0xff262b35)));
+            } catch (Throwable ignore) {}   // Android 5: без раскраски — системный вид
+        }
     }
 }

@@ -656,6 +656,9 @@ public class IvaPatchTest {
                 eq("заявки 10.63: архив — подписи", IvaOrderPatch.ARCH_TITLE + "|" + IvaOrderPatch.ARCH_ON + "|" + IvaOrderPatch.ARCH_OFF + "|" + IvaOrderPatch.ARCH_ONLY_CLOSED,
                     "Архив заявок|В архив|Вернуть из архива|В архив можно убрать только закрытую заявку");
             }
+            // 10.65: «Доставка» в форме инструмента — выключатель
+            eq("доставка 10.65: подпись по штатному значению", IvaPatch.delSub(true) + "|" + IvaPatch.delSub(false) + "|" + IvaPatch.DEL_TITLE,
+                "Есть — укажите цену ниже, ₽ за 1 км (в одну сторону)|Нет — только самовывоз. Включите, чтобы указать цену|Доставка");
             // 10.64: «Заявки» — вкладки «Активные / Закрытые», всё нажимается
             eq("заявки 10.64: активные — новые и в аренде, закрытые — закрытые; архив — нигде",
                 IvaOrderPatch.ordOnTab(false, false, 0) + "|" + IvaOrderPatch.ordOnTab(true, false, 0) + "|" + IvaOrderPatch.ordOnTab(true, false, 1)
