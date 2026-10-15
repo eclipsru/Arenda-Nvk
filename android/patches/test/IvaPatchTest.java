@@ -1405,6 +1405,167 @@ public class IvaPatchTest {
                 eq("автоподбор 10.81: название каждого вида подбирает сам вид", kwOkt + "/" + kwRk.size(), "159/159");
             } catch (Throwable kwE) { eq("автоподбор 10.81: настоящий словарь", "исключение " + kwE, ""); }
         }
+        // ───── 10.82: справочник моделей (IvaModelPatch) — то же, что assets/models.js (tests/model-search.cjs) ─────
+        {
+            java.util.LinkedHashMap<String, String> mdA = new java.util.LinkedHashMap<String, String>();
+            java.util.LinkedHashMap<String, String> mdB = new java.util.LinkedHashMap<String, String>();
+            java.util.LinkedHashMap<String, String> mdC = new java.util.LinkedHashMap<String, String>();
+            mdC.put("power", "780"); mdC.put("energy", "2.4");
+            java.util.LinkedHashMap<String, String>[] mdR = IvaModelPatch.specsFill(mdA, mdB, mdC);
+            eq("модели 10.82: пустая форма заполняется", mdR[0] + "|" + mdR[1], "{power=780, energy=2.4}|{power=780, energy=2.4}");
+            mdA.put("power", "800"); mdA.put("energy", "2.4");
+            mdB.put("power", "780"); mdB.put("energy", "2.4");
+            mdC = new java.util.LinkedHashMap<String, String>(); mdC.put("power", "830"); mdC.put("weight", "2.9");
+            mdR = IvaModelPatch.specsFill(mdA, mdB, mdC);
+            eq("модели 10.82: ручная мощность остаётся, наша энергия убирается, вес подставляется", mdR[0] + "|" + mdR[1], "{power=800, energy=, weight=2.9}|{weight=2.9}");
+            mdA = new java.util.LinkedHashMap<String, String>(); mdA.put("power", "780"); mdA.put("src", "Сеть 220 В");
+            mdB = new java.util.LinkedHashMap<String, String>(); mdB.put("power", "780");
+            mdC = new java.util.LinkedHashMap<String, String>(); mdC.put("power", "830");
+            mdR = IvaModelPatch.specsFill(mdA, mdB, mdC);
+            eq("модели 10.82: наше прошлое значение меняется на новое, ручное поле цело", mdR[0] + "|" + mdR[1], "{power=830, src=Сеть 220 В}|{power=830}");
+            mdA = new java.util.LinkedHashMap<String, String>(); mdA.put("power", "");
+            mdR = IvaModelPatch.specsFill(mdA, mdB, new java.util.LinkedHashMap<String, String>());
+            eq("модели 10.82: модель без характеристик ничего не ставит", mdR[0] + "|" + mdR[1], "{power=}|{}");
+            mdR = IvaModelPatch.specsFill(null, null, null);
+            eq("модели 10.82: пустые аргументы", mdR[0] + "|" + mdR[1], "{}|{}");
+            IvaModelPatch.Model mdHr = new IvaModelPatch.Model(1, "rotary-sds-plus", "Makita", "HR2470", "Перфоратор Makita HR2470", null);
+            IvaModelPatch.Model mdGbh = new IvaModelPatch.Model(2, "rotary-sds-plus", "Bosch", "GBH 2-26", "Перфоратор Bosch GBH 2-26", null);
+            eq("модели 10.82: модель ещё подходит к названию (код слитно)",
+                IvaModelPatch.stillFits("Перфоратор Makita HR2470", mdHr) + "," + IvaModelPatch.stillFits("Макита hr-2470 б/у", mdHr) + ","
+                + IvaModelPatch.stillFits("Перфоратор Makita HR2450", mdHr) + "," + IvaModelPatch.stillFits("Перфоратор Makita", mdHr) + ","
+                + IvaModelPatch.stillFits("Bosch GBH2-26", mdGbh) + "," + IvaModelPatch.stillFits("GBH 2 26 DRE", mdGbh) + ","
+                + IvaModelPatch.stillFits("x", null) + "," + IvaModelPatch.stillFits("x", new IvaModelPatch.Model(3, "", "", "", "", null)),
+                "true,true,false,false,true,true,false,false");
+            eq("модели 10.82: числа как в JSON", IvaModelPatch.numText("2.40") + "|" + IvaModelPatch.numText("007") + "|" + IvaModelPatch.numText("780") + "|"
+                + IvaModelPatch.numText("1000") + "|" + IvaModelPatch.numText("0.0") + "|" + IvaModelPatch.numText("-1.50"), "2.4|7|780|1000|0|-1.5");
+            eq("модели 10.82: разбор характеристик", IvaModelPatch.parseFlat("{\"src\":\"Аккумулятор\", \"volt\" : 18,\"energy\":2.40,\"x\":null,\"q\":\"a\\\"b\\u0436\",\"ok\":true}").toString(),
+                "{src=Аккумулятор, volt=18, energy=2.4, q=a\"bж, ok=true}");
+            eq("модели 10.82: плохой JSON — пусто", IvaModelPatch.parseFlat("{\"a\":") + "|" + IvaModelPatch.parseFlat("[1]") + "|" + IvaModelPatch.parseFlat(null) + "|" + IvaModelPatch.parseFlat("{}"), "{}|{}|{}|{}");
+            eq("модели 10.82: к записи вида дописываются модель и характеристики",
+                IvaModelPatch.mergeBody("{\"kind\":\"drill\"}", IvaModelPatch.extraBody(12, "{\"power\":780}")) + " | " + IvaModelPatch.mergeBody("{\"kind\":\"drill\"}", IvaModelPatch.extraBody(0, null))
+                + " | " + IvaModelPatch.mergeBody("{\"kind\":\"drill\"}", IvaModelPatch.extraBody(0, "{\"src\":\"Бензин\"}")) + " | " + IvaModelPatch.mergeBody(null, "x")
+                + " | " + IvaModelPatch.extraBody(7, null),
+                "{\"kind\":\"drill\",\"model_id\":12,\"specs\":{\"power\":780}} | {\"kind\":\"drill\"} | {\"kind\":\"drill\",\"specs\":{\"src\":\"Бензин\"}} | null | \"model_id\":7");
+            eq("модели 10.82: строка в JSON экранируется", IvaModelPatch.jsonStr("a\"b\\c\nd\u0001"), "\"a\\\"b\\\\c\\nd\\u0001\"");
+            eq("модели 10.82: запрос моделей — страницами по 1000, только активные", IvaModelPatch.modelsPath(2000),
+                "/rest/v1/iva_models?select=id,kind,brand,model,title,specs&active=eq.true&order=id.asc&limit=1000&offset=2000");
+            eq("модели 10.82: надписи", IvaModelPatch.MODEL_LABEL + "|" + IvaModelPatch.MODEL_HINT + "|" + IvaModelPatch.SPECS_LABEL + "|"
+                + new IvaModelPatch.Field("k", "power", "Мощность", "Вт", "num", null, 1).label() + "|" + new IvaModelPatch.Field("k", "src", "Питание", "", "choice", null, 1).label() + "|"
+                + IvaModelPatch.modelText(mdGbh) + "|" + IvaModelPatch.modelText(null), "Модель|Модель (необязательно)|Характеристики|Мощность, Вт|Питание|Bosch GBH 2-26|");
+            java.util.List<IvaModelPatch.Model> mdMini = new java.util.ArrayList<IvaModelPatch.Model>();
+            mdMini.add(new IvaModelPatch.Model(1, "k", "Denzel", "A1", "X Denzel A1", null)); mdMini.add(new IvaModelPatch.Model(2, "k", "DeWalt", "B2", "X DeWalt B2", null));
+            mdMini.add(new IvaModelPatch.Model(3, "k", "AEG", "C3", "X AEG C3", null)); mdMini.add(new IvaModelPatch.Model(4, "z", "Bosch", "D4", "X Bosch D4", null));
+            eq("модели 10.82: бренды без учёта регистра (Denzel раньше DeWalt), только свой вид",
+                IvaModelPatch.brands(IvaModelPatch.index(mdMini, new java.util.LinkedHashMap<String, String[]>(), null), "k").toString(), "[AEG, Denzel, DeWalt]");
+            try {
+                java.nio.file.Path mdMig = java.nio.file.Paths.get("supabase/migrations");
+                java.util.List<IvaModelPatch.Model> mdMs = new java.util.ArrayList<IvaModelPatch.Model>();
+                java.util.List<String> mdSql = new java.util.ArrayList<String>();
+                for (int mdN = 1; java.nio.file.Files.exists(mdMig.resolve("20261017_models_data_" + mdN + ".sql")); mdN++)
+                    mdSql.add(new String(java.nio.file.Files.readAllBytes(mdMig.resolve("20261017_models_data_" + mdN + ".sql")), "UTF-8"));
+                java.util.regex.Pattern mdTp = java.util.regex.Pattern.compile("(?m)^ {2}\\('((?:[^']|'')*)', '((?:[^']|'')*)', '((?:[^']|'')*)', '((?:[^']|'')*)', '((?:[^']|'')*)'\\)");
+                long mdId = 1;
+                java.util.List<String> mdRaw = new java.util.ArrayList<String>();
+                for (String mdS : mdSql) {
+                    java.util.regex.Matcher mdM = mdTp.matcher(mdS);
+                    while (mdM.find()) {
+                        String mdJs = mdM.group(5).replace("''", "'");
+                        mdRaw.add(mdJs);
+                        mdMs.add(new IvaModelPatch.Model(mdId++, mdM.group(1), mdM.group(2).replace("''", "'"), mdM.group(3).replace("''", "'"), mdM.group(4).replace("''", "'"), IvaModelPatch.parseFlat(mdJs)));
+                    }
+                }
+                String mdSch = new String(java.nio.file.Files.readAllBytes(mdMig.resolve("20261017_models.sql")), "UTF-8");
+                java.util.regex.Matcher mdNm = java.util.regex.Pattern.compile("\\((\\d+) моделей\\)").matcher(mdSch);
+                eq("модели 10.82: модели из SQL — столько, сколько в шапке", mdNm.find() && mdMs.size() >= 2000 && Integer.parseInt(mdNm.group(1)) == mdMs.size() ? "да" : mdMs.size() + "", "да");
+                String mdBs = mdSch.split("3\\. Бренды")[1].split("4\\. Характеристики")[0];
+                java.util.LinkedHashMap<String, String[]> mdBr = new java.util.LinkedHashMap<String, String[]>();
+                java.util.regex.Matcher mdBm = java.util.regex.Pattern.compile("(?m)^ {2}\\('((?:[^']|'')*)', (?:array\\[(.*)\\]::text\\[\\]|'\\{\\}'::text\\[\\])\\)").matcher(mdBs);
+                while (mdBm.find()) {
+                    String[] mdAl = mdBm.group(2) == null ? new String[0] : mdBm.group(2).split(", ");
+                    for (int mdJ = 0; mdJ < mdAl.length; mdJ++) mdAl[mdJ] = mdAl[mdJ].replaceAll("^'|'$", "").replace("''", "'");
+                    mdBr.put(mdBm.group(1).replace("''", "'"), mdAl);
+                }
+                String mdFs = mdSch.split("create temp table _f")[1];
+                java.util.List<IvaModelPatch.Field> mdFl = new java.util.ArrayList<IvaModelPatch.Field>();
+                java.util.regex.Matcher mdFm = java.util.regex.Pattern.compile("(?m)^ {2}\\('([a-z0-9-]+)', '([a-z0-9]+)', '((?:[^']|'')*)', '((?:[^']|'')*)', '(num|choice|text)', (?:array\\[(.*)\\]::text\\[\\]|'\\{\\}'::text\\[\\]), (\\d+)\\)").matcher(mdFs);
+                java.util.Set<String> mdFk = new java.util.HashSet<String>();
+                while (mdFm.find()) {
+                    String[] mdOp = mdFm.group(6) == null ? new String[0] : mdFm.group(6).split("', '");
+                    for (int mdJ = 0; mdJ < mdOp.length; mdJ++) mdOp[mdJ] = mdOp[mdJ].replaceAll("^'|'$", "").replace("''", "'");
+                    mdFl.add(new IvaModelPatch.Field(mdFm.group(1), mdFm.group(2), mdFm.group(3).replace("''", "'"), mdFm.group(4).replace("''", "'"), mdFm.group(5), mdOp, Integer.parseInt(mdFm.group(7))));
+                    mdFk.add(mdFm.group(1));
+                }
+                String mdWs = new String(java.nio.file.Files.readAllBytes(mdMig.resolve("20261016_kind_words.sql")), "UTF-8");
+                java.util.Map<String, String[]> mdW = new java.util.HashMap<String, String[]>();
+                java.util.regex.Matcher mdWm = java.util.regex.Pattern.compile("(?m)^\\s*\\('([a-z0-9-]+)', array\\[(.*)\\]::text\\[\\]\\)").matcher(mdWs);
+                while (mdWm.find()) {
+                    String[] mdP = mdWm.group(2).split(",");
+                    for (int mdJ = 0; mdJ < mdP.length; mdJ++) mdP[mdJ] = mdP[mdJ].trim().replaceAll("^'|'$", "");
+                    mdW.put(mdWm.group(1), mdP);
+                }
+                eq("модели 10.82: бренды, слова видов, поля 159 видов", (mdBr.size() >= 80) + "/" + mdW.size() + "/" + mdFk.size(), "true/159/159");
+                int mdLost = 0, mdForeign = 0;
+                for (int mdI = 0; mdI < mdMs.size(); mdI++) {
+                    IvaModelPatch.Model mdM = mdMs.get(mdI);
+                    java.util.List<IvaModelPatch.Field> mdF = IvaModelPatch.fieldsFor(mdFl, mdM.kind);
+                    for (String mdK : mdM.specs.keySet()) { boolean mdHas = false; for (IvaModelPatch.Field mdX : mdF) if (mdX.key.equals(mdK)) mdHas = true; if (!mdHas) mdForeign++; }
+                    String mdCl = IvaModelPatch.specsClean(mdM.specs, mdF);
+                    if (mdM.specs.isEmpty() ? mdCl != null : !IvaModelPatch.parseFlat(mdCl).equals(mdM.specs)) mdLost++;
+                    if (mdCl != null && !IvaModelPatch.parseFlat(mdRaw.get(mdI)).equals(IvaModelPatch.parseFlat(mdCl))) mdLost++;
+                }
+                eq("модели 10.82: характеристики моделей — поля своего вида, очистка ничего не теряет", mdForeign + "/" + mdLost, "0/0");
+                IvaModelPatch.Index mdIx = IvaModelPatch.index(mdMs, mdBr, mdW);
+                eq("модели 10.82: индекс по всем моделям", mdIx.list.size() == mdMs.size(), true);
+                int mdOk = 0, mdTot = 0;
+                StringBuilder mdBad = new StringBuilder();
+                for (String mdLine : new String(java.nio.file.Files.readAllBytes(java.nio.file.Paths.get("tests/model-search-cases.txt")), "UTF-8").split("\n")) {
+                    if (mdLine.trim().isEmpty() || mdLine.startsWith("#")) continue;
+                    String[] mdC2 = mdLine.split("\\|", -1);
+                    mdTot++;
+                    java.util.List<IvaModelPatch.Model> mdH = IvaModelPatch.search(mdC2[0], mdIx, mdC2[1], mdC2[2], 8);
+                    boolean mdGood = true;
+                    if (!mdC2[3].isEmpty() && !"-".equals(mdC2[3])) mdGood = !mdH.isEmpty() && mdH.get(0).title.equals(mdC2[3]);
+                    if ("-".equals(mdC2[3])) mdGood = mdH.isEmpty();
+                    if (mdC2.length > 4 && !mdC2[4].isEmpty() && mdH.size() != Integer.parseInt(mdC2[4])) mdGood = false;
+                    for (IvaModelPatch.Model mdX : mdH) {
+                        if (!mdC2[1].isEmpty() && !mdX.kind.equals(mdC2[1])) mdGood = false;
+                        if (!mdC2[2].isEmpty() && !mdX.brand.equals(mdC2[2])) mdGood = false;
+                    }
+                    if (mdGood) mdOk++;
+                    else if (mdBad.length() < 400) mdBad.append(mdC2[0]).append(" → ").append(mdH.isEmpty() ? "—" : mdH.get(0).title).append(" (").append(mdH.size()).append("); ");
+                }
+                eq("модели 10.82: общие случаи tests/model-search-cases.txt (" + mdTot + ") — как на сайте", mdOk == mdTot && mdTot >= 40 ? "все" : mdBad.toString(), "все");
+                java.util.Set<String> mdSeen = new java.util.HashSet<String>(), mdDup = new java.util.HashSet<String>();
+                for (IvaModelPatch.Model mdX : mdMs) if (!mdSeen.add(mdX.title)) mdDup.add(mdX.title);
+                int mdSelf = 0, mdPair = 0;
+                StringBuilder mdBad2 = new StringBuilder();
+                for (IvaModelPatch.Model mdX : mdMs) {
+                    java.util.List<IvaModelPatch.Model> mdH = IvaModelPatch.search(mdX.title, mdIx, "", "", 8);
+                    if (mdDup.contains(mdX.title) ? mdH.contains(mdX) : !mdH.isEmpty() && mdH.get(0) == mdX) mdSelf++;
+                    else if (mdBad2.length() < 300) mdBad2.append(mdX.title).append("; ");
+                    if (IvaModelPatch.search(mdX.brand + " " + mdX.model, mdIx, "", "", 8).contains(mdX)) mdPair++;
+                }
+                eq("модели 10.82: название каждой модели находит её саму (" + mdMs.size() + ")", mdSelf == mdMs.size() ? "все" : mdBad2.toString(), "все");
+                eq("модели 10.82: бренд + модель находит модель среди подсказок", mdPair + "/" + mdMs.size(), mdMs.size() + "/" + mdMs.size());
+                java.util.List<String> mdBl = IvaModelPatch.brands(mdIx, "rotary-sds-plus");
+                java.util.List<String> mdSorted = new java.util.ArrayList<String>(new java.util.LinkedHashSet<String>(mdBl));
+                java.util.Collections.sort(mdSorted, new java.util.Comparator<String>() { public int compare(String x, String y) { return x.toLowerCase().compareTo(y.toLowerCase()); } });
+                eq("модели 10.82: бренды вида по алфавиту, без повторов; у вида без моделей брендов нет",
+                    (mdBl.size() > 5 && mdBl.equals(mdSorted) && mdBl.contains("Makita")) + "," + IvaModelPatch.brands(mdIx, "scaffold").size(), "true,0");
+                java.util.Map<String, String> mdV = new java.util.HashMap<String, String>();
+                mdV.put("src", "Аккумулятор"); mdV.put("volt", "18"); mdV.put("power", " 780 "); mdV.put("energy", "2,4"); mdV.put("weight", "abc"); mdV.put("zzz", "1");
+                java.util.List<IvaModelPatch.Field> mdRf = IvaModelPatch.fieldsFor(mdFl, "rotary-sds-plus");
+                eq("модели 10.82: числа с запятой, лишние и плохие поля отбрасываются (как на сайте)", IvaModelPatch.specsClean(mdV, mdRf),
+                    "{\"src\":\"Аккумулятор\",\"volt\":18,\"power\":780,\"energy\":2.4}");
+                java.util.Map<String, String> mdV2 = new java.util.HashMap<String, String>();
+                mdV2.put("src", "Бензин");
+                java.util.Map<String, String> mdV3 = new java.util.HashMap<String, String>();
+                mdV3.put("pipe", "  20–63 ");
+                eq("модели 10.82: чужой вариант и пусто → null; строка — без пробелов по краям",
+                    IvaModelPatch.specsClean(mdV2, mdRf) + "|" + IvaModelPatch.specsClean(new java.util.HashMap<String, String>(), mdRf) + "|" + IvaModelPatch.specsClean(null, mdRf)
+                    + "|" + IvaModelPatch.specsClean(mdV3, IvaModelPatch.fieldsFor(mdFl, "pp-welder")), "null|null|null|{\"pipe\":\"20–63\"}");
+            } catch (Throwable mdE) { eq("модели 10.82: настоящий справочник", "исключение " + mdE, ""); }
+        }
         if (fail > 0) { System.out.println("ошибок: " + fail); System.exit(1); }
         System.out.println("все проверки IvaPatch пройдены");
     }

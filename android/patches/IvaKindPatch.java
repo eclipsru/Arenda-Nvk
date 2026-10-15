@@ -374,6 +374,7 @@ final class IvaKindPatch {
         try { ensureLoaded(a); } catch (Throwable ignore) {}
         try { if ("tooledit".equals(tab)) openedEdit(a); } catch (Throwable ignore) {}
         try { refreshRows(a); } catch (Throwable ignore) {}
+        try { IvaModelPatch.onTab(a, tab); } catch (Throwable ignore) {}   // 10.82: опубликовали — модель и характеристики заново
         try { consumePending(a, tab); } catch (Throwable ignore) {}
     }
 
@@ -441,6 +442,7 @@ final class IvaKindPatch {
         }
         paint(a, k, row);
         if (k == 0) watchName(a);
+        if (k == 0) IvaModelPatch.refresh(a);                         // 10.82: «Модель» и «Характеристики» под видом
     }
 
     // ───── 10.81: автоподбор в форме «Добавить» ─────
@@ -501,7 +503,25 @@ final class IvaKindPatch {
         String curCat = str(IvaClientPatch.get(a, FORM[0][1])), curSub = str(IvaClientPatch.get(a, FORM[0][3]));
         String[] p = plan(curCat, curSub, sel[0], auto[0], auto[1], auto[2], g);
         if (p == null) return;
-        TextView catV = (TextView) co, subV = (TextView) so;
+        applyPlan(a, p, curCat, curSub, catTitle, subTitle, (TextView) co, (TextView) so);
+    }
+
+    /** 10.82: выбрали модель из справочника — категория, подкатегория и вид модели (как штатный выбор). Считается
+     *  подставленным нами: новое название может его сменить, выбранное руками — нет. */
+    static void setFromModel(Activity a, String cat, String sub, String kind) {
+        Object co = IvaClientPatch.get(a, FORM[0][0]), so = IvaClientPatch.get(a, FORM[0][2]);
+        if (!(co instanceof TextView) || !(so instanceof TextView) || cat == null || cat.isEmpty()) return;
+        String catTitle = nativeTitle(a, "cats", null, cat);
+        if (catTitle == null) return;
+        String subTitle = sub == null || sub.isEmpty() ? "" : nativeTitle(a, "subcats", cat, sub);
+        if (subTitle == null) { sub = ""; subTitle = ""; }
+        String k = sub == null || sub.isEmpty() || !fits(list(), cat, sub, kind) ? "" : kind;
+        String curCat = str(IvaClientPatch.get(a, FORM[0][1])), curSub = str(IvaClientPatch.get(a, FORM[0][3]));
+        applyPlan(a, new String[]{cat, sub == null ? "" : sub, k}, curCat, curSub, catTitle, subTitle, (TextView) co, (TextView) so);
+    }
+
+    /** Поставить в форме «Добавить» {категория, подкатегория, вид} так же, как штатный выбор из списков. */
+    static void applyPlan(Activity a, String[] p, String curCat, String curSub, String catTitle, String subTitle, TextView catV, TextView subV) {
         int text = IvaPatch.color(a, "text", 0xfff2f4f8), hint = IvaPatch.color(a, "gray2", 0xff6b7080);
         hideDrop(a, "atCatSug"); hideDrop(a, "atSubSug");
         if (!p[0].equals(curCat)) {                                  // как штатный выбор категории
@@ -621,6 +641,7 @@ final class IvaKindPatch {
                 View root = v.getRootView();
                 View row = root == null ? null : root.findViewWithTag(tag);
                 if (row != null) paint(a, k, row);
+                if (k == 0) try { IvaModelPatch.refresh(a); } catch (Throwable ignore) {}
             }
         });
         drop.addView(t, new LinearLayout.LayoutParams(-1, -2));
@@ -650,11 +671,14 @@ final class IvaKindPatch {
     static volatile long pendingAt = 0;
     static volatile int pendingForm = -1;
     static volatile String pendingKind = "", pendingId = "", pendingName = "", pendingEmail = "";
+    static volatile String pendingExtra = "";            // 10.82: ,"model_id":…,"specs":{…} — только форма «Добавить»
 
     /** Нажали «Опубликовать» (k=0) / «Сохранить» (k=1): запоминаем, что записать, если штатное сохранение удастся. */
     static void onSaveTouch(Activity a, int k) {
         try {
             pendingAt = 0;
+            pendingExtra = "";
+            if (k == 0) IvaModelPatch.onSaveTouch();
             if (kinds == null) return;                                   // SQL не применён — вида нет
             String name = "";
             Object no = IvaClientPatch.get(a, FORM[k][5]);
@@ -671,6 +695,7 @@ final class IvaKindPatch {
                 pendingName = name;
                 pendingEmail = str(IvaClientPatch.get(a, "userEmail"));
                 if (pendingEmail.isEmpty()) return;
+                try { pendingExtra = IvaModelPatch.saveExtra(a, kind, name); } catch (Throwable e) { pendingExtra = ""; }   // 10.82
             }
             pendingKind = kind;
             pendingForm = k;
@@ -684,7 +709,7 @@ final class IvaKindPatch {
         pendingAt = 0;
         if (!write) return;
         final int k = pendingForm;
-        final String kind = pendingKind, id = pendingId, name = pendingName, email = pendingEmail;
+        final String kind = pendingKind, id = pendingId, name = pendingName, email = pendingEmail, extra = k == 0 ? pendingExtra : "";
         final String body = patchBody(kind);
         if (body == null) return;
         if (k == 0) sel[0] = "";                                         // опубликовано — форма «Добавить» начинается заново
@@ -703,7 +728,10 @@ final class IvaKindPatch {
                         target = clean(o.optString("id", ""));
                     }
                     if (target.isEmpty()) return;
-                    String[] p = IvaClientPatch.apiCall(a, patchPath(target), "PATCH", body, true);
+                    String full = IvaModelPatch.mergeBody(body, extra);
+                    String[] p = IvaClientPatch.apiCall(a, patchPath(target), "PATCH", full, true);
+                    if (!full.equals(body) && (p == null || p[0] == null || !p[0].startsWith("2")))   // модель не приняли — хотя бы вид
+                        p = IvaClientPatch.apiCall(a, patchPath(target), "PATCH", body, true);
                     if (p != null && p[0] != null && p[0].startsWith("2")) {
                         final String tid = target;
                         a.runOnUiThread(new Runnable() {

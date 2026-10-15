@@ -29,6 +29,7 @@ makita 9558|||Болгарка Makita 9558HN|2
 лестница алюмет 5307|||Лестница Алюмет 5307|1
 glm 50|||Лазерный дальномер Bosch GLM 50 C|
 перф makita|||Перфоратор Makita M8700|8
+makita бош|||-|0
 ушм makita|||Болгарка Makita 9069|
 отбойник makita|||Отбойный молоток Makita DHK180|
 makita hm|||Бетонолом Makita HM1400|

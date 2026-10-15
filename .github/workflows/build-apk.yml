@@ -92,6 +92,10 @@ jobs:
             supabase/migrations/20261015_category_tree.sql
             supabase/migrations/20261016_kind_words.sql
             tests/kind-guess-cases.txt
+            # 10.82: IvaPatchTest проверяет поиск моделей на настоящем справочнике и общих случаях (как сайт)
+            supabase/migrations/20261017_models.sql
+            supabase/migrations/20261017_models_data_*.sql
+            tests/model-search-cases.txt
           sparse-checkout-cone-mode: false
 
       - name: Инструменты
@@ -113,7 +117,7 @@ jobs:
           mkdir -p "$C"
           # Ошибки компилятора и проваленные проверки дублируются в аннотации задачи.
           fail() { grep -E "$2" "$1" 2>/dev/null | while IFS= read -r l; do echo "::error title=$3::$l"; done; exit 1; }
-          if ! javac -encoding UTF-8 -source 8 -target 8 -nowarn -bootclasspath "$ANDROID_JAR" -d "$C" android/patches/IvaPatch.java android/patches/IvaClientPatch.java android/patches/IvaSearchPatch.java android/patches/IvaChatPatch.java android/patches/IvaOrderPatch.java android/patches/IvaNotifyPatch.java android/patches/IvaReviewPatch.java android/patches/IvaPushPatch.java android/patches/IvaRentPatch.java android/patches/IvaKindPatch.java 2>&1 | tee "$RUNNER_TEMP/j1.log"; then
+          if ! javac -encoding UTF-8 -source 8 -target 8 -nowarn -bootclasspath "$ANDROID_JAR" -d "$C" android/patches/IvaPatch.java android/patches/IvaClientPatch.java android/patches/IvaSearchPatch.java android/patches/IvaChatPatch.java android/patches/IvaOrderPatch.java android/patches/IvaNotifyPatch.java android/patches/IvaReviewPatch.java android/patches/IvaPushPatch.java android/patches/IvaRentPatch.java android/patches/IvaKindPatch.java android/patches/IvaModelPatch.java 2>&1 | tee "$RUNNER_TEMP/j1.log"; then
             fail "$RUNNER_TEMP/j1.log" 'error:|ошибка:' 'Компиляция IvaPatch'
           fi
           T="$RUNNER_TEMP/tcls"

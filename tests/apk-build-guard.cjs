@@ -783,7 +783,7 @@ try {
       && sql.includes('and k.words is distinct from v.words;') && sql.includes('--   alter table public.iva_kinds drop column if exists words;')
       && (sql.match(/^\s*\('[a-z0-9-]+', array\[/gm) || []).length === 159 && !/\bdrop table\b|\bdelete from\b|\btruncate\b/i.test(sql.split('Откат')[0]),
       'автоподбор 10.81: SQL — столбец words для 159 видов, повтор безопасен, ничего не удаляет, откат в конце');
-    assert.ok(chk.includes('tools/kind-words-stand.py') && / kind-guess; do/.test(chk) && / kind-guess-browser; do/.test(chk),
+    assert.ok(chk.includes('tools/kind-words-stand.py') && / kind-guess( model-search)?; do/.test(chk) && / kind-guess-browser; do/.test(chk),
       'автоподбор 10.81: стенд SQL, тест алгоритма и браузерный тест — в check.sh');
     // 2. приложение: слова — отдельным запросом (старый запрос видов не меняется: нет столбца — только без автоподбора)
     assert.ok(kp.includes('static final String WORDS_PATH = "/rest/v1/iva_kinds?select=key,words&active=eq.true";') && !/KINDS_PATH = "[^"]*words/.test(kp),
@@ -801,7 +801,7 @@ try {
     assert.ok(pl.includes('if (!mayFill(cc, autoCat) && !cc.equals(g.cat)) return null;') && kg.includes('if (!ivaKindMayFill(cc, last.cat) && cc !== g.cat) return null;'),
       'автоподбор 10.81: категорию, выбранную руками, не меняем (приложение и сайт)');
     // 4. форма «Добавить»: свой слушатель названия (штатный не заменяется), пауза, как штатный выбор; правка — без автоподбора
-    const wn = fnx(kp, 'watchName'), af = fnx(kp, 'autofill');
+    const wn = fnx(kp, 'watchName'), af = fnx(kp, 'autofill') + fnx(kp, 'applyPlan');   // 10.82: подстановка вынесена в applyPlan
     assert.ok(wn.includes('Object no = IvaClientPatch.get(a, FORM[0][5]);') && wn.includes('nv.addTextChangedListener(') && wn.includes('if (my != nameSeq) return;')
       && wn.includes('}, AUTO_DELAY_MS);') && !/setOnClickListener|setText\(|setOnFocusChangeListener/.test(wn) && fnx(kp, 'refreshRow').includes('if (k == 0) watchName(a);'),
       'автоподбор 10.81: слушатель названия добавляется (штатный не трогаем), с паузой, только в форме «Добавить»');
@@ -813,7 +813,7 @@ try {
     assert.ok(kp.includes('static final String SUB_HINT = "Подкатегория (необязательно)";') && has(dex14, 'Подкатегория (необязательно)')
       && has(dex14, 'atCatSug') && has(dex14, 'atSubSug') && has(dex14, 'atName'),
       'автоподбор 10.81: штатные поля и текст пустой подкатегории есть в 10.14');
-    assert.ok(!/IvaKindPatch|kind/i.test(ap) && /IvaRentPatch\.java android\/patches\/IvaKindPatch\.java 2>&1/.test(wf),
+    assert.ok(!/IvaKindPatch|kind/i.test(ap) && /IvaRentPatch\.java android\/patches\/IvaKindPatch\.java (android\/patches\/IvaModelPatch\.java )?2>&1/.test(wf),
       'автоподбор 10.81: новых вставок в smali и новых файлов нет');
     // 5. сайт: один модуль, вид пишется только когда справочник видов есть в базе
     assert.ok(nw.includes('<script src="assets/kind-guess.js?v=20261016-kind"></script>') && cab.includes('<script src="assets/kind-guess.js?v=20261016-kind"></script>')
@@ -889,7 +889,7 @@ try {
     const sql = R('supabase/migrations/20261015_category_tree.sql'), mv = R('supabase/migrations/20261015_category_tree_move.sql');
     const fnx = (src, name) => { const mm = new RegExp(`static (?:final )?[\\w.<>, \\[\\]]+ ${name}\\(`).exec(src); assert.ok(mm, `нет ${name}`); return src.slice(mm.index, src.indexOf('\n    }\n', mm.index)); };
     // 1. сборка и проверка компилируют IvaKindPatch; вставок в smali нет
-    assert.ok(/IvaRentPatch\.java android\/patches\/IvaKindPatch\.java 2>&1/.test(wf) && ck.includes('android/patches/IvaKindPatch.java'),
+    assert.ok(/IvaRentPatch\.java android\/patches\/IvaKindPatch\.java (android\/patches\/IvaModelPatch\.java )?2>&1/.test(wf) && ck.includes('android/patches/IvaKindPatch.java'),
       'вид 10.79: IvaKindPatch компилируется в сборку и в проверку');
     assert.ok(!/IvaKindPatch|kind/i.test(ap), 'вид 10.79: новых вставок в smali нет');
     // 2. точки входа: onTab (справочник, форма, запись), onHub (только форма — запомненный выбор не трогает), касание сохранения
@@ -907,7 +907,8 @@ try {
       'вид 10.79: вид пишется только при открытии кабинета после нажатия (штатный успех), не позже 3 минут');
     const cp = fnx(kp, 'consumePending');
     assert.ok(cp.includes('pendingAt = 0;\n        if (!write) return;') && cp.includes('final String body = patchBody(kind);')
-      && cp.includes('apiCall(a, patchPath(target), "PATCH", body, true)') && (cp.match(/apiCall\(/g) || []).length === 2
+      && cp.includes('apiCall(a, patchPath(target), "PATCH", body, true)') && (cp.match(/apiCall\(/g) || []).length === 3   // 10.82: + запись с моделью
+      && cp.includes('String full = IvaModelPatch.mergeBody(body, extra);')
       && cp.includes('if (!clean(o.isNull("kind") ? "" : o.optString("kind", "")).isEmpty()) return;'),
       'вид 10.79: одна попытка; PATCH только тела patchBody; у нового объявления уже есть вид — не трогаем');
     assert.ok(/return "\{\\"kind\\":null\}";/.test(fnx(kp, 'patchBody')) && fnx(kp, 'patchBody').includes('if (!k.matches("[a-z0-9-]{1,64}")) return null;'),
