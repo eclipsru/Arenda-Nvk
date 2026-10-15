@@ -200,6 +200,7 @@ public final class IvaPatch {
         try { delSwitches(a); } catch (Throwable ignore) {}   // 10.65: «Доставка» — выключатель
         try { condRows(a); } catch (Throwable ignore) {}      // 10.66: «Состояние» — Новый / Хорошее / Рабочее
         try { pickColors(a); } catch (Throwable ignore) {}    // 10.67: выбранная (под)категория — белым, не серым
+        try { IvaKindPatch.onHub(a); } catch (Throwable ignore) {}        // 10.79: поле «Вид инструмента» в форме
         try {
             Object lim = get(a, "meLimited");
             if (!(lim instanceof Boolean) || !((Boolean) lim) || limitedShown) return;
@@ -410,6 +411,7 @@ public final class IvaPatch {
         try { delSwitches(a); } catch (Throwable ignore) {}   // 10.65: «Доставка» в форме инструмента — выключатель
         try { condRows(a); } catch (Throwable ignore) {}      // 10.66: «Состояние» в форме инструмента
         try { pickColors(a); } catch (Throwable ignore) {}    // 10.67: выбранная (под)категория — белым, не серым
+        try { IvaKindPatch.onTab(a, tab); } catch (Throwable ignore) {}     // 10.79: «Вид инструмента» — справочник, форма, запись
         try { IvaClientPatch.authBackup(a); } catch (Throwable ignore) {}   // 10.69: копия входа (пишется, лишь когда ключ сменился)
         try { IvaReviewPatch.onTab(a, tab); } catch (Throwable ignore) {}   // 10.70: отзывы — страница инструмента и проката
         try {
@@ -928,7 +930,10 @@ public final class IvaPatch {
             if (save != null) save.setOnTouchListener(new View.OnTouchListener() {
                 @Override public boolean onTouch(View v, android.view.MotionEvent e) {
                     // до штатного нажатия: строка состояния — в поле условий (штатный код его прочтёт); нажатие не трогаем
-                    if (e.getActionMasked() == android.view.MotionEvent.ACTION_DOWN && v.isEnabled()) condPut(terms, k);
+                    if (e.getActionMasked() == android.view.MotionEvent.ACTION_DOWN && v.isEnabled()) {
+                        condPut(terms, k);
+                        try { IvaKindPatch.onSaveTouch(a, k); } catch (Throwable ignore) {}   // 10.79: вид — после штатного успеха
+                    }
                     return false;
                 }
             });

@@ -1233,6 +1233,67 @@ public class IvaPatchTest {
                     + "," + IvaChatPatch.supportChat("adm@x.ru", "client@y.ru", ad, ""), "true,true,false,false,false");
                 eq("чат 10.78: надписи", IvaChatPatch.ADMIN_BADGE + "|" + IvaChatPatch.SUPPORT_SUB + "|" + IvaNotifyPatch.SUPPORT_TITLE, "Админ|Чат поддержки|Чат поддержки");
             }
+            // 10.79: «Вид инструмента» — справочник, форма, запись после штатного успеха, фильтр
+            {
+                java.util.List<IvaKindPatch.Kind> kl = new java.util.ArrayList<IvaKindPatch.Kind>();
+                kl.add(new IvaKindPatch.Kind("screwdriver", "power", "drills", "Шуруповёрт", 2));
+                kl.add(new IvaKindPatch.Kind("drill", "power", "drills", "Дрель", 1));
+                kl.add(new IvaKindPatch.Kind("magnetic-drill", "power", "drills", "Магнитная дрель", 2));
+                kl.add(new IvaKindPatch.Kind("rotary-sds-plus", "power", "hammers", "Перфоратор SDS-plus", 1));
+                kl.add(new IvaKindPatch.Kind("bottle-jack", "moving", "hand-trucks", "Бутылочный домкрат", 3));
+                kl.add(new IvaKindPatch.Kind("", "power", "drills", "Без ключа", 0));
+                StringBuilder ks = new StringBuilder();
+                for (IvaKindPatch.Kind k : IvaKindPatch.forSub(kl, "power", "drills")) ks.append(k.key).append(',');
+                eq("вид 10.79: виды подкатегории — по порядку, при равном — по названию; без ключа — нет", ks.toString(), "drill,magnetic-drill,screwdriver,");
+                eq("вид 10.79: чужая категория с тем же ключом подкатегории — не её виды; пусто / null — ничего",
+                    IvaKindPatch.forSub(kl, "auto", "drills").size() + "," + IvaKindPatch.forSub(kl, "power", "").size() + "," + IvaKindPatch.forSub(kl, null, "drills").size()
+                    + "," + IvaKindPatch.forSub(null, "power", "drills").size(), "0,0,0,0");
+                eq("вид 10.79: вид подходит только своей подкатегории; пустой — всегда; нет справочника — не подходит",
+                    IvaKindPatch.fits(kl, "power", "drills", "drill") + "," + IvaKindPatch.fits(kl, "power", "hammers", "drill") + "," + IvaKindPatch.fits(kl, "power", "drills", "")
+                    + "," + IvaKindPatch.fits(kl, "power", "drills", null) + "," + IvaKindPatch.fits(null, "power", "drills", "drill") + "," + IvaKindPatch.fits(kl, "auto", "drills", "drill"),
+                    "true,false,true,true,false,false");
+                eq("вид 10.79: сменили подкатегорию — вид, которого в ней нет, снимается; есть — остаётся",
+                    IvaKindPatch.keep(kl, "power", "hammers", "drill") + "|" + IvaKindPatch.keep(kl, "power", "drills", "drill") + "|" + IvaKindPatch.keep(kl, "power", "drills", null)
+                    + "|" + IvaKindPatch.keep(null, "power", "drills", "drill"), "|drill||");
+                eq("вид 10.79: название поля — выбранный вид или подсказка",
+                    IvaKindPatch.fieldText(kl, "bottle-jack") + "|" + IvaKindPatch.fieldText(kl, "") + "|" + IvaKindPatch.fieldText(kl, "nope") + "|" + IvaKindPatch.fieldText(null, "drill"),
+                    "Бутылочный домкрат|Вид инструмента (необязательно)|Вид инструмента (необязательно)|Вид инструмента (необязательно)");
+                eq("вид 10.79: JSON null у Android («null») и пробелы — пусто", IvaKindPatch.clean("null") + "|" + IvaKindPatch.clean(" drill ") + "|" + IvaKindPatch.clean(null), "|drill|");
+                eq("вид 10.79: запись — только известный формат ключа; снять вид — null",
+                    IvaKindPatch.patchBody("drill") + "|" + IvaKindPatch.patchBody("") + "|" + IvaKindPatch.patchBody(null) + "|" + IvaKindPatch.patchBody("a\"b") + "|" + IvaKindPatch.patchBody("Дрель"),
+                    "{\"kind\":\"drill\"}|{\"kind\":null}|{\"kind\":null}|null|null");
+                eq("вид 10.79: правка — PATCH по id; вид открытого объявления — только вид",
+                    IvaKindPatch.patchPath("809aa868-7020-4311-be41-9a62a5b0e684") + "|" + IvaKindPatch.kindPath("12"),
+                    "/rest/v1/tools?id=eq.809aa868-7020-4311-be41-9a62a5b0e684|/rest/v1/tools?select=kind&id=eq.12");
+                eq("вид 10.79: новое — своё последнее с этим названием за последние 30 минут (почта строчными, название без пробелов по краям)",
+                    IvaKindPatch.lookupPath(" Adm@X.ru ", "  Дрель Bosch & Co ", "2026-10-15T10:00:00Z"),
+                    "/rest/v1/tools?select=id,kind&owner_email=eq.adm%40x.ru&name=eq.%D0%94%D1%80%D0%B5%D0%BB%D1%8C+Bosch+%26+Co&created_at=gte.2026-10-15T10%3A00%3A00Z&order=created_at.desc&limit=1");
+                eq("вид 10.79: время для поиска — UTC", IvaKindPatch.isoUtc(0L) + "|" + IvaKindPatch.isoUtc(1760522400000L), "1970-01-01T00:00:00Z|2025-10-15T10:00:00Z");
+                long t0 = 1_000_000_000L;
+                eq("вид 10.79: выбор, запомненный нажатием «Сохранить», живёт 3 минуты (и не «из будущего»)",
+                    IvaKindPatch.pendingFresh(t0, t0) + "," + IvaKindPatch.pendingFresh(t0, t0 + 180_000L) + "," + IvaKindPatch.pendingFresh(t0, t0 + 180_001L)
+                    + "," + IvaKindPatch.pendingFresh(t0, t0 - 1) + "," + IvaKindPatch.pendingFresh(0, 5), "true,true,false,false,false");
+                eq("вид 10.79: записываем только при штатном успехе (кабинет «admhub»), любая другая вкладка — забыть",
+                    IvaKindPatch.pendingWrite("admhub", t0, t0 + 2000) + "," + IvaKindPatch.pendingWrite("tooledit", t0, t0 + 2000) + "," + IvaKindPatch.pendingWrite("home", t0, t0 + 2000)
+                    + "," + IvaKindPatch.pendingWrite("admhub", t0, t0 + 200_000L) + "," + IvaKindPatch.pendingWrite(null, t0, t0), "true,false,false,false,false");
+                eq("вид 10.79: поле — сразу после списка подкатегорий; списка нет / он не рядом — после самой подкатегории; подкатегории нет — никуда",
+                    IvaKindPatch.rowIndex(5, 6) + "," + IvaKindPatch.rowIndex(5, -1) + "," + IvaKindPatch.rowIndex(5, 9) + "," + IvaKindPatch.rowIndex(-1, 3), "7,6,6,-1");
+                eq("вид 10.79: надписи формы", IvaKindPatch.LABEL_HINT + "|" + IvaKindPatch.NO_KIND, "Вид инструмента (необязательно)|Без вида");
+                eq("фильтр 10.79: вид — не выбран: подходит всё (и без вида); выбран: только он",
+                    IvaSearchPatch.kindMatch("drill", "") + "," + IvaSearchPatch.kindMatch("", null) + "," + IvaSearchPatch.kindMatch("drill", "drill") + ","
+                    + IvaSearchPatch.kindMatch(" drill ", "drill") + "," + IvaSearchPatch.kindMatch("", "drill") + "," + IvaSearchPatch.kindMatch(null, "drill") + "," + IvaSearchPatch.kindMatch("screwdriver", "drill"),
+                    "true,true,true,true,false,false,false");
+                eq("фильтр 10.79: «Фильтр · N» — вид считается только вместе с подкатегорией",
+                    IvaSearchPatch.activeCount("power", "drills", "drill", -1, -1, false, 0) + "," + IvaSearchPatch.activeCount("power", "", "drill", -1, -1, false, 0)
+                    + "," + IvaSearchPatch.activeCount("", "", "drill", -1, -1, false, 0) + "," + IvaSearchPatch.activeCount("power", "drills", "", 300, -1, true, 0)
+                    + "," + IvaSearchPatch.activeCount("power", "drills", null, -1, -1, false, 0), "3,1,0,4,2");
+                IvaSearchPatch.Filter kf = new IvaSearchPatch.Filter();
+                kf.cat = "power"; kf.sub = "drills"; kf.kind = "drill";
+                IvaSearchPatch.Filter kc = kf.copy();
+                String r1 = kc.kind + "," + kf.extraActive();
+                kf.resetAll();
+                eq("фильтр 10.79: вид копируется, включает отбор ленты, «Сбросить» его снимает", r1 + "," + kf.kind.isEmpty() + "," + kf.extraActive(), "drill,true,true,false");
+            }
         }
         if (fail > 0) { System.out.println("ошибок: " + fail); System.exit(1); }
         System.out.println("все проверки IvaPatch пройдены");

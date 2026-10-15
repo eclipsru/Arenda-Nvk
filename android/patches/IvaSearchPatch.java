@@ -319,6 +319,19 @@ public final class IvaSearchPatch {
         return n;
     }
 
+    /** 10.79: + вид (считается только вместе с подкатегорией — без неё вида не бывает). */
+    static int activeCount(String cat, String sub, String kind, long from, long to, boolean delivery, int conds) {
+        int n = activeCount(cat, sub, from, to, delivery, conds);
+        if (cat != null && !cat.isEmpty() && sub != null && !sub.isEmpty() && kind != null && !kind.isEmpty()) n++;
+        return n;
+    }
+
+    /** 10.79: вид объявления подходит под выбранный (не выбран — подходит любое, и без вида тоже). */
+    static boolean kindMatch(String toolKind, String sel) {
+        if (sel == null || sel.isEmpty()) return true;
+        return sel.equals(toolKind == null ? "" : toolKind.trim());
+    }
+
     static String filterButtonText(int n) { return n > 0 ? "Фильтр \u00b7 " + n : "Фильтр"; }
 
     static String showLabel(int n) {
@@ -426,17 +439,18 @@ public final class IvaSearchPatch {
     /** Условия панели. Категория — общая со штатной сеткой (curCat/curSub/catMode). */
     static final class Filter {
         String cat = "", sub = "";
+        String kind = "";                       // 10.79: вид инструмента (tools.kind) — только внутри выбранной подкатегории
         long from = -1, to = -1;
         boolean delivery = false;
         int conds = 0;
 
         Filter copy() {
             Filter f = new Filter();
-            f.cat = cat; f.sub = sub; f.from = from; f.to = to; f.delivery = delivery; f.conds = conds;
+            f.cat = cat; f.sub = sub; f.kind = kind; f.from = from; f.to = to; f.delivery = delivery; f.conds = conds;
             return f;
         }
-        boolean extraActive() { return from >= 0 || to >= 0 || delivery || conds != 0; }
-        void resetAll() { cat = ""; sub = ""; from = -1; to = -1; delivery = false; conds = 0; }
+        boolean extraActive() { return from >= 0 || to >= 0 || delivery || conds != 0 || !kind.isEmpty(); }
+        void resetAll() { cat = ""; sub = ""; kind = ""; from = -1; to = -1; delivery = false; conds = 0; }
     }
 
     static String selCity = "";                 // выбранный город поиска ("" + chosen — «Все города»)
@@ -812,7 +826,7 @@ public final class IvaSearchPatch {
 
     static boolean extraMatch(JSONObject j, String city, Filter f) {
         return extraMatch(toolCityOf(j), j.optDouble("price", 0), j.optBoolean("delivery", false), condOf(j),
-            city, f.from, f.to, f.delivery, f.conds);
+            city, f.from, f.to, f.delivery, f.conds) && kindMatch(js(j, "kind"), f.kind);
     }
 
     static String str(Object o) { return o instanceof String ? (String) o : ""; }
@@ -834,6 +848,7 @@ public final class IvaSearchPatch {
 
     /** Город и фильтры → поле tools → штатный renderFeed (он добавит поиск, категорию и подкатегорию). */
     static void applySearch(Activity a) {
+        applied.kind = kindFor(a, applied.kind);        // 10.79: категорию сменили — вид из другой подкатегории снимается
         ArrayList full = allTools(a);
         String city = cityChosen ? selCity : "";
         if (!anyActive()) {
@@ -877,7 +892,16 @@ public final class IvaSearchPatch {
         String mode = str(IvaClientPatch.get(a, "catMode"));
         f.cat = "cat".equals(mode) ? str(IvaClientPatch.get(a, "curCat")) : "";
         f.sub = "cat".equals(mode) ? str(IvaClientPatch.get(a, "curSub")) : "";
+        f.kind = IvaKindPatch.keep(IvaKindPatch.list(), f.cat, f.sub, f.kind);   // 10.79: вид — только своей подкатегории
         return f;
+    }
+
+    /** 10.79: применённый вид, если он есть в текущих (штатных) категории и подкатегории; иначе — без вида. */
+    static String kindFor(Activity a, String kind) {
+        if (kind == null || kind.isEmpty()) return "";
+        String mode = str(IvaClientPatch.get(a, "catMode"));
+        if (!"cat".equals(mode)) return "";
+        return IvaKindPatch.keep(IvaKindPatch.list(), str(IvaClientPatch.get(a, "curCat")), str(IvaClientPatch.get(a, "curSub")), kind);
     }
 
     /** Категория в штатных полях (одна на сетку категорий и панель) + перерисовка сетки. */
@@ -1119,7 +1143,7 @@ public final class IvaSearchPatch {
         TextView b = filterButton;
         if (b == null) return;
         Filter f = current(a);
-        int n = activeCount(f.cat, f.sub, f.from, f.to, f.delivery, f.conds);
+        int n = activeCount(f.cat, f.sub, f.kind, f.from, f.to, f.delivery, f.conds);
         b.setText(filterButtonText(n));
         b.setTextColor(n > 0 ? color(a, "orange", 0xffff8f1f) : color(a, "text", 0xfff2f4f8));
         b.setContentDescription(n > 0 ? "Фильтры, выбрано условий: " + n + ". Открыть" : "Открыть фильтры");
@@ -1433,8 +1457,10 @@ public final class IvaSearchPatch {
     static void addActiveChips(final Activity a, ViewGroup box, final Filter f, final Runnable changed, final boolean plain) {
         if (!f.cat.isEmpty()) {
             final boolean hasSub = !f.sub.isEmpty();
-            addChip(a, box, catTitle(a, f.cat), new ChipAction() { @Override public void remove() { f.cat = ""; f.sub = ""; } }, changed, plain);
-            if (hasSub) addChip(a, box, subTitle(a, f.cat, f.sub), new ChipAction() { @Override public void remove() { f.sub = ""; } }, changed, plain);
+            addChip(a, box, catTitle(a, f.cat), new ChipAction() { @Override public void remove() { f.cat = ""; f.sub = ""; f.kind = ""; } }, changed, plain);
+            if (hasSub) addChip(a, box, subTitle(a, f.cat, f.sub), new ChipAction() { @Override public void remove() { f.sub = ""; f.kind = ""; } }, changed, plain);
+            String kt = hasSub ? IvaKindPatch.titleOf(IvaKindPatch.list(), f.kind) : "";
+            if (!kt.isEmpty()) addChip(a, box, kt, new ChipAction() { @Override public void remove() { f.kind = ""; } }, changed, plain);
         }
         if (f.from >= 0 || f.to >= 0)
             addChip(a, box, priceChip(f.from, f.to), new ChipAction() { @Override public void remove() { f.from = -1; f.to = -1; } }, changed, plain);
@@ -1475,6 +1501,7 @@ public final class IvaSearchPatch {
                 @Override public void run() {
                     if (!cat0.equals(f.cat) || !sub0.equals(f.sub)) setNativeCat(a, f.cat, f.sub);
                     applied.from = f.from; applied.to = f.to; applied.delivery = f.delivery; applied.conds = f.conds;
+                    applied.kind = f.kind;
                     applySearch(a);
                 }
             });
@@ -1758,10 +1785,10 @@ public final class IvaSearchPatch {
     }
 
     // ── Содержимое панели ──
-    static Flow catBox, subBox, condBox;
+    static Flow catBox, subBox, kindBox, condBox;
     static LinearLayout panelChips;              // 10.48: ряд выбранных условий в шапке шторки
     static HorizontalScrollView panelChipsScroll;
-    static TextView subTitleView, condTitleView, condNote, priceHint, cityLine, showBtn, resetBtn;
+    static TextView subTitleView, kindTitleView, condTitleView, condNote, priceHint, cityLine, showBtn, resetBtn;
     static CheckBox deliveryBox;
     static EditText fromEdit, toEdit;
     static boolean syncing = false;
@@ -1880,6 +1907,10 @@ public final class IvaSearchPatch {
         body.addView(subTitleView);
         subBox = new Flow(a, dp(a, 6));
         body.addView(subBox, new LinearLayout.LayoutParams(-1, -2));
+        kindTitleView = sectionTitle(a, "Вид");                 // 10.79: виды выбранной подкатегории
+        body.addView(kindTitleView);
+        kindBox = new Flow(a, dp(a, 6));
+        body.addView(kindBox, new LinearLayout.LayoutParams(-1, -2));
 
         body.addView(sectionTitle(a, "Цена за сутки, \u20bd"));
         LinearLayout prices = new LinearLayout(a);
@@ -2059,7 +2090,7 @@ public final class IvaSearchPatch {
             // Категории и подкатегории — штатные справочники cats/subcats (как в сетке на главной), но только те,
             // где при остальных условиях (город, поиск, цена, доставка, состояние) есть хоть один инструмент.
             Filter noCat = draft.copy();
-            noCat.cat = ""; noCat.sub = "";
+            noCat.cat = ""; noCat.sub = ""; noCat.kind = "";
             List<String> catKeys = new ArrayList<String>();
             LinkedHashMap<String, String> catTitles = new LinkedHashMap<String, String>();
             Object cats = IvaClientPatch.get(a, "cats");
@@ -2091,11 +2122,11 @@ public final class IvaSearchPatch {
             }
             catBox.removeAllViews();
             addOption(a, catBox, "Все \u00b7 " + allCount, draft.cat.isEmpty(),
-                new Runnable() { @Override public void run() { draft.cat = ""; draft.sub = ""; } });
+                new Runnable() { @Override public void run() { draft.cat = ""; draft.sub = ""; draft.kind = ""; } });
             for (final String key : facetVisible(catKeys, catCounts, draft.cat)) {
                 Integer cn = catCounts.get(key);
                 addOption(a, catBox, catTitles.get(key) + " \u00b7 " + (cn == null ? 0 : cn), key.equals(draft.cat),
-                    new Runnable() { @Override public void run() { draft.cat = key; draft.sub = ""; } });
+                    new Runnable() { @Override public void run() { draft.cat = key; draft.sub = ""; draft.kind = ""; } });
             }
             subBox.removeAllViews();
             Object subs = IvaClientPatch.get(a, "subcats");
@@ -2112,12 +2143,39 @@ public final class IvaSearchPatch {
                 for (final String key : facetVisible(subKeys, subCounts, draft.sub)) {
                     Integer sn = subCounts.get(key);
                     addOption(a, subBox, subTitles.get(key) + " \u00b7 " + (sn == null ? 0 : sn), key.equals(draft.sub),
-                        new Runnable() { @Override public void run() { draft.sub = key.equals(draft.sub) ? "" : key; } });
+                        new Runnable() { @Override public void run() { draft.sub = key.equals(draft.sub) ? "" : key; draft.kind = ""; } });
                 }
             }
             boolean hasSubs = subBox.getChildCount() > 0;
             subTitleView.setVisibility(hasSubs ? View.VISIBLE : View.GONE);
             subBox.setVisibility(hasSubs ? View.VISIBLE : View.GONE);
+
+            // 10.79: «Вид» — виды выбранной подкатегории (справочник iva_kinds), только где при остальных условиях есть
+            // инструменты; выбранный виден и при нуле. Повторное нажатие снимает вид.
+            kindBox.removeAllViews();
+            List<IvaKindPatch.Kind> kinds = IvaKindPatch.forSub(IvaKindPatch.list(), draft.cat, draft.sub);
+            if (!kinds.isEmpty()) {
+                Filter noKind = draft.copy();
+                noKind.kind = "";
+                LinkedHashMap<String, Integer> kindCounts = new LinkedHashMap<String, Integer>();
+                for (Object o : allTools(a)) {
+                    if (!(o instanceof JSONObject)) continue;
+                    JSONObject j = (JSONObject) o;
+                    if (!nativeMatch(j, "cat", draft.cat, draft.sub, query) || !extraMatch(j, city, noKind)) continue;
+                    String kk = js(j, "kind").trim();
+                    if (!kk.isEmpty()) kindCounts.put(kk, (kindCounts.containsKey(kk) ? kindCounts.get(kk) : 0) + 1);
+                }
+                List<String> kindKeys = new ArrayList<String>();
+                for (IvaKindPatch.Kind kd : kinds) kindKeys.add(kd.key);
+                for (final String key : facetVisible(kindKeys, kindCounts, draft.kind)) {
+                    Integer kn = kindCounts.get(key);
+                    addOption(a, kindBox, IvaKindPatch.titleOf(kinds, key) + " \u00b7 " + (kn == null ? 0 : kn), key.equals(draft.kind),
+                        new Runnable() { @Override public void run() { draft.kind = key.equals(draft.kind) ? "" : key; } });
+                }
+            }
+            boolean hasKinds = kindBox.getChildCount() > 0;
+            kindTitleView.setVisibility(hasKinds ? View.VISIBLE : View.GONE);
+            kindBox.setVisibility(hasKinds ? View.VISIBLE : View.GONE);
 
             // Подсказка цены и числа по доставке/состоянию — по выдаче при остальных условиях
             long min = -1, max = -1;
@@ -2193,6 +2251,7 @@ public final class IvaSearchPatch {
         Filter cur = current(a);
         if (!cur.cat.equals(d.cat) || !cur.sub.equals(d.sub)) setNativeCat(a, d.cat, d.sub);
         applied.from = d.from; applied.to = d.to; applied.delivery = d.delivery; applied.conds = d.conds;
+        applied.kind = d.kind;
         applySearch(a);
         closePanel(a, true);
         try {   // к началу ленты, чтобы сразу было видно результат

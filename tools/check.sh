@@ -162,6 +162,19 @@ else
   skip "стенд режима окончания аренды: нет pgserver (PG_PY=<python с pgserver> bash tools/check.sh)"
 fi
 
+head_ "4.5.3. Стенд нового дерева категорий и «Видов» (локальный PostgreSQL)"
+# 10.79: 15 категорий, «Другое» в каждой, старые ключи и id на месте, виды согласованы с подкатегориями, вид у
+# объявления — только известный, виды меняет только главный админ; просмотр переноса = сам перенос; повтор безопасен.
+if "$PG_PY" -c "import pgserver" >/dev/null 2>&1; then
+  if "$PG_PY" tools/category-tree-stand.py >/tmp/iva-test-cat-tree.log 2>&1; then
+    ok "дерево категорий и виды: $(grep -c '✔' /tmp/iva-test-cat-tree.log) проверок SQL на PostgreSQL"
+  else
+    bad "стенд дерева категорий"; grep -E '✘|ИТОГ|Error|ERROR' /tmp/iva-test-cat-tree.log | head -8 | sed 's/^/      /'
+  fi
+else
+  skip "стенд дерева категорий: нет pgserver (PG_PY=<python с pgserver> bash tools/check.sh)"
+fi
+
 head_ "4.6. Скачивание приложения у всех: файл выпущенной версии на месте"
 # Выпущенная версия живёт строкой в базе (app_releases) и ссылается на файл в корне сайта.
 # Если файл убрать, у всех пользователей ломается «Скачать APK». Код 2 = проверить не удалось (нет сети).

@@ -713,7 +713,8 @@ try {
     const cs = ip.slice(ip.indexOf('// ───────────── 10.66: «Состояние»'));
     assert.ok(cs.includes('condRow(a, "atTerms", "atSave", 0);') && cs.includes('condRow(a, "teTerms", "teSave", 1);')
       && cs.includes('form.addView(row, form.indexOfChild(terms), lp);          // перед «Условием аренды»')
-      && cs.includes('if (e.getActionMasked() == android.view.MotionEvent.ACTION_DOWN && v.isEnabled()) condPut(terms, k);\n                    return false;')
+      && cs.includes('if (e.getActionMasked() == android.view.MotionEvent.ACTION_DOWN && v.isEnabled()) {\n                        condPut(terms, k);')   // 10.79: + вид
+      && cs.includes('IvaKindPatch.onSaveTouch(a, k); } catch (Throwable ignore) {}   // 10.79: вид — после штатного успеха\n                    }\n                    return false;')
       && cs.includes('static final String[] COND_TITLES = IvaSearchPatch.COND_TITLES;') && cs.includes('int bit = IvaSearchPatch.condFromTerms(terms);')
       && !/removeView|setOnClickListener\(null\)|apiCall|"PATCH"|"POST"/.test(cs),
       'состояние 10.66: строка перед «Условием аренды» в обеих формах; строка «Состояние: …» в условиях — при нажатии публикации (само нажатие не перехватываем), разбор — как у фильтра; ничего не удаляет и в базу само не пишет');
@@ -768,6 +769,84 @@ try {
     for (const str of ['rowCall', 'rowMax', 'atSubKey', 'atCatKey', 'editToolSub', 'editToolCat', 'admParts', 'admDrill', 'admClientKey', 'partClientKey'])
       assert.ok(has(arsc14, str) || has(dex14, str), `APK 10.14: нет «${str}» — правка 10.67 не найдёт штатное поле`);
     assert.ok(/eq\("админ 10\.67: /.test(tp) && /eq\("подкатегория 10\.67: /.test(tp) && /eq\("кабинет 10\.67: /.test(tp), 'IvaPatchTest: проверки 10.67');
+  }
+  // 10.79 (решение владельца 15.10.2026, №28): новое дерево категорий (15 категорий, «Другое» в каждой) — одним SQL; «Вид
+  // инструмента» — в форме «Добавить инструмент» и в правке (необязательно) и в фильтре после «Подкатегории»
+  {
+    const kp = R('android/patches/IvaKindPatch.java'), ip = R('android/patches/IvaPatch.java'), sp = R('android/patches/IvaSearchPatch.java');
+    const tp = R('android/patches/test/IvaPatchTest.java'), wf = R('.github/workflows/build-apk.yml'), ck = R('.github/workflows/check.yml');
+    const ap = R('android/patches/apply.py'), chk = R('tools/check.sh');
+    const sql = R('supabase/migrations/20261015_category_tree.sql'), mv = R('supabase/migrations/20261015_category_tree_move.sql');
+    const fnx = (src, name) => { const mm = new RegExp(`static (?:final )?[\\w.<>, \\[\\]]+ ${name}\\(`).exec(src); assert.ok(mm, `нет ${name}`); return src.slice(mm.index, src.indexOf('\n    }\n', mm.index)); };
+    // 1. сборка и проверка компилируют IvaKindPatch; вставок в smali нет
+    assert.ok(/IvaRentPatch\.java android\/patches\/IvaKindPatch\.java 2>&1/.test(wf) && ck.includes('android/patches/IvaKindPatch.java'),
+      'вид 10.79: IvaKindPatch компилируется в сборку и в проверку');
+    assert.ok(!/IvaKindPatch|kind/i.test(ap), 'вид 10.79: новых вставок в smali нет');
+    // 2. точки входа: onTab (справочник, форма, запись), onHub (только форма — запомненный выбор не трогает), касание сохранения
+    assert.ok(fnx(ip, 'onTab').includes('try { IvaKindPatch.onTab(a, tab); } catch (Throwable ignore) {}')
+      && fnx(ip, 'onHub').includes('try { IvaKindPatch.onHub(a); } catch (Throwable ignore) {}') && !fnx(ip, 'onHub').includes('IvaKindPatch.onTab('),
+      'вид 10.79: вызывается из IvaPatch.onTab и onHub (onHub — без записи)');
+    const cr = fnx(ip, 'condRow');
+    assert.ok(/ACTION_DOWN && v\.isEnabled\(\)\) \{\n\s+condPut\(terms, k\);\n\s+try \{ IvaKindPatch\.onSaveTouch\(a, k\); \} catch \(Throwable ignore\) \{\}[^\n]*\n\s+\}\n\s+return false;/.test(cr),
+      'вид 10.79: нажатие «Опубликовать»/«Сохранить» только запоминает вид (касание не перехватывается)');
+    const oh = fnx(kp, 'onHub');
+    assert.ok(!oh.includes('consumePending') && fnx(kp, 'onTab').includes('consumePending(a, tab)'), 'вид 10.79: записываем только из onTab');
+    // 3. запись — только после штатного успеха (showTab("admhub")), 3 минуты, одна попытка; только поле kind
+    assert.ok(fnx(kp, 'pendingWrite').includes('return pendingFresh(at, now) && "admhub".equals(tab);')
+      && kp.includes('static final long PENDING_MS = 3 * 60_000L;') && kp.includes('static final long FRESH_MS = 30 * 60_000L;'),
+      'вид 10.79: вид пишется только при открытии кабинета после нажатия (штатный успех), не позже 3 минут');
+    const cp = fnx(kp, 'consumePending');
+    assert.ok(cp.includes('pendingAt = 0;\n        if (!write) return;') && cp.includes('final String body = patchBody(kind);')
+      && cp.includes('apiCall(a, patchPath(target), "PATCH", body, true)') && (cp.match(/apiCall\(/g) || []).length === 2
+      && cp.includes('if (!clean(o.isNull("kind") ? "" : o.optString("kind", "")).isEmpty()) return;'),
+      'вид 10.79: одна попытка; PATCH только тела patchBody; у нового объявления уже есть вид — не трогаем');
+    assert.ok(/return "\{\\"kind\\":null\}";/.test(fnx(kp, 'patchBody')) && fnx(kp, 'patchBody').includes('if (!k.matches("[a-z0-9-]{1,64}")) return null;'),
+      'вид 10.79: в теле запроса — только kind (ключ латиницей) или null');
+    assert.ok(fnx(kp, 'lookupPath').includes('owner_email=eq.') && fnx(kp, 'lookupPath').includes('&created_at=gte.') && fnx(kp, 'lookupPath').includes('&order=created_at.desc&limit=1'),
+      'вид 10.79: новое объявление — своё, с этим названием, свежее, последнее');
+    const st = fnx(kp, 'onSaveTouch');
+    assert.ok(st.includes('pendingAt = 0;') && st.includes('if (kinds == null) return;') && st.includes('if (!editLoaded || editId.isEmpty() || kind.equals(orig[1])) return;')
+      && st.includes('if (kind.isEmpty()) return;'),
+      'вид 10.79: без SQL — ничего; правка — только если вид загружен и изменён; новое без вида — ничего');
+    // 4. справочник — публичный (без входа), копия на телефоне; нет таблицы — вида нигде нет
+    assert.ok(kp.includes('static final String KINDS_PATH = "/rest/v1/iva_kinds?select=key,cat,sub,title,sort&active=eq.true&order=sort.asc,title.asc";')
+      && fnx(kp, 'ensureLoaded').includes('IvaClientPatch.apiCall(a, KINDS_PATH, "GET", null, false)'),
+      'вид 10.79: справочник видов читается публичным ключом');
+    assert.ok(!/customer_profiles|passport|phone|surname|AlarmManager|WorkManager|com\.google/.test(kp), 'вид 10.79: без личных данных и сервисов Google');
+    // 5. форма: поле после списка подкатегорий в обеих формах; виды — только выбранной подкатегории; чужой вид снимается
+    assert.ok(kp.includes('{"atCat", "atCatKey", "atSub", "atSubKey", "atSubSug", "atName"},') && kp.includes('{"teCat", "editToolCat", "teSub", "editToolSub", "teSubSug", "teName"},')
+      && fnx(kp, 'paint').includes('sel[k] = keep(all, cat, sub, sel[k]);') && fnx(kp, 'paint').includes('row.setVisibility(show ? View.VISIBLE : View.GONE);'),
+      'вид 10.79: поле «Вид» в обеих формах, только при видах в подкатегории; вид чужой подкатегории снимается');
+    assert.ok(!/#[0-9A-Fa-f]{6}\b|setBackgroundColor\(0x/.test(kp), 'вид 10.79: без новых цветов (фон и стрелка — копии штатного поля)');
+    for (const str of ['atSubSug', 'teSubSug', 'atName', 'teName', 'editToolId', 'userEmail', 'atCatKey', 'atSubKey', 'editToolCat', 'editToolSub'])
+      assert.ok(has(arsc14, str) || has(dex14, str), `APK 10.14: нет «${str}» — поле «Вид» не найдёт штатное поле`);
+    assert.ok(has(dex14, 'admhub') && has(dex14, 'tooledit'), 'APK 10.14: нет вкладок admhub / tooledit');
+    // 6. фильтр: «Вид» после «Подкатегории»; отбор ленты; число в «Фильтр · N»; смена категории/подкатегории снимает вид
+    assert.ok(sp.includes('city, f.from, f.to, f.delivery, f.conds) && kindMatch(js(j, "kind"), f.kind);')
+      && sp.includes('f.cat = cat; f.sub = sub; f.kind = kind;') && sp.includes('|| !kind.isEmpty(); }') && sp.includes('void resetAll() { cat = ""; sub = ""; kind = "";'),
+      'фильтр 10.79: вид отбирает ленту, копируется, сбрасывается');
+    const rp = fnx(sp, 'refreshPanel');
+    assert.ok(rp.indexOf('subBox.setVisibility(') < rp.indexOf('kindBox.removeAllViews();') && rp.includes('IvaKindPatch.forSub(IvaKindPatch.list(), draft.cat, draft.sub)')
+      && rp.includes('facetVisible(kindKeys, kindCounts, draft.kind)') && rp.includes('nativeMatch(j, "cat", draft.cat, draft.sub, query) || !extraMatch(j, city, noKind)')
+      && rp.includes('draft.cat = key; draft.sub = ""; draft.kind = "";') && rp.includes('draft.sub = key.equals(draft.sub) ? "" : key; draft.kind = "";'),
+      'фильтр 10.79: «Вид» после «Подкатегории» — только непустые с числом; смена категории/подкатегории снимает вид');
+    assert.ok(fnx(sp, 'applyDraft').includes('applied.kind = d.kind;') && fnx(sp, 'refreshChips').includes('applied.kind = f.kind;')
+      && fnx(sp, 'applySearch').includes('applied.kind = kindFor(a, applied.kind);') && fnx(sp, 'refreshFilterButton').includes('activeCount(f.cat, f.sub, f.kind,'),
+      'фильтр 10.79: вид применяется кнопкой и пузырями, учитывается в «Фильтр · N», чужой вид снимается');
+    // 7. SQL: 15 категорий, ключи прежние, «Другое» везде, виды и tools.kind, просмотр отдельно от переноса
+    for (const k of ['power', 'cutting', 'construction', 'surface', 'garden', 'cleaning', 'climate', 'generators', 'compressors', 'welding', 'plumbing', 'measuring', 'moving', 'painting', 'auto'])
+      assert.ok(new RegExp(`\\('${k}',\\s+'[^']+',\\s+\\d+,`).test(sql), `SQL 10.79: нет категории ${k}`);
+    assert.ok(!/delete from public\.(cats|subcats|tools)/i.test(sql) && !/update public\.tools/i.test(sql) && /update public\.subcats set active = false where cat = 'power' and key in \('cordless', 'corded'\);/.test(sql),
+      'SQL 10.79: шаг 1 ничего не удаляет и объявления не меняет; питание — выключается');
+    assert.ok(sql.includes('create table if not exists public.iva_kinds') && sql.includes('create policy iva_kinds_read on public.iva_kinds for select to anon, authenticated using (true);')
+      && sql.includes('using (public.fn_is_chief()) with check (public.fn_is_chief());') && sql.includes('foreign key (kind) references public.iva_kinds(key) on update cascade on delete set null;')
+      && sql.includes('revoke all on function public.iva_tree_plan() from public, anon, authenticated;'),
+      'SQL 10.79: виды читают все, меняет главный админ; вид объявления — только из справочника; план закрыт от гостей');
+    assert.ok(/select \* from public\.iva_tree_plan\(\) order by old_cat, name;/.test(sql) && mv.includes('from public.iva_tree_plan() p') && mv.includes('ЗАПУСКАТЬ ТОЛЬКО ПОСЛЕ «да» владельца'),
+      'SQL 10.79: просмотр переноса — в шаге 1, перенос — отдельный файл по тому же плану');
+    assert.ok(chk.includes('"$PG_PY" tools/category-tree-stand.py'), 'check.sh: стенд дерева категорий');
+    assert.ok(/NEW_NAME: '10\.79'/.test(wf) && /NEW_CODE: '153'/.test(wf), 'версия 10.79 (153)');
+    assert.ok((tp.match(/eq\("(вид|фильтр) 10\.79: /g) || []).length >= 17, 'IvaPatchTest: проверки 10.79');
   }
   // 10.78 (просьба владельца 14.10.2026): таймер «чч.мм.сс» (каждую секунду); раздел настроек «Срок аренды»; в кабинете и у админа
   // нет «Позвонить», «Написать в МАКС», «Адрес выдачи»; над «О приложении» — оранжевая «Обновить до версии N» (только если
@@ -833,7 +912,6 @@ try {
       && cp.includes('static final String ADMIN_BADGE = "Админ", SUPPORT_SUB = "Чат поддержки";') && has(arsc14, 'bg_chip_on') && has(arsc14, 'ic_chat'),
       'чат 10.78: «Админ» — оранжевая таблетка приложения, без новых цветов');
     assert.ok(!/IvaRentPatch|cabinet|adminMark/.test(ap), '10.78: новых вставок в smali нет');
-    assert.ok(/NEW_NAME: '10\.78'/.test(wf) && /NEW_CODE: '152'/.test(wf), 'версия 10.78 (152)');
     assert.ok((tp.match(/eq\("(аренда|кабинет|чат) 10\.78: /g) || []).length >= 14, 'IvaPatchTest: проверки 10.78');
   }
   // 10.77 (просьба владельца 14.10.2026): «Аренда» в настройках админа — конец аренды «Сутки» (14:30 → 14:30) или «До закрытия
@@ -889,7 +967,7 @@ try {
       && an.includes('admMissingUntil = System.currentTimeMillis() + 10 * 60000L;') && an.includes('changed = !sig(byPart).equals(sig(g));'),
       'таймер 10.77: админ — не чаще раза в минуту (новая выдача — через 5 с); без SQL — тихо; перерисовка только при изменении');
     // сборка и проверка
-    assert.ok(/IvaPushPatch\.java android\/patches\/IvaRentPatch\.java 2>&1/.test(wf) && ck.includes('android/patches/IvaRentPatch.java'), 'аренда 10.77: IvaRentPatch компилируется в сборку и в проверку');
+    assert.ok(/IvaPushPatch\.java android\/patches\/IvaRentPatch\.java(?: android\/patches\/Iva\w+Patch\.java)* 2>&1/.test(wf) && ck.includes('android/patches/IvaRentPatch.java'), 'аренда 10.77: IvaRentPatch компилируется в сборку и в проверку');
     assert.ok(!ap.includes('IvaRentPatch'), 'аренда 10.77: новых вставок в smali нет');
     assert.ok(!/AlarmManager|WorkManager|customer_profiles|passport|surname|com\.google/.test(rp) && !/AlarmManager|WorkManager|customer_profiles|passport|phone|surname/.test(np),
       'аренда 10.77: без будильников и личных данных');
