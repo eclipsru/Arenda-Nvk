@@ -801,6 +801,16 @@ try {
       'форма 10.89: частые условия — выпадающим списком под «Условиями аренды», без своих строк и «Наличные или перевод»');
     assert.ok(!/паспорт/i.test((fp.match(/static final String\[\] TERMS_\w+ = \{[^}]*\}/g) || []).join(' ')) && /eq\("форма 10\.90: в частых условиях нет ни одной подсказки про паспорт"/.test(tp),
       'форма 10.90: в частых условиях нет подсказок про паспорт (просьба владельца)');
+    // 10.91 (просьба владельца 15.10): стрелка списка вправо / вниз, повторное нажатие и «Далее» закрывают, без «Сгенерировать описание»
+    const mp91 = R('android/patches/IvaModelPatch.java');
+    const fn91 = (name) => { const i = fp.indexOf(`static void ${name}(`); assert.ok(i >= 0, `нет ${name}`); return fp.slice(i, fp.indexOf('\n    }\n', i)); };
+    assert.ok(fp.includes('static float arrowAngle(boolean open) { return open ? ARROW_OPEN : ARROW_CLOSED; }') && fp.includes('static final float ARROW_OPEN = 90f, ARROW_CLOSED = 0f;')
+      && fp.includes('try { arrows(a, form); } catch (Throwable ignore) {}') && fp.includes('arrow(f, termsOpen);') && !fp.includes('chev.setLevel(1)')
+      && fp.includes('if (c instanceof TextView && cs instanceof View) tapToggle((TextView) c, (View) cs);') && fp.includes('vto.addOnGlobalFocusChangeListener(')
+      && !/setOnClickListener|setOnEditorActionListener/.test(fn91('arrows') + fn91('tapToggle'))
+      && mp91.includes('static final boolean SHOW_GEN = false;') && mp91.includes('if (!SHOW_GEN) gen.setVisibility(View.GONE);')
+      && /eq\("форма 10\.91: «Далее»/.test(tp) && /eq\("форма 10\.91: кнопки «Сгенерировать описание» нет"/.test(tp),
+      'форма 10.91: стрелки списков, закрытие повторным нажатием и «Далее», кнопки «Сгенерировать описание» нет');
     assert.ok(fp.includes('static final boolean SHOW_SAMPLE = false;') && fp.includes('hideTop(form);') && fp.includes('TITLE_NATIVE = "Добавить инструмент", SUBTITLE_NATIVE = "Публикуется сразу"'),
       'форма 10.89: сверху нет заголовка, подзаголовка и «по образцу» (черновик остаётся)');
     // 10.89: фото — 5 окошек, большой просмотр, камера / галерея; результат — в свой Fragment, onActivityResult не трогаем

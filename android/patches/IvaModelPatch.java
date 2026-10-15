@@ -849,7 +849,7 @@ final class IvaModelPatch {
         paintBlock(a, (LinearLayout) block, kind);
         paintSpecs(a, (LinearLayout) specs, kind, false);
         paintExtras(a, form, specs, kind);                                       // 10.84: комплектация, цена, описание
-        try { IvaKindPatch.arrange(a); } catch (Throwable ignore) {}             // 10.86: подписи и «Категория…» над «Сгенерировать описание»
+        try { IvaKindPatch.arrange(a); } catch (Throwable ignore) {}             // 10.86: подписи и «Категория…» над блоком HELP
     }
 
     static void hideAll(View any) {
@@ -1721,6 +1721,8 @@ final class IvaModelPatch {
     static final String KIT_PATH = "/rest/v1/iva_kit_items?select=kind,items", PROPOSALS_PATH = "/rest/v1/iva_model_proposals";
     static final String KIT = "iva_model_kit", HELP = "iva_model_help", PROP = BLOCK + ":prop";
     static final String KIT_LABEL = "Комплектация", KIT_HINT = "отметьте, что отдаёте вместе с инструментом", DESCR_BTN = "Сгенерировать описание";
+    /** 10.91: «Сгенерировать описание» убрана по просьбе владельца 15.10.2026 (код оставлен: вернуть — true). */
+    static final boolean SHOW_GEN = false;
     static volatile Map<String, String[]> kitMap = new HashMap<String, String[]>();
     static List<String> kitSel = new ArrayList<String>();
     static String kitKind = null, lastDescr = "";
@@ -1806,6 +1808,7 @@ final class IvaModelPatch {
         box.setOrientation(LinearLayout.VERTICAL);
         TextView gen = IvaSearchPatch.chip(a, DESCR_BTN, false, false);
         gen.setTag(HELP + ":gen");
+        if (!SHOW_GEN) gen.setVisibility(View.GONE);                             // 10.91: кнопки нет (просьба владельца)
         gen.setOnClickListener(new View.OnClickListener() {
             @Override public void onClick(View v) { try { generate(a); } catch (Throwable ignore) {} }
         });

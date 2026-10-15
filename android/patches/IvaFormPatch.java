@@ -35,7 +35,8 @@ import java.util.WeakHashMap;
 /**
  * 10.87 · Форма «Добавить инструмент» (просьба владельца 15.10.2026: «понятно, удобно, структурировано», решения — на нас).
  *  * Пункты собраны в разделы: «Что сдаёте» (фото, название, модель, категория / подкатегория / вид) → «Характеристики
- *    и состояние» → «Цена» → «Условия и доставка» → «Описание» (+ «Сгенерировать») → «Опубликовать» — в самом низу.
+ *    и состояние» → «Цена» → «Условия и доставка» → «Описание» → «Опубликовать» — в самом низу
+ *    (кнопка «Сгенерировать описание» убрана в 10.91).
  *  * Внутри полей — примеры («Например: 800»), а не повтор подписи; обязательные подписи — со звёздочкой.
  *  * Цена за сутки обязательна. Нет названия, категории или цены — «Опубликовать» не срабатывает, под полем красная
  *    строка, экран прокручивается к первому такому полю (раньше пустая цена молча не отправлялась).
@@ -361,6 +362,145 @@ final class IvaFormPatch {
         layout(a, form);
         resolveModel(a);
         scheduleSave(a);
+        try { arrows(a, form); } catch (Throwable ignore) {}                   // 10.91: стрелки списков
+    }
+
+    // ───── 10.91 (просьба владельца 15.10.2026): поля со списком и стрелкой справа — «Категория», «Подкатегория»,
+    //  «Вид инструмента», «Выбрать из частых условий» ─────
+    //  * список закрыт — стрелка вправо (как нарисована ic_chevron), открыт — вниз (поворот на 90°);
+    //  * повторное нажатие на поле с открытым списком закрывает его (штатно «Категория» / «Подкатегория» открывались
+    //    заново: hideDrops + showPickDrop) — свой OnTouchListener, штатный обработчик нажатия не заменяется;
+    //  * «Далее» на клавиатуре (фокус переходит в следующее поле формы) закрывает открытые списки.
+    static final float ARROW_OPEN = 90f, ARROW_CLOSED = 0f;
+    static final java.util.Map<View, Boolean> arrowForms = new java.util.WeakHashMap<View, Boolean>();
+
+    static float arrowAngle(boolean open) { return open ? ARROW_OPEN : ARROW_CLOSED; }
+
+    /** Палец отпущен на поле, список которого был открыт в момент касания, — закрыть (и не открывать заново). */
+    static boolean tapCloses(boolean openAtDown, boolean up) { return openAtDown && up; }
+
+    /** Фокус ушёл из поля ввода формы в другое поле ввода («Далее» или нажатие на другое поле) — списки закрыть.
+     *  Фокус просто снят (клавиатура спрятана) — ничего не делаем. */
+    static boolean closeOnFocus(boolean oldInForm, boolean oldEdit, boolean newEdit, boolean same) {
+        return oldInForm && oldEdit && newEdit && !same;
+    }
+
+    /** Стрелка справа, поворачиваемая без замены картинки (RotateDrawable из кода — только с API 23, у нас minSdk 21). */
+    static final class Turn extends android.graphics.drawable.Drawable implements android.graphics.drawable.Drawable.Callback {
+        final android.graphics.drawable.Drawable in;
+        float deg = ARROW_CLOSED;
+        Turn(android.graphics.drawable.Drawable in) { this.in = in; in.setCallback(this); }
+        @Override public void draw(android.graphics.Canvas c) {
+            android.graphics.Rect b = getBounds();
+            int s = c.save();
+            c.rotate(deg, b.exactCenterX(), b.exactCenterY());
+            in.setBounds(b);
+            in.draw(c);
+            c.restoreToCount(s);
+        }
+        @Override public void setAlpha(int al) { in.setAlpha(al); }
+        @Override public void setColorFilter(android.graphics.ColorFilter cf) { in.setColorFilter(cf); }
+        @Override public int getOpacity() { return android.graphics.PixelFormat.TRANSLUCENT; }
+        @Override public int getIntrinsicWidth() { return in.getIntrinsicWidth(); }
+        @Override public int getIntrinsicHeight() { return in.getIntrinsicHeight(); }
+        @Override public ConstantState getConstantState() { return in.getConstantState(); }   // копия (IvaKindPatch.copy) — простая стрелка
+        @Override public void invalidateDrawable(android.graphics.drawable.Drawable d) { invalidateSelf(); }
+        @Override public void scheduleDrawable(android.graphics.drawable.Drawable d, Runnable r, long when) { scheduleSelf(r, when); }
+        @Override public void unscheduleDrawable(android.graphics.drawable.Drawable d, Runnable r) { unscheduleSelf(r); }
+    }
+
+    /** Стрелка справа у поля: вниз — список открыт, вправо — закрыт. Стрелки нет — ничего. */
+    static void arrow(TextView f, boolean open) {
+        if (f == null) return;
+        android.graphics.drawable.Drawable[] ds = f.getCompoundDrawables();
+        if (ds == null || ds.length < 4 || ds[2] == null) return;
+        Turn t;
+        if (ds[2] instanceof Turn) t = (Turn) ds[2];
+        else {
+            t = new Turn(ds[2]);
+            t.setBounds(ds[2].getBounds());
+            f.setCompoundDrawables(ds[0], ds[1], t, ds[3]);
+        }
+        float d = arrowAngle(open);
+        if (t.deg == d) return;
+        t.deg = d;
+        t.invalidateSelf();
+        f.invalidate();
+    }
+
+    static boolean open(Object list) { return list instanceof View && ((View) list).getVisibility() == View.VISIBLE; }
+
+    static View kindView(View form, String part) {
+        return form.findViewWithTag(IvaKindPatch.ROW_TAG + IvaKindPatch.FORM[0][2] + part);
+    }
+
+    /** Стрелки «Категории», «Подкатегории» и «Вида» — по тому, виден ли их список («Частые условия» — в paintTerms). */
+    static void syncArrows(Activity a, View form) {
+        Object c = IvaClientPatch.get(a, "atCat"), s = IvaClientPatch.get(a, "atSub");
+        if (c instanceof TextView) arrow((TextView) c, open(IvaClientPatch.get(a, "atCatSug")));
+        if (s instanceof TextView) arrow((TextView) s, open(IvaClientPatch.get(a, "atSubSug")));
+        View kf = kindView(form, ":field");
+        if (kf instanceof TextView) arrow((TextView) kf, open(kindView(form, ":drop")));
+    }
+
+    /** Закрыть все списки формы: штатные «Категория» / «Подкатегория», «Вид», «Частые условия», подсказки названия и модели. */
+    static void closeDrops(Activity a, LinearLayout form) {
+        for (String f : new String[]{"atCatSug", "atSubSug"}) IvaKindPatch.hideDrop(a, f);
+        for (View v : new View[]{kindView(form, ":drop"), form.findViewWithTag(IvaModelPatch.NAME_SUG),
+                form.findViewWithTag(IvaModelPatch.BLOCK + ":drop")})
+            if (v != null) v.setVisibility(View.GONE);
+        if (termsOpen) { termsOpen = false; paintTerms(a, form); }
+        syncArrows(a, form);
+    }
+
+    static boolean inside(View root, View v) {
+        for (Object p = v; p instanceof View; p = ((View) p).getParent()) if (p == root) return true;
+        return false;
+    }
+
+    /** Повторное нажатие на штатное поле с открытым списком — закрыть список; штатное нажатие при этом не срабатывает. */
+    static void tapToggle(final TextView field, final View list) {
+        field.setOnTouchListener(new View.OnTouchListener() {
+            boolean wasOpen = false;
+            @Override public boolean onTouch(View v, android.view.MotionEvent e) {
+                try {
+                    int ac = e.getActionMasked();
+                    if (ac == android.view.MotionEvent.ACTION_DOWN) wasOpen = open(list);
+                    if (!tapCloses(wasOpen, ac == android.view.MotionEvent.ACTION_UP)) return false;
+                    wasOpen = false;
+                    list.setVisibility(View.GONE);
+                    android.view.MotionEvent c = android.view.MotionEvent.obtain(e);
+                    c.setAction(android.view.MotionEvent.ACTION_CANCEL);           // снять нажатое состояние без «клика»
+                    v.onTouchEvent(c);
+                    c.recycle();
+                    return true;
+                } catch (Throwable t) { return false; }
+            }
+        });
+    }
+
+    static void arrows(final Activity a, final LinearLayout form) {
+        syncArrows(a, form);
+        if (arrowForms.containsKey(form)) return;
+        arrowForms.put(form, Boolean.TRUE);
+        Object c = IvaClientPatch.get(a, "atCat"), cs = IvaClientPatch.get(a, "atCatSug");
+        Object s = IvaClientPatch.get(a, "atSub"), ss = IvaClientPatch.get(a, "atSubSug");
+        if (c instanceof TextView && cs instanceof View) tapToggle((TextView) c, (View) cs);
+        if (s instanceof TextView && ss instanceof View) tapToggle((TextView) s, (View) ss);
+        android.view.ViewTreeObserver vto = form.getViewTreeObserver();
+        vto.addOnGlobalLayoutListener(new android.view.ViewTreeObserver.OnGlobalLayoutListener() {
+            @Override public void onGlobalLayout() {                                 // список открыли / закрыли — стрелка следом
+                try { if (form.isShown()) syncArrows(a, form); } catch (Throwable ignore) {}
+            }
+        });
+        vto.addOnGlobalFocusChangeListener(new android.view.ViewTreeObserver.OnGlobalFocusChangeListener() {
+            @Override public void onGlobalFocusChanged(View o, View n) {
+                try {
+                    if (closeOnFocus(o != null && inside(form, o), o instanceof EditText, n instanceof EditText, o == n))
+                        closeDrops(a, form);
+                } catch (Throwable ignore) {}
+            }
+        });
     }
 
     static void ensureViews(Activity a, LinearLayout form) {
@@ -592,8 +732,8 @@ final class IvaFormPatch {
                 android.graphics.drawable.Drawable chev = ds != null && ds.length > 2 ? IvaKindPatch.copy(ds[2], a, null) : null;
                 if (chev != null && !left.isEmpty()) {
                     chev.setBounds(ds[2].getBounds());
-                    if (termsOpen) chev.setLevel(1);
                     f.setCompoundDrawables(null, null, chev, null);
+                    arrow(f, termsOpen);                                              // 10.91: открыт — вниз, закрыт — вправо
                 }
                 f.setCompoundDrawablePadding(st.getCompoundDrawablePadding());
             } catch (Throwable ignore) {}

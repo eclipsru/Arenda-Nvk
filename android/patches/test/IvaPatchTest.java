@@ -1890,6 +1890,16 @@ public class IvaPatchTest {
         eq("форма 10.90: в частых условиях нет ни одной подсказки про паспорт",
             fpPass + "," + IvaFormPatch.termOptions("").contains("Паспорт при получении") + "," + IvaFormPatch.termOptions("").contains("Оформляем договор аренды"),
             "false,false,true");
+        eq("форма 10.91: стрелка списка — закрыт вправо (0°), открыт вниз (90°)",
+            IvaFormPatch.arrowAngle(false) + "," + IvaFormPatch.arrowAngle(true), "0.0,90.0");
+        eq("форма 10.91: повторное нажатие закрывает только список, открытый в момент касания, и только при отпускании",
+            IvaFormPatch.tapCloses(true, true) + "," + IvaFormPatch.tapCloses(true, false) + "," + IvaFormPatch.tapCloses(false, true)
+                + "," + IvaFormPatch.tapCloses(false, false), "true,false,false,false");
+        eq("форма 10.91: «Далее» (фокус из поля формы в другое поле) закрывает списки; снятие фокуса, чужой экран, то же поле — нет",
+            IvaFormPatch.closeOnFocus(true, true, true, false) + "," + IvaFormPatch.closeOnFocus(true, true, false, false)
+                + "," + IvaFormPatch.closeOnFocus(false, true, true, false) + "," + IvaFormPatch.closeOnFocus(true, false, true, false)
+                + "," + IvaFormPatch.closeOnFocus(true, true, true, true), "true,false,false,false,false");
+        eq("форма 10.91: кнопки «Сгенерировать описание» нет", String.valueOf(IvaModelPatch.SHOW_GEN), "false");
         eq("форма 10.89: скрываем штатные «Добавить инструмент» и «Публикуется сразу…», остальное — нет",
             IvaFormPatch.nativeTop("Добавить инструмент") + "," + IvaFormPatch.nativeTop("Публикуется сразу — от вашего имени. Клиенты увидят его в поиске.")
                 + "," + IvaFormPatch.nativeTop("Что сдаёте") + "," + IvaFormPatch.nativeTop(null) + "," + IvaFormPatch.SHOW_SAMPLE,
