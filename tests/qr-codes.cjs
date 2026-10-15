@@ -13,7 +13,7 @@ const path = require('node:path');
 const assert = require('node:assert/strict');
 
 const ROOT = path.resolve(__dirname, '..');
-const QR = ['assets/qr-site.png', 'assets/qr-app.png', 'assets/qr-app-apk.png', 'assets/qr-listovka.png', 'assets/qr-app-logo.png'];
+const QR = ['assets/qr-site.png', 'assets/qr-app.png', 'assets/qr-app-apk.png', 'assets/qr-listovka.png', 'assets/qr-app-logo.png', 'assets/qr-site-logo.png'];
 
 // 1. Файлы на месте и валидные PNG
 for (const f of QR) {
@@ -47,9 +47,13 @@ assert.ok(fs.existsSync(path.join(ROOT, 'assets', 'logo.png')) && fs.existsSync(
 assert.ok(fs.readFileSync(path.join(ROOT, 'app.html'), 'utf8').includes('data-app-dl='),
   'app.html: пропала кнопка скачивания (data-app-dl) — постоянный QR перестанет вести на скачивание');
 
+// 2в. 16.10.2026: постоянный код на сайт с логотипом и надписью «Ива» — главная из sitemap.xml
+assert.ok(make.includes('SITE_LOGO_URL = SITE + "/"') && make.includes('SITE_CAPTION = "Ива"') && sitemap.includes(`<loc>${base}/</loc>`),
+  'tools/make-qr.py: постоянный код на сайт должен вести на главную (как в sitemap.xml) и иметь надпись «Ива»');
+
 // 3. Никаких внешних сервисов для генерации — только локальная библиотека
 for (const bad of ['urlopen', 'requests.get', 'http://', 'api.qrserver', 'quickchart', 'chart.googleapis']) {
   assert.ok(!make.includes(bad), `tools/make-qr.py: найден внешний ресурс «${bad}» — коды должны рисоваться локально`);
 }
 
-console.log(`✔ qr-codes: 5 файлов на месте (постоянный с логотипом → app.html), адреса совпадают с сайтом (${base}), генерация локальная`);
+console.log(`✔ qr-codes: 6 файлов на месте (постоянные с логотипом: приложение → app.html, сайт → главная), адреса совпадают с сайтом (${base}), генерация локальная`);
