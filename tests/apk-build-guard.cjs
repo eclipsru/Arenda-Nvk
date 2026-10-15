@@ -880,6 +880,27 @@ try {
       && R('tools/app-releases-stand.py').includes('20261022_app_releases_tester.sql'),
       'SQL 10.94: только добавляет право выпуска eclipsik (от своего имени); проверяется на стенде PostgreSQL');
     for (const s2 of [wf, ck]) assert.ok(s2.includes('android/patches/IvaTestPatch.java'), 'IvaTestPatch.java — в списке javac сборки и проверки');
+    // 10.95: «Пункт выдачи» — строка в настройках у админов, отдельная страница, запись в iva_pickup_points; «Срок аренды» — по первому пункту
+    const pk = R('android/patches/IvaPickupPatch.java'), rp95 = R('android/patches/IvaRentPatch.java'), np95 = R('android/patches/IvaNotifyPatch.java');
+    assert.ok(np95.includes('if (admin) try { IvaPickupPatch.settingsRow(a, page, cText, cGray, cOrange); } catch (Throwable ignore) {}')
+      && np95.indexOf('IvaPickupPatch.settingsRow(') < np95.indexOf('IvaRentPatch.settingsSection(a, page,')
+      && pk.includes('u.page = IvaChiefPatch.page(a, ROW_TITLE, PAGE_SUB, false);') && pk.includes('g.setStroke(Math.max(1, dp(a, 1.5f)), cOrange);')
+      && pk.includes('static final String TABLE = "/rest/v1/iva_pickup_points";') && pk.includes('static final String PHOTON = "https://photon.komoot.io/api/";')
+      && R('assets/geo.js').includes("const endpoint='https://photon.komoot.io/api/';")
+      && pk.includes('try { ne = IvaCensorPatch.fieldError(p.name); } catch (Throwable ignore) {}')
+      && !/customer_profiles|passport|phone|surname|select=\*/.test(pk) && !/owner_email\\"/.test(pk),
+      'пункт 10.95: «Пункт выдачи» — только у админов, над «Сроком аренды»; своя страница; Photon как на сайте; без личных данных клиентов; владельца ставит база');
+    assert.ok(rp95.includes('int[] pc = IvaPickupPatch.mainClose(a);') && rp95.includes('if (pc != null) st.close = pc.clone();')
+      && rp95.includes('if (IvaPickupPatch.mainClose(a) != null) { linkedToast(a); return; }') && rp95.includes('relinkRef = new java.lang.ref.WeakReference<Runnable>(ref[0]);'),
+      'пункт 10.95: «Срок аренды → До закрытия пункта» — время из первого пункта (только показ)');
+    const sq95 = R('supabase/migrations/20261023_pickup_points.sql');
+    assert.ok(sq95.includes('CREATE TABLE IF NOT EXISTS public.iva_pickup_points') && sq95.includes('ALTER TABLE public.iva_pickup_points ENABLE ROW LEVEL SECURITY;')
+      && sq95.includes('REVOKE ALL ON TABLE public.iva_pickup_points FROM public, anon, authenticated;')
+      && sq95.includes("raise exception 'Не больше 20 пунктов выдачи';") && sq95.includes('perform public.iva_pickup_sync_rent(')
+      && sq95.includes('select p.close_min into pc from public.iva_pickup_points p where p.owner_email = em order by p.created_at, p.id limit 1;')
+      && !/DROP TABLE|TRUNCATE|DELETE FROM/i.test(sq95.replace(/^--.*$/gm, '')) && R('tools/check.sh').includes('tools/pickup-stand.py'),
+      'SQL 10.95: пункты — только свои у действующего админа, до 20, «Срок аренды» по первому; без удаления данных; стенд PostgreSQL в check.sh');
+    for (const s2 of [wf, ck]) assert.ok(s2.includes('android/patches/IvaPickupPatch.java'), 'IvaPickupPatch.java — в списке javac сборки и проверки');
     assert.ok(wf.includes('            tests/censor-cases.txt\n') && /eq\("цензура 10\.92: общие случаи tests\/censor-cases\.txt/.test(tp)
       && R('tools/check.sh').includes('tools/censor-stand.py'), 'цензура 10.92: общие случаи — в IvaPatchTest (сборка) и на стенде PostgreSQL (check.sh)');
     // 10.89: фильтр — 3 + «Все ▾», выбрали — только выбранная; карточка — модель и состояние; бренд и модель — текстом
@@ -1140,7 +1161,7 @@ try {
       && mf.includes("if (e.target.closest('[data-msug]')) e.preventDefault();") && !/<link[^>]*theme\.css/.test(cab),
       'модели 10.82: сайт — общие модули; кабинет без theme.css');
     // 5. приложение: без новых вставок в smali — только из IvaKindPatch; файл в сборке; личных данных не читаем
-    assert.ok(!/IvaModelPatch|model/i.test(ap) && /IvaKindPatch\.java android\/patches\/IvaModelPatch\.java (android\/patches\/IvaFormPatch\.java )?(android\/patches\/IvaPhotoPatch\.java )?(android\/patches\/IvaCensorPatch\.java )?(android\/patches\/IvaChiefPatch\.java )?(android\/patches\/IvaTestPatch\.java )?2>&1/.test(wf)
+    assert.ok(!/IvaModelPatch|model/i.test(ap) && /IvaKindPatch\.java android\/patches\/IvaModelPatch\.java (android\/patches\/IvaFormPatch\.java )?(android\/patches\/IvaPhotoPatch\.java )?(android\/patches\/IvaCensorPatch\.java )?(android\/patches\/IvaChiefPatch\.java )?(android\/patches\/IvaTestPatch\.java )?(android\/patches\/IvaPickupPatch\.java )?2>&1/.test(wf)
       && kp.includes('if (k == 0) IvaModelPatch.refresh(a);') && kp.includes('try { IvaModelPatch.onTab(a, tab); } catch (Throwable ignore) {}')
       && !/customer_profiles|passport|phone|surname/.test(mp),
       'модели 10.82: новых вставок в smali нет; личных данных не читаем');
@@ -1195,7 +1216,7 @@ try {
     assert.ok(kp.includes('static final String SUB_HINT = "Подкатегория (необязательно)";') && has(dex14, 'Подкатегория (необязательно)')
       && has(dex14, 'atCatSug') && has(dex14, 'atSubSug') && has(dex14, 'atName'),
       'автоподбор 10.81: штатные поля и текст пустой подкатегории есть в 10.14');
-    assert.ok(!/IvaKindPatch|kind/i.test(ap) && /IvaRentPatch\.java android\/patches\/IvaKindPatch\.java (android\/patches\/IvaModelPatch\.java )?(android\/patches\/IvaFormPatch\.java )?(android\/patches\/IvaPhotoPatch\.java )?(android\/patches\/IvaCensorPatch\.java )?(android\/patches\/IvaChiefPatch\.java )?(android\/patches\/IvaTestPatch\.java )?2>&1/.test(wf),
+    assert.ok(!/IvaKindPatch|kind/i.test(ap) && /IvaRentPatch\.java android\/patches\/IvaKindPatch\.java (android\/patches\/IvaModelPatch\.java )?(android\/patches\/IvaFormPatch\.java )?(android\/patches\/IvaPhotoPatch\.java )?(android\/patches\/IvaCensorPatch\.java )?(android\/patches\/IvaChiefPatch\.java )?(android\/patches\/IvaTestPatch\.java )?(android\/patches\/IvaPickupPatch\.java )?2>&1/.test(wf),
       'автоподбор 10.81: новых вставок в smali и новых файлов нет');
     // 5. сайт: один модуль, вид пишется только когда справочник видов есть в базе
     assert.ok(nw.includes('<script src="assets/kind-guess.js?v=20261016-kind"></script>') && cab.includes('<script src="assets/kind-guess.js?v=20261016-kind"></script>')
@@ -1270,7 +1291,7 @@ try {
     const sql = R('supabase/migrations/20261015_category_tree.sql'), mv = R('supabase/migrations/20261015_category_tree_move.sql');
     const fnx = (src, name) => { const mm = new RegExp(`static (?:final )?[\\w.<>, \\[\\]]+ ${name}\\(`).exec(src); assert.ok(mm, `нет ${name}`); return src.slice(mm.index, src.indexOf('\n    }\n', mm.index)); };
     // 1. сборка и проверка компилируют IvaKindPatch; вставок в smali нет
-    assert.ok(/IvaRentPatch\.java android\/patches\/IvaKindPatch\.java (android\/patches\/IvaModelPatch\.java )?(android\/patches\/IvaFormPatch\.java )?(android\/patches\/IvaPhotoPatch\.java )?(android\/patches\/IvaCensorPatch\.java )?(android\/patches\/IvaChiefPatch\.java )?(android\/patches\/IvaTestPatch\.java )?2>&1/.test(wf) && ck.includes('android/patches/IvaKindPatch.java'),
+    assert.ok(/IvaRentPatch\.java android\/patches\/IvaKindPatch\.java (android\/patches\/IvaModelPatch\.java )?(android\/patches\/IvaFormPatch\.java )?(android\/patches\/IvaPhotoPatch\.java )?(android\/patches\/IvaCensorPatch\.java )?(android\/patches\/IvaChiefPatch\.java )?(android\/patches\/IvaTestPatch\.java )?(android\/patches\/IvaPickupPatch\.java )?2>&1/.test(wf) && ck.includes('android/patches/IvaKindPatch.java'),
       'вид 10.79: IvaKindPatch компилируется в сборку и в проверку');
     assert.ok(!/IvaKindPatch|kind/i.test(ap), 'вид 10.79: новых вставок в smali нет');
     // 2. точки входа: onTab (справочник, форма, запись), onHub (только форма — запомненный выбор не трогает), касание сохранения
@@ -1543,7 +1564,8 @@ try {
     assert.ok(sys < at('switchRow(a, card, "Все уведомления"') && at('switchRow(a, card, "Все уведомления"') < at('schedSw[0] = switchRow(')
       && at('schedSw[0] = switchRow(') < at('body.addView(status, sl);') && at('body.addView(status, sl);') < at('body.addView(note, nl);'),
       'настройки 10.75: порядок — Android, какие присылать, расписание, остальное');
-    const os75 = os.replace('IvaRentPatch.settingsSection(a, page, cText, cGray, cOrange)', '');   // 10.77: «Аренда» — отдельная кнопка ниже
+    const os75 = os.replace('IvaRentPatch.settingsSection(a, page, cText, cGray, cOrange)', '')   // 10.77: «Аренда» — отдельная кнопка ниже
+      .replace('IvaPickupPatch.settingsRow(a, page, cText, cGray, cOrange)', '');   // 10.95: «Пункт выдачи» — тоже отдельная кнопка
     assert.ok(!/(?:page|root)\.addView\((?:status|test|note|push|card|sc|sys)\b/.test(os75) && (os75.match(/page\.addView\(/g) || []).length === 2
       && (os75.match(/\bpage\b/g) || []).length === 7 && !/\(a, page\b/.test(os75),
       'настройки 10.75: всё про уведомления — внутри списка, снаружи только кнопка');

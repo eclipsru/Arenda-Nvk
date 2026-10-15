@@ -246,6 +246,17 @@ else
   skip "стенд «Цензуры»: нет pgserver (PG_PY=<python с pgserver> bash tools/check.sh)"
 fi
 
+head_ "4.5.7. Стенд «Пункта выдачи» (локальный PostgreSQL)"
+if "$PG_PY" -c "import pgserver" >/dev/null 2>&1; then
+  if "$PG_PY" tools/pickup-stand.py >/tmp/iva-test-pickup.log 2>&1; then
+    ok "пункт выдачи: $(grep -c '✔' /tmp/iva-test-pickup.log) проверок SQL на PostgreSQL (права, график, связь со «Сроком аренды»)"
+  else
+    bad "стенд «Пункта выдачи»"; grep -E '✘|Error|ERROR' /tmp/iva-test-pickup.log | head -8 | sed 's/^/      /'
+  fi
+else
+  skip "стенд «Пункта выдачи»: нет pgserver (PG_PY=<python с pgserver> bash tools/check.sh)"
+fi
+
 head_ "4.6. Скачивание приложения у всех: файл выпущенной версии на месте"
 # Выпущенная версия живёт строкой в базе (app_releases) и ссылается на файл в корне сайта.
 # Если файл убрать, у всех пользователей ломается «Скачать APK». Код 2 = проверить не удалось (нет сети).

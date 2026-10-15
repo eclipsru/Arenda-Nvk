@@ -2126,6 +2126,64 @@ public class IvaPatchTest {
             eq("кабинет 10.93: дни назад", IvaChiefPatch.daysAgo("2026-10-15T00:00:01Z", ch93Now) + "," + IvaChiefPatch.daysAgo("2026-10-08T12:00:00", ch93Now) + ","
                 + IvaChiefPatch.daysAgo("кривое", ch93Now) + "," + IvaChiefPatch.daysAgo(null, ch93Now), "0,7,-1,-1");
         } catch (Exception ch93E) { eq("кабинет 10.93: тесты", String.valueOf(ch93E), ""); }
+        // 10.95: «Пункт выдачи» — проверки полей, график (как в базе), подсказки адреса (как сайт), запросы
+        {
+            eq("пункт 10.95: email проката", IvaPickupPatch.emailOk("prokat@mail.ru") + "," + IvaPickupPatch.emailOk(" Prokat@Mail.RU ") + ","
+                + IvaPickupPatch.emailOk("prokat.mail.ru") + "," + IvaPickupPatch.emailOk("prokat@mail") + "," + IvaPickupPatch.emailOk("a b@mail.ru") + ","
+                + IvaPickupPatch.emailOk("") + "," + IvaPickupPatch.emailOk(null) + "," + IvaPickupPatch.emailOk("a@b.c"), "true,true,false,false,false,false,false,false");
+            eq("пункт 10.95: ошибки полей", IvaPickupPatch.nameErr("  ") + "|" + IvaPickupPatch.nameErr("Склад") + "|" + IvaPickupPatch.nameErr(new String(new char[81]).replace('\0', 'я')) + "|"
+                + IvaPickupPatch.addrErr("Нск") + "|" + IvaPickupPatch.addrErr("Новосибирск, улица Ленина, д. 5") + "|" + IvaPickupPatch.emailErr("") + "|" + IvaPickupPatch.emailErr("x@"),
+                "Введите название пункта||Название — не длиннее 80 символов|Введите полный адрес: город, улица, дом||Введите email проката|Похоже, в email ошибка (пример: prokat@mail.ru)");
+            int[] p95o = {540, 540, 540, 540, 540, 600, -1}, p95c = {1140, 1140, 1140, 1140, 1140, 960, -1};
+            eq("пункт 10.95: график — как проверка базы", IvaPickupPatch.hoursOk(p95o, p95c) + ","
+                + IvaPickupPatch.hoursOk(new int[]{1200, 540, 540, 540, 540, 540, 540}, new int[]{1140, 1140, 1140, 1140, 1140, 1140, 1140}) + ","
+                + IvaPickupPatch.hoursOk(new int[]{-1, 540, 540, 540, 540, 540, 540}, new int[]{1140, 1140, 1140, 1140, 1140, 1140, 1140}) + ","
+                + IvaPickupPatch.hoursOk(IvaPickupPatch.fill(-1), IvaPickupPatch.fill(-1)) + ","
+                + IvaPickupPatch.hoursOk(IvaPickupPatch.fill(0), IvaPickupPatch.fill(1439)) + ","
+                + IvaPickupPatch.hoursOk(IvaPickupPatch.fill(540), IvaPickupPatch.fill(1440)) + ","
+                + IvaPickupPatch.hoursOk(new int[6], new int[6]) + "," + IvaPickupPatch.hoursOk(null, p95c), "true,false,false,false,true,false,false,false");
+            eq("пункт 10.95: график текстом", IvaPickupPatch.hoursText(p95o, p95c) + " | "
+                + IvaPickupPatch.hoursText(IvaPickupPatch.fill(0), IvaPickupPatch.fill(1439)) + " | "
+                + IvaPickupPatch.hoursText(new int[]{540, -1, 540, 540, 600, 600, -1}, new int[]{1140, -1, 1140, 1140, 960, 960, -1}),
+                "Пн–Пт 09:00–19:00 · Сб 10:00–16:00 · Вс выходной | Пн–Вс 00:00–23:59 | Пн 09:00–19:00 · Вт выходной · Ср, Чт 09:00–19:00 · Пт, Сб 10:00–16:00 · Вс выходной");
+            eq("пункт 10.95: график из базы и в базу", IvaPickupPatch.arrJson(IvaPickupPatch.arr("{540,540,540,540,540,600,-1}")) + "|"
+                + IvaPickupPatch.arrJson(IvaPickupPatch.arr("[1140, 1140,1140,1140,1140,960,-1]")) + "|" + IvaPickupPatch.arr("{1,2,3}") + "|"
+                + IvaPickupPatch.arr("{1440,0,0,0,0,0,0}") + "|" + IvaPickupPatch.arr("x") + "|" + IvaPickupPatch.arr(null),
+                "[540,540,540,540,540,600,-1]|[1140,1140,1140,1140,1140,960,-1]|null|null|null|null");
+            eq("пункт 10.95: сколько пунктов", IvaPickupPatch.countText(1) + "," + IvaPickupPatch.countText(2) + "," + IvaPickupPatch.countText(5) + ","
+                + IvaPickupPatch.countText(11) + "," + IvaPickupPatch.countText(14) + "," + IvaPickupPatch.countText(20) + "," + IvaPickupPatch.countText(21),
+                "1 пункт,2 пункта,5 пунктов,11 пунктов,14 пунктов,20 пунктов,21 пункт");
+            eq("пункт 10.95: запросы — только свои, нужные столбцы, по порядку добавления", IvaPickupPatch.listPath(" Admin@X.ru ") + " | " + IvaPickupPatch.idPath("a-1"),
+                "/rest/v1/iva_pickup_points?select=id,name,address,city,lat,lng,open_min,close_min,email,created_at&owner_email=eq.admin%40x.ru&order=created_at.asc,id.asc"
+                + " | /rest/v1/iva_pickup_points?id=eq.a-1");
+            IvaPickupPatch.Point p95 = new IvaPickupPatch.Point();
+            p95.name = "  Склад   \"Ленина\" "; p95.address = "Новосибирск,  улица Ленина, д. 5"; p95.city = "Новосибирск"; p95.email = " Prokat@Mail.ru ";
+            p95.lat = 55.03; p95.lng = 82.92; p95.open = p95o; p95.close = p95c;
+            String p95b = IvaPickupPatch.body(p95);
+            p95.lng = null;
+            eq("пункт 10.95: запись — без владельца, координаты парой", p95b + " | " + IvaPickupPatch.body(p95).contains("\"lat\":null,\"lng\":null"),
+                "{\"name\":\"Склад \\\"Ленина\\\"\",\"address\":\"Новосибирск, улица Ленина, д. 5\",\"city\":\"Новосибирск\",\"lat\":55.03,\"lng\":82.92,"
+                + "\"open_min\":[540,540,540,540,540,600,-1],\"close_min\":[1140,1140,1140,1140,1140,960,-1],\"email\":\"prokat@mail.ru\"} | true");
+            eq("пункт 10.95: ответы базы", IvaPickupPatch.dbError("201", "") + "|" + IvaPickupPatch.dbError("400", "{\"message\":\"Не больше 20 пунктов выдачи\"}") + "|"
+                + IvaPickupPatch.dbError("404", "{\"code\":\"PGRST205\"}") + "|" + IvaPickupPatch.dbError("403", "{\"code\":\"42501\"}") + "|"
+                + IvaPickupPatch.dbError("400", "{\"code\":\"23514\"}") + "|" + IvaPickupPatch.dbError("", "") + "|" + IvaPickupPatch.dbError("500", "x"),
+                "|Не больше 20 пунктов выдачи|Заработает после обновления базы (SQL 10.95)|Нет права: пункты добавляет действующий админ|"
+                + "База не приняла данные — проверьте поля|Не сохранилось — нет связи с сервером|Не сохранилось (ответ 500)");
+            eq("пункт 10.95: запрос подсказок — как сайт (Photon, Россия, 8)", IvaPickupPatch.photonUrl("  Новосибирск  Ленина 5 "),
+                "https://photon.komoot.io/api/?q=%D0%9D%D0%BE%D0%B2%D0%BE%D1%81%D0%B8%D0%B1%D0%B8%D1%80%D1%81%D0%BA+%D0%9B%D0%B5%D0%BD%D0%B8%D0%BD%D0%B0+5&lang=default&countrycode=RU&limit=8");
+            java.util.Map<String, String> p95h = new java.util.HashMap<String, String>();
+            p95h.put("countrycode", "RU"); p95h.put("osm_key", "building"); p95h.put("type", "house"); p95h.put("city", "Новосибирск");
+            p95h.put("street", "улица Ленина"); p95h.put("housenumber", "5"); p95h.put("state", "Новосибирская область");
+            java.util.Map<String, String> p95c2 = new java.util.HashMap<String, String>();
+            p95c2.put("countrycode", "RU"); p95c2.put("osm_key", "place"); p95c2.put("osm_value", "town"); p95c2.put("name", "город Бердск");
+            java.util.Map<String, String> p95l = new java.util.HashMap<String, String>(p95h); p95l.put("street", "Lenina street");
+            java.util.Map<String, String> p95k = new java.util.HashMap<String, String>(p95h); p95k.put("countrycode", "KZ");
+            java.util.Map<String, String> p95n = new java.util.HashMap<String, String>();
+            p95n.put("countrycode", "RU"); p95n.put("osm_key", "amenity"); p95n.put("type", "house"); p95n.put("town", "Искитим"); p95n.put("name", "Склад Ива");
+            eq("пункт 10.95: подсказка адреса — как IvaGeo сайта", String.join("|", IvaPickupPatch.addrOf(p95h)) + " / " + String.join("|", IvaPickupPatch.addrOf(p95c2))
+                + " / " + IvaPickupPatch.addrOf(p95l) + " / " + IvaPickupPatch.addrOf(p95k) + " / " + String.join("|", IvaPickupPatch.addrOf(p95n)) + " / " + IvaPickupPatch.addrOf(null),
+                "Новосибирск, улица Ленина, д. 5|Новосибирск|Новосибирская область / Бердск|Бердск| / null / null / Искитим, Склад Ива|Искитим| / null");
+        }
         // 10.94: жёлтая (пробная) версия у eclips и eclipsik — кнопка, выбор, выпуск, уведомление
         {
             eq("пробная 10.94: кому видна", IvaTestPatch.isTester("eclips.ru@mail.ru") + "," + IvaTestPatch.isTester(" Eclipsik.RU@mail.ru ") + ","

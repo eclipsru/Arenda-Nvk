@@ -1668,6 +1668,8 @@ public final class IvaNotifyPatch {
             page.addView(body, new LinearLayout.LayoutParams(-1, -2));
             try { page.setLayoutTransition(new android.animation.LayoutTransition()); } catch (Throwable ignore) {}
             // 10.77: «Аренда» — только админам: как считать окончание аренды (сутки / до закрытия пункта)
+            // 10.95: «Пункт выдачи» — только админам, отдельная страница (по первому пункту считается «Срок аренды»)
+            if (admin) try { IvaPickupPatch.settingsRow(a, page, cText, cGray, cOrange); } catch (Throwable ignore) {}
             if (admin) try { IvaRentPatch.settingsSection(a, page, cText, cGray, cOrange); } catch (Throwable ignore) {}
             head.setContentDescription(NOTIF_TITLE + ", развернуть");
             head.setOnClickListener(new View.OnClickListener() {

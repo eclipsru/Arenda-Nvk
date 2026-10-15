@@ -473,7 +473,8 @@ public class IvaRentPatch {
         final LinearLayout closeBox = new LinearLayout(a);
         closeBox.setOrientation(LinearLayout.VERTICAL);
         body.addView(closeBox, new LinearLayout.LayoutParams(-1, -2));
-        closeBox.addView(IvaNotifyPatch.label(a, "Пункт закрывается", cGray));
+        final TextView closeLabel = IvaNotifyPatch.label(a, "Пункт закрывается", cGray);
+        closeBox.addView(closeLabel);
         LinearLayout sc = new LinearLayout(a);
         sc.setOrientation(LinearLayout.VERTICAL);
         Drawable sbg = IvaOrderPatch.drawable(a, "bg_card");
@@ -510,12 +511,14 @@ public class IvaRentPatch {
             tt.setOnClickListener(new View.OnClickListener() {
                 @Override public void onClick(View v) {
                     if (st.close[day] < 0) return;
+                    if (IvaPickupPatch.mainClose(a) != null) { linkedToast(a); return; }   // 10.95: время — из пункта выдачи
                     pickClose(a, st, day, new Runnable() { @Override public void run() { edited[0] = true; ref[0].run(); save[0].run(); } });
                 }
             });
             ds.setOnCheckedChangeListener(new CompoundButton.OnCheckedChangeListener() {
                 @Override public void onCheckedChanged(CompoundButton b, boolean v) {
                     if (drawing[0]) return;
+                    if (IvaPickupPatch.mainClose(a) != null) { linkedToast(a); ref[0].run(); return; }   // 10.95
                     if (!v) {
                         int openDays = 0;
                         for (int x : st.close) if (x >= 0) openDays++;
@@ -535,7 +538,7 @@ public class IvaRentPatch {
             open[i] = ds;
             sc.addView(row);
         }
-        TextView copy = new TextView(a);
+        final TextView copy = new TextView(a);
         copy.setText("Время понедельника — на все дни");
         copy.setTextSize(14f);
         copy.setTypeface(null, Typeface.BOLD);
@@ -550,7 +553,7 @@ public class IvaRentPatch {
             }
         });
         sc.addView(copy);
-        TextView ch = new TextView(a);
+        final TextView ch = new TextView(a);
         ch.setText(CLOSE_HINT);
         ch.setTextSize(12f);
         ch.setTextColor(cGray);
@@ -578,6 +581,12 @@ public class IvaRentPatch {
                 ((TextView) optDay.getChildAt(0)).setTextColor(!byClose ? cOrange : cText);
                 ((TextView) optClose.getChildAt(0)).setTextColor(byClose ? cOrange : cText);
                 closeBox.setVisibility(byClose ? View.VISIBLE : View.GONE);
+                // 10.95 (решение владельца): есть пункты выдачи — время закрытия из графика первого пункта, здесь только показ
+                int[] pc = IvaPickupPatch.mainClose(a);
+                if (pc != null) st.close = pc.clone();
+                closeLabel.setText(pc != null ? "Пункт закрывается — по графику «" + IvaPickupPatch.mainName(a) + "»" : "Пункт закрывается");
+                copy.setVisibility(pc != null ? View.GONE : View.VISIBLE);
+                ch.setText(pc != null ? LINK_HINT : CLOSE_HINT);
                 drawing[0] = true;
                 for (int i = 0; i < 7; i++) {
                     boolean on = st.close[i] >= 0;
@@ -633,6 +642,7 @@ public class IvaRentPatch {
             }
         });
         ref[0].run();
+        relinkRef = new java.lang.ref.WeakReference<Runnable>(ref[0]);
 
         // из базы — актуальные (с другого телефона могли поменять); пока грузится — сохранённые на телефоне
         new Thread(new Runnable() {
@@ -658,6 +668,21 @@ public class IvaRentPatch {
                 });
             }
         }).start();
+    }
+
+    // 10.95: «Срок аренды» ↔ «Пункт выдачи»
+    static final String LINK_HINT = "Время закрытия — из графика первого пункта выдачи; меняется в «Настройки → Пункт выдачи». "
+        + "Выходной день: если срок выпадает на него, вернуть можно до закрытия следующего рабочего дня.";
+    static volatile java.lang.ref.WeakReference<Runnable> relinkRef = new java.lang.ref.WeakReference<Runnable>(null);
+
+    /** Пункты выдачи загрузились или изменились — перерисовать «Срок аренды», если он открыт. */
+    static void relink() {
+        Runnable r = relinkRef.get();
+        if (r != null) try { r.run(); } catch (Throwable ignore) {}
+    }
+
+    static void linkedToast(Activity a) {
+        try { Toast.makeText(a, "Время закрытия — из графика пункта «" + IvaPickupPatch.mainName(a) + "». Измените его в «Пункт выдачи»", Toast.LENGTH_LONG).show(); } catch (Throwable ignore) {}
     }
 
     static LinearLayout option(Activity a, LinearLayout body, String title, String sub, int cText, int cGray) {
