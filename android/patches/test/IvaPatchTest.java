@@ -1983,6 +1983,79 @@ public class IvaPatchTest {
                 + "," + (fpOrd.indexOf(IvaFormPatch.TERMS) == fpOrd.indexOf("atTerms") + 1) + "," + fpOrd.get(fpOrd.size() - 1)
                 + "," + (fpOrd.size() == new java.util.HashSet<String>(fpOrd).size()) + "," + (fpOrd.indexOf(IvaPhotoPatch.TAG) == fpOrd.indexOf("atPhotos") + 1),
             "true,true,true,true,true,atSave,true,true");
+        {   // 10.92: «Цензура» — общие случаи (их же проверяет база: tools/censor-stand.py → public.iva_censor)
+            int cz92Tot = 0, cz92Ok = 0;
+            StringBuilder cz92Bad = new StringBuilder();
+            java.util.Set<String> cz92Lv = new java.util.HashSet<String>();
+            try {
+                for (String cz92L : new String(java.nio.file.Files.readAllBytes(java.nio.file.Paths.get("tests/censor-cases.txt")), "UTF-8").split("\n")) {
+                    if (cz92L.trim().isEmpty() || cz92L.startsWith("#")) continue;
+                    int cz92T = cz92L.indexOf('\t');
+                    String cz92Want = cz92L.substring(0, cz92T), cz92Txt = IvaCensorPatch.unescape(cz92L.substring(cz92T + 1));
+                    String cz92Got = IvaCensorPatch.levelName(IvaCensorPatch.check(cz92Txt, null, null).level);
+                    cz92Tot++;
+                    cz92Lv.add(cz92Want);
+                    if (cz92Got.equals(cz92Want)) cz92Ok++; else cz92Bad.append(cz92L).append(" → ").append(cz92Got).append("; ");
+                }
+            } catch (Exception cz92E) { cz92Bad.append(cz92E); }
+            eq("цензура 10.92: общие случаи tests/censor-cases.txt (" + cz92Tot + ") — мат, сомнительно, обычные тексты", cz92Ok == cz92Tot && cz92Tot >= 180 && cz92Lv.size() == 3 ? "все" : cz92Bad.toString(), "все");
+            eq("цензура 10.92: почему сработало — латиница, транслит, по буквам, разбито, звёздочки, английский, грубое",
+                IvaCensorPatch.check("xyй", null, null).hits.get(0).rule + "," + IvaCensorPatch.check("pizdec", null, null).hits.get(0).rule
+                    + "," + IvaCensorPatch.check("х у й", null, null).hits.get(0).rule + "," + IvaCensorPatch.check("пи зда", null, null).hits.get(0).rule
+                    + "," + IvaCensorPatch.check("х*й", null, null).hits.get(0).rule + "," + IvaCensorPatch.check("fuck", null, null).hits.get(0).rule
+                    + "," + IvaCensorPatch.check("жопа", null, null).hits.get(0).rule + "," + IvaCensorPatch.check("хуй", null, null).hits.get(0).rule,
+                "visual,translit,letters,split,masked,en,rude,word");
+            eq("цензура 10.92: как прочитали — «xyйня» → «хуйня», «nahuy» → «нахуй», слово по буквам — как в тексте",
+                IvaCensorPatch.check("Сдаю, xyйня", null, null).hits.get(0).as + "|" + IvaCensorPatch.check("nahuy", null, null).hits.get(0).as
+                    + "|" + IvaCensorPatch.check("х у й", null, null).hits.get(0).word, "хуйня|нахуй|х у й");
+            java.util.Set<String> cz92Al = new java.util.HashSet<String>(java.util.Arrays.asList("хрен", "her"));
+            java.util.List<String> cz92Bn = java.util.Arrays.asList("гавно", "scam");
+            eq("цензура 10.92: «Это не мат» — не трогаем; «Запрещать всегда» — мат и внутри слова, и латиницей",
+                IvaCensorPatch.check("хрен", cz92Al, cz92Bn).level + "," + IvaCensorPatch.check("гавно", cz92Al, cz92Bn).level
+                    + "," + IvaCensorPatch.check("гавноед", cz92Al, cz92Bn).level + "," + IvaCensorPatch.check("SCAM", cz92Al, cz92Bn).level
+                    + "," + IvaCensorPatch.check("хрен", null, null).level + "," + IvaCensorPatch.check("гавно", cz92Al, cz92Bn).hits.get(0).rule,
+                "0,2,2,2,1,ban");
+            eq("цензура 10.92: таблицы замен — одной длины (как translate в базе)",
+                (IvaCensorPatch.V_FROM.length() == IvaCensorPatch.V_TO.length()) + "," + (IvaCensorPatch.P_FROM.length() == IvaCensorPatch.P_TO.length())
+                    + "," + (IvaCensorPatch.C_UP.length() == IvaCensorPatch.C_LOW.length()) + "," + (IvaCensorPatch.P_PAIRS.length % 2), "true,true,true,0");
+            eq("цензура 10.92: варианты слова — похожие буквы и транслит, без повторов",
+                String.join("/", IvaCensorPatch.vars("xyu")) + "|" + String.join("/", IvaCensorPatch.vars("shlyuhaaa")), "хуи/хю|sнlуина/шлюха");
+            eq("цензура 10.92: пустое и null — чисто", IvaCensorPatch.check("", null, null).level + "," + IvaCensorPatch.check(null, null, null).level
+                + "," + IvaCensorPatch.check("   ", null, null).level, "0,0,0");
+            eq("цензура 10.92: пункт «Цензура» — только у создателя, вошедшего в аккаунт",
+                IvaCensorPatch.rowFor(true, "eclips.ru@mail.ru") + "," + IvaCensorPatch.rowFor(true, " ECLIPS.RU@mail.ru ") + "," + IvaCensorPatch.rowFor(false, "eclips.ru@mail.ru")
+                    + "," + IvaCensorPatch.rowFor(true, "admin@x.ru") + "," + IvaCensorPatch.rowFor(true, null), "true,true,false,false,false");
+            eq("цензура 10.92: подпись пункта — сколько ждёт решения",
+                IvaCensorPatch.rowSub(-1, false) + "|" + IvaCensorPatch.rowSub(0, false) + "|" + IvaCensorPatch.rowSub(3, false) + "|" + IvaCensorPatch.rowSub(100, false)
+                    + "|" + IvaCensorPatch.rowSub(5, true),
+                "Сомнительные объявления и отзывы — на проверку|На проверке ничего нет|На проверке: 3|На проверке: 100+|Нужно обновить базу (20261021_censor.sql)");
+            eq("цензура 10.92: нет таблицы / функции (SQL не выполнен) — понятная подсказка",
+                IvaCensorPatch.missingTable("404", "") + "," + IvaCensorPatch.missingTable("400", "{\"code\":\"PGRST205\"}") + "," + IvaCensorPatch.missingTable("400", "42P01")
+                    + "," + IvaCensorPatch.missingTable("401", "JWT expired") + "," + IvaCensorPatch.missingTable("200", null), "true,true,true,false,false");
+            eq("цензура 10.92: где и что — подписи карточки",
+                IvaCensorPatch.sourceLabel("tool", "descr") + "|" + IvaCensorPatch.sourceLabel("review", "author_name") + "|" + IvaCensorPatch.statusLabel("kept")
+                    + "|" + IvaCensorPatch.statusLabel("hidden") + "|" + IvaCensorPatch.statusLabel("fixed") + "|" + IvaCensorPatch.statusLabel("new"),
+                "Объявление · описание|Отзыв · имя автора|Оставлено|Скрыто|Автор исправил текст|Ждёт решения");
+            eq("цензура 10.92: подсветка слова в тексте (без регистра, ё = е)",
+                IvaCensorPatch.findWord("Сдаю ЖОПА дрель", "жопа") + "," + IvaCensorPatch.findWord("ёлка", "елка") + "," + IvaCensorPatch.findWord("текст", "нет")
+                    + "," + IvaCensorPatch.findWord(null, "x"), "5,0,-1,-1");
+            eq("цензура 10.92: запросы решений — id, оставить/скрыть, слово (кавычки экранируются)",
+                IvaCensorPatch.decideBody(7, true) + "|" + IvaCensorPatch.decideBody(8, false) + "|" + IvaCensorPatch.wordBody("ху\"й", "ban"),
+                "{\"p_id\":7,\"p_keep\":true}|{\"p_id\":8,\"p_keep\":false}|{\"p_word\":\"ху\\\"й\",\"p_kind\":\"ban\"}");
+            eq("цензура 10.92: ошибка под полем формы — только мат; сомнительное публикуется на проверку",
+                IvaCensorPatch.fieldError("xyйня") + "|" + IvaCensorPatch.fieldError("жопа") + "|" + IvaCensorPatch.fieldError("Перфоратор")
+                    + "|" + IvaFormPatch.heldWord("Перфоратор\nхозяин урод\n") + "|" + IvaFormPatch.heldWord("Перфоратор Makita"),
+                "Нецензурное слово «xyйня» — уберите его, пожалуйста|||урод|");
+            eq("цензура 10.92: в форме проверяются название, условия и описание; ошибки — под полями",
+                (java.util.Arrays.asList(IvaFormPatch.ORDER).indexOf(IvaFormPatch.ERR + "atTerms") == java.util.Arrays.asList(IvaFormPatch.ORDER).indexOf(IvaFormPatch.TERMS) + 1)
+                    + "," + (java.util.Arrays.asList(IvaFormPatch.ORDER).indexOf(IvaFormPatch.ERR + "atDescr") == java.util.Arrays.asList(IvaFormPatch.ORDER).indexOf(IvaModelPatch.HELP) + 1),
+                "true,true");
+            eq("цензура 10.92: отзыв — та же проверка (латиница и транслит теперь тоже мат)",
+                IvaReviewPatch.hasMat("nahuy") + "," + IvaReviewPatch.hasMat("х у й") + "," + IvaReviewPatch.hasMat("жопа") + "," + IvaReviewPatch.hasMat("хлеб"), "true,true,false,false");
+            eq("цензура 10.92: подробное «почему» — как в базе", IvaCensorPatch.why("translit") + "|" + IvaCensorPatch.why("masked"),
+                "нецензурное слово, написанное латиницей (транслитом)|звёздочки вместо букв — похоже на замаскированный мат");
+            eq("цензура 10.92: текст из файла случаев — \\n и \\u", IvaCensorPatch.unescape("а\\nб\\u200bв"), "а\nб\u200bв");
+        }
         if (fail > 0) { System.out.println("ошибок: " + fail); System.exit(1); }
         System.out.println("все проверки IvaPatch пройдены");
     }

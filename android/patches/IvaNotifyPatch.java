@@ -447,6 +447,7 @@ public final class IvaNotifyPatch {
         try { openFromNotification(a); } catch (Throwable ignore) {}
         try { ensureRow(a); } catch (Throwable ignore) {}
         try { cabinet(a, tab); } catch (Throwable ignore) {}   // 10.78: «Чат поддержки» и «Обновить до версии …»
+        try { IvaCensorPatch.onTab(a, tab); } catch (Throwable ignore) {}   // 10.92: «Цензура» у создателя, слова создателя
     }
 
     static Object get(Object o, String f) { return IvaClientPatch.get(o, f); }

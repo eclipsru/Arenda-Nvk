@@ -964,6 +964,12 @@ final class IvaChatPatch {
         if (text.isEmpty()) return;
         final String from = clean(str(IvaClientPatch.get(a, "userEmail")));
         final String tool = low(partner).equals(openPartner) ? openTool : "";
+        String mat = "";
+        try { mat = IvaCensorPatch.fieldError(text); } catch (Throwable ignore) {}
+        if (!mat.isEmpty()) {                                                          // 10.92: мат не отправляется (база тоже не примет)
+            android.widget.Toast.makeText(a, mat, android.widget.Toast.LENGTH_LONG).show();
+            return;                                                                    // текст остаётся в поле — можно исправить
+        }
         input.setText("");
         stickBottom = true;
         new Thread(new Runnable() {

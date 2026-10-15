@@ -794,7 +794,7 @@ try {
       'форма 10.88: «Опубликовать» находится по id разметки и стоит последней (штатный отступ под ней остаётся)');
     assert.ok(has(arsc14, 'atSave') && has(arsc14, 'teSave'), 'APK 10.14: нет id atSave / teSave — кнопку публикации не найти');
     // 10.89 (просьба владельца 15.10): частые условия — одна строка с выпадающим списком; выбранное — в поле и из списка
-    assert.ok(fp.includes('SEC + "4", IvaKindPatch.LBL + "atTerms", "atTerms", TERMS, IvaPatch.DEL_ROW_TAG') && fp.includes('static String termToggle(String terms, String p) {')
+    assert.ok(fp.includes('SEC + "4", IvaKindPatch.LBL + "atTerms", "atTerms", TERMS, ERR + "atTerms", IvaPatch.DEL_ROW_TAG') && fp.includes('static String termToggle(String terms, String p) {')
       && fp.includes('static List<String> termLeft(String src, String terms) {') && fp.includes('if ("atTerms".equals(field) && tv.getParent() instanceof LinearLayout) paintTerms(')
       && !fp.includes('ownTerms') && !fp.includes('"Наличные или перевод"') && fp.includes('TERMS_PICK = "Выбрать из частых условий"')
       && (fp.match(/static final String\[\] TERMS_BASE = \{[^}]*\}/) || [''])[0].split('",').length >= 10,
@@ -822,6 +822,32 @@ try {
       && !/onActivityResult\(Activity|uses-permission|CAMERA"/.test(php) && fp.includes('try { IvaPhotoPatch.setup(a, form); } catch (Throwable ignore) {}'),
       'фото 10.89: 5 окошек, «Сделать фото» / «Из галереи» без новых разрешений, результат — в IvaPhotoPatch.Picker');
     for (const s2 of [wf, ck]) assert.ok(s2.includes('android/patches/IvaPhotoPatch.java'), 'IvaPhotoPatch.java — в списке javac сборки и проверки');
+    // 10.92: «Цензура» — одна проверка в приложении и в базе: выражения и таблицы замен IvaCensorPatch = 20261021_censor.sql
+    const cz = R('android/patches/IvaCensorPatch.java'), czs = R('supabase/migrations/20261021_censor.sql');
+    const czc = (n) => {
+      const m = cz.match(new RegExp(`(?:static final String |, )${n} = ((?:"(?:[^"\\\\]|\\\\.)*"(?:\\s*\\+\\s*)?)+)`));
+      assert.ok(m, `IvaCensorPatch: нет ${n}`);
+      return (m[1].match(/"(?:[^"\\]|\\.)*"/g) || []).map((x) => JSON.parse(x)).join('');
+    };
+    const czq = (v) => `'${v.replace(/'/g, "''")}'`;
+    for (const n of ['LAT_EXCL', 'EN_MAT', 'EXCL', 'MAT', 'EN_RUDE', 'RUDE', 'MASK', 'MASK_FIRST', 'C_SPLIT', 'C_SEP', 'C_INVIS']) {
+      assert.ok(czs.includes(czq(czc(n))), `цензура 10.92: ${n} в приложении и в базе (20261021_censor.sql) должны совпадать`);
+    }
+    assert.ok(czs.includes(`translate(t, ${czq(czc('V_FROM'))}, ${czq(czc('V_TO'))})`) && czs.includes(`translate(p, ${czq(czc('P_FROM'))}, ${czq(czc('P_TO'))})`)
+      && czs.includes(`'${czc('C_UP')}', '${czc('C_LOW')}'`) && czs.includes(`left(p, ${(cz.match(/MAX_LEN = (\d+)/) || [])[1]})`),
+      'цензура 10.92: таблицы замен (похожие буквы, транслит, регистр) и предел длины — как в базе');
+    const czPairs = JSON.parse('[' + (cz.match(/P_PAIRS = \{([^}]*)\}/) || ['', ''])[1] + ']');
+    const czRep = (czs.match(/replace\(p, '[^']+', '[^']+'\)/g) || []).map((x) => x.match(/'([^']+)', '([^']+)'/).slice(1)).flat();
+    assert.deepStrictEqual(czPairs, czRep, 'цензура 10.92: сочетания транслита (sh → ш …) и их порядок — как в базе');
+    assert.ok(cz.includes('static final String OWNER = "eclips.ru@mail.ru";') && R('android/patches/IvaNotifyPatch.java').includes('try { IvaCensorPatch.onTab(a, tab); } catch (Throwable ignore) {}')
+      && R('android/patches/IvaReviewPatch.java').includes('try { if (IvaCensorPatch.check(s).level == 2) return true; } catch (Throwable ignore) {}')
+      && fp.includes('{"atDescr", IvaCensorPatch.fieldError(text(a, "atDescr"))},') && fp.includes('{"atTerms", IvaCensorPatch.fieldError(text(a, "atTerms"))},')
+      && R('android/patches/IvaChatPatch.java').includes('try { mat = IvaCensorPatch.fieldError(text); } catch (Throwable ignore) {}')
+      && !/customer_profiles|passport|phone|surname/.test(cz) && !/select=\*/.test(cz),
+      'цензура 10.92: «Цензура» — только у создателя; отзывы, форма и чат — та же проверка');
+    for (const s2 of [wf, ck]) assert.ok(s2.includes('android/patches/IvaCensorPatch.java'), 'IvaCensorPatch.java — в списке javac сборки и проверки');
+    assert.ok(wf.includes('            tests/censor-cases.txt\n') && /eq\("цензура 10\.92: общие случаи tests\/censor-cases\.txt/.test(tp)
+      && R('tools/check.sh').includes('tools/censor-stand.py'), 'цензура 10.92: общие случаи — в IvaPatchTest (сборка) и на стенде PostgreSQL (check.sh)');
     // 10.89: фильтр — 3 + «Все ▾», выбрали — только выбранная; карточка — модель и состояние; бренд и модель — текстом
     const sp89 = R('android/patches/IvaSearchPatch.java'), mp89 = R('android/patches/IvaModelPatch.java');
     assert.ok(sp89.includes('static final int FACET_TOP = 3;') && (sp89.match(/facetShown\(\w+Vis, \w+Counts, draft\.\w+, \w+Open, FACET_TOP\)/g) || []).length === 3
@@ -1080,7 +1106,7 @@ try {
       && mf.includes("if (e.target.closest('[data-msug]')) e.preventDefault();") && !/<link[^>]*theme\.css/.test(cab),
       'модели 10.82: сайт — общие модули; кабинет без theme.css');
     // 5. приложение: без новых вставок в smali — только из IvaKindPatch; файл в сборке; личных данных не читаем
-    assert.ok(!/IvaModelPatch|model/i.test(ap) && /IvaKindPatch\.java android\/patches\/IvaModelPatch\.java (android\/patches\/IvaFormPatch\.java )?(android\/patches\/IvaPhotoPatch\.java )?2>&1/.test(wf)
+    assert.ok(!/IvaModelPatch|model/i.test(ap) && /IvaKindPatch\.java android\/patches\/IvaModelPatch\.java (android\/patches\/IvaFormPatch\.java )?(android\/patches\/IvaPhotoPatch\.java )?(android\/patches\/IvaCensorPatch\.java )?2>&1/.test(wf)
       && kp.includes('if (k == 0) IvaModelPatch.refresh(a);') && kp.includes('try { IvaModelPatch.onTab(a, tab); } catch (Throwable ignore) {}')
       && !/customer_profiles|passport|phone|surname/.test(mp),
       'модели 10.82: новых вставок в smali нет; личных данных не читаем');
@@ -1135,7 +1161,7 @@ try {
     assert.ok(kp.includes('static final String SUB_HINT = "Подкатегория (необязательно)";') && has(dex14, 'Подкатегория (необязательно)')
       && has(dex14, 'atCatSug') && has(dex14, 'atSubSug') && has(dex14, 'atName'),
       'автоподбор 10.81: штатные поля и текст пустой подкатегории есть в 10.14');
-    assert.ok(!/IvaKindPatch|kind/i.test(ap) && /IvaRentPatch\.java android\/patches\/IvaKindPatch\.java (android\/patches\/IvaModelPatch\.java )?(android\/patches\/IvaFormPatch\.java )?(android\/patches\/IvaPhotoPatch\.java )?2>&1/.test(wf),
+    assert.ok(!/IvaKindPatch|kind/i.test(ap) && /IvaRentPatch\.java android\/patches\/IvaKindPatch\.java (android\/patches\/IvaModelPatch\.java )?(android\/patches\/IvaFormPatch\.java )?(android\/patches\/IvaPhotoPatch\.java )?(android\/patches\/IvaCensorPatch\.java )?2>&1/.test(wf),
       'автоподбор 10.81: новых вставок в smali и новых файлов нет');
     // 5. сайт: один модуль, вид пишется только когда справочник видов есть в базе
     assert.ok(nw.includes('<script src="assets/kind-guess.js?v=20261016-kind"></script>') && cab.includes('<script src="assets/kind-guess.js?v=20261016-kind"></script>')
@@ -1210,7 +1236,7 @@ try {
     const sql = R('supabase/migrations/20261015_category_tree.sql'), mv = R('supabase/migrations/20261015_category_tree_move.sql');
     const fnx = (src, name) => { const mm = new RegExp(`static (?:final )?[\\w.<>, \\[\\]]+ ${name}\\(`).exec(src); assert.ok(mm, `нет ${name}`); return src.slice(mm.index, src.indexOf('\n    }\n', mm.index)); };
     // 1. сборка и проверка компилируют IvaKindPatch; вставок в smali нет
-    assert.ok(/IvaRentPatch\.java android\/patches\/IvaKindPatch\.java (android\/patches\/IvaModelPatch\.java )?(android\/patches\/IvaFormPatch\.java )?(android\/patches\/IvaPhotoPatch\.java )?2>&1/.test(wf) && ck.includes('android/patches/IvaKindPatch.java'),
+    assert.ok(/IvaRentPatch\.java android\/patches\/IvaKindPatch\.java (android\/patches\/IvaModelPatch\.java )?(android\/patches\/IvaFormPatch\.java )?(android\/patches\/IvaPhotoPatch\.java )?(android\/patches\/IvaCensorPatch\.java )?2>&1/.test(wf) && ck.includes('android/patches/IvaKindPatch.java'),
       'вид 10.79: IvaKindPatch компилируется в сборку и в проверку');
     assert.ok(!/IvaKindPatch|kind/i.test(ap), 'вид 10.79: новых вставок в smali нет');
     // 2. точки входа: onTab (справочник, форма, запись), onHub (только форма — запомненный выбор не трогает), касание сохранения

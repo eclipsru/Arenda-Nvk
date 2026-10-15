@@ -99,8 +99,8 @@ final class IvaFormPatch {
         SEC + "2", IvaModelPatch.SPECS, IvaModelPatch.KIT, IvaPatch.COND_ROW_TAG + ":atTerms",
         SEC + "3", IvaModelPatch.HELP + ":price", IvaKindPatch.LBL + "atPrice", "atPrice", ERR + "atPrice",
         IvaKindPatch.LBL + "atDep", "atDep",
-        SEC + "4", IvaKindPatch.LBL + "atTerms", "atTerms", TERMS, IvaPatch.DEL_ROW_TAG + ":atDelToggle", "atDelToggle", "atDelPrice",
-        SEC + "5", "atDescr", IvaModelPatch.HELP,
+        SEC + "4", IvaKindPatch.LBL + "atTerms", "atTerms", TERMS, ERR + "atTerms", IvaPatch.DEL_ROW_TAG + ":atDelToggle", "atDelToggle", "atDelPrice",
+        SEC + "5", "atDescr", IvaModelPatch.HELP, ERR + "atDescr",
         "atSave",
     };
 
@@ -518,7 +518,7 @@ final class IvaFormPatch {
             lp.topMargin = IvaPatch.dp(a, i == 0 ? 14 : 30);
             form.addView(t, at++, lp);
         }
-        for (String f : new String[]{"atName", "atCat", "atPrice"}) {
+        for (String f : new String[]{"atName", "atCat", "atPrice", "atTerms", "atDescr"}) {   // 10.92: + условия, описание
             if (form.findViewWithTag(ERR + f) != null) continue;
             TextView e = new TextView(a);
             e.setTag(ERR + f);
@@ -629,6 +629,18 @@ final class IvaFormPatch {
     // ───── проверка перед «Опубликовать» ─────
 
     /** Касание «Опубликовать» (IvaPatch.condRow). true — нажатие не пропускаем: под полями ошибки. */
+    // 10.92: сомнительное слово в объявлении — публикуется, но база снимает его с показа до проверки создателем
+    static String heldWord = "";
+
+    /** Первое сомнительное слово (мат сюда не доходит — он не даёт опубликовать) или "". */
+    static String heldWord(String all) {
+        try { IvaCensorPatch.Res r = IvaCensorPatch.check(all); return r.level == 1 ? r.first(1) : ""; } catch (Throwable e) { return ""; }
+    }
+
+    static String heldMsg(String w) {
+        return "Объявление отправлено на проверку: слово «" + w + "» похоже на грубое. Оно появится в каталоге после проверки.";
+    }
+
     static boolean onSaveTouch(Activity a, int action) {
         if (action == android.view.MotionEvent.ACTION_DOWN) {
             saveBlocked = false;
@@ -637,6 +649,7 @@ final class IvaFormPatch {
             LinearLayout form = (LinearLayout) ((View) no).getParent();
             saveBlocked = paintErrors(a, form, true);
             if (!saveBlocked) publishAt = System.currentTimeMillis();
+            heldWord = saveBlocked ? "" : heldWord(text(a, "atName") + "\n" + text(a, "atDescr") + "\n" + text(a, "atTerms"));
         }
         return saveBlocked;
     }
@@ -644,9 +657,11 @@ final class IvaFormPatch {
     /** show — нажали «Опубликовать»: показать все ошибки и прокрутить к первой. Иначе — только убрать исправленные. */
     static boolean paintErrors(Activity a, LinearLayout form, boolean show) {
         String[][] checks = {
-            {"atName", text(a, "atName").trim().isEmpty() ? ERR_NAME : ""},
+            {"atName", text(a, "atName").trim().isEmpty() ? ERR_NAME : IvaCensorPatch.fieldError(text(a, "atName"))},
             {"atCat", str(IvaClientPatch.get(a, "atCatKey")).isEmpty() ? ERR_CAT : ""},
             {"atPrice", priceOk(text(a, "atPrice")) ? "" : ERR_PRICE},
+            {"atTerms", IvaCensorPatch.fieldError(text(a, "atTerms"))},                  // 10.92: мат не публикуется
+            {"atDescr", IvaCensorPatch.fieldError(text(a, "atDescr"))},
         };
         View first = null;
         for (String[] c : checks) {
@@ -1131,6 +1146,10 @@ final class IvaFormPatch {
         if (at == 0 || at == clearedFor || !IvaKindPatch.pendingWrite(tab, at, System.currentTimeMillis())) return;
         clearedFor = at;
         clearDraft(a);
+        if (!heldWord.isEmpty()) {                                                    // 10.92: объявление ждёт проверки
+            try { android.widget.Toast.makeText(a, heldMsg(heldWord), android.widget.Toast.LENGTH_LONG).show(); } catch (Throwable ignore) {}
+            heldWord = "";
+        }
         Object no = IvaClientPatch.get(a, "atName");                                 // строка черновика могла успеть показаться
         View root = no instanceof View ? ((View) no).getRootView() : null;
         View dv = root == null ? null : root.findViewWithTag(DRAFT);

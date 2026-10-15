@@ -129,6 +129,7 @@ public final class IvaReviewPatch {
         + "|^манд(а|у|ы|ой|е)$|^мандавош|^шлюх|^сук(а|и|у|ой|ин|ины|ину|ами)$|^(на|по|ни)?хер($|н|ов)|^(за|по|на|от)?дроч";
     static final String MAT_MSG = "В отзыве есть нецензурные слова. Уберите их, пожалуйста.";
     static final String MAT_NAME_MSG = "В имени есть нецензурные слова. Измените имя в профиле.";
+    static final String HELD_MSG = "Спасибо! В отзыве есть сомнительные слова — он появится после проверки.";   // 10.92
     static java.util.regex.Pattern matRe, matAllow;
 
     static String matNorm(String s) {
@@ -142,9 +143,11 @@ public final class IvaReviewPatch {
         return b.toString().replaceAll(MAT_STRIP, "");
     }
 
-    /** Есть ли в тексте нецензурные слова (как iva_has_mat в базе). */
+    /** Есть ли в тексте нецензурные слова (как iva_has_mat в базе). 10.92: та же проверка, что iva_censor
+     *  (латиница, транслит, буквы через пробел, слова создателя) — IvaCensorPatch; прежняя — запасная. */
     static boolean hasMat(String s) {
         if (s == null || s.trim().isEmpty()) return false;
+        try { if (IvaCensorPatch.check(s).level == 2) return true; } catch (Throwable ignore) {}
         if (matRe == null) { matRe = java.util.regex.Pattern.compile(MAT_RE); matAllow = java.util.regex.Pattern.compile(MAT_ALLOW); }
         for (String tok : matNorm(s).split(MAT_SPLIT)) {
             if (tok.isEmpty()) continue;
@@ -1113,6 +1116,8 @@ public final class IvaReviewPatch {
                 err.setVisibility(View.GONE);
                 Object un = get(a, "userName");
                 final String body = submitBody(toolId, rating[0], String.valueOf(in.getText()), un instanceof String ? (String) un : "");
+                final boolean held = IvaCensorPatch.level(String.valueOf(in.getText())) == 1
+                    || IvaCensorPatch.level(un instanceof String ? (String) un : "") == 1;   // 10.92: сомнительное — после проверки
                 new Thread(new Runnable() {
                     @Override public void run() {
                         String[] r = null;
@@ -1121,7 +1126,7 @@ public final class IvaReviewPatch {
                         h().post(new Runnable() {
                             @Override public void run() {
                                 if (ok(fr)) {
-                                    Toast.makeText(a, edit ? "Отзыв обновлён!" : "Спасибо за отзыв!", Toast.LENGTH_SHORT).show();
+                                    Toast.makeText(a, held ? HELD_MSG : edit ? "Отзыв обновлён!" : "Спасибо за отзыв!", held ? Toast.LENGTH_LONG : Toast.LENGTH_SHORT).show();
                                     try { d.dismiss(); } catch (Throwable ignore) {}
                                     if (done != null) try { done.run(); } catch (Throwable ignore) {}
                                     return;
