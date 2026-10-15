@@ -1451,7 +1451,7 @@ public class IvaPatchTest {
                 "/rest/v1/iva_models?select=id,kind,brand,model,title,specs&active=eq.true&order=id.asc&limit=1000&offset=2000");
             eq("модели 10.82: надписи", IvaModelPatch.MODEL_LABEL + "|" + IvaModelPatch.MODEL_HINT + "|" + IvaModelPatch.SPECS_LABEL + "|"
                 + new IvaModelPatch.Field("k", "power", "Мощность", "Вт", "num", null, 1).label() + "|" + new IvaModelPatch.Field("k", "src", "Питание", "", "choice", null, 1).label() + "|"
-                + IvaModelPatch.modelText(mdGbh) + "|" + IvaModelPatch.modelText(null), "Модель|Модель (необязательно)|Характеристики|Мощность, Вт|Питание|Bosch GBH 2-26|");
+                + IvaModelPatch.modelText(mdGbh) + "|" + IvaModelPatch.modelText(null), "Модель|Например: HR2470 — или выберите из списка|Характеристики|Мощность, Вт|Питание|Bosch GBH 2-26|");
             java.util.List<IvaModelPatch.Model> mdMini = new java.util.ArrayList<IvaModelPatch.Model>();
             mdMini.add(new IvaModelPatch.Model(1, "k", "Denzel", "A1", "X Denzel A1", null)); mdMini.add(new IvaModelPatch.Model(2, "k", "DeWalt", "B2", "X DeWalt B2", null));
             mdMini.add(new IvaModelPatch.Model(3, "k", "AEG", "C3", "X AEG C3", null)); mdMini.add(new IvaModelPatch.Model(4, "z", "Bosch", "D4", "X Bosch D4", null));
@@ -1551,7 +1551,7 @@ public class IvaPatchTest {
                 java.util.List<String> mdSorted = new java.util.ArrayList<String>(new java.util.LinkedHashSet<String>(mdBl));
                 java.util.Collections.sort(mdSorted, new java.util.Comparator<String>() { public int compare(String x, String y) { return x.toLowerCase().compareTo(y.toLowerCase()); } });
                 eq("модели 10.82: бренды вида по алфавиту, без повторов; у вида без моделей брендов нет",
-                    (mdBl.size() > 5 && mdBl.equals(mdSorted) && mdBl.contains("Makita")) + "," + IvaModelPatch.brands(mdIx, "scaffold").size(), "true,0");
+                    (mdBl.size() > 5 && mdBl.equals(mdSorted) && mdBl.contains("Makita")) + "," + IvaModelPatch.brands(mdIx, "bottle-jack").size(), "true,0");
                 java.util.Map<String, String> mdV = new java.util.HashMap<String, String>();
                 mdV.put("src", "Аккумулятор"); mdV.put("volt", "18"); mdV.put("power", " 780 "); mdV.put("energy", "2,4"); mdV.put("weight", "abc"); mdV.put("zzz", "1");
                 java.util.List<IvaModelPatch.Field> mdRf = IvaModelPatch.fieldsFor(mdFl, "rotary-sds-plus");
@@ -1813,22 +1813,83 @@ public class IvaPatchTest {
                         + IvaModelPatch.fuzzyQuery("балгарка makita", mdIx) + "|" + IvaModelPatch.translit("bolgarka moyka shchetka bosch", mdIx) + "|"
                         + IvaModelPatch.fuzzyQuery("болгарка", mdIx) + "|" + IvaModelPatch.translit("болгарка gws", mdIx),
                     "болгарка|makita|113|болгарка makita|болгарка мойка щетка bosch|null|null");
-                eq("форма 10.86: «Категория/Подкатегория/Вид» — подряд перед «Сгенерировать описание», остальное на месте; уже на месте — ничего",
-                    java.util.Arrays.toString(IvaKindPatch.regroup(10, new int[]{2, 3, 4}, 8)) + "|" + IvaKindPatch.regroup(10, new int[]{5, 6, 7}, 8)
-                        + "|" + java.util.Arrays.toString(IvaKindPatch.regroup(6, new int[]{4, 5}, 1)) + "|" + IvaKindPatch.regroup(5, new int[]{1, 2}, 2)
-                        + "|" + IvaKindPatch.regroup(5, new int[]{1, 1}, 4) + "|" + IvaKindPatch.regroup(5, new int[]{}, 4) + "|" + IvaKindPatch.regroup(5, new int[]{1}, 7),
-                    "[0, 1, 5, 6, 7, 2, 3, 4, 8, 9]|null|[0, 4, 5, 1, 2, 3]|null|null|null|null");
                 StringBuilder ffLb = new StringBuilder();
                 for (String[] ffX : IvaKindPatch.LABELS) ffLb.append(ffX[1]).append(';');
-                eq("форма 10.86: подписи пунктов формы «Добавить»", ffLb.toString(),
-                    "Фотографии;Название инструмента;Категория;Подкатегория;Вид инструмента;Цена за сутки, ₽;Залог, ₽;Описание;Условия аренды;");
-                eq("форма 10.86: группа — подписи, поля и выпадающие списки категории, подкатегории и вида",
-                    java.util.Arrays.toString(IvaKindPatch.GROUP), "[iva_lbl:atCat, atCat, atCatSug, iva_lbl:atSub, atSub, atSubSug, iva_lbl:kind, kind]");
+                eq("форма 10.87: подписи пунктов — обязательные со звёздочкой, у «Описания» подписи нет (это заголовок раздела)", ffLb.toString(),
+                    "Фотографии · до 5, первое — на обложке;Название инструмента *;Категория *;Подкатегория;Вид инструмента;Цена за сутки, ₽ *;Залог, ₽;Условия аренды;");
                 eq("поиск 10.86: словарь опечаток — слова без цифр от 4 букв, по порядку",
                     mdIx.vocab.size() > 500 && mdIx.vocab.contains("болгарка") && !mdIx.vocab.contains("hr2470")
                         && mdIx.vocab.get(0).compareTo(mdIx.vocab.get(1)) < 0, true);
             } catch (Throwable mdE) { eq("модели 10.82: настоящий справочник", "исключение " + mdE, ""); }
         }
+        // ───── 10.87: форма «Добавить инструмент» (IvaFormPatch) ─────
+        eq("форма 10.87: наши пункты встают на свои же места по порядку, прочие дети — где были; уже на месте — null",
+            java.util.Arrays.toString(IvaFormPatch.permute(6, new int[]{4, 2, 3})) + "|" + IvaFormPatch.permute(5, new int[]{1, 2, 4})
+                + "|" + java.util.Arrays.toString(IvaFormPatch.permute(5, new int[]{3, 0})) + "|" + IvaFormPatch.permute(5, new int[]{1, 1})
+                + "|" + IvaFormPatch.permute(5, new int[]{7}) + "|" + IvaFormPatch.permute(5, new int[]{}) + "|" + IvaFormPatch.permute(0, new int[]{0}),
+            "[0, 1, 4, 2, 3, 5]|null|[3, 1, 2, 0, 4]|null|null|null|null");
+        eq("форма 10.87: цена за сутки — число больше нуля",
+            IvaFormPatch.priceOk("800") + "," + IvaFormPatch.priceOk(" 1 500 ") + "," + IvaFormPatch.priceOk("99,5") + ","
+                + IvaFormPatch.priceOk("") + "," + IvaFormPatch.priceOk("0") + "," + IvaFormPatch.priceOk("-5") + "," + IvaFormPatch.priceOk("abc")
+                + "," + IvaFormPatch.priceOk(null) + "," + IvaFormPatch.priceOk("12345678"),
+            "true,true,true,false,false,false,false,false,false");
+        java.util.LinkedHashMap<String, String> fpSt = new java.util.LinkedHashMap<String, String>();
+        fpSt.put("name", "Перфоратор Makita HR2470");
+        fpSt.put("descr", "Строка 1\nстрока 2 = ок \\ слэш");
+        fpSt.put("spec.power", "780");
+        fpSt.put("kit.0", "Кейс");
+        fpSt.put("bad=key", "x");
+        fpSt.put("pics", "3");
+        String fpEnc = IvaFormPatch.enc(fpSt);
+        java.util.LinkedHashMap<String, String> fpDec = IvaFormPatch.dec(fpEnc);
+        eq("форма 10.87: черновик туда и обратно — переводы строк, «=» и «\\» в значении, порядок; плохой ключ пропускается",
+            fpDec.toString() + "|" + fpEnc.split("\n").length + "|" + IvaFormPatch.dec(null).size() + "|" + IvaFormPatch.dec("мусор\n=x\n").size(),
+            "{name=Перфоратор Makita HR2470, descr=Строка 1\nстрока 2 = ок \\ слэш, spec.power=780, kit.0=Кейс, pics=3}|5|0|0");
+        eq("форма 10.87: характеристики и комплектация из черновика",
+            IvaFormPatch.specsOf(fpDec) + "|" + IvaFormPatch.kitOf(fpDec), "{power=780}|[Кейс]");
+        java.util.LinkedHashMap<String, String> fpEmpty = new java.util.LinkedHashMap<String, String>();
+        fpEmpty.put("name", "  "); fpEmpty.put("pics", "0"); fpEmpty.put("cat", "power");
+        java.util.LinkedHashMap<String, String> fpPic = new java.util.LinkedHashMap<String, String>();
+        fpPic.put("pics", "1");
+        eq("форма 10.87: что-то есть — название, цена, описание, условия или фото (одна категория — не черновик)",
+            IvaFormPatch.hasContent(fpDec) + "," + IvaFormPatch.hasContent(fpEmpty) + "," + IvaFormPatch.hasContent(fpPic) + "," + IvaFormPatch.hasContent(null),
+            "true,false,true,false");
+        eq("форма 10.87: строка черновика",
+            IvaFormPatch.draftTitle(fpDec) + "|" + IvaFormPatch.draftTitle(fpPic),
+            "Есть незаконченный инструмент: «Перфоратор Makita HR2470» · 3 фото|Есть незаконченный инструмент: без названия · 1 фото");
+        eq("форма 10.87: город по умолчанию — прошлый в форме, затем последнего объявления, затем профиля",
+            IvaFormPatch.defaultCity("", " Ростов-на-Дону ", "Шахты") + "|" + IvaFormPatch.defaultCity("Аксай", "Ростов-на-Дону", "") + "|"
+                + IvaFormPatch.defaultCity(null, "", "Шахты") + "|" + IvaFormPatch.defaultCity("", "", ""),
+            "Ростов-на-Дону|Аксай|Шахты|");
+        eq("форма 10.87: город в записи — JSON-строка; пусто, с кавычками (не похоже на город) или слишком длинно — ничего",
+            IvaFormPatch.cityExtra("Ростов-на-Дону") + "|" + IvaFormPatch.cityExtra("") + "|" + IvaFormPatch.cityExtra("Город \"Х\"") + "|"
+                + IvaFormPatch.cityExtra("оченьдлинноеназваниегородакотороготочнонебываетнасветеииникогданебудет"),
+            "\"pickup_city\":\"Ростов-на-Дону\"|||");
+        eq("форма 10.87: цена из базы — без «.0»; пусто, 0 и мусор — пусто",
+            IvaFormPatch.money("800.0") + "," + IvaFormPatch.money("1250.5") + "," + IvaFormPatch.money("0") + "," + IvaFormPatch.money("null")
+                + "," + IvaFormPatch.money("") + "," + IvaFormPatch.money("x"),
+            "800,1250.5,,,,");
+        java.util.List<java.util.Map<String, String>> fpRows = new java.util.ArrayList<java.util.Map<String, String>>();
+        for (String fpN : new String[]{"Перфоратор Makita", "перфоратор  makita", "", "Болгарка Bosch", "Миксер", "Фен"}) {
+            java.util.Map<String, String> fpR = new java.util.HashMap<String, String>(); fpR.put("name", fpN); fpRows.add(fpR);
+        }
+        StringBuilder fpS = new StringBuilder();
+        for (java.util.Map<String, String> fpR : IvaFormPatch.samples(fpRows, 3)) fpS.append(fpR.get("name")).append(';');
+        eq("форма 10.87: образцы — новые сверху, без повторов названия и пустых, не больше трёх", fpS.toString(),
+            "Перфоратор Makita;Болгарка Bosch;Миксер;");
+        eq("форма 10.87: длинное название образца — с многоточием", IvaFormPatch.cut("Перфоратор аккумуляторный Makita DHR242Z", 20) + "|" + IvaFormPatch.cut(" Фен ", 20),
+            "Перфоратор аккумуля…|Фен");
+        StringBuilder fpO = new StringBuilder();
+        for (String fpK : IvaFormPatch.ORDER) if (fpK.startsWith(IvaFormPatch.SEC) || fpK.startsWith("at") && !fpK.startsWith("atC") && !fpK.startsWith("atS")) fpO.append(fpK).append(' ');
+        eq("форма 10.87: порядок — фото, название · цена, залог · город … условия, доставка · описание · кнопка",
+            fpO.toString().trim(), "iva_sec:1 atPhotos atName iva_sec:2 iva_sec:3 atPrice atDep iva_sec:4 atTerms atDelToggle atDelPrice iva_sec:5 atDescr");
+        java.util.List<String> fpOrd = java.util.Arrays.asList(IvaFormPatch.ORDER);
+        eq("форма 10.87: «Модель» под названием, категория — до характеристик, подсказка цены — над ценой, «Сгенерировать» — под описанием, город — первым в выдаче",
+            (fpOrd.indexOf(IvaModelPatch.BLOCK) == fpOrd.indexOf(IvaModelPatch.NAME_SUG) + 1) + "," + (fpOrd.indexOf("atCat") < fpOrd.indexOf(IvaModelPatch.SPECS))
+                + "," + (fpOrd.indexOf(IvaModelPatch.HELP + ":price") + 2 == fpOrd.indexOf("atPrice")) + "," + (fpOrd.indexOf(IvaModelPatch.HELP) == fpOrd.indexOf("atDescr") + 1)
+                + "," + (fpOrd.indexOf(IvaFormPatch.CITY) == fpOrd.indexOf(IvaFormPatch.SEC + "4") + 1) + "," + fpOrd.get(fpOrd.size() - 1)
+                + "," + (fpOrd.size() == new java.util.HashSet<String>(fpOrd).size()),
+            "true,true,true,true,true,atSave,true");
         if (fail > 0) { System.out.println("ошибок: " + fail); System.exit(1); }
         System.out.println("все проверки IvaPatch пройдены");
     }

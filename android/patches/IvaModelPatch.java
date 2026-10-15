@@ -615,7 +615,7 @@ final class IvaModelPatch {
     static final int PAGE = 1000;                     // PostgREST отдаёт не больше 1000 строк за раз
     static final String BRANDS_PATH = "/rest/v1/iva_brands?select=name,aliases&order=name.asc";
     static final String FIELDS_PATH = "/rest/v1/iva_spec_fields?select=kind,key,title,unit,type,options,sort&order=kind.asc,sort.asc";
-    static final String MODEL_LABEL = "Модель", MODEL_HINT = "Модель (необязательно)", SPECS_LABEL = "Характеристики";
+    static final String MODEL_LABEL = "Модель", MODEL_HINT = "Например: HR2470 — или выберите из списка", SPECS_LABEL = "Характеристики";
     static final int NAME_SUGGEST = 6, MODEL_SUGGEST = 20;
     static final long DELAY_MS = 250;
     static final long RETRY_MS = 60_000L, REFRESH_MS = 30 * 60_000L;
@@ -792,7 +792,7 @@ final class IvaModelPatch {
     static void hideAll(View any) {
         View root = any.getRootView();
         if (root == null) return;
-        for (String t : new String[]{NAME_SUG, BLOCK, SPECS, KIT, HELP}) {
+        for (String t : new String[]{NAME_SUG, BLOCK, SPECS, KIT, HELP, HELP + ":price"}) {
             View v = root.findViewWithTag(t);
             if (v != null) v.setVisibility(View.GONE);
         }
@@ -1047,9 +1047,10 @@ final class IvaModelPatch {
         box.removeAllViews();
         if (fl.isEmpty()) return;
         TextView nv = nameView(a);
-        box.addView(label(a, SPECS_LABEL), lpTop(a, 14));
+        boolean first = true;                                                    // 10.87: «Характеристики…» — заголовок раздела над блоком
         for (final Field f : fl) {
-            box.addView(small(a, f.label()), lpTop(a, 8));
+            box.addView(small(a, f.label()), lpTop(a, first ? 12 : 8));
+            first = false;
             if ("choice".equals(f.type)) {
                 HorizontalScrollView hs = new HorizontalScrollView(a);
                 hs.setHorizontalScrollBarEnabled(false);
@@ -1095,15 +1096,6 @@ final class IvaModelPatch {
             lp.rightMargin = IvaPatch.dp(a, 8);
             row.addView(c, lp);
         }
-    }
-
-    static TextView label(Activity a, String text) {
-        TextView t = new TextView(a);
-        t.setText(text);
-        t.setTextSize(15f);
-        t.setTextColor(cText(a));
-        t.setTypeface(null, android.graphics.Typeface.BOLD);
-        return t;
     }
 
     static TextView small(Activity a, String text) {
@@ -1578,7 +1570,7 @@ final class IvaModelPatch {
 
     static final String KIT_PATH = "/rest/v1/iva_kit_items?select=kind,items", PROPOSALS_PATH = "/rest/v1/iva_model_proposals";
     static final String KIT = "iva_model_kit", HELP = "iva_model_help", PROP = BLOCK + ":prop";
-    static final String KIT_LABEL = "Комплектация", KIT_HINT = "Отметьте, что отдаёте вместе с инструментом", DESCR_BTN = "Сгенерировать описание";
+    static final String KIT_LABEL = "Комплектация", KIT_HINT = "отметьте, что отдаёте вместе с инструментом", DESCR_BTN = "Сгенерировать описание";
     static volatile Map<String, String[]> kitMap = new HashMap<String, String[]>();
     static List<String> kitSel = new ArrayList<String>();
     static String kitKind = null, lastDescr = "";
@@ -1607,6 +1599,12 @@ final class IvaModelPatch {
         if (kit == null) { kit = new LinearLayout(a); ((LinearLayout) kit).setOrientation(LinearLayout.VERTICAL); kit.setTag(KIT);
             form.addView(kit, form.indexOfChild(after) + 1, new LinearLayout.LayoutParams(-1, -2)); }
         if (help == null) { help = buildHelp(a); form.addView(help, form.indexOfChild(kit) + 1, new LinearLayout.LayoutParams(-1, -2)); }
+        if (form.findViewWithTag(HELP + ":price") == null) {                     // 10.87: подсказка цены — в разделе «Цена», над полем
+            TextView price = small(a, "");
+            price.setTag(HELP + ":price");
+            price.setVisibility(View.GONE);
+            form.addView(price, form.indexOfChild(help), lpTop(a, 10));
+        }
         paintKit(a, (LinearLayout) kit, kind, false);
         paintHelp(a, (LinearLayout) help, kind);
     }
@@ -1621,8 +1619,7 @@ final class IvaModelPatch {
         if (items == null || items.length == 0) return;
         List<String> keep = kitClean(kitSel, items);
         kitSel = keep == null ? new ArrayList<String>() : keep;
-        box.addView(label(a, KIT_LABEL), lpTop(a, 14));
-        box.addView(small(a, KIT_HINT), lpTop(a, 4));
+        box.addView(small(a, KIT_LABEL + " — " + KIT_HINT), lpTop(a, 12));   // 10.87: подпись мелким, как у остальных пунктов
         HorizontalScrollView hs = new HorizontalScrollView(a);
         hs.setHorizontalScrollBarEnabled(false);
         hs.setOverScrollMode(View.OVER_SCROLL_NEVER);
@@ -1657,10 +1654,6 @@ final class IvaModelPatch {
         LinearLayout box = new LinearLayout(a);
         box.setTag(HELP);
         box.setOrientation(LinearLayout.VERTICAL);
-        TextView price = small(a, "");
-        price.setTag(HELP + ":price");
-        price.setVisibility(View.GONE);
-        box.addView(price, lpTop(a, 12));
         TextView gen = IvaSearchPatch.chip(a, DESCR_BTN, false, false);
         gen.setTag(HELP + ":gen");
         gen.setOnClickListener(new View.OnClickListener() {
@@ -1692,7 +1685,7 @@ final class IvaModelPatch {
 
     static void paintHelp(final Activity a, LinearLayout box, String kind) {
         box.setVisibility(View.VISIBLE);
-        View pv = box.findViewWithTag(HELP + ":price");
+        View pv = box.getParent() instanceof View ? ((View) box.getParent()).findViewWithTag(HELP + ":price") : null;   // 10.87: в форме
         if (!(pv instanceof TextView)) return;
         TextView price = (TextView) pv;
         final Hint h = kind.isEmpty() ? null : priceHint(catalogRows(a), chosen != null && chosen.kind.equals(kind) ? chosen.id : 0, kind);

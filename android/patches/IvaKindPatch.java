@@ -60,6 +60,7 @@ final class IvaKindPatch {
     static final String KINDS_PATH = "/rest/v1/iva_kinds?select=key,cat,sub,title,sort&active=eq.true&order=sort.asc,title.asc";
     static final String PREFS = "iva_kinds", PREFS_KEY = "list";
     static final String LABEL_HINT = "Вид инструмента (необязательно)", NO_KIND = "Без вида";
+    static final String KIND_HINT_ADD = "Подставится по названию — или выберите";   // 10.87: форма «Добавить»
     static final long RETRY_MS = 60_000L;          // не загрузилось / таблицы нет — пробуем снова не чаще раза в минуту
     static final long REFRESH_MS = 30 * 60_000L;   // загрузилось — обновляем раз в полчаса (вдруг поправили список)
     static final long PENDING_MS = 3 * 60_000L;    // выбор, запомненный нажатием «Сохранить», живёт 3 минуты
@@ -375,6 +376,7 @@ final class IvaKindPatch {
         try { if ("tooledit".equals(tab)) openedEdit(a); } catch (Throwable ignore) {}
         try { refreshRows(a); } catch (Throwable ignore) {}
         try { IvaModelPatch.onTab(a, tab); } catch (Throwable ignore) {}   // 10.82: опубликовали — модель и характеристики заново
+        try { IvaFormPatch.onTab(a, tab); } catch (Throwable ignore) {}    // 10.87: опубликовали — черновик не нужен
         try { consumePending(a, tab); } catch (Throwable ignore) {}
     }
 
@@ -657,7 +659,9 @@ final class IvaKindPatch {
         View f = row.findViewWithTag(ROW_TAG + FORM[k][2] + ":field");
         if (f instanceof TextView) {
             boolean waiting = k == 1 && !editLoaded;
-            ((TextView) f).setText(waiting ? "Вид инструмента…" : fieldText(all, sel[k]));
+            String ft = fieldText(all, sel[k]);
+            if (k == 0 && sel[k].isEmpty()) ft = KIND_HINT_ADD;                 // 10.87: подпись уже над полем — внутри пример
+            ((TextView) f).setText(waiting ? "Вид инструмента…" : ft);
             ((TextView) f).setTextColor(!waiting && !sel[k].isEmpty() ? IvaPatch.color(a, "text", 0xfff2f4f8) : IvaPatch.color(a, "gray2", 0xff6b7080));
             f.setEnabled(!waiting);
         }
@@ -691,12 +695,15 @@ final class IvaKindPatch {
                 if (!editLoaded || editId.isEmpty() || kind.equals(orig[1])) return;   // вид не менялся — писать нечего
                 pendingId = editId;
             } else {
-                if (kind.isEmpty()) return;                              // новое объявление без вида — ничего не нужно
+                String city = "";
+                try { city = IvaFormPatch.cityExtra(IvaFormPatch.cityValue(a)); } catch (Throwable e) { city = ""; }   // 10.87
+                if (kind.isEmpty() && city.isEmpty()) return;            // новое объявление без вида и города — ничего не нужно
                 pendingId = "";
                 pendingName = name;
                 pendingEmail = str(IvaClientPatch.get(a, "userEmail"));
                 if (pendingEmail.isEmpty()) return;
                 try { pendingExtra = IvaModelPatch.saveExtra(a, kind, name); } catch (Throwable e) { pendingExtra = ""; }   // 10.82
+                if (!city.isEmpty()) pendingExtra = city + (pendingExtra.isEmpty() ? "" : "," + pendingExtra);   // город — первым (kit — последним, dropKit)
             }
             pendingKind = kind;
             pendingForm = k;
@@ -759,35 +766,11 @@ final class IvaKindPatch {
     static final String LBL = "iva_lbl:";
     static final String KIND_KEY = "kind";
     static final String[][] LABELS = {
-        {"atPhotos", "Фотографии"}, {"atName", "Название инструмента"}, {"atCat", "Категория"}, {"atSub", "Подкатегория"},
-        {KIND_KEY, "Вид инструмента"}, {"atPrice", "Цена за сутки, ₽"}, {"atDep", "Залог, ₽"}, {"atDescr", "Описание"},
-        {"atTerms", "Условия аренды"},
+        {"atPhotos", "Фотографии · до 5, первое — на обложке"}, {"atName", "Название инструмента *"}, {"atCat", "Категория *"},
+        {"atSub", "Подкатегория"}, {KIND_KEY, "Вид инструмента"}, {"atPrice", "Цена за сутки, ₽ *"}, {"atDep", "Залог, ₽"},
+        {"atTerms", "Условия аренды"},                                   // 10.87: «Описание» — заголовок раздела, своей подписи нет
     };
-    static final String[] GROUP = {LBL + "atCat", "atCat", "atCatSug", LBL + "atSub", "atSub", "atSubSug", LBL + KIND_KEY, KIND_KEY};
     static final int LABEL_TOP_DP = 12, FIELD_TOP_DP = 6;
-
-    /** Новый порядок детей формы: group (индексы, в этом порядке) — подряд прямо перед anchor, остальные — как были.
-     *  null — уже на месте (или нечего двигать). Чистая логика — под тестом. */
-    static int[] regroup(int count, int[] group, int anchor) {
-        if (group == null || group.length == 0 || anchor < 0 || anchor >= count) return null;
-        boolean inPlace = true;
-        for (int i = 0; i < group.length; i++) {
-            if (group[i] < 0 || group[i] >= count || group[i] == anchor) return null;
-            if (group[i] != anchor - group.length + i) inPlace = false;
-        }
-        if (inPlace) return null;
-        java.util.Set<Integer> g = new java.util.HashSet<Integer>();
-        for (int x : group) g.add(x);
-        if (g.size() != group.length) return null;
-        int[] out = new int[count];
-        int k = 0;
-        for (int i = 0; i < count; i++) {
-            if (g.contains(i)) continue;
-            if (i == anchor) for (int x : group) out[k++] = x;
-            out[k++] = i;
-        }
-        return out;
-    }
 
     static View formChild(Activity a, LinearLayout form, String key) {
         if (key.startsWith(LBL)) return form.findViewWithTag(key);
@@ -836,20 +819,8 @@ final class IvaKindPatch {
             if (KIND_KEY.equals(l[0])) topMargin(f.findViewWithTag(ROW_TAG + FORM[0][2] + ":field"), FIELD_TOP_DP, a);
             else topMargin(f, FIELD_TOP_DP, a);
         }
-        // 2. «Категория», «Подкатегория», «Вид» — над «Сгенерировать описание» (нет его — над «Ценой»)
-        List<View> grp = new ArrayList<View>();
-        for (String k : GROUP) { View v = formChild(a, form, k); if (v != null) grp.add(v); }
-        View anchor = form.findViewWithTag(IvaModelPatch.HELP);
-        if (anchor == null || anchor.getParent() != form) anchor = formChild(a, form, LBL + "atPrice");
-        if (anchor == null) anchor = formChild(a, form, "atPrice");
-        if (anchor == null || grp.isEmpty()) return;
-        int[] gi = new int[grp.size()];
-        for (int i = 0; i < gi.length; i++) gi[i] = form.indexOfChild(grp.get(i));
-        int[] plan = regroup(form.getChildCount(), gi, form.indexOfChild(anchor));
-        if (plan == null) return;
-        for (View v : grp) form.removeView(v);
-        int at = form.indexOfChild(anchor);
-        for (int i = 0; i < grp.size(); i++) form.addView(grp.get(i), at + i);
+        // 2. 10.87: разделы, порядок пунктов, подсказки, ошибки, черновик, образцы, город (IvaFormPatch)
+        try { IvaFormPatch.setup(a, form); } catch (Throwable ignore) {}
     }
 
     /** Каталог в памяти уже мог прийти без вида — дописываем, чтобы фильтр «Вид» сразу видел объявление. */

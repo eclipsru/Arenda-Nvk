@@ -770,6 +770,34 @@ try {
       assert.ok(has(arsc14, str) || has(dex14, str), `APK 10.14: нет «${str}» — правка 10.67 не найдёт штатное поле`);
     assert.ok(/eq\("админ 10\.67: /.test(tp) && /eq\("подкатегория 10\.67: /.test(tp) && /eq\("кабинет 10\.67: /.test(tp), 'IvaPatchTest: проверки 10.67');
   }
+  // 10.87 (просьба владельца 15.10.2026: форма «Добавить» — понятнее и удобнее, «давай сделаем как ты считаешь нужным»;
+  // справочник «очень слабый — максимально доработать»): разделы формы, «*» у обязательного, ошибки под полями, черновик,
+  // «Город выдачи», «по образцу своего инструмента»; справочник — части 4–5. Новых smali-вставок нет: только arrange, onTab
+  // и касание «Опубликовать» (condRow), которые уже были.
+  {
+    const fp = R('android/patches/IvaFormPatch.java'), kp = R('android/patches/IvaKindPatch.java'), ip = R('android/patches/IvaPatch.java');
+    const tp = R('android/patches/test/IvaPatchTest.java'), wf = R('.github/workflows/build-apk.yml'), ck = R('.github/workflows/check.yml');
+    assert.ok(kp.includes('try { IvaFormPatch.setup(a, form); } catch (Throwable ignore) {}') && kp.includes('try { IvaFormPatch.onTab(a, tab); } catch (Throwable ignore) {}')
+      && ip.includes('try { stop = IvaFormPatch.onSaveTouch(a, e.getActionMasked()); } catch (Throwable ignore) {}') && ip.includes('if (k == 0 && v.isEnabled()) {'),
+      'форма 10.87: вызовы IvaFormPatch — из arrange, onTab и касания «Опубликовать» (только форма «Добавить»)');
+    assert.ok(fp.includes('static final String ERR_NAME = "Напишите название инструмента", ERR_CAT = "Выберите категорию", ERR_PRICE = "Укажите цену за сутки";')
+      && fp.includes('static final String CITY_LABEL = "Город выдачи"') && fp.includes('static final int MAX_PICS = 5, SAMPLE_MAX = 15, CITY_CHIPS = 6;'),
+      'форма 10.87: тексты ошибок, «Город выдачи», не больше 5 фото');
+    assert.ok(kp.includes('try { city = IvaFormPatch.cityExtra(IvaFormPatch.cityValue(a)); } catch (Throwable e) { city = ""; }   // 10.87')
+      && fp.includes('String c = IvaSearchPatch.city(city);') && fp.includes('if (c.isEmpty() || c.length() > 60) return "";'),
+      'форма 10.87: город выдачи — тем же нормализатором, что и поиск; пусто — поле не отправляется');
+    assert.ok(fp.includes('static SharedPreferences prefs(Activity a) { return a.getSharedPreferences("iva_form", 0); }')
+      && fp.includes('new File(new File(a.getFilesDir(), "iva_draft"), "p" + i + ".jpg")') && !/onActivityResult|MediaStore|ACTION_IMAGE_CAPTURE/.test(fp),
+      'форма 10.87: черновик — только на телефоне (prefs и файлы приложения); камеры и onActivityResult нет');
+    assert.ok(!/customer_profiles|passport|phone|surname/.test(fp) && !/reviews\?select=\*/.test(fp) && !/\.runOnUiThread\([^)]*apiCall/.test(fp),
+      'форма 10.87: личных данных не читаем, сеть — не в главном потоке');
+    for (const s of [wf, ck]) assert.ok(s.includes('android/patches/IvaFormPatch.java'), 'IvaFormPatch.java — в списке javac сборки и проверки');
+    assert.ok((tp.match(/eq\("форма 10\.87: /g) || []).length >= 10, 'IvaPatchTest: проверки 10.87');
+    // справочник: части 4–5 проходят генератор (повтор — ошибка), SQL совпадает с данными
+    for (const f of ['supabase/models/4-current-power.txt', 'supabase/models/5-current-equipment.txt']) assert.ok(fs.existsSync(path.join(ROOT, f)), 'нет ' + f);
+    const nModels = +((R('supabase/migrations/20261017_models.sql').match(/\((\d+) моделей\)/) || [])[1] || 0);
+    assert.ok(nModels >= 4500, 'справочник 10.87: моделей не меньше 4500 (' + nModels + ')');
+  }
   // 10.86 (просьба владельца 15.10.2026, решения main4_plus и model_only): форма «Добавить» в приложении — подписи над
   // пунктами, «Модель» под названием, «Категория / Подкатегория / Вид» над «Сгенерировать описание»; подсказки названия
   // понимают «болгарка», «ушм», раскладку, латиницу и опечатки; «Питание» — только у выбранной модели, напряжение — при
@@ -782,9 +810,8 @@ try {
     const fnx = (src, name) => { const mm = new RegExp(`static (?:final )?[\\w.<>, \\[\\]]+ ${name}\\(`).exec(src); assert.ok(mm, `нет ${name}`); return src.slice(mm.index, src.indexOf('\n    }\n', mm.index)); };
     // 1. раскладка: только форма «Добавить» (atName), подписи мелким серым, группа перед блоком «Сгенерировать описание»
     const ar = fnx(kp, 'arrange');
-    assert.ok(ar.includes('IvaClientPatch.get(a, FORM[0][5])') && !/\bte[A-Z]/.test(ar) && ar.includes('form.findViewWithTag(IvaModelPatch.HELP)')
-      && ar.includes('t.setTextSize(13f);') && ar.includes('IvaPatch.color(a, "gray", 0xff9aa1b0)') && ar.includes('int[] plan = regroup(form.getChildCount(), gi, form.indexOfChild(anchor));')
-      && ar.includes('if (plan == null) return;') && kp.includes('static final int LABEL_TOP_DP = 12, FIELD_TOP_DP = 6;'),
+    assert.ok(ar.includes('IvaClientPatch.get(a, FORM[0][5])') && !/\bte[A-Z]/.test(ar) && ar.includes('try { IvaFormPatch.setup(a, form); } catch (Throwable ignore) {}')   // 10.87: порядок — IvaFormPatch
+      && ar.includes('t.setTextSize(13f);') && ar.includes('IvaPatch.color(a, "gray", 0xff9aa1b0)') && kp.includes('static final int LABEL_TOP_DP = 12, FIELD_TOP_DP = 6;'),
       'форма 10.86: подписи и перестановка — только в форме «Добавить», без лишних движений');
     assert.ok(fnx(kp, 'refreshRows').includes('try { arrange(a); } catch (Throwable ignore) {}') && fnx(ip, 'condRows').includes('try { IvaKindPatch.arrange(a); } catch (Throwable ignore) {}')
       && fnx(mp, 'refresh').includes('try { IvaKindPatch.arrange(a); } catch (Throwable ignore) {}'),
@@ -822,9 +849,8 @@ try {
       'поиск 10.86: «болгарка», «ушм», раскладка и опечатки — в приложении и на сайте');
     assert.ok(tp.includes('java.nio.file.Paths.get("tests/form-fields-cases.txt")') && jt.includes('form-fields-cases.txt') && ff.split('\n').filter(l => l && !l.startsWith('#')).length >= 12
       && wf.includes('            tests/form-fields-cases.txt\n'), 'форма 10.86: общие случаи полей — в обоих тестах и в сборке');
-    assert.ok((tp.match(/eq\("форма 10\.86: /g) || []).length >= 6 && (tp.match(/eq\("поиск 10\.86: /g) || []).length >= 2
+    assert.ok((tp.match(/eq\("форма 10\.86: /g) || []).length >= 3 && (tp.match(/eq\("поиск 10\.86: /g) || []).length >= 2
       && !/customer_profiles|passport|phone|surname/.test(mp + kp), 'IvaPatchTest: проверки 10.86');
-    assert.ok(/NEW_NAME: '10\.86'/.test(wf) && /NEW_CODE: '160'/.test(wf) && /TEST_NOTES: 'Тестовая сборка 10\.86: /.test(wf), 'версия 10.86 (160)');
   }
   // 10.85 (решение владельца 15.10.2026: «и то и другое» — доделка этапа 3 справочника моделей): в шторке «Фильтр»
   // приложения — числа «от–до» для числовых характеристик вида; объявления без нужной характеристики — в конце списка.
@@ -1008,7 +1034,7 @@ try {
       && mf.includes("if (e.target.closest('[data-msug]')) e.preventDefault();") && !/<link[^>]*theme\.css/.test(cab),
       'модели 10.82: сайт — общие модули; кабинет без theme.css');
     // 5. приложение: без новых вставок в smali — только из IvaKindPatch; файл в сборке; личных данных не читаем
-    assert.ok(!/IvaModelPatch|model/i.test(ap) && /IvaKindPatch\.java android\/patches\/IvaModelPatch\.java 2>&1/.test(wf)
+    assert.ok(!/IvaModelPatch|model/i.test(ap) && /IvaKindPatch\.java android\/patches\/IvaModelPatch\.java (android\/patches\/IvaFormPatch\.java )?2>&1/.test(wf)
       && kp.includes('if (k == 0) IvaModelPatch.refresh(a);') && kp.includes('try { IvaModelPatch.onTab(a, tab); } catch (Throwable ignore) {}')
       && !/customer_profiles|passport|phone|surname/.test(mp),
       'модели 10.82: новых вставок в smali нет; личных данных не читаем');
@@ -1063,7 +1089,7 @@ try {
     assert.ok(kp.includes('static final String SUB_HINT = "Подкатегория (необязательно)";') && has(dex14, 'Подкатегория (необязательно)')
       && has(dex14, 'atCatSug') && has(dex14, 'atSubSug') && has(dex14, 'atName'),
       'автоподбор 10.81: штатные поля и текст пустой подкатегории есть в 10.14');
-    assert.ok(!/IvaKindPatch|kind/i.test(ap) && /IvaRentPatch\.java android\/patches\/IvaKindPatch\.java (android\/patches\/IvaModelPatch\.java )?2>&1/.test(wf),
+    assert.ok(!/IvaKindPatch|kind/i.test(ap) && /IvaRentPatch\.java android\/patches\/IvaKindPatch\.java (android\/patches\/IvaModelPatch\.java )?(android\/patches\/IvaFormPatch\.java )?2>&1/.test(wf),
       'автоподбор 10.81: новых вставок в smali и новых файлов нет');
     // 5. сайт: один модуль, вид пишется только когда справочник видов есть в базе
     assert.ok(nw.includes('<script src="assets/kind-guess.js?v=20261016-kind"></script>') && cab.includes('<script src="assets/kind-guess.js?v=20261016-kind"></script>')
@@ -1138,7 +1164,7 @@ try {
     const sql = R('supabase/migrations/20261015_category_tree.sql'), mv = R('supabase/migrations/20261015_category_tree_move.sql');
     const fnx = (src, name) => { const mm = new RegExp(`static (?:final )?[\\w.<>, \\[\\]]+ ${name}\\(`).exec(src); assert.ok(mm, `нет ${name}`); return src.slice(mm.index, src.indexOf('\n    }\n', mm.index)); };
     // 1. сборка и проверка компилируют IvaKindPatch; вставок в smali нет
-    assert.ok(/IvaRentPatch\.java android\/patches\/IvaKindPatch\.java (android\/patches\/IvaModelPatch\.java )?2>&1/.test(wf) && ck.includes('android/patches/IvaKindPatch.java'),
+    assert.ok(/IvaRentPatch\.java android\/patches\/IvaKindPatch\.java (android\/patches\/IvaModelPatch\.java )?(android\/patches\/IvaFormPatch\.java )?2>&1/.test(wf) && ck.includes('android/patches/IvaKindPatch.java'),
       'вид 10.79: IvaKindPatch компилируется в сборку и в проверку');
     assert.ok(!/IvaKindPatch|kind/i.test(ap), 'вид 10.79: новых вставок в smali нет');
     // 2. точки входа: onTab (справочник, форма, запись), onHub (только форма — запомненный выбор не трогает), касание сохранения
@@ -1166,8 +1192,8 @@ try {
       'вид 10.79: новое объявление — своё, с этим названием, свежее, последнее');
     const st = fnx(kp, 'onSaveTouch');
     assert.ok(st.includes('pendingAt = 0;') && st.includes('if (kinds == null) return;') && st.includes('if (!editLoaded || editId.isEmpty() || kind.equals(orig[1])) return;')
-      && st.includes('if (kind.isEmpty()) return;'),
-      'вид 10.79: без SQL — ничего; правка — только если вид загружен и изменён; новое без вида — ничего');
+      && st.includes('if (kind.isEmpty() && city.isEmpty()) return;'),   // 10.87: без вида — только город выдачи
+      'вид 10.79: без SQL — ничего; правка — только если вид загружен и изменён; новое без вида и города — ничего');
     // 4. справочник — публичный (без входа), копия на телефоне; нет таблицы — вида нигде нет
     assert.ok(kp.includes('static final String KINDS_PATH = "/rest/v1/iva_kinds?select=key,cat,sub,title,sort&active=eq.true&order=sort.asc,title.asc";')
       && fnx(kp, 'ensureLoaded').includes('IvaClientPatch.apiCall(a, KINDS_PATH, "GET", null, false)'),

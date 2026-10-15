@@ -930,6 +930,12 @@ public final class IvaPatch {
             form.addView(row, form.indexOfChild(terms), lp);          // перед «Условием аренды»
             if (save != null) save.setOnTouchListener(new View.OnTouchListener() {
                 @Override public boolean onTouch(View v, android.view.MotionEvent e) {
+                    // 10.87: «Добавить» без названия, категории или цены — нажатие не пропускаем, ошибки под полями
+                    if (k == 0 && v.isEnabled()) {
+                        boolean stop = false;
+                        try { stop = IvaFormPatch.onSaveTouch(a, e.getActionMasked()); } catch (Throwable ignore) {}
+                        if (stop) return true;
+                    }
                     // до штатного нажатия: строка состояния — в поле условий (штатный код его прочтёт); нажатие не трогаем
                     if (e.getActionMasked() == android.view.MotionEvent.ACTION_DOWN && v.isEnabled()) {
                         condPut(terms, k);

@@ -1,0 +1,931 @@
+package ru.prokatnvsk.app;
+
+import android.app.Activity;
+import android.content.SharedPreferences;
+import android.graphics.Typeface;
+import android.text.InputType;
+import android.view.View;
+import android.view.ViewParent;
+import android.widget.EditText;
+import android.widget.HorizontalScrollView;
+import android.widget.LinearLayout;
+import android.widget.ScrollView;
+import android.widget.TextView;
+
+import org.json.JSONArray;
+import org.json.JSONObject;
+
+import java.io.ByteArrayOutputStream;
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
+import java.io.InputStream;
+import java.lang.reflect.Method;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Iterator;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.WeakHashMap;
+
+/**
+ * 10.87 · Форма «Добавить инструмент» (просьба владельца 15.10.2026: «понятно, удобно, структурировано», решения — на нас).
+ *  * Пункты собраны в разделы: «Что сдаёте» (фото, название, модель, категория / подкатегория / вид) → «Характеристики
+ *    и состояние» → «Цена» → «Выдача и условия» (город выдачи, условия, доставка) → «Описание» (+ «Сгенерировать»).
+ *  * Внутри полей — примеры («Например: 800»), а не повтор подписи; обязательные подписи — со звёздочкой.
+ *  * Цена за сутки обязательна. Нет названия, категории или цены — «Опубликовать» не срабатывает, под полем красная
+ *    строка, экран прокручивается к первому такому полю (раньше пустая цена молча не отправлялась).
+ *  * Черновик: заполненное (и фото) сохраняется само; открыли пустую форму — строка «Продолжить заполнение?».
+ *    Опубликовали — черновик удаляется.
+ *  * «Заполнить по образцу»: свои инструменты кнопками — всё, кроме фото (как «Создать копию» у Ozon).
+ *  * «Город выдачи»: по умолчанию — город прошлого объявления (раньше без адреса объявление считалось Новочеркасским).
+ *  Штатные поля только переставляются внутри той же формы и получают другие подсказки — их слушатели, id и проверки
+ *  не меняются; правка инструмента не меняется. Новых точек входа в штатный код нет (IvaPatch.onTab / onHub).
+ */
+final class IvaFormPatch {
+    private IvaFormPatch() {}
+
+    static final String SEC = "iva_sec:", ERR = "iva_err:", CITY = "iva_city", SAMPLE = "iva_sample", DRAFT = "iva_draft";
+    static final String[][] SECTIONS = {
+        {"1", "Что сдаёте"}, {"2", "Характеристики и состояние"}, {"3", "Цена"}, {"4", "Выдача и условия"}, {"5", "Описание"},
+    };
+    static final String[][] HINTS = {
+        {"atName", "Например: перфоратор Makita HR2470"},
+        {"atPrice", "Например: 800"},
+        {"atDep", "Пусто — залог за 5 суток аренды"},
+        {"atDescr", "Что умеет, для каких работ, что важно знать"},
+        {"atTerms", "Например: паспорт, выдача с 9:00 до 20:00"},
+        {"atDelPrice", "Цена доставки, ₽ за 1 км"},
+    };
+    static final String NATIVE_CAT_EMPTY = "Категория *", CAT_EMPTY = "Выберите категорию", SUB_EMPTY = "Выберите подкатегорию";
+    static final String ERR_NAME = "Напишите название инструмента", ERR_CAT = "Выберите категорию", ERR_PRICE = "Укажите цену за сутки";
+    static final String CITY_LABEL = "Город выдачи", CITY_HINT = "Например: Новочеркасск";
+    static final String SAMPLE_LABEL = "Заполнить по образцу своего инструмента (всё, кроме фото)";
+    static final String DRAFT_CONT = "Продолжить", DRAFT_DROP = "Удалить черновик";
+    static final int MAX_PICS = 5, SAMPLE_MAX = 15, CITY_CHIPS = 6;
+    static final long SAVE_DELAY_MS = 1500, PUBLISH_QUIET_MS = 30000;
+
+    /** Порядок пунктов формы. Ключ — штатное поле («atName»), подпись (IvaKindPatch.LBL + поле), «kind» или тег нашего блока. */
+    static final String[] ORDER = {
+        SAMPLE, DRAFT,
+        SEC + "1", IvaKindPatch.LBL + "atPhotos", "atPhotos", IvaKindPatch.LBL + "atName", "atName", ERR + "atName",
+        IvaModelPatch.NAME_SUG, IvaModelPatch.BLOCK,
+        IvaKindPatch.LBL + "atCat", "atCat", ERR + "atCat", "atCatSug", IvaKindPatch.LBL + "atSub", "atSub", "atSubSug",
+        IvaKindPatch.LBL + IvaKindPatch.KIND_KEY, IvaKindPatch.KIND_KEY,
+        SEC + "2", IvaModelPatch.SPECS, IvaModelPatch.KIT, IvaPatch.COND_ROW_TAG + ":atTerms",
+        SEC + "3", IvaModelPatch.HELP + ":price", IvaKindPatch.LBL + "atPrice", "atPrice", ERR + "atPrice",
+        IvaKindPatch.LBL + "atDep", "atDep",
+        SEC + "4", CITY, IvaKindPatch.LBL + "atTerms", "atTerms", IvaPatch.DEL_ROW_TAG + ":atDelToggle", "atDelToggle", "atDelPrice",
+        SEC + "5", "atDescr", IvaModelPatch.HELP,
+        "atSave",
+    };
+
+    // ════════════════════════════════ чистая логика (под тестом) ════════════════════════════════
+
+    /** Новый порядок детей: known — текущие индексы наших пунктов в нужном порядке. Пункты занимают те же места
+     *  (по возрастанию), прочие дети (заголовок формы, отступ внизу) остаются где были. null — уже на месте. */
+    static int[] permute(int count, int[] known) {
+        if (known == null || known.length == 0 || count <= 0) return null;
+        HashSet<Integer> seen = new HashSet<Integer>();
+        for (int k : known) if (k < 0 || k >= count || !seen.add(k)) return null;
+        int[] slots = known.clone();
+        Arrays.sort(slots);
+        int[] out = new int[count];
+        for (int i = 0; i < count; i++) out[i] = i;
+        boolean same = true;
+        for (int j = 0; j < slots.length; j++) {
+            out[slots[j]] = known[j];
+            if (slots[j] != known[j]) same = false;
+        }
+        return same ? null : out;
+    }
+
+    /** Цена за сутки: целое число рублей больше нуля (пробелы внутри можно). */
+    static boolean priceOk(String s) {
+        if (s == null) return false;
+        String t = s.replace(" ", "").replace("\u00a0", "").trim();
+        if (!t.matches("[0-9]{1,7}([.,][0-9]{1,2})?")) return false;
+        try { return Double.parseDouble(t.replace(',', '.')) > 0; } catch (Throwable e) { return false; }
+    }
+
+    /** Черновик в строку: «ключ=значение» построчно, перевод строки и «\» — экранируются. Порядок ключей сохраняется. */
+    static String enc(Map<String, String> m) {
+        StringBuilder b = new StringBuilder();
+        if (m == null) return "";
+        for (Map.Entry<String, String> e : m.entrySet()) {
+            String k = e.getKey(), v = e.getValue();
+            if (k == null || k.isEmpty() || k.indexOf('=') >= 0 || k.indexOf('\n') >= 0 || v == null) continue;
+            b.append(k).append('=').append(v.replace("\\", "\\\\").replace("\r", "").replace("\n", "\\n")).append('\n');
+        }
+        return b.toString();
+    }
+
+    static LinkedHashMap<String, String> dec(String s) {
+        LinkedHashMap<String, String> m = new LinkedHashMap<String, String>();
+        if (s == null) return m;
+        for (String line : s.split("\n")) {
+            int i = line.indexOf('=');
+            if (i <= 0) continue;
+            String raw = line.substring(i + 1);
+            StringBuilder v = new StringBuilder();
+            for (int j = 0; j < raw.length(); j++) {
+                char c = raw.charAt(j);
+                if (c == '\\' && j + 1 < raw.length()) {
+                    char n = raw.charAt(++j);
+                    v.append(n == 'n' ? '\n' : n);
+                } else v.append(c);
+            }
+            m.put(line.substring(0, i), v.toString());
+        }
+        return m;
+    }
+
+    /** Есть ли что сохранять: название, цена, описание, условия или фото. */
+    static boolean hasContent(Map<String, String> st) {
+        if (st == null) return false;
+        for (String k : new String[]{"name", "price", "descr", "terms"}) if (!g(st, k).trim().isEmpty()) return true;
+        return num(g(st, "pics")) > 0;
+    }
+
+    /** Город по умолчанию: прошлый выбранный в форме → город последнего своего объявления → город профиля. */
+    static String defaultCity(String last, String latestTool, String profile) {
+        for (String c : new String[]{last, latestTool, profile}) {
+            String x = IvaSearchPatch.city(c);
+            if (!x.isEmpty()) return x;
+        }
+        return "";
+    }
+
+    /** Строка черновика: «Перфоратор Makita HR2470 · 3 фото». */
+    static String draftTitle(Map<String, String> st) {
+        String n = g(st, "name").trim();
+        int p = num(g(st, "pics"));
+        String t = n.isEmpty() ? "без названия" : "«" + cut(n, 40) + "»";
+        return "Есть незаконченный инструмент: " + t + (p > 0 ? " · " + p + " фото" : "");
+    }
+
+    static String cut(String s, int n) {
+        String t = s == null ? "" : s.trim();
+        return t.length() <= n ? t : t.substring(0, n - 1).trim() + "…";
+    }
+
+    /** Образцы: свои объявления, новые сверху, без повторов названия, не больше max. */
+    static List<Map<String, String>> samples(List<Map<String, String>> rows, int max) {
+        List<Map<String, String>> out = new ArrayList<Map<String, String>>();
+        HashSet<String> seen = new HashSet<String>();
+        if (rows == null) return out;
+        for (Map<String, String> r : rows) {
+            String n = g(r, "name").trim();
+            String k = n.toLowerCase(Locale.ROOT).replace('ё', 'е').replaceAll("\\s+", " ");
+            if (n.isEmpty() || !seen.add(k)) continue;
+            out.add(r);
+            if (out.size() >= max) break;
+        }
+        return out;
+    }
+
+    /** Объявление из базы → состояние формы (условия — без строки «Состояние: …», она становится кнопкой). */
+    static LinkedHashMap<String, String> fromTool(JSONObject j) {
+        LinkedHashMap<String, String> m = new LinkedHashMap<String, String>();
+        m.put("name", js(j, "name"));
+        m.put("cat", js(j, "cat"));
+        m.put("sub", js(j, "sub"));
+        m.put("kind", js(j, "kind"));
+        m.put("model", js(j, "model_id"));
+        m.put("price", money(js(j, "price")));
+        m.put("dep", money(js(j, "deposit")));
+        m.put("descr", js(j, "descr"));
+        String terms = js(j, "terms");
+        int c = IvaPatch.condIndex(terms);
+        m.put("terms", IvaPatch.condStrip(terms));
+        m.put("cond", String.valueOf(c < 0 ? IvaPatch.COND_DEFAULT : c));
+        m.put("deliv", j != null && j.optBoolean("delivery", false) ? "1" : "0");
+        m.put("delp", money(js(j, "delivery_price")));
+        m.put("city", js(j, "pickup_city"));
+        JSONObject sp = j == null ? null : j.optJSONObject("specs");
+        if (sp != null) for (Iterator<String> it = sp.keys(); it.hasNext(); ) {
+            String k = it.next();
+            String v = sp.isNull(k) ? "" : String.valueOf(sp.opt(k));
+            if (!v.isEmpty() && !"null".equals(v)) m.put("spec." + k, v);
+        }
+        JSONArray kit = j == null ? null : j.optJSONArray("kit");
+        if (kit != null) for (int i = 0; i < kit.length(); i++) {
+            String v = IvaKindPatch.clean(kit.optString(i, ""));
+            if (!v.isEmpty()) m.put("kit." + i, v);
+        }
+        return m;
+    }
+
+    /** «800.0» → «800», «1250.5» → «1250.5», пусто / 0 → пусто. */
+    static String money(String s) {
+        String t = s == null ? "" : s.trim();
+        if (t.isEmpty() || "null".equals(t)) return "";
+        try {
+            double d = Double.parseDouble(t);
+            if (d <= 0) return "";
+            if (d == Math.rint(d)) return String.valueOf((long) d);
+            return String.valueOf(d);
+        } catch (Throwable e) { return ""; }
+    }
+
+    /** Кусок тела записи: ,"pickup_city":"…" без начальной запятой. Пусто — нечего. */
+    static String cityExtra(String city) {
+        String c = IvaSearchPatch.city(city);
+        if (c.isEmpty() || c.length() > 60) return "";
+        return "\"pickup_city\":\"" + jsonEsc(c) + "\"";
+    }
+
+    static String jsonEsc(String s) {
+        StringBuilder b = new StringBuilder();
+        for (int i = 0; i < s.length(); i++) {
+            char c = s.charAt(i);
+            if (c == '"' || c == '\\') b.append('\\').append(c);
+            else if (c < 0x20) b.append(String.format(Locale.ROOT, "\\u%04x", (int) c));
+            else b.append(c);
+        }
+        return b.toString();
+    }
+
+    static Map<String, String> specsOf(Map<String, String> st) {
+        LinkedHashMap<String, String> m = new LinkedHashMap<String, String>();
+        for (Map.Entry<String, String> e : st.entrySet())
+            if (e.getKey().startsWith("spec.") && e.getValue() != null && !e.getValue().isEmpty()) m.put(e.getKey().substring(5), e.getValue());
+        return m;
+    }
+
+    static List<String> kitOf(Map<String, String> st) {
+        List<String> l = new ArrayList<String>();
+        for (Map.Entry<String, String> e : st.entrySet())
+            if (e.getKey().startsWith("kit.") && e.getValue() != null && !e.getValue().isEmpty()) l.add(e.getValue());
+        return l;
+    }
+
+    static String g(Map<String, String> m, String k) { String v = m == null ? null : m.get(k); return v == null ? "" : v; }
+
+    static int num(String s) { try { return Integer.parseInt(s.trim()); } catch (Throwable e) { return 0; } }
+
+    static String js(JSONObject j, String k) {
+        if (j == null || !j.has(k) || j.isNull(k)) return "";
+        return IvaKindPatch.clean(String.valueOf(j.opt(k)));
+    }
+
+    // ════════════════════════════════ раскладка ════════════════════════════════
+
+    static final WeakHashMap<View, Boolean> watched = new WeakHashMap<View, Boolean>();
+    static final WeakHashMap<View, String> sigs = new WeakHashMap<View, String>();   // что уже нарисовано в строках черновика / образцов
+    static boolean saveBlocked = false;
+    static long publishAt = 0, clearedFor = 0;
+    static String lastSaved = null;
+    static String picsSig = "";
+    static long pendingModel = 0;
+    static volatile List<JSONObject> mine = null;
+    static volatile boolean mineLoading = false;
+    static volatile long mineTriedAt = 0;
+    static String cityDefault = "";
+
+    /** Вызывается из IvaKindPatch.arrange (форма «Добавить» открыта или поменялась). */
+    static void setup(Activity a, LinearLayout form) {
+        ensureViews(a, form);
+        hints(a);
+        paintErrors(a, form, false);
+        paintTop(a, form);
+        layout(a, form);
+        resolveModel(a);
+        scheduleSave(a);
+    }
+
+    static void ensureViews(Activity a, LinearLayout form) {
+        Object save = IvaClientPatch.get(a, "atSave");
+        int at = save instanceof View && ((View) save).getParent() == form ? form.indexOfChild((View) save) : form.getChildCount();
+        for (int i = 0; i < SECTIONS.length; i++) {
+            if (form.findViewWithTag(SEC + SECTIONS[i][0]) != null) continue;
+            TextView t = new TextView(a);
+            t.setTag(SEC + SECTIONS[i][0]);
+            t.setText(SECTIONS[i][1]);
+            t.setTextSize(17f);
+            t.setTypeface(null, Typeface.BOLD);
+            t.setTextColor(IvaPatch.color(a, "text", 0xfff2f4f8));
+            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2);
+            lp.topMargin = IvaPatch.dp(a, i == 0 ? 14 : 30);
+            form.addView(t, at++, lp);
+        }
+        for (String f : new String[]{"atName", "atCat", "atPrice"}) {
+            if (form.findViewWithTag(ERR + f) != null) continue;
+            TextView e = new TextView(a);
+            e.setTag(ERR + f);
+            e.setTextSize(13f);
+            e.setTextColor(IvaPatch.color(a, "red", 0xffff5a5f));
+            e.setVisibility(View.GONE);
+            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2);
+            lp.topMargin = IvaPatch.dp(a, 4);
+            form.addView(e, at++, lp);
+        }
+        if (form.findViewWithTag(CITY) == null) form.addView(buildCity(a), at++, new LinearLayout.LayoutParams(-1, -2));
+        if (form.findViewWithTag(SAMPLE) == null) {
+            LinearLayout s = new LinearLayout(a);
+            s.setTag(SAMPLE);
+            s.setOrientation(LinearLayout.VERTICAL);
+            s.setVisibility(View.GONE);
+            form.addView(s, at++, new LinearLayout.LayoutParams(-1, -2));
+        }
+        if (form.findViewWithTag(DRAFT) == null) {
+            LinearLayout d = new LinearLayout(a);
+            d.setTag(DRAFT);
+            d.setOrientation(LinearLayout.VERTICAL);
+            d.setVisibility(View.GONE);
+            form.addView(d, at, new LinearLayout.LayoutParams(-1, -2));
+        }
+        for (String f : new String[]{"atName", "atPrice", "atDep", "atDescr", "atTerms", "atDelPrice"}) watchField(a, f);
+    }
+
+    static View child(Activity a, LinearLayout form, String key) {
+        View v;
+        if (key.startsWith(IvaKindPatch.LBL) || IvaKindPatch.KIND_KEY.equals(key) || (key.startsWith("at") && key.length() > 2
+                && Character.isUpperCase(key.charAt(2)))) v = IvaKindPatch.formChild(a, form, key);
+        else v = form.findViewWithTag(key);
+        return v != null && v.getParent() == form ? v : null;
+    }
+
+    static void layout(Activity a, LinearLayout form) {
+        List<View> want = new ArrayList<View>();
+        for (String k : ORDER) {
+            View v = child(a, form, k);
+            if (v != null && !want.contains(v)) want.add(v);
+        }
+        int n = form.getChildCount();
+        int[] known = new int[want.size()];
+        for (int i = 0; i < known.length; i++) known[i] = form.indexOfChild(want.get(i));
+        int[] plan = permute(n, known);
+        if (plan == null) return;
+        View[] old = new View[n];
+        for (int i = 0; i < n; i++) old[i] = form.getChildAt(i);
+        View focus = form.findFocus();
+        for (int pos = 0; pos < n; pos++) {
+            View w = old[plan[pos]];
+            if (form.getChildAt(pos) == w) continue;
+            form.removeView(w);
+            form.addView(w, pos);
+        }
+        if (focus != null && !focus.isFocused()) focus.requestFocus();
+    }
+
+    static void hints(Activity a) {
+        for (String[] h : HINTS) {
+            Object o = IvaClientPatch.get(a, h[0]);
+            if (o instanceof TextView && !h[1].equals(String.valueOf(((TextView) o).getHint()))) ((TextView) o).setHint(h[1]);
+        }
+        Object c = IvaClientPatch.get(a, "atCat"), s = IvaClientPatch.get(a, "atSub");
+        if (c instanceof TextView && str(IvaClientPatch.get(a, "atCatKey")).isEmpty()
+                && NATIVE_CAT_EMPTY.equals(String.valueOf(((TextView) c).getText()))) ((TextView) c).setText(CAT_EMPTY);
+        if (s instanceof TextView && str(IvaClientPatch.get(a, "atSubKey")).isEmpty()
+                && IvaKindPatch.SUB_HINT.equals(String.valueOf(((TextView) s).getText()))) ((TextView) s).setText(SUB_EMPTY);
+    }
+
+    static String str(Object o) { return o == null ? "" : String.valueOf(o).trim(); }
+
+    static String text(Activity a, String field) {
+        Object o = IvaClientPatch.get(a, field);
+        return o instanceof TextView ? String.valueOf(((TextView) o).getText()) : "";
+    }
+
+    // ───── проверка перед «Опубликовать» ─────
+
+    /** Касание «Опубликовать» (IvaPatch.condRow). true — нажатие не пропускаем: под полями ошибки. */
+    static boolean onSaveTouch(Activity a, int action) {
+        if (action == android.view.MotionEvent.ACTION_DOWN) {
+            saveBlocked = false;
+            Object no = IvaClientPatch.get(a, "atName");
+            if (!(no instanceof View) || !(((View) no).getParent() instanceof LinearLayout)) return false;
+            LinearLayout form = (LinearLayout) ((View) no).getParent();
+            saveBlocked = paintErrors(a, form, true);
+            if (!saveBlocked) {
+                publishAt = System.currentTimeMillis();
+                String c = cityValue(a);
+                if (!c.isEmpty()) prefs(a).edit().putString("city", c).apply();
+            }
+        }
+        return saveBlocked;
+    }
+
+    /** show — нажали «Опубликовать»: показать все ошибки и прокрутить к первой. Иначе — только убрать исправленные. */
+    static boolean paintErrors(Activity a, LinearLayout form, boolean show) {
+        String[][] checks = {
+            {"atName", text(a, "atName").trim().isEmpty() ? ERR_NAME : ""},
+            {"atCat", str(IvaClientPatch.get(a, "atCatKey")).isEmpty() ? ERR_CAT : ""},
+            {"atPrice", priceOk(text(a, "atPrice")) ? "" : ERR_PRICE},
+        };
+        View first = null;
+        for (String[] c : checks) {
+            View e = form.findViewWithTag(ERR + c[0]);
+            if (!(e instanceof TextView)) continue;
+            boolean bad = !c[1].isEmpty();
+            if (show) {
+                ((TextView) e).setText(c[1]);
+                e.setVisibility(bad ? View.VISIBLE : View.GONE);
+                if (bad && first == null) {
+                    Object f = IvaClientPatch.get(a, c[0]);
+                    first = f instanceof View ? (View) f : e;
+                }
+            } else if (!bad && e.getVisibility() == View.VISIBLE) e.setVisibility(View.GONE);
+        }
+        if (first != null) {
+            scrollTo(a, first);
+            IvaNotifyPatch.flash(first);
+        }
+        return first != null;
+    }
+
+    static void scrollTo(Activity a, View v) {
+        int y = 0;
+        View cur = v;
+        ViewParent p = v.getParent();
+        while (p instanceof View && !(p instanceof ScrollView)) { y += cur.getTop(); cur = (View) p; p = cur.getParent(); }
+        if (p instanceof ScrollView) {
+            y += cur.getTop();
+            ((ScrollView) p).smoothScrollTo(0, Math.max(0, y - IvaPatch.dp(a, 90)));
+        }
+    }
+
+    static void watchField(final Activity a, final String field) {
+        Object o = IvaClientPatch.get(a, field);
+        if (!(o instanceof TextView) || watched.containsKey(o)) return;
+        final TextView tv = (TextView) o;
+        watched.put(tv, Boolean.TRUE);
+        tv.addTextChangedListener(new android.text.TextWatcher() {
+            @Override public void beforeTextChanged(CharSequence s, int st, int c, int n) {}
+            @Override public void onTextChanged(CharSequence s, int st, int b, int c) {}
+            @Override public void afterTextChanged(android.text.Editable s) {
+                try {
+                    if (tv.getParent() instanceof LinearLayout) paintErrors(a, (LinearLayout) tv.getParent(), false);
+                    if ("atName".equals(field) || "atPrice".equals(field)) paintTopLater(a, tv);
+                    scheduleSave(a);
+                } catch (Throwable ignore) {}
+            }
+        });
+    }
+
+    // ───── «Город выдачи» ─────
+
+    static View buildCity(final Activity a) {
+        LinearLayout box = new LinearLayout(a);
+        box.setTag(CITY);
+        box.setOrientation(LinearLayout.VERTICAL);
+        box.addView(IvaModelPatch.small(a, CITY_LABEL), IvaModelPatch.lpTop(a, 12));
+        final EditText e = new EditText(a);
+        e.setTag(CITY + ":field");
+        Object no = IvaClientPatch.get(a, "atName");
+        IvaModelPatch.styleInput(a, e, no instanceof TextView ? (TextView) no : null);
+        e.setSingleLine(true);
+        e.setHint(CITY_HINT);
+        e.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_CAP_WORDS);
+        box.addView(e, IvaModelPatch.lpTop(a, 6));
+        HorizontalScrollView hs = new HorizontalScrollView(a);
+        hs.setTag(CITY + ":hs");
+        hs.setHorizontalScrollBarEnabled(false);
+        hs.setOverScrollMode(View.OVER_SCROLL_NEVER);
+        hs.setVisibility(View.GONE);
+        final LinearLayout row = new LinearLayout(a);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        hs.addView(row, new HorizontalScrollView.LayoutParams(-2, -2));
+        box.addView(hs, IvaModelPatch.lpTop(a, 6));
+        final HorizontalScrollView fhs = hs;
+        e.setOnFocusChangeListener(new View.OnFocusChangeListener() {
+            @Override public void onFocusChange(View v, boolean has) {
+                try { if (has) paintCityChips(a, e, row); fhs.setVisibility(has ? View.VISIBLE : View.GONE); } catch (Throwable ignore) {}
+            }
+        });
+        e.addTextChangedListener(new android.text.TextWatcher() {
+            @Override public void beforeTextChanged(CharSequence s, int st, int c, int n) {}
+            @Override public void onTextChanged(CharSequence s, int st, int b, int c) {}
+            @Override public void afterTextChanged(android.text.Editable s) {
+                try { if (e.hasFocus()) paintCityChips(a, e, row); scheduleSave(a); } catch (Throwable ignore) {}
+            }
+        });
+        String d = defaultCity(prefs(a).getString("city", ""), latestCity(), IvaSearchPatch.profileCity);
+        if (!d.isEmpty()) e.setText(d);
+        cityDefault = d;
+        return box;
+    }
+
+    static void paintCityChips(final Activity a, final EditText e, final LinearLayout row) {
+        row.removeAllViews();
+        String q = String.valueOf(e.getText());
+        String cur = IvaSearchPatch.city(q);
+        List<String> all = IvaSearchPatch.pickerCities(cur.isEmpty() ? "" : q, cityCounts(), IvaSearchPatch.profileCity);
+        if (all.size() == 1 && IvaSearchPatch.cityKey(all.get(0)).equals(IvaSearchPatch.cityKey(cur))) all = new ArrayList<String>();
+        int n = 0;
+        for (final String c : all) {
+            if (n++ >= CITY_CHIPS) break;
+            TextView t = IvaSearchPatch.chip(a, c, false, false);
+            t.setOnClickListener(new View.OnClickListener() {
+                @Override public void onClick(View v) {
+                    try {
+                        e.setText(c);
+                        e.setSelection(e.getText().length());
+                        IvaSearchPatch.hideKeyboard(a, e);
+                        e.clearFocus();
+                    } catch (Throwable ignore) {}
+                }
+            });
+            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-2, -2);
+            lp.rightMargin = IvaPatch.dp(a, 8);
+            row.addView(t, lp);
+        }
+    }
+
+    static Map<String, Integer> cityCounts() {
+        Map<String, Integer> m = new HashMap<String, Integer>();
+        Object l = IvaSearchPatch.fullTools;
+        if (!(l instanceof ArrayList)) return m;
+        for (Object o : (ArrayList) l) {
+            if (!(o instanceof JSONObject)) continue;
+            String c = IvaSearchPatch.toolCityOf((JSONObject) o);
+            Integer x = m.get(c);
+            m.put(c, x == null ? 1 : x + 1);
+        }
+        return m;
+    }
+
+    static EditText cityField(Activity a) {
+        Object no = IvaClientPatch.get(a, "atName");
+        View root = no instanceof View ? ((View) no).getRootView() : null;
+        View f = root == null ? null : root.findViewWithTag(CITY + ":field");
+        return f instanceof EditText ? (EditText) f : null;
+    }
+
+    static String cityValue(Activity a) {
+        EditText e = cityField(a);
+        return e == null ? "" : IvaSearchPatch.city(String.valueOf(e.getText()));
+    }
+
+    static String latestCity() {
+        List<JSONObject> l = mine;
+        if (l != null) for (JSONObject j : l) { String c = js(j, "pickup_city"); if (!c.isEmpty()) return c; }
+        return "";
+    }
+
+    // ───── свои инструменты: образцы и город ─────
+
+    static void loadMine(final Activity a) {
+        long now = System.currentTimeMillis();
+        if (mine != null || mineLoading || now - mineTriedAt < 60000) return;
+        final String email = str(IvaClientPatch.get(a, "userEmail")).toLowerCase(Locale.ROOT);
+        if (email.isEmpty()) return;
+        mineLoading = true;
+        mineTriedAt = now;
+        new Thread(new Runnable() {
+            @Override public void run() {
+                try {
+                    String[] r = IvaClientPatch.apiCall(a, "/rest/v1/tools?select=*&owner_email=eq." + IvaKindPatch.enc(email)
+                        + "&order=created_at.desc&limit=40", "GET", null, true);
+                    if (!IvaModelPatch.ok(r)) return;
+                    JSONArray arr = new JSONArray(r[1].trim());
+                    List<JSONObject> out = new ArrayList<JSONObject>();
+                    for (int i = 0; i < arr.length(); i++) { JSONObject j = arr.optJSONObject(i); if (j != null) out.add(j); }
+                    mine = out;
+                    a.runOnUiThread(new Runnable() {
+                        @Override public void run() {
+                            try {
+                                EditText e = cityField(a);
+                                if (e != null && String.valueOf(e.getText()).trim().isEmpty() && !e.hasFocus()) {
+                                    String d = defaultCity(prefs(a).getString("city", ""), latestCity(), IvaSearchPatch.profileCity);
+                                    if (!d.isEmpty()) { e.setText(d); cityDefault = d; }
+                                }
+                                Object no = IvaClientPatch.get(a, "atName");
+                                if (no instanceof View && ((View) no).getParent() instanceof LinearLayout)
+                                    paintTop(a, (LinearLayout) ((View) no).getParent());
+                            } catch (Throwable ignore) {}
+                        }
+                    });
+                } catch (Throwable ignore) {
+                } finally { mineLoading = false; }
+            }
+        }).start();
+    }
+
+    /** Строки над формой (черновик, образцы) — только пока форма пустая. */
+    static void paintTop(final Activity a, LinearLayout form) {
+        loadMine(a);
+        View dv = form.findViewWithTag(DRAFT), sv = form.findViewWithTag(SAMPLE);
+        boolean empty = !hasContent(collect(a, false));
+        final LinkedHashMap<String, String> d = empty ? draft(a) : null;
+        if (dv instanceof LinearLayout) {
+            LinearLayout box = (LinearLayout) dv;
+            if (d == null || !hasContent(d)) box.setVisibility(View.GONE);
+            else {
+                String title = draftTitle(d);
+                if (!title.equals(sigs.get(box))) {
+                    box.removeAllViews();
+                    sigs.put(box, title);
+                    android.graphics.drawable.Drawable bg = IvaPatch.drawable(a, "bg_field");
+                    if (bg != null) box.setBackground(bg);
+                    box.setPadding(IvaPatch.dp(a, 14), IvaPatch.dp(a, 12), IvaPatch.dp(a, 14), IvaPatch.dp(a, 12));
+                    TextView t = new TextView(a);
+                    t.setText(title);
+                    t.setTextSize(14f);
+                    t.setTextColor(IvaPatch.color(a, "text", 0xfff2f4f8));
+                    box.addView(t, new LinearLayout.LayoutParams(-1, -2));
+                    LinearLayout row = new LinearLayout(a);
+                    row.setOrientation(LinearLayout.HORIZONTAL);
+                    TextView go = IvaSearchPatch.chip(a, DRAFT_CONT, true, false);
+                    go.setOnClickListener(new View.OnClickListener() {
+                        @Override public void onClick(View v) { try { apply(a, draft(a), true); } catch (Throwable ignore) {} }
+                    });
+                    TextView del = IvaSearchPatch.chip(a, DRAFT_DROP, false, false);
+                    del.setOnClickListener(new View.OnClickListener() {
+                        @Override public void onClick(View v) {
+                            try {
+                                clearDraft(a);
+                                View b = v.getRootView() == null ? null : v.getRootView().findViewWithTag(DRAFT);
+                                if (b != null) b.setVisibility(View.GONE);
+                            } catch (Throwable ignore) {}
+                        }
+                    });
+                    LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-2, -2);
+                    lp.rightMargin = IvaPatch.dp(a, 8);
+                    row.addView(go, lp);
+                    row.addView(del, new LinearLayout.LayoutParams(-2, -2));
+                    box.addView(row, IvaModelPatch.lpTop(a, 10));
+                    LinearLayout.LayoutParams blp = (LinearLayout.LayoutParams) box.getLayoutParams();
+                    if (blp != null) { blp.topMargin = IvaPatch.dp(a, 12); box.setLayoutParams(blp); }
+                }
+                box.setVisibility(View.VISIBLE);
+            }
+        }
+        if (sv instanceof LinearLayout) {
+            LinearLayout box = (LinearLayout) sv;
+            List<Map<String, String>> rows = new ArrayList<Map<String, String>>();
+            List<JSONObject> l = mine;
+            if (l != null) for (JSONObject j : l) { Map<String, String> m = fromTool(j); rows.add(m); }
+            List<Map<String, String>> sm = samples(rows, SAMPLE_MAX);
+            if (!empty || sm.isEmpty() || (d != null && hasContent(d))) { box.setVisibility(View.GONE); return; }
+            StringBuilder sig = new StringBuilder();
+            for (Map<String, String> m : sm) sig.append(g(m, "name")).append('|');
+            if (!sig.toString().equals(sigs.get(box))) {
+                box.removeAllViews();
+                sigs.put(box, sig.toString());
+                box.addView(IvaModelPatch.small(a, SAMPLE_LABEL), IvaModelPatch.lpTop(a, 12));
+                HorizontalScrollView hs = new HorizontalScrollView(a);
+                hs.setHorizontalScrollBarEnabled(false);
+                hs.setOverScrollMode(View.OVER_SCROLL_NEVER);
+                LinearLayout row = new LinearLayout(a);
+                row.setOrientation(LinearLayout.HORIZONTAL);
+                hs.addView(row, new HorizontalScrollView.LayoutParams(-2, -2));
+                for (final Map<String, String> m : sm) {
+                    TextView c = IvaSearchPatch.chip(a, cut(g(m, "name"), 28), false, false);
+                    c.setOnClickListener(new View.OnClickListener() {
+                        @Override public void onClick(View v) {
+                            try {
+                                LinkedHashMap<String, String> st = new LinkedHashMap<String, String>(m);
+                                st.remove("pics");
+                                apply(a, st, false);
+                            } catch (Throwable ignore) {}
+                        }
+                    });
+                    LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-2, -2);
+                    lp.rightMargin = IvaPatch.dp(a, 8);
+                    row.addView(c, lp);
+                }
+                box.addView(hs, IvaModelPatch.lpTop(a, 6));
+            }
+            box.setVisibility(View.VISIBLE);
+        }
+    }
+
+    static void paintTopLater(final Activity a, final View any) {
+        any.removeCallbacks(TOP);
+        topActivity = a;
+        any.postDelayed(TOP, 400);
+    }
+
+    static Activity topActivity = null;
+    static final Runnable TOP = new Runnable() {
+        @Override public void run() {
+            try {
+                Activity a = topActivity;
+                Object no = a == null ? null : IvaClientPatch.get(a, "atName");
+                if (no instanceof View && ((View) no).getParent() instanceof LinearLayout) paintTop(a, (LinearLayout) ((View) no).getParent());
+            } catch (Throwable ignore) {}
+        }
+    };
+
+    // ───── состояние формы: собрать / поставить ─────
+
+    @SuppressWarnings("unchecked")
+    static LinkedHashMap<String, String> collect(Activity a, boolean full) {
+        LinkedHashMap<String, String> m = new LinkedHashMap<String, String>();
+        m.put("name", text(a, "atName"));
+        m.put("price", text(a, "atPrice"));
+        m.put("dep", text(a, "atDep"));
+        m.put("descr", text(a, "atDescr"));
+        m.put("terms", IvaPatch.condStrip(text(a, "atTerms")));
+        Object pics = IvaClientPatch.get(a, "atPics");
+        m.put("pics", String.valueOf(pics instanceof ArrayList ? ((ArrayList) pics).size() : 0));
+        if (!full) return m;
+        m.put("cat", str(IvaClientPatch.get(a, "atCatKey")));
+        m.put("sub", str(IvaClientPatch.get(a, "atSubKey")));
+        m.put("kind", IvaModelPatch.kindNow());
+        IvaModelPatch.Model ch = IvaModelPatch.chosen;
+        m.put("model", ch == null ? "" : String.valueOf(ch.id));
+        m.put("cond", String.valueOf(IvaPatch.condSel[0]));
+        Object dl = IvaClientPatch.get(a, "atDeliv");
+        m.put("deliv", dl instanceof Boolean && (Boolean) dl ? "1" : "0");
+        m.put("delp", text(a, "atDelPrice"));
+        EditText ce = cityField(a);
+        m.put("city", ce == null ? "" : String.valueOf(ce.getText()));
+        for (Map.Entry<String, String> e : IvaModelPatch.specVals.entrySet())
+            if (e.getValue() != null && !e.getValue().trim().isEmpty()) m.put("spec." + e.getKey(), e.getValue());
+        int i = 0;
+        for (String k : IvaModelPatch.kitSel) m.put("kit." + (i++), k);
+        return m;
+    }
+
+    /** Поставить состояние в форму (черновик — с фото; образец — без). Штатные поля — как будто их заполнили руками. */
+    @SuppressWarnings("unchecked")
+    static void apply(Activity a, Map<String, String> st, boolean withPics) {
+        if (st == null) return;
+        Object no = IvaClientPatch.get(a, "atName");
+        if (!(no instanceof TextView)) return;
+        TextView nv = (TextView) no;
+        IvaModelPatch.quiet = true;
+        try {
+            nv.setText(g(st, "name"));
+            if (nv instanceof EditText) ((EditText) nv).setSelection(nv.getText().length());
+        } finally { IvaModelPatch.quiet = false; }
+        IvaKindPatch.nameSeq++;                                                      // автоподбор по названию не нужен
+        IvaModelPatch.nameSeq++;
+        String cat = g(st, "cat");
+        if (!cat.isEmpty()) IvaKindPatch.setFromModel(a, cat, g(st, "sub"), g(st, "kind"));
+        IvaModelPatch.specVals = new LinkedHashMap<String, String>(specsOf(st));
+        IvaModelPatch.specAuto = new LinkedHashMap<String, String>();
+        IvaModelPatch.specsKind = null;
+        IvaModelPatch.kitSel = new ArrayList<String>(kitOf(st));
+        IvaModelPatch.kitKind = null;
+        IvaModelPatch.chosen = null;
+        long mid = 0;
+        try { mid = Long.parseLong(g(st, "model").trim()); } catch (Throwable ignore) {}
+        pendingModel = mid;
+        setText(a, "atPrice", g(st, "price"));
+        setText(a, "atDep", g(st, "dep"));
+        setText(a, "atDescr", g(st, "descr"));
+        setText(a, "atTerms", g(st, "terms"));
+        int cond = num(g(st, "cond"));
+        IvaPatch.condSel[0] = cond >= 0 && cond < IvaPatch.COND_TITLES.length ? cond : IvaPatch.COND_DEFAULT;
+        Object te = IvaClientPatch.get(a, "atTerms");
+        if (te instanceof View) { IvaPatch.condSeen[0] = text(a, "atTerms"); IvaPatch.condPaint(a, (View) te, 0); }
+        boolean wantDel = "1".equals(g(st, "deliv"));
+        Object dl = IvaClientPatch.get(a, "atDeliv");
+        boolean hasDel = dl instanceof Boolean && (Boolean) dl;
+        if (wantDel != hasDel) {
+            View root = nv.getRootView();
+            View row = root == null ? null : root.findViewWithTag(IvaPatch.DEL_ROW_TAG + ":atDelToggle");
+            if (row != null) row.performClick();
+        }
+        setText(a, "atDelPrice", g(st, "delp"));
+        EditText ce = cityField(a);
+        String city = IvaSearchPatch.city(g(st, "city"));
+        if (ce != null && !city.isEmpty()) ce.setText(city);
+        if (withPics) loadPics(a, num(g(st, "pics")));
+        resolveModel(a);
+        IvaModelPatch.refresh(a);
+        IvaSearchPatch.hideKeyboard(a, nv);
+        nv.clearFocus();
+        IvaNotifyPatch.flash(nv);
+        lastSaved = null;
+        View root = nv.getRootView();
+        View dv = root == null ? null : root.findViewWithTag(DRAFT), sv = root == null ? null : root.findViewWithTag(SAMPLE);
+        if (dv != null) dv.setVisibility(View.GONE);
+        if (sv != null) sv.setVisibility(View.GONE);
+        scheduleSave(a);
+    }
+
+    static void setText(Activity a, String field, String v) {
+        Object o = IvaClientPatch.get(a, field);
+        if (o instanceof TextView && !String.valueOf(((TextView) o).getText()).equals(v)) ((TextView) o).setText(v);
+    }
+
+    /** Модель из черновика / образца — когда справочник загрузится (и если вид тот же). */
+    static void resolveModel(Activity a) {
+        long id = pendingModel;
+        List<IvaModelPatch.Model> ms = IvaModelPatch.modelList;
+        if (id == 0 || ms == null) return;
+        pendingModel = 0;
+        String kind = IvaModelPatch.kindNow();
+        for (IvaModelPatch.Model m : ms) {
+            if (m.id != id) continue;
+            if (!m.kind.equals(kind) || IvaModelPatch.chosen != null) return;
+            IvaModelPatch.chosen = m;
+            IvaModelPatch.specsKind = null;
+            try { IvaModelPatch.refresh(a); } catch (Throwable ignore) {}
+            return;
+        }
+    }
+
+    // ───── черновик ─────
+
+    static SharedPreferences prefs(Activity a) { return a.getSharedPreferences("iva_form", 0); }
+
+    static LinkedHashMap<String, String> draft(Activity a) {
+        String s = prefs(a).getString("draft", "");
+        return s.isEmpty() ? null : dec(s);
+    }
+
+    static File picFile(Activity a, int i) { return new File(new File(a.getFilesDir(), "iva_draft"), "p" + i + ".jpg"); }
+
+    static void clearDraft(Activity a) {
+        prefs(a).edit().remove("draft").apply();
+        lastSaved = "";
+        picsSig = "";
+        for (int i = 0; i < MAX_PICS; i++) try { picFile(a, i).delete(); } catch (Throwable ignore) {}
+    }
+
+    static Activity saveActivity = null;
+    static View saveHost = null;
+    static final Runnable SAVE = new Runnable() {
+        @Override public void run() { try { if (saveActivity != null) saveDraft(saveActivity); } catch (Throwable ignore) {} }
+    };
+
+    static void scheduleSave(Activity a) {
+        Object no = IvaClientPatch.get(a, "atName");
+        if (!(no instanceof View)) return;
+        saveActivity = a;
+        if (saveHost != null) saveHost.removeCallbacks(SAVE);
+        saveHost = (View) no;
+        saveHost.postDelayed(SAVE, SAVE_DELAY_MS);
+    }
+
+    /** Сохранить черновик, если в форме что-то есть и это не только что опубликованное. */
+    @SuppressWarnings("unchecked")
+    static void saveDraft(final Activity a) {
+        if (System.currentTimeMillis() - publishAt < PUBLISH_QUIET_MS) return;
+        Object no = IvaClientPatch.get(a, "atName");
+        if (!(no instanceof View) || !((View) no).isShown()) return;
+        LinkedHashMap<String, String> st = collect(a, true);
+        if (!hasContent(st)) return;
+        String s = enc(st);
+        if (s.equals(lastSaved)) return;
+        lastSaved = s;
+        prefs(a).edit().putString("draft", s).apply();
+        Object pics = IvaClientPatch.get(a, "atPics");
+        if (!(pics instanceof ArrayList)) return;
+        final List<Object> list = new ArrayList<Object>((ArrayList) pics);
+        StringBuilder sig = new StringBuilder();
+        for (Object o : list) sig.append(o instanceof byte[] ? ((byte[]) o).length + "/" + System.identityHashCode(o) : "?").append(',');
+        if (sig.toString().equals(picsSig)) return;
+        picsSig = sig.toString();
+        new Thread(new Runnable() {
+            @Override public void run() {
+                try {
+                    File dir = new File(a.getFilesDir(), "iva_draft");
+                    if (!dir.isDirectory() && !dir.mkdirs()) return;
+                    for (int i = 0; i < MAX_PICS; i++) {
+                        File f = picFile(a, i);
+                        if (i >= list.size() || !(list.get(i) instanceof byte[])) { f.delete(); continue; }
+                        FileOutputStream out = new FileOutputStream(f);
+                        try { out.write((byte[]) list.get(i)); } finally { out.close(); }
+                    }
+                } catch (Throwable ignore) {}
+            }
+        }).start();
+    }
+
+    @SuppressWarnings("unchecked")
+    static void loadPics(Activity a, int n) {
+        Object pics = IvaClientPatch.get(a, "atPics");
+        if (!(pics instanceof ArrayList) || n <= 0) return;
+        List<byte[]> got = new ArrayList<byte[]>();
+        for (int i = 0; i < Math.min(n, MAX_PICS); i++) {
+            File f = picFile(a, i);
+            if (!f.isFile() || f.length() <= 0 || f.length() > 30L * 1024 * 1024) continue;
+            try {
+                InputStream in = new FileInputStream(f);
+                ByteArrayOutputStream b = new ByteArrayOutputStream();
+                try { byte[] buf = new byte[16384]; int r; while ((r = in.read(buf)) > 0) b.write(buf, 0, r); } finally { in.close(); }
+                got.add(b.toByteArray());
+            } catch (Throwable ignore) {}
+        }
+        if (got.isEmpty()) return;
+        ArrayList list = (ArrayList) pics;
+        list.clear();
+        list.addAll(got);
+        try { Method m = a.getClass().getDeclaredMethod("renderAtPhotos"); m.setAccessible(true); m.invoke(a); } catch (Throwable ignore) {}
+    }
+
+    /** Первая вкладка после «Опубликовать»: кабинет — штатный успех, черновик больше не нужен. */
+    static void onTab(Activity a, String tab) {
+        long at = publishAt;
+        if (at == 0 || at == clearedFor || !IvaKindPatch.pendingWrite(tab, at, System.currentTimeMillis())) return;
+        clearedFor = at;
+        clearDraft(a);
+        Object no = IvaClientPatch.get(a, "atName");                                 // строка черновика могла успеть показаться
+        View root = no instanceof View ? ((View) no).getRootView() : null;
+        View dv = root == null ? null : root.findViewWithTag(DRAFT);
+        if (dv != null) dv.setVisibility(View.GONE);
+        mine = null;                                                                  // новый инструмент — в образцах
+        mineTriedAt = 0;
+    }
+}
