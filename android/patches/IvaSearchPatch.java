@@ -446,18 +446,35 @@ public final class IvaSearchPatch {
         // 10.83: характеристики-выбор вида (ключ поля → значение); действуют, только пока выбран тот же вид (specKind)
         LinkedHashMap<String, String> specs = new LinkedHashMap<String, String>();
         String specKind = "";
+        // 10.85: числовые характеристики «от–до» (ключ поля → {от, до}, NaN — без границы); тоже только при том же виде
+        LinkedHashMap<String, double[]> ranges = new LinkedHashMap<String, double[]>();
 
         Filter copy() {
             Filter f = new Filter();
             f.cat = cat; f.sub = sub; f.kind = kind; f.from = from; f.to = to; f.delivery = delivery; f.conds = conds;
             f.specs = new LinkedHashMap<String, String>(specs); f.specKind = specKind;
+            f.ranges = copyRanges(ranges);
             return f;
         }
         /** Сколько характеристик действует (вид сменили или сняли — ни одной). */
-        int specCount() { return kind.isEmpty() || !kind.equals(specKind) ? 0 : specs.size(); }
+        int specCount() { return kind.isEmpty() || !kind.equals(specKind) ? 0 : specs.size() + ranges.size(); }
         boolean extraActive() { return from >= 0 || to >= 0 || delivery || conds != 0 || !kind.isEmpty() || specCount() > 0; }
-        void resetAll() { cat = ""; sub = ""; kind = ""; from = -1; to = -1; delivery = false; conds = 0; specs.clear(); specKind = ""; }
-        void setSpecsFrom(Filter o) { specs = new LinkedHashMap<String, String>(o.specs); specKind = o.specKind; }
+        void resetAll() { cat = ""; sub = ""; kind = ""; from = -1; to = -1; delivery = false; conds = 0; specs.clear(); ranges.clear(); specKind = ""; }
+        void setSpecsFrom(Filter o) { specs = new LinkedHashMap<String, String>(o.specs); ranges = copyRanges(o.ranges); specKind = o.specKind; }
+        /** 10.85: «от/до» поля характеристики; обе границы пустые — условие снимается. */
+        void setRange(String key, double lo, double hi) {
+            if (Double.isNaN(lo) && Double.isNaN(hi)) ranges.remove(key); else ranges.put(key, new double[]{lo, hi});
+        }
+        /** 10.85: 1 — подходит, 0 — нужной характеристики нет (в конце списка), -1 — не подходит. */
+        int specState(Map<String, String> toolSpecs) {
+            return specCount() == 0 ? 1 : IvaModelPatch.specState(toolSpecs, specs, ranges);
+        }
+    }
+
+    static LinkedHashMap<String, double[]> copyRanges(Map<String, double[]> src) {
+        LinkedHashMap<String, double[]> out = new LinkedHashMap<String, double[]>();
+        if (src != null) for (Map.Entry<String, double[]> e : src.entrySet()) out.put(e.getKey(), e.getValue() == null ? null : e.getValue().clone());
+        return out;
     }
 
     static String selCity = "";                 // выбранный город поиска ("" + chosen — «Все города»)
@@ -834,7 +851,7 @@ public final class IvaSearchPatch {
     static boolean extraMatch(JSONObject j, String city, Filter f) {
         return extraMatch(toolCityOf(j), j.optDouble("price", 0), j.optBoolean("delivery", false), condOf(j),
             city, f.from, f.to, f.delivery, f.conds) && kindMatch(js(j, "kind"), f.kind)
-            && (f.specCount() == 0 || IvaModelPatch.specsMatch(IvaModelPatch.toolSpecs(j), f.specs));   // 10.83
+            && (f.specCount() == 0 || f.specState(IvaModelPatch.toolSpecs(j)) >= 0);   // 10.83; 10.85: без характеристики — в конце
     }
 
     static String str(Object o) { return o instanceof String ? (String) o : ""; }
@@ -857,15 +874,20 @@ public final class IvaSearchPatch {
     /** Город и фильтры → поле tools → штатный renderFeed (он добавит поиск, категорию и подкатегорию). */
     static void applySearch(Activity a) {
         applied.kind = kindFor(a, applied.kind);        // 10.79: категорию сменили — вид из другой подкатегории снимается
-        if (applied.specCount() == 0) { applied.specs.clear(); applied.specKind = ""; }   // 10.83: вид сменили — характеристики снимаются
+        if (applied.specCount() == 0) { applied.specs.clear(); applied.ranges.clear(); applied.specKind = ""; }   // 10.83: вид сменили — характеристики снимаются
         ArrayList full = allTools(a);
         String city = cityChosen ? selCity : "";
         if (!anyActive()) {
             appliedTools = null;
             IvaClientPatch.set(a, "tools", full);
         } else {
-            ArrayList out = new ArrayList();
-            for (Object o : full) if (o instanceof JSONObject && extraMatch((JSONObject) o, city, applied)) out.add(o);
+            ArrayList out = new ArrayList(), tail = new ArrayList();
+            boolean bySpec = applied.specCount() > 0;
+            for (Object o : full) if (o instanceof JSONObject && extraMatch((JSONObject) o, city, applied)) {
+                // 10.85: без нужной характеристики — в конце (штатный renderFeed выводит список по порядку)
+                if (bySpec && applied.specState(IvaModelPatch.toolSpecs((JSONObject) o)) == 0) tail.add(o); else out.add(o);
+            }
+            out.addAll(tail);
             appliedTools = out;
             IvaClientPatch.set(a, "tools", out);
         }
@@ -1473,6 +1495,9 @@ public final class IvaSearchPatch {
             if (!kt.isEmpty() && f.specCount() > 0) for (final String sk : new ArrayList<String>(f.specs.keySet()))   // 10.83
                 addChip(a, box, IvaModelPatch.chipText(IvaModelPatch.fields, f.kind, sk, f.specs.get(sk)),
                     new ChipAction() { @Override public void remove() { f.specs.remove(sk); } }, changed, plain);
+            if (!kt.isEmpty() && f.specCount() > 0) for (final String rk : new ArrayList<String>(f.ranges.keySet()))   // 10.85
+                addChip(a, box, IvaModelPatch.rangeChip(IvaModelPatch.fields, f.kind, rk, f.ranges.get(rk)),
+                    new ChipAction() { @Override public void remove() { f.ranges.remove(rk); } }, changed, plain);
         }
         if (f.from >= 0 || f.to >= 0)
             addChip(a, box, priceChip(f.from, f.to), new ChipAction() { @Override public void remove() { f.from = -1; f.to = -1; } }, changed, plain);
@@ -1800,6 +1825,11 @@ public final class IvaSearchPatch {
     // ── Содержимое панели ──
     static Flow catBox, subBox, kindBox, condBox;
     static LinearLayout specBox;                 // 10.83: характеристики-выбор выбранного вида
+    static LinearLayout numBox;                  // 10.85: числовые характеристики «от–до» (не пересобирается, пока вводят)
+    static TextView specNote;                    // 10.85: «Ещё N объявлений без указанной характеристики — в конце списка»
+    static String numSig = null;
+    static final LinkedHashMap<String, EditText[]> numEdits = new LinkedHashMap<String, EditText[]>();
+    static final LinkedHashMap<String, TextView> numHints = new LinkedHashMap<String, TextView>();
     static LinearLayout panelChips;              // 10.48: ряд выбранных условий в шапке шторки
     static HorizontalScrollView panelChipsScroll;
     static TextView subTitleView, kindTitleView, condTitleView, condNote, priceHint, cityLine, showBtn, resetBtn;
@@ -1928,6 +1958,17 @@ public final class IvaSearchPatch {
         specBox = new LinearLayout(a);                          // 10.83: «Питание», … — плашками, когда выбран вид
         specBox.setOrientation(LinearLayout.VERTICAL);
         body.addView(specBox, new LinearLayout.LayoutParams(-1, -2));
+        numBox = new LinearLayout(a);                           // 10.85: «Мощность, Вт: от … до …»
+        numBox.setOrientation(LinearLayout.VERTICAL);
+        numBox.setVisibility(View.GONE);
+        numSig = null; numEdits.clear(); numHints.clear();
+        body.addView(numBox, new LinearLayout.LayoutParams(-1, -2));
+        specNote = new TextView(a);
+        specNote.setTextSize(12f);
+        specNote.setTextColor(cGray2);
+        specNote.setPadding(0, dp(a, 6), 0, 0);
+        specNote.setVisibility(View.GONE);
+        body.addView(specNote);
 
         body.addView(sectionTitle(a, "Цена за сутки, \u20bd"));
         LinearLayout prices = new LinearLayout(a);
@@ -2083,6 +2124,7 @@ public final class IvaSearchPatch {
             if (fromEdit != null) fromEdit.setText(draft.from >= 0 ? String.valueOf(draft.from) : "");
             if (toEdit != null) toEdit.setText(draft.to >= 0 ? String.valueOf(draft.to) : "");
             if (deliveryBox != null) deliveryBox.setChecked(draft.delivery);
+            syncNumInputs();                                                       // 10.85
         } finally { syncing = false; }
     }
 
@@ -2254,8 +2296,8 @@ public final class IvaSearchPatch {
     static void paintSpecFilter(final Activity a, String city, String query) {
         if (specBox == null) return;
         specBox.removeAllViews();
-        if (!draft.kind.equals(draft.specKind)) { draft.specs.clear(); draft.specKind = draft.kind; }
-        if (draft.kind.isEmpty()) { specBox.setVisibility(View.GONE); return; }
+        if (!draft.kind.equals(draft.specKind)) { draft.specs.clear(); draft.ranges.clear(); draft.specKind = draft.kind; }
+        if (draft.kind.isEmpty()) { specBox.setVisibility(View.GONE); paintNumFilter(a, city, query); return; }
         if (IvaModelPatch.fields == null) IvaModelPatch.ensureFields(a);
         for (final IvaModelPatch.Field fl : IvaModelPatch.choiceFields(IvaModelPatch.fields, draft.kind)) {
             Filter other = draft.copy();
@@ -2285,6 +2327,140 @@ public final class IvaSearchPatch {
             }
         }
         specBox.setVisibility(specBox.getChildCount() > 0 ? View.VISIBLE : View.GONE);
+        paintNumFilter(a, city, query);
+    }
+
+    /** 10.85: числовые характеристики вида — «от/до». Поля — только те, что указаны хоть у одного объявления этого вида
+     *  (или уже заданы); блок пересобирается только при смене вида или набора полей, чтобы ввод не сбивался.
+     *  Под полями — разброс у подходящих объявлений (без условия этого же поля). */
+    static void paintNumFilter(final Activity a, String city, String query) {
+        if (numBox == null || draft == null) return;
+        final String kind = draft.kind;
+        List<IvaModelPatch.Field> show = new ArrayList<IvaModelPatch.Field>();
+        if (!kind.isEmpty() && IvaModelPatch.fields != null) {
+            HashSet<String> has = new HashSet<String>();
+            for (Object o : allTools(a)) {
+                if (!(o instanceof JSONObject) || !kind.equals(js((JSONObject) o, "kind").trim())) continue;
+                for (Map.Entry<String, String> e : IvaModelPatch.toolSpecs((JSONObject) o).entrySet())
+                    if (!Double.isNaN(IvaModelPatch.num(e.getValue()))) has.add(e.getKey());
+            }
+            for (IvaModelPatch.Field fl : IvaModelPatch.numFields(IvaModelPatch.fields, kind))
+                if (has.contains(fl.key) || draft.ranges.containsKey(fl.key)) show.add(fl);
+        }
+        StringBuilder sig = new StringBuilder(kind);
+        for (IvaModelPatch.Field fl : show) sig.append('|').append(fl.key);
+        if (!sig.toString().equals(numSig)) {
+            numSig = sig.toString();
+            numBox.removeAllViews();
+            numEdits.clear();
+            numHints.clear();
+            int gray2 = color(a, "gray2", 0xff6b7080);
+            for (final IvaModelPatch.Field fl : show) {
+                numBox.addView(sectionTitle(a, fl.label()));
+                LinearLayout row = new LinearLayout(a);
+                row.setOrientation(LinearLayout.HORIZONTAL);
+                EditText lo = numField(a, "от", fl.key), hi = numField(a, "до", fl.key);
+                LinearLayout.LayoutParams ll = new LinearLayout.LayoutParams(0, dp(a, PRICE_FIELD_DP), 1f);
+                ll.rightMargin = dp(a, 8);
+                row.addView(lo, ll);
+                row.addView(hi, new LinearLayout.LayoutParams(0, dp(a, PRICE_FIELD_DP), 1f));
+                numBox.addView(row, new LinearLayout.LayoutParams(-1, -2));
+                TextView h = new TextView(a);
+                h.setTextSize(12f);
+                h.setTextColor(gray2);
+                h.setPadding(0, dp(a, 6), 0, 0);
+                numBox.addView(h);
+                numEdits.put(fl.key, new EditText[]{lo, hi});
+                numHints.put(fl.key, h);
+            }
+            syncNumInputs();
+        }
+        numBox.setVisibility(show.isEmpty() ? View.GONE : View.VISIBLE);
+        String catMode = draft.cat.isEmpty() ? "root" : "cat";
+        for (IvaModelPatch.Field fl : show) {
+            Filter other = draft.copy();
+            other.ranges.remove(fl.key);
+            double min = Double.NaN, max = Double.NaN;
+            int n = 0;
+            for (Object o : allTools(a)) {
+                if (!(o instanceof JSONObject)) continue;
+                JSONObject j = (JSONObject) o;
+                if (!nativeMatch(j, catMode, draft.cat, draft.sub, query) || !extraMatch(j, city, other)) continue;
+                double v = IvaModelPatch.num(IvaModelPatch.g(IvaModelPatch.toolSpecs(j), fl.key));
+                if (Double.isNaN(v)) continue;
+                n++;
+                if (Double.isNaN(min) || v < min) min = v;
+                if (Double.isNaN(max) || v > max) max = v;
+            }
+            TextView h = numHints.get(fl.key);
+            if (h != null) h.setText(IvaModelPatch.rangeHint(min, max, n, fl.unit));
+        }
+        if (specNote != null) {
+            int miss = 0;
+            if (draft.specCount() > 0) for (Object o : allTools(a)) {
+                if (!(o instanceof JSONObject)) continue;
+                JSONObject j = (JSONObject) o;
+                if (nativeMatch(j, catMode, draft.cat, draft.sub, query) && extraMatch(j, city, draft)
+                    && draft.specState(IvaModelPatch.toolSpecs(j)) == 0) miss++;
+            }
+            String t = IvaModelPatch.missingNote(miss);
+            specNote.setText(t);
+            specNote.setVisibility(t.isEmpty() ? View.GONE : View.VISIBLE);
+        }
+    }
+
+    /** 10.85: поле «от»/«до» числовой характеристики (как поле цены, но можно дробное: «2,4»). */
+    static EditText numField(final Activity a, String hint, final String key) {
+        final EditText e = new EditText(a);
+        e.setHint(hint);
+        e.setSingleLine(true);
+        e.setTextSize(15f);
+        e.setTextColor(color(a, "text", 0xfff2f4f8));
+        e.setHintTextColor(color(a, "gray2", 0xff6b7080));
+        e.setInputType(InputType.TYPE_CLASS_NUMBER | InputType.TYPE_NUMBER_FLAG_DECIMAL);
+        e.setFilters(new android.text.InputFilter[] {new android.text.InputFilter.LengthFilter(8)});
+        e.setImeOptions(EditorInfo.IME_ACTION_DONE);
+        e.setPadding(dp(a, 12), 0, dp(a, 12), 0);
+        Drawable fb = drawable(a, "bg_field");
+        if (fb != null) e.setBackground(fb);
+        e.setTag("iva_num:" + key);
+        backKeys(a, e);
+        e.setOnEditorActionListener(new TextView.OnEditorActionListener() {
+            @Override public boolean onEditorAction(TextView v, int action, KeyEvent ev) {
+                hideKeyboard(a, v);
+                if (sheet != null) sheet.requestFocus();
+                return true;
+            }
+        });
+        e.addTextChangedListener(new TextWatcher() {
+            @Override public void beforeTextChanged(CharSequence s, int st, int c, int af) {}
+            @Override public void onTextChanged(CharSequence s, int st, int b, int c) {}
+            @Override public void afterTextChanged(Editable s) {
+                if (syncing || draft == null) return;
+                EditText[] p = numEdits.get(key);
+                if (p == null) return;
+                draft.setRange(key, IvaModelPatch.num(p[0].getText().toString()), IvaModelPatch.num(p[1].getText().toString()));
+                draft.specKind = draft.kind;
+                refreshPanel(a);
+            }
+        });
+        return e;
+    }
+
+    /** 10.85: поля «от/до» ← правка (после «Сбросить» и снятия условия кнопкой ✕). */
+    static void syncNumInputs() {
+        if (draft == null) return;
+        boolean was = syncing;
+        syncing = true;
+        try {
+            for (Map.Entry<String, EditText[]> e : numEdits.entrySet()) {
+                double[] r = draft.ranges.get(e.getKey());
+                String lo = r == null || Double.isNaN(r[0]) ? "" : IvaModelPatch.numInput(r[0]);
+                String hi = r == null || r.length < 2 || Double.isNaN(r[1]) ? "" : IvaModelPatch.numInput(r[1]);
+                if (!lo.equals(e.getValue()[0].getText().toString())) e.getValue()[0].setText(lo);
+                if (!hi.equals(e.getValue()[1].getText().toString())) e.getValue()[1].setText(hi);
+            }
+        } finally { syncing = was; }
     }
 
     static void addOption(final Activity a, Flow box, String text, boolean on, final Runnable select) {

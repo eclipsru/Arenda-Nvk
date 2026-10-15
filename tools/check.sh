@@ -65,7 +65,7 @@ head_ "3. Релиз приложения (app-update.json ↔ APK ↔ этал�
 if node tools/check-release.js; then ok "релиз приложения согласован"; else bad "см. замечания выше"; fi
 
 head_ "4. Статические тесты (без браузера)"
-for t in syntax-and-release chat-auto-send-guard email-guard cities-sync directory-import city-pages city-priority py-compat empty-states p4-personal-data p6-commission diag-owner-readonly p5-bot-no-contacts p5-max-no-contacts p5-order-email deploy-functions-guard iva-push reset-password keystore-check-guard apk-build-guard app-test-channel publish-rights-guard qr-codes client-profile-page kind-guess model-search model-stage4; do
+for t in syntax-and-release chat-auto-send-guard email-guard cities-sync directory-import city-pages city-priority py-compat empty-states p4-personal-data p6-commission diag-owner-readonly p5-bot-no-contacts p5-max-no-contacts p5-order-email deploy-functions-guard iva-push reset-password keystore-check-guard apk-build-guard app-test-channel publish-rights-guard qr-codes client-profile-page kind-guess model-search model-stage4 spec-filter; do
   if node "tests/$t.cjs" >"/tmp/iva-test-$t.log" 2>&1; then ok "tests/$t.cjs"
   else bad "tests/$t.cjs"; tail -6 "/tmp/iva-test-$t.log" | sed 's/^/      /'; fi
 done
@@ -257,7 +257,7 @@ else
   done
   if [ "$READY" = "1" ]; then
     ok "локальный сервер поднят: http://127.0.0.1:$PORT"
-    for t in photon rental-profile new-tool-prefill order-and-fee order-consent-browser reviews-system app-banner chief-and-apk empty-states-browser kind-guess-browser model-form-browser model-stage4-browser; do
+    for t in photon rental-profile new-tool-prefill order-and-fee order-consent-browser reviews-system app-banner chief-and-apk empty-states-browser kind-guess-browser model-form-browser model-stage4-browser spec-filter-browser; do
       if SITE_BASE_URL="http://127.0.0.1:$PORT" node "tests/$t.cjs" >"/tmp/iva-test-$t.log" 2>&1; then ok "tests/$t.cjs"
       else bad "tests/$t.cjs"; tail -6 "/tmp/iva-test-$t.log" | sed 's/^/      /'; fi
     done

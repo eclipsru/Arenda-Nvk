@@ -487,13 +487,127 @@
       .catch(function () { return null; });
   }
 
+  /* ═══ 10.85: фильтр по характеристикам — числа «от–до», объявления без нужной характеристики — в конце списка ═══
+     Те же правила, что IvaModelPatch (num, specState, rangeChip, rangeHint, missingNote); общие случаи —
+     tests/spec-filter-cases.txt (их проверяют IvaPatchTest и tests/spec-filter.cjs). */
+  var NB = '\u00a0';
+
+  /* Число характеристики или поля «от/до»: «800», «2,4», «1 500» → число; иначе NaN. */
+  function ivaNum(v) {
+    var t = str(v).replace(/[\s\u00a0]+/g, '');
+    return /^\d{1,9}([.,]\d{1,3})?$/.test(t) ? parseFloat(t.replace(',', '.')) : NaN;
+  }
+
+  function ivaNumFields(fields) { return (fields || []).filter(function (f) { return f.type === 'num'; }); }
+  function ivaChoiceFields(fields) { return (fields || []).filter(function (f) { return f.type === 'choice' && f.options && f.options.length; }); }
+
+  function normRange(r) {
+    var lo = r && r.length > 0 && typeof r[0] === 'number' ? r[0] : NaN, hi = r && r.length > 1 && typeof r[1] === 'number' ? r[1] : NaN;
+    if (!isNaN(lo) && !isNaN(hi) && lo > hi) { var t = lo; lo = hi; hi = t; }
+    return [lo, hi];
+  }
+
+  /* 1 — подходит; 0 — нужной характеристики нет (в конце списка); -1 — не подходит. ranges: {ключ: [от, до]}, NaN — без границы. */
+  function ivaSpecState(tool, sel, ranges) {
+    var missing = false, k;
+    tool = tool || {};
+    for (k in sel || {}) if (Object.prototype.hasOwnProperty.call(sel, k)) {
+      var v = str(tool[k]).trim();
+      if (v === '') missing = true;
+      else if (str(sel[k]) !== v) return -1;
+    }
+    for (k in ranges || {}) if (Object.prototype.hasOwnProperty.call(ranges, k)) {
+      var r = normRange(ranges[k]);
+      if (isNaN(r[0]) && isNaN(r[1])) continue;
+      var n = ivaNum(tool[k]);
+      if (isNaN(n)) missing = true;
+      else if ((!isNaN(r[0]) && n < r[0]) || (!isNaN(r[1]) && n > r[1])) return -1;
+    }
+    return missing ? 0 : 1;
+  }
+
+  /* «1 500», «2,4», «2,25» (не больше двух знаков после запятой). */
+  function ivaNumText(v) {
+    if (typeof v !== 'number' || !isFinite(v)) return '';
+    var r = Math.round(v * 100) / 100;
+    if (r === Math.round(r)) return String(r).replace(/\B(?=(\d{3})+(?!\d))/g, NB);
+    return String(r).replace('.', ',');
+  }
+
+  function ivaRangeText(r0, unit) {
+    var r = normRange(r0), t;
+    if (!isNaN(r[0]) && !isNaN(r[1])) t = r[0] === r[1] ? ivaNumText(r[0]) : ivaNumText(r[0]) + '–' + ivaNumText(r[1]);
+    else if (!isNaN(r[0])) t = 'от ' + ivaNumText(r[0]);
+    else if (!isNaN(r[1])) t = 'до ' + ivaNumText(r[1]);
+    else return '';
+    return unit ? t + NB + unit : t;
+  }
+
+  /* Надпись плашки: «Мощность: 600–1 500 Вт» (поля нет — только числа). fields — поля вида. */
+  function ivaRangeChip(fields, key, r) {
+    for (var i = 0; fields && i < fields.length; i++) if (fields[i].key === key) return fields[i].title + ': ' + ivaRangeText(r, fields[i].unit || '');
+    return ivaRangeText(r, '');
+  }
+
+  /* Подпись выбранного значения: «Питание: Аккумулятор». */
+  function ivaSpecChip(fields, key, value) {
+    for (var i = 0; fields && i < fields.length; i++) if (fields[i].key === key) return fields[i].title + ': ' + value;
+    return str(value);
+  }
+
+  function ivaRangeHint(min, max, n, unit) {
+    if (!(n > 0) || isNaN(min) || isNaN(max)) return 'В подходящих объявлениях не указано.';
+    var u = unit ? NB + unit : '';
+    if (min === max) return 'Сейчас у всех, где указано, — ' + ivaNumText(min) + u + '.';
+    return 'Сейчас в выдаче: от ' + ivaNumText(min) + ' до ' + ivaNumText(max) + u + '.';
+  }
+
+  function ivaMissingNote(n) {
+    if (!(n > 0)) return '';
+    var w = n % 10 === 1 && n % 100 !== 11 ? 'объявление' : n % 10 >= 2 && n % 10 <= 4 && (n % 100 < 12 || n % 100 > 14) ? 'объявления' : 'объявлений';
+    return 'Ещё ' + n + ' ' + w + ' без указанной характеристики — в конце списка.';
+  }
+
+  /* Каталог сайта: вид и характеристики активных объявлений (отдельным запросом — общий список полей TOOL_FIELDS не
+     меняется), виды и подписи полей. Нет столбца specs — только виды; нет столбца kind или таблиц — null (как раньше). */
+  function ivaCatalogSpecs(api) {
+    var base = '/rest/v1/tools?status=eq.active&active=eq.true&limit=1000&select=';
+    var kinds = [], fields = [];
+    return new Promise(function (r) { r(api(base + 'id,kind,specs')); })
+      .catch(function () { return api(base + 'id,kind'); })
+      .then(function (rows) {
+        if (!Array.isArray(rows)) return null;
+        return Promise.all([
+          Promise.resolve(api('/rest/v1/iva_kinds?active=eq.true&order=sort.asc,title.asc&select=key,cat,sub,title,sort')).catch(function () { return []; }),
+          Promise.resolve(api('/rest/v1/iva_spec_fields?select=kind,key,title,unit,type,options,sort&order=kind.asc,sort.asc')).catch(function () { return []; })
+        ]).then(function (res) {
+          kinds = (Array.isArray(res[0]) ? res[0] : []).filter(function (k) { return k && k.key && k.cat && k.sub; })
+            .map(function (k) { return { key: k.key, cat: k.cat, sub: k.sub, title: k.title || k.key, sort: k.sort || 0 }; });
+          if (!kinds.length) return null;
+          fields = (Array.isArray(res[1]) ? res[1] : []).filter(function (x) { return x && x.kind && x.key; })
+            .map(function (x) { return { kind: x.kind, key: x.key, title: x.title || x.key, unit: x.unit || '', type: x.type || 'text',
+              options: Array.isArray(x.options) ? x.options : [], sort: x.sort || 0 }; });
+          var byId = {};
+          rows.forEach(function (t) {
+            if (!t || t.id == null || !t.kind) return;
+            byId[t.id] = { kind: String(t.kind), specs: t.specs && typeof t.specs === 'object' && !Array.isArray(t.specs) ? t.specs : {} };
+          });
+          return { byId: byId, kinds: kinds, fields: fields };
+        });
+      })
+      .catch(function () { return null; });
+  }
+
   var api = {
     ivaModelIndex: ivaModelIndex, ivaModelSearch: ivaModelSearch, ivaModelBrands: ivaModelBrands,
     ivaSpecsFill: ivaSpecsFill, ivaModelStillFits: ivaModelStillFits, ivaSpecsClean: ivaSpecsClean,
     ivaFieldsFor: ivaFieldsFor, ivaModelsLoad: ivaModelsLoad,
     ivaSpecRows: ivaSpecRows, ivaSpecsMatch: ivaSpecsMatch, ivaToolSpecs: ivaToolSpecs,
     ivaProposalParts: ivaProposalParts, ivaPriceHint: ivaPriceHint, ivaPriceHintText: ivaPriceHintText,
-    ivaDescribe: ivaDescribe, ivaKitClean: ivaKitClean, ivaProposalTitle: ivaProposalTitle, ivaModelExact: ivaModelExact
+    ivaDescribe: ivaDescribe, ivaKitClean: ivaKitClean, ivaProposalTitle: ivaProposalTitle, ivaModelExact: ivaModelExact,
+    ivaNum: ivaNum, ivaNumFields: ivaNumFields, ivaChoiceFields: ivaChoiceFields, ivaSpecState: ivaSpecState, ivaNumText: ivaNumText,
+    ivaRangeText: ivaRangeText, ivaRangeChip: ivaRangeChip, ivaSpecChip: ivaSpecChip, ivaRangeHint: ivaRangeHint,
+    ivaMissingNote: ivaMissingNote, ivaCatalogSpecs: ivaCatalogSpecs
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else for (var k in api) root[k] = api[k];

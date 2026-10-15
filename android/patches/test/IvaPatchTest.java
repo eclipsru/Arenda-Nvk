@@ -1695,6 +1695,77 @@ public class IvaPatchTest {
                     if (s4It.length == 0 ? s4C == null && s4D.equals("Инструмент в аренду.") : s4D.endsWith(".") && s4D.split(", ").length == s4It.length) s4KOk++;
                 }
                 eq("этап 4 10.84: комплектация 159 видов из supabase/models/kit.txt", s4KOk + "/" + s4KAll, "159/159");
+                // 10.85: фильтр по характеристикам — общие случаи tests/spec-filter-cases.txt (их же проверяет tests/spec-filter.cjs)
+                int sfOk = 0, sfTot = 0;
+                java.util.Map<String, Integer> sfCnt = new java.util.TreeMap<String, Integer>();
+                StringBuilder sfBad = new StringBuilder();
+                for (String sfL : new String(java.nio.file.Files.readAllBytes(java.nio.file.Paths.get("tests/spec-filter-cases.txt")), "UTF-8").split("\n")) {
+                    if (sfL.isEmpty() || sfL.startsWith("#")) continue;
+                    String[] sfF = sfL.split("\t", -1);
+                    String sfGot, sfExp;
+                    if ("num".equals(sfF[0])) {
+                        double sfV = IvaModelPatch.num(sfF[1]);
+                        sfGot = Double.isNaN(sfV) ? "" : (sfV == Math.rint(sfV) ? String.valueOf((long) sfV) : String.valueOf(sfV)); sfExp = sfF[2];
+                    } else if ("state".equals(sfF[0])) {
+                        java.util.LinkedHashMap<String, String> sfT = new java.util.LinkedHashMap<String, String>(), sfS = new java.util.LinkedHashMap<String, String>();
+                        java.util.LinkedHashMap<String, double[]> sfR = new java.util.LinkedHashMap<String, double[]>();
+                        if (!sfF[1].isEmpty()) for (String sfX : sfF[1].split(";")) { String[] sfP = sfX.split("=", 2); sfT.put(sfP[0], sfP[1]); }
+                        if (!sfF[2].isEmpty()) for (String sfX : sfF[2].split(";")) { String[] sfP = sfX.split("=", 2); sfS.put(sfP[0], sfP[1]); }
+                        if (!sfF[3].isEmpty()) for (String sfX : sfF[3].split(";")) {
+                            String[] sfP = sfX.split("=", 2), sfB = sfP[1].split("\\.\\.", -1);
+                            sfR.put(sfP[0], new double[]{sfB[0].isEmpty() ? Double.NaN : Double.parseDouble(sfB[0]), sfB[1].isEmpty() ? Double.NaN : Double.parseDouble(sfB[1])});
+                        }
+                        sfGot = String.valueOf(IvaModelPatch.specState(sfT, sfS, sfR)); sfExp = sfF[4];
+                    } else if ("chip".equals(sfF[0])) {
+                        String[] sfB = sfF[3].split("\\.\\.", -1);
+                        sfGot = IvaModelPatch.rangeChip(mdFl, sfF[1], sfF[2], new double[]{sfB[0].isEmpty() ? Double.NaN : Double.parseDouble(sfB[0]),
+                            sfB[1].isEmpty() ? Double.NaN : Double.parseDouble(sfB[1])}).replace('\u00a0', ' ');
+                        sfExp = sfF[4];
+                    } else if ("hint".equals(sfF[0])) {
+                        sfGot = IvaModelPatch.rangeHint(sfF[1].isEmpty() ? Double.NaN : Double.parseDouble(sfF[1]), sfF[2].isEmpty() ? Double.NaN : Double.parseDouble(sfF[2]),
+                            Integer.parseInt(sfF[3]), sfF[4]).replace('\u00a0', ' ');
+                        sfExp = sfF[5];
+                    } else if ("note".equals(sfF[0])) {
+                        sfGot = IvaModelPatch.missingNote(Integer.parseInt(sfF[1])); sfExp = sfF[2];
+                    } else { sfGot = "?"; sfExp = "известный вид строки: " + sfF[0]; }
+                    sfTot++;
+                    sfCnt.put(sfF[0], (sfCnt.containsKey(sfF[0]) ? sfCnt.get(sfF[0]) : 0) + 1);
+                    if (sfGot.equals(sfExp)) sfOk++; else sfBad.append(" [").append(sfL.replace('\t', '|')).append(" → ").append(sfGot).append("]");
+                }
+                eq("фильтр 10.85: общие случаи tests/spec-filter-cases.txt", sfOk + "/" + sfTot + sfBad, sfTot + "/" + sfTot);
+                eq("фильтр 10.85: в файле есть все виды случаев", sfCnt.keySet().toString(), "[chip, hint, note, num, state]");
+                eq("фильтр 10.85: числовые поля перфоратора — из справочника",
+                    IvaModelPatch.numFields(mdFl, "rotary-sds-plus").size() + ":" + IvaModelPatch.numFields(mdFl, "rotary-sds-plus").get(0).key
+                        + "," + IvaModelPatch.choiceFields(mdFl, "rotary-sds-plus").size(), "4:volt,1");
+                eq("фильтр 10.85: число для поля ввода — без пробелов",
+                    IvaModelPatch.numInput(1500) + "|" + IvaModelPatch.numInput(2.4) + "|" + IvaModelPatch.numText(1234567) .replace('\u00a0', ' '), "1500|2,4|1 234 567");
+                // Filter: диапазоны считаются в «Фильтр · N», копия независима, другой вид снимает, «Сбросить» очищает
+                IvaSearchPatch.Filter sfA = new IvaSearchPatch.Filter();
+                sfA.cat = "power"; sfA.sub = "hammers"; sfA.kind = "rotary-sds-plus"; sfA.specKind = "rotary-sds-plus";
+                sfA.specs.put("src", "Аккумулятор");
+                sfA.setRange("power", 600, Double.NaN);
+                sfA.setRange("weight", Double.NaN, Double.NaN);
+                IvaSearchPatch.Filter sfB2 = sfA.copy();
+                sfB2.ranges.get("power")[0] = 9999;
+                sfB2.setRange("energy", 2, 3);
+                java.util.LinkedHashMap<String, String> sfT1 = new java.util.LinkedHashMap<String, String>();
+                sfT1.put("src", "Аккумулятор"); sfT1.put("power", "780");
+                java.util.LinkedHashMap<String, String> sfT2 = new java.util.LinkedHashMap<String, String>();
+                sfT2.put("src", "Аккумулятор");
+                java.util.LinkedHashMap<String, String> sfT3 = new java.util.LinkedHashMap<String, String>();
+                sfT3.put("src", "Аккумулятор"); sfT3.put("power", "500");
+                String sfS1 = sfA.specCount() + "," + sfA.ranges.size() + "," + sfA.ranges.get("power")[0] + "|" + sfB2.specCount()
+                    + "|" + sfA.specState(sfT1) + sfA.specState(sfT2) + sfA.specState(sfT3);
+                sfA.kind = "rotary-sds-max";
+                String sfS2 = sfA.specCount() + "," + sfA.specState(sfT3) + "," + sfA.extraActive();
+                sfB2.setRange("energy", Double.NaN, Double.NaN);
+                String sfS3 = sfB2.ranges.keySet().toString();
+                IvaSearchPatch.Filter sfC = new IvaSearchPatch.Filter();
+                sfC.setSpecsFrom(sfB2);
+                sfB2.resetAll();
+                eq("фильтр 10.85: «от–до» в счётчике, копия независима, без характеристики — 0 (в конце), другой вид снимает, «Сбросить» очищает",
+                    sfS1 + "|" + sfS2 + "|" + sfS3 + "|" + sfC.ranges.size() + "," + sfB2.ranges.size() + "," + sfB2.specCount(),
+                    "2,1,600.0|3|10-1|0,1,true|[power]|1,0,0");
             } catch (Throwable mdE) { eq("модели 10.82: настоящий справочник", "исключение " + mdE, ""); }
         }
         if (fail > 0) { System.out.println("ошибок: " + fail); System.exit(1); }

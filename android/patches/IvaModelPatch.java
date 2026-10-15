@@ -1599,4 +1599,98 @@ final class IvaModelPatch {
             }
         }).start();
     }
+
+    // ════════════════════════════════ 10.85: фильтр по характеристикам — числа «от–до» ════════════════════════════════
+    //  * В шторке «Фильтр» под характеристиками-выбором — числовые поля вида («Мощность, Вт: от … до …»), только те,
+    //    что указаны хоть у одного объявления этого вида; под полями — разброс у подходящих объявлений.
+    //  * Объявление без нужной характеристики не скрывается, а показывается в конце списка (specState = 0).
+    //  Те же правила на сайте — assets/models.js (ivaNum, ivaSpecState, ivaRangeChip, ivaRangeHint, ivaMissingNote);
+    //  оба проверяются на tests/spec-filter-cases.txt.
+
+    static final Pattern NUM_IN = Pattern.compile("^\\d{1,9}([.,]\\d{1,3})?$");
+
+    /** Число характеристики или поля «от/до»: «800», «2,4», «1 500» → число; иначе NaN. */
+    static double num(String v) {
+        String t = s(v).replaceAll("[\\s\\u00a0]+", "");
+        if (!NUM_IN.matcher(t).matches()) return Double.NaN;
+        try { return Double.parseDouble(t.replace(',', '.')); } catch (Throwable e) { return Double.NaN; }
+    }
+
+    /** Числовые поля вида (для фильтра) — в порядке полей. */
+    static List<Field> numFields(List<Field> all, String kind) {
+        List<Field> out = new ArrayList<Field>();
+        for (Field f : fieldsFor(all, kind)) if ("num".equals(f.type)) out.add(f);
+        return out;
+    }
+
+    /** Границы по порядку («от» больше «до» — меняются местами); NaN — без границы. */
+    static double[] normRange(double[] r) {
+        double lo = r == null || r.length < 1 ? Double.NaN : r[0], hi = r == null || r.length < 2 ? Double.NaN : r[1];
+        if (!Double.isNaN(lo) && !Double.isNaN(hi) && lo > hi) { double t = lo; lo = hi; hi = t; }
+        return new double[]{lo, hi};
+    }
+
+    static boolean rangeOn(double[] r) { double[] n = normRange(r); return !Double.isNaN(n[0]) || !Double.isNaN(n[1]); }
+
+    /** 1 — подходит; 0 — нужной характеристики нет (показываем в конце списка); -1 — не подходит. */
+    static int specState(Map<String, String> tool, Map<String, String> sel, Map<String, double[]> ranges) {
+        boolean missing = false;
+        if (sel != null) for (Map.Entry<String, String> e : sel.entrySet()) {
+            String v = g(tool, e.getKey()).trim();
+            if (v.isEmpty()) missing = true;
+            else if (!s(e.getValue()).equals(v)) return -1;
+        }
+        if (ranges != null) for (Map.Entry<String, double[]> e : ranges.entrySet()) {
+            double[] r = normRange(e.getValue());
+            if (Double.isNaN(r[0]) && Double.isNaN(r[1])) continue;
+            double v = num(g(tool, e.getKey()));
+            if (Double.isNaN(v)) missing = true;
+            else if ((!Double.isNaN(r[0]) && v < r[0]) || (!Double.isNaN(r[1]) && v > r[1])) return -1;
+        }
+        return missing ? 0 : 1;
+    }
+
+    /** Число для надписи: «1 500», «2,4», «2,25» (не больше двух знаков после запятой). */
+    static String numText(double v) {
+        if (Double.isNaN(v) || Double.isInfinite(v)) return "";
+        double r = Math.round(v * 100) / 100.0;
+        if (r == Math.rint(r)) return groups((long) r);
+        String t = java.math.BigDecimal.valueOf(r).stripTrailingZeros().toPlainString();
+        return t.replace('.', ',');
+    }
+
+    /** Число для поля ввода: без пробелов («1500», «2,4»). */
+    static String numInput(double v) { return numText(v).replace("\u00a0", ""); }
+
+    /** «600–1 500 Вт», «от 600 Вт», «до 2,5 кг», «800 Вт». */
+    static String rangeText(double[] r0, String unit) {
+        double[] r = normRange(r0);
+        String t;
+        if (!Double.isNaN(r[0]) && !Double.isNaN(r[1])) t = r[0] == r[1] ? numText(r[0]) : numText(r[0]) + "–" + numText(r[1]);
+        else if (!Double.isNaN(r[0])) t = "от " + numText(r[0]);
+        else if (!Double.isNaN(r[1])) t = "до " + numText(r[1]);
+        else return "";
+        return s(unit).isEmpty() ? t : t + "\u00a0" + unit;
+    }
+
+    /** Надпись плашки: «Мощность: 600–1 500 Вт» (подписи не загрузились — только числа). */
+    static String rangeChip(List<Field> all, String kind, String key, double[] r) {
+        for (Field f : fieldsFor(all, kind)) if (f.key.equals(key)) return f.title + ": " + rangeText(r, f.unit);
+        return rangeText(r, "");
+    }
+
+    /** Подсказка под полями «от/до»: разброс у подходящих объявлений. */
+    static String rangeHint(double min, double max, int n, String unit) {
+        if (n <= 0 || Double.isNaN(min) || Double.isNaN(max)) return "В подходящих объявлениях не указано.";
+        String u = s(unit).isEmpty() ? "" : "\u00a0" + unit;
+        if (min == max) return "Сейчас у всех, где указано, — " + numText(min) + u + ".";
+        return "Сейчас в выдаче: от " + numText(min) + " до " + numText(max) + u + ".";
+    }
+
+    /** Строка под характеристиками: сколько объявлений без нужной характеристики (они в конце списка). */
+    static String missingNote(int n) {
+        if (n <= 0) return "";
+        String w = n % 10 == 1 && n % 100 != 11 ? "объявление" : n % 10 >= 2 && n % 10 <= 4 && (n % 100 < 12 || n % 100 > 14) ? "объявления" : "объявлений";
+        return "Ещё " + n + " " + w + " без указанной характеристики — в конце списка.";
+    }
 }

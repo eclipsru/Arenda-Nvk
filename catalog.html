@@ -58,6 +58,7 @@
 <script src="assets/data.js"></script>
 <script src="assets/geo.js?v=20260923-photon"></script>
 <script src="assets/sb.js?v=20260923-photon"></script>
+<script src="assets/models.js?v=20261019-filter"></script>
 <script src="assets/app-release.js?v=20261009-rel"></script>
 <script src="assets/app.js?v=20261009-rel"></script>
 <script src="assets/clicks.js?v=20261001-p4"></script>
@@ -74,8 +75,48 @@
     priceFrom: Number(p.get('from')) || 0,
     priceTo:   Number(p.get('to')) || 0,
     conds:     (p.get('cond') || '').split(',').filter(Boolean),
-    delivery:  p.get('delivery') === '1'
+    delivery:  p.get('delivery') === '1',
+    kind:      p.get('kind') || '',      /* 10.85: вид и характеристики (s.ключ=значение, r.ключ=от..до) */
+    specs:     {},
+    ranges:    {}
   };
+  p.forEach(function(v, k){
+    if (k.indexOf('s.') === 0 && v) F.specs[k.slice(2)] = v;
+    if (k.indexOf('r.') === 0){
+      var b = v.split('..'), lo = ivaNumSafe(b[0]), hi = ivaNumSafe(b[1]);
+      if (!isNaN(lo) || !isNaN(hi)) F.ranges[k.slice(2)] = [lo, hi];
+    }
+  });
+  function emptyF(){
+    return {q:'', cat:'', sub:'', city:'', priceFrom:0, priceTo:0, conds:[], delivery:false, kind:'', specs:{}, ranges:{}};
+  }
+  function ivaNumSafe(v){ return typeof ivaNum === 'function' ? ivaNum(v) : NaN; }
+
+  /* 10.85: вид и характеристики объявлений — отдельной загрузкой (ivaCatalogSpecs); пока не пришли или SQL не
+     применён (SP = null) — каталог как раньше, вид в ссылке не мешает. */
+  var SP = null;
+  function kindsOfSub(){ return SP && F.sub ? SP.kinds.filter(function(k){ return k.cat === F.cat && k.sub === F.sub; }) : []; }
+  function kindOn(){ return !!(SP && F.kind && kindsOfSub().some(function(k){ return k.key === F.kind; })); }
+  function kindFields(){ return kindOn() ? ivaFieldsFor({ fields: SP.fields }, F.kind) : []; }
+  function specOf(ad){ return SP && SP.byId[ad.id] || null; }
+  function clearKind(){ F.kind = ''; F.specs = {}; F.ranges = {}; }
+  function numIn(v){ return isNaN(v) ? '' : ivaNumText(v).replace(/\u00a0/g, ''); }
+  /* Объявления вида при условиях f (без вида — как раньше); state: 1 — подходит, 0 — нет нужной характеристики. */
+  function byKind(list, f){
+    if (!kindOn()) return list.map(function(ad){ return { ad: ad, st: 1 }; });
+    var out = [];
+    list.forEach(function(ad){
+      var sp = specOf(ad);
+      if (!sp || sp.kind !== F.kind) return;
+      var st = ivaSpecState(sp.specs, f.specs, f.ranges);
+      if (st >= 0) out.push({ ad: ad, st: st });
+    });
+    return out;
+  }
+  function results(){
+    var rows = byKind(sortAds(applyFilters(ADS, F), SORT), F);
+    return rows.filter(function(r){ return r.st === 1; }).concat(rows.filter(function(r){ return r.st === 0; }));
+  }
   var SORT = p.get('sort') || 'new';
   if (['new','good','work'].indexOf(SORT) === -1) SORT = 'new';
 
@@ -94,6 +135,11 @@
     if (F.conds.length) u.set('cond', F.conds.join(','));
     if (F.delivery) u.set('delivery', '1');
     if (SORT !== 'new') u.set('sort', SORT);
+    if (F.kind){
+      u.set('kind', F.kind);
+      Object.keys(F.specs).forEach(function(k){ u.set('s.' + k, F.specs[k]); });
+      Object.keys(F.ranges).forEach(function(k){ var r = F.ranges[k]; u.set('r.' + k, (isNaN(r[0]) ? '' : r[0]) + '..' + (isNaN(r[1]) ? '' : r[1])); });
+    }
     var s = u.toString();
     history.replaceState(null, '', location.pathname + (s ? '?' + s : ''));
   }
@@ -136,7 +182,7 @@
     '</div>' +
 
     '<div class="f-grp"><h4>Категория</h4><div class="f-list">' + catList + '</div></div>' +
-    subBlock +
+    subBlock + kindHTML() +
 
     '<div class="f-grp"><h4>Город</h4>' +
       '<select class="inp" id="fCity">' +
@@ -164,18 +210,86 @@
     '</div>';
   }
 
+  /* ---------- 10.85: «Вид» и характеристики (как в приложении) ---------- */
+  function kindHTML(){
+    var kinds = kindsOfSub();
+    if (!kinds.length) return '';
+    var base = applyFilters(ADS, F), cnt = {};
+    base.forEach(function(ad){ var sp = specOf(ad); if (sp) cnt[sp.kind] = (cnt[sp.kind] || 0) + 1; });
+    var shown = kinds.filter(function(k){ return cnt[k.key] || k.key === F.kind; });
+    if (!shown.length) return '';
+    var out = '<div class="f-grp"><h4>Вид</h4><div class="f-list">' +
+      '<div class="f-item' + (!kindOn() ? ' on' : '') + '" data-kind="">Любой</div>' +
+      shown.map(function(k){
+        return '<div class="f-item' + (F.kind === k.key ? ' on' : '') + '" data-kind="' + esc(k.key) + '">' +
+                 esc(k.title) + '<span class="n">' + (cnt[k.key] || 0) + '</span></div>';
+      }).join('') + '</div></div>';
+    if (!kindOn()) return out;
+    var fl = kindFields(), ofKind = base.filter(function(ad){ var sp = specOf(ad); return sp && sp.kind === F.kind; });
+    ivaChoiceFields(fl).forEach(function(f){
+      var other = { specs: Object.assign({}, F.specs), ranges: F.ranges }, c = {};
+      delete other.specs[f.key];
+      ofKind.forEach(function(ad){
+        var sp = specOf(ad);
+        if (ivaSpecState(sp.specs, other.specs, other.ranges) < 0) return;
+        var v = String(sp.specs[f.key] == null ? '' : sp.specs[f.key]).trim();
+        if (v) c[v] = (c[v] || 0) + 1;
+      });
+      var sel = F.specs[f.key] || '', vals = f.options.filter(function(v){ return c[v] || v === sel; });
+      if (!vals.length) return;
+      out += '<div class="f-grp"><h4>' + esc(f.title) + '</h4><div class="f-list">' +
+        '<div class="f-item' + (!sel ? ' on' : '') + '" data-spec="' + esc(f.key) + '" data-val="">Любое</div>' +
+        vals.map(function(v){
+          return '<div class="f-item' + (v === sel ? ' on' : '') + '" data-spec="' + esc(f.key) + '" data-val="' + esc(v) + '">' +
+                   esc(v) + '<span class="n">' + (c[v] || 0) + '</span></div>';
+        }).join('') + '</div></div>';
+    });
+    ivaNumFields(fl).forEach(function(f){
+      var has = F.ranges[f.key] || ofKind.some(function(ad){ return !isNaN(ivaNum(specOf(ad).specs[f.key])); });
+      if (!has) return;
+      var other = { specs: F.specs, ranges: Object.assign({}, F.ranges) }, min = NaN, max = NaN, n = 0;
+      delete other.ranges[f.key];
+      ofKind.forEach(function(ad){
+        var sp = specOf(ad);
+        if (ivaSpecState(sp.specs, other.specs, other.ranges) < 0) return;
+        var v = ivaNum(sp.specs[f.key]);
+        if (isNaN(v)) return;
+        n++; if (isNaN(min) || v < min) min = v; if (isNaN(max) || v > max) max = v;
+      });
+      var r = F.ranges[f.key] || [NaN, NaN];
+      out += '<div class="f-grp"><h4>' + esc(f.title + (f.unit ? ', ' + f.unit : '')) + '</h4>' +
+        '<div class="f-row">' +
+          '<input class="inp" data-rng="' + esc(f.key) + '" data-end="0" inputmode="decimal" placeholder="от" value="' + numIn(r[0]) + '">' +
+          '<input class="inp" data-rng="' + esc(f.key) + '" data-end="1" inputmode="decimal" placeholder="до" value="' + numIn(r[1]) + '">' +
+        '</div><div class="small muted" style="margin-top:6px">' + esc(ivaRangeHint(min, max, n, f.unit)) + '</div></div>';
+    });
+    var miss = results().filter(function(x){ return x.st === 0; }).length;
+    if (miss) out += '<div class="f-grp"><div class="small muted" id="fSpecNote">' + esc(ivaMissingNote(miss)) + '</div></div>';
+    return out;
+  }
+
   /* ---------- Привязка обработчиков панели ---------- */
   function bindFilters(root){
     root.addEventListener('click', function(e){
       var c = e.target.closest('[data-cat]');
-      if (c){ F.cat = c.getAttribute('data-cat'); F.sub = ''; render(); return; }
+      if (c){ F.cat = c.getAttribute('data-cat'); F.sub = ''; clearKind(); render(); return; }
 
       var s = e.target.closest('[data-sub]');
-      if (s){ F.sub = s.getAttribute('data-sub'); render(); return; }
+      if (s){ F.sub = s.getAttribute('data-sub'); clearKind(); render(); return; }
+
+      var kd = e.target.closest('[data-kind]');
+      if (kd){ var nk = kd.getAttribute('data-kind'); if (nk !== F.kind){ clearKind(); F.kind = nk; } render(); return; }
+
+      var sv = e.target.closest('[data-spec]');
+      if (sv){
+        var sk = sv.getAttribute('data-spec'), val = sv.getAttribute('data-val');
+        if (!val || F.specs[sk] === val) delete F.specs[sk]; else F.specs[sk] = val;
+        render(); return;
+      }
 
       if (e.target.id === 'fReset'){
         setCity('',true);
-        F = {q:'', cat:'', sub:'', city:'', priceFrom:0, priceTo:0, conds:[], delivery:false};
+        F = emptyF();
         render();
       }
     });
@@ -195,7 +309,7 @@
 
     /* Цена — применяем по Enter или потере фокуса, чтобы не дёргалось при наборе */
     root.addEventListener('keydown', function(e){
-      if (e.key === 'Enter' && (e.target.id === 'pFrom' || e.target.id === 'pTo')) e.target.blur();
+      if (e.key === 'Enter' && (e.target.id === 'pFrom' || e.target.id === 'pTo' || e.target.hasAttribute('data-rng'))) e.target.blur();
     });
     root.addEventListener('blur', function(e){
       if (e.target.id === 'pFrom' || e.target.id === 'pTo'){
@@ -205,6 +319,15 @@
         if (from !== F.priceFrom || to !== F.priceTo){
           F.priceFrom = from; F.priceTo = to; render();
         }
+      }
+      if (e.target.hasAttribute && e.target.hasAttribute('data-rng')){   /* 10.85: «от/до» характеристики — как цена */
+        var key = e.target.getAttribute('data-rng');
+        var lo = ivaNum((root.querySelector('[data-rng="' + key + '"][data-end="0"]') || {}).value);
+        var hi = ivaNum((root.querySelector('[data-rng="' + key + '"][data-end="1"]') || {}).value);
+        var old = F.ranges[key] || [NaN, NaN];
+        if (String(lo) === String(old[0]) && String(hi) === String(old[1])) return;
+        if (isNaN(lo) && isNaN(hi)) delete F.ranges[key]; else F.ranges[key] = [lo, hi];
+        render();
       }
     }, true);
   }
@@ -220,6 +343,13 @@
     if (F.q)    add('«' + F.q + '»', 'q');
     if (F.cat)  add(catTitle(F.cat), 'cat');
     if (F.sub)  add(subTitle(F.sub), 'sub');
+    if (kindOn()){
+      var kt = kindsOfSub().filter(function(k){ return k.key === F.kind; })[0];
+      add(kt ? kt.title : F.kind, 'kind');
+      var fl = kindFields();
+      Object.keys(F.specs).forEach(function(k){ add(ivaSpecChip(fl, k, F.specs[k]), 's:' + k); });
+      Object.keys(F.ranges).forEach(function(k){ add(ivaRangeChip(fl, k, F.ranges[k]).replace(/\u00a0/g, ' '), 'r:' + k); });
+    }
     if (F.city) add(F.city, 'city');
     if (F.priceFrom) add('от ' + F.priceFrom + ' ₽', 'from');
     if (F.priceTo)   add('до ' + F.priceTo + ' ₽', 'to');
@@ -244,7 +374,7 @@
     $('ttl').textContent = F.cat ? catTitle(F.cat) : (F.q ? 'Поиск: ' + F.q : 'Каталог');
 
     /* Результаты */
-    var list = sortAds(applyFilters(ADS, F), SORT);
+    var list = results().map(function(r){ return r.ad; });   /* 10.85: без нужной характеристики — в конце */
     $('found').textContent = 'Найдено ' + list.length + ' ' +
       plural(list.length, 'объявление', 'объявления', 'объявлений');
 
@@ -252,7 +382,8 @@
 
     /* Счётчик активных фильтров на мобильной кнопке */
     var n = (F.cat?1:0) + (F.sub?1:0) + (F.city?1:0) + (F.priceFrom?1:0) +
-            (F.priceTo?1:0) + F.conds.length + (F.delivery?1:0);
+            (F.priceTo?1:0) + F.conds.length + (F.delivery?1:0) +
+            (kindOn() ? 1 + Object.keys(F.specs).length + Object.keys(F.ranges).length : 0);
     $('fMobN').textContent = n;
     $('fMobN').classList.toggle('hide', !n);
 
@@ -266,7 +397,7 @@
       var er = $('eReset');
       if (er) er.addEventListener('click', function(){
         setCity('',true);
-        F = {q:'', cat:'', sub:'', city:'', priceFrom:0, priceTo:0, conds:[], delivery:false};
+        F = emptyF();
         render();
       });
       // Список городов со страницами подгружается один раз и не тормозит показ:
@@ -287,12 +418,15 @@
 
     if (k === 'all'){
       setCity('',true);
-      F = {q:'', cat:'', sub:'', city:'', priceFrom:0, priceTo:0, conds:[], delivery:false};
+      F = emptyF();
       var qi = $('q'); if (qi) qi.value = '';
     }
     else if (k === 'q'){ F.q = ''; var qi2 = $('q'); if (qi2) qi2.value = ''; }
-    else if (k === 'cat'){ F.cat = ''; F.sub = ''; }
-    else if (k === 'sub'){ F.sub = ''; }
+    else if (k === 'cat'){ F.cat = ''; F.sub = ''; clearKind(); }
+    else if (k === 'sub'){ F.sub = ''; clearKind(); }
+    else if (k === 'kind'){ clearKind(); }
+    else if (k.indexOf('s:') === 0){ delete F.specs[k.slice(2)]; }
+    else if (k.indexOf('r:') === 0){ delete F.ranges[k.slice(2)]; }
     else if (k === 'city'){ setCity('',true); F.city = ''; }
     else if (k === 'from'){ F.priceFrom = 0; }
     else if (k === 'to'){ F.priceTo = 0; }
@@ -319,7 +453,7 @@
     $('shOk').addEventListener('click', closeSheet);
     $('shReset').addEventListener('click', function(){
       setCity('',true);
-      F = {q:'', cat:'', sub:'', city:'', priceFrom:0, priceTo:0, conds:[], delivery:false};
+      F = emptyF();
       render();
       closeSheet();
     });
@@ -330,7 +464,14 @@
   IvaClicks.init(getCity(), {views: false});  // считаем только обращения, не показы
   bindFilters($('filters'));
   render();
-  hydrateShowcase().then(render);   /* перерисовать по живым данным */
+  hydrateShowcase().then(render)   /* перерисовать по живым данным */
+    .then(function(){ return typeof ivaCatalogSpecs === 'function' ? ivaCatalogSpecs(api) : null; })
+    .then(function(sp){   /* 10.85: вид и характеристики пришли — «Вид» в фильтре; вид не из этой подкатегории — снимается */
+      if (!sp) return;
+      SP = sp;
+      if (F.kind && !kindOn()) clearKind();
+      render();
+    });
 })();
 </script>
 </body>

@@ -221,7 +221,7 @@ try {
       'IvaSearchPatch: обрезка по полям снимается только у контейнера главной (и больше нигде)');
     // 10.53: в шторке «Сбросить» / «Показать N» и поля цены — толщиной со строку поиска (обе кнопки и оба поля)
     assert.ok(js45.includes('SHEET_BTN_DP = SEARCH_DP;') && js45.includes('PRICE_FIELD_DP = SEARCH_DP;')
-      && (js45.match(/dp\(a, SHEET_BTN_DP\)/g) || []).length === 2 && (js45.match(/dp\(a, PRICE_FIELD_DP\)/g) || []).length === 2,
+      && (js45.match(/dp\(a, SHEET_BTN_DP\)/g) || []).length === 2 && (js45.match(/dp\(a, PRICE_FIELD_DP\)/g) || []).length >= 2,   // 10.85: + поля «от/до» характеристик той же толщины
       'IvaSearchPatch: кнопки шторки и поля цены — толщиной со строку поиска (10.53)');
     // 10.53: картинка-шапка — до строки города (условий нет) или до низа ряда условий; строка поиска на месте; обрезка снизу
     const fit = js45.slice(js45.indexOf('static void fitHeaderBg('), js45.indexOf('static void cropFromTop('));
@@ -770,6 +770,45 @@ try {
       assert.ok(has(arsc14, str) || has(dex14, str), `APK 10.14: нет «${str}» — правка 10.67 не найдёт штатное поле`);
     assert.ok(/eq\("админ 10\.67: /.test(tp) && /eq\("подкатегория 10\.67: /.test(tp) && /eq\("кабинет 10\.67: /.test(tp), 'IvaPatchTest: проверки 10.67');
   }
+  // 10.85 (решение владельца 15.10.2026: «и то и другое» — доделка этапа 3 справочника моделей): в шторке «Фильтр»
+  // приложения — числа «от–до» для числовых характеристик вида; объявления без нужной характеристики — в конце списка.
+  // На сайте — то же в каталоге (catalog.html): «Вид», характеристики-выбор, числа, ссылка с условиями.
+  {
+    const mp = R('android/patches/IvaModelPatch.java'), sp = R('android/patches/IvaSearchPatch.java'), tp = R('android/patches/test/IvaPatchTest.java');
+    const wf = R('.github/workflows/build-apk.yml'), chk = R('tools/check.sh'), md = R('assets/models.js'), cat = R('catalog.html'), sb = R('assets/sb.js');
+    const bt = R('tests/spec-filter-browser.cjs'), jt = R('tests/spec-filter.cjs');
+    const fnx = (src, name) => { const mm = new RegExp(`static (?:final )?[\\w.<>, \\[\\]]+ ${name}\\(`).exec(src); assert.ok(mm, `нет ${name}`); return src.slice(mm.index, src.indexOf('\n    }\n', mm.index)); };
+    // 1. совпадение: нет значения — 0 (не скрываем), противоречие — -1; в общем extraMatch; лента — подходящие, затем без характеристики
+    const ss = fnx(mp, 'specState');
+    assert.ok(ss.includes('if (v.isEmpty()) missing = true;') && ss.includes('if (Double.isNaN(v)) missing = true;') && ss.includes('return missing ? 0 : 1;')
+      && sp.includes('&& (f.specCount() == 0 || f.specState(IvaModelPatch.toolSpecs(j)) >= 0);')
+      && sp.includes('if (bySpec && applied.specState(IvaModelPatch.toolSpecs((JSONObject) o)) == 0) tail.add(o); else out.add(o);') && sp.includes('out.addAll(tail);'),
+      'фильтр 10.85: без нужной характеристики — не скрываем, а в конце ленты (штатный renderFeed — по порядку)');
+    // 2. «от–до» в Filter: в счётчике, копия независима, сброс и смена вида снимают
+    assert.ok(sp.includes('specs.size() + ranges.size(); }') && sp.includes('f.ranges = copyRanges(ranges);') && sp.includes('specs.clear(); ranges.clear(); specKind = ""; }')
+      && sp.includes('{ draft.specs.clear(); draft.ranges.clear(); draft.specKind = draft.kind; }') && sp.includes('applied.ranges.clear();'),
+      'фильтр 10.85: «от–до» считаются в «Фильтр · N», копируются, снимаются при сбросе и смене вида');
+    // 3. поля не пересобираются, пока вводят; та же толщина, что поле цены; плашки «Мощность: от 700 Вт»
+    const pn = fnx(sp, 'paintNumFilter');
+    assert.ok(pn.includes('if (!sig.toString().equals(numSig)) {') && pn.includes('if (has.contains(fl.key) || draft.ranges.containsKey(fl.key)) show.add(fl);')
+      && pn.includes('new LinearLayout.LayoutParams(0, dp(a, PRICE_FIELD_DP), 1f)') && fnx(sp, 'numField').includes('InputType.TYPE_NUMBER_FLAG_DECIMAL')
+      && sp.includes('IvaModelPatch.rangeChip(IvaModelPatch.fields, f.kind, rk, f.ranges.get(rk))') && sp.includes('syncNumInputs();                                                       // 10.85'),
+      'фильтр 10.85: поля «от/до» — только указанные у вида, не сбивают ввод, толщиной с поле цены; плашки снимаются');
+    // 4. сайт: отдельный запрос активных объявлений (общий список полей не меняется), без SQL — как раньше
+    assert.ok(md.includes("var base = '/rest/v1/tools?status=eq.active&active=eq.true&limit=1000&select=';") && md.includes("api(base + 'id,kind,specs')")
+      && md.includes(".catch(function () { return api(base + 'id,kind'); })") && !/TOOL_FIELDS = [^;]*\b(kind|specs)\b/.test(sb)
+      && cat.includes('<script src="assets/models.js?v=20261019-filter"></script>') && cat.includes('var rows = byKind(sortAds(applyFilters(ADS, F), SORT), F);')
+      && cat.includes("return rows.filter(function(r){ return r.st === 1; }).concat(rows.filter(function(r){ return r.st === 0; }));")
+      && cat.includes('if (F.kind && !kindOn()) clearKind();'),
+      'фильтр 10.85: каталог сайта — вид и характеристики отдельным запросом, без характеристики — в конце, без SQL — как раньше');
+    // 5. одни и те же случаи в приложении и на сайте; тесты в check.sh; сборка видит файл
+    assert.ok(tp.includes('java.nio.file.Paths.get("tests/spec-filter-cases.txt")') && jt.includes('spec-filter-cases.txt')
+      && wf.includes('            tests/spec-filter-cases.txt\n') && / spec-filter[ ;]/.test(chk) && / spec-filter-browser[ ;]/.test(chk)
+      && ["await run('full');", "await run('nospecs');", "await run('old');"].every(x => bt.includes(x)),
+      'фильтр 10.85: приложение и сайт — на одних случаях; браузерный тест каталога в трёх режимах');
+    assert.ok((tp.match(/eq\("фильтр 10\.85: /g) || []).length >= 5 && !/customer_profiles|passport|phone|surname/.test(mp), 'IvaPatchTest: проверки 10.85');
+    assert.ok(/NEW_NAME: '10\.85'/.test(wf) && /NEW_CODE: '159'/.test(wf) && /TEST_NOTES: 'Тестовая сборка 10\.85: /.test(wf), 'версия 10.85 (159)');
+  }
   // 10.84 (этап 4 справочника моделей, решение владельца 15.10.2026, №30): «Предложить модель» с одобрением главного админа
   // (вкладка «Модели» в chief.html), «Комплектация» (tools.kit), подсказка цены с «Подставить», «Сгенерировать описание» —
   // в приложении и на сайте (new.html, cabinet.html). SQL — 20261018_models_stage4.sql; без него всё как в 10.83.
@@ -820,7 +859,6 @@ try {
       && ["await runNew('full');", "await runNew('old');", "await runNew('nocol');", 'await runCabinet();', "await runChief('full');", "await runChief('old');"].every(x => bt.includes(x)),
       'модели 10.84: приложение и сайт — на одних случаях; сборка видит файлы; браузерный тест всех трёх страниц');
     assert.ok((tp.match(/eq\("этап 4 10\.84: /g) || []).length >= 7, 'IvaPatchTest: проверки 10.84');
-    assert.ok(/NEW_NAME: '10\.84'/.test(wf) && /NEW_CODE: '158'/.test(wf) && /TEST_NOTES: 'Тестовая сборка 10\.84: /.test(wf), 'версия 10.84 (158)');
   }
   // 10.83 (этап 3 справочника моделей, решение владельца 15.10.2026, №30): характеристики в карточке (приложение — над
   // отзывами, сайт — tool.html после «Состояния») и фильтр по характеристикам-выбору вида в шторке приложения.
@@ -842,11 +880,11 @@ try {
       && ef.includes('IvaClientPatch.apiCall(a, FIELDS_PATH, "GET", null, false)') && ef.includes('new Thread(') && !ef.includes('modelsPath'),
       'характеристики 10.83: клиенту — только подписи полей, без моделей, в фоне');
     // 3. фильтр: характеристики живут только с тем же видом; совпадение — в общем extraMatch; применяются вместе с остальным
-    assert.ok(sp.includes('int specCount() { return kind.isEmpty() || !kind.equals(specKind) ? 0 : specs.size(); }')
+    assert.ok(sp.includes('int specCount() { return kind.isEmpty() || !kind.equals(specKind) ? 0 : specs.size()')   // 10.85: + ranges.size()
       && sp.includes('f.specs = new LinkedHashMap<String, String>(specs); f.specKind = specKind;')
-      && sp.includes('&& (f.specCount() == 0 || IvaModelPatch.specsMatch(IvaModelPatch.toolSpecs(j), f.specs));')
+      && /&& \(f\.specCount\(\) == 0 \|\| (IvaModelPatch\.specsMatch\(IvaModelPatch\.toolSpecs\(j\), f\.specs\)|f\.specState\(IvaModelPatch\.toolSpecs\(j\)\) >= 0)\);/.test(sp)
       && (sp.match(/applied\.setSpecsFrom\((f|d)\);/g) || []).length === 2 && sp.includes('activeCount(f.cat, f.sub, f.kind, f.from, f.to, f.delivery, f.conds) + f.specCount();')
-      && sp.includes('conds = 0; specs.clear(); specKind = ""; }'),
+      && /conds = 0; specs\.clear\(\);( ranges\.clear\(\);)? specKind = ""; \}/.test(sp),
       'характеристики 10.83: фильтр — только с тем же видом, в общем совпадении, считается в «Фильтр · N», сбрасывается');
     const pf = fnx(sp, 'paintSpecFilter');
     assert.ok(pf.includes('IvaModelPatch.choiceFields(IvaModelPatch.fields, draft.kind)') && pf.includes('other.specs.remove(fl.key);')
