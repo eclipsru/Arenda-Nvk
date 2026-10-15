@@ -405,7 +405,7 @@ core-drill-stand | Husqvarna | DM 650 |
 wall-chaser | Makita | SG1250 | power=1400; disc=125
 wall-chaser | Makita | SG150 | power=1800; disc=150
 wall-chaser | Makita | SG181 | power=1400; disc=180
-wall-chaser | Bosch | GNF 35 CA | power=1400; disc=150; depth=35
+wall-chaser | Bosch | GNF 35 CA | power=1400; disc=150; depth=35; weight=4.7
 wall-chaser | Bosch | GNF 65 A | power=2400; disc=230; depth=65
 wall-chaser | Bosch | GNF 20 CA | power=900; disc=115; depth=20
 wall-chaser | Hilti | DCH 150-SL |

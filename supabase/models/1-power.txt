@@ -3,7 +3,7 @@
 # Характеристики — только те, в которых уверены; остальное админ допишет сам (поля редактируются).
 
 # Перфораторы SDS-plus
-rotary-sds-plus | Makita | HR2470 | src=Сеть 220 В; power=780; energy=2.4
+rotary-sds-plus | Makita | HR2470 | src=Сеть 220 В; power=780; energy=2.4; weight=2.9
 rotary-sds-plus | Makita | HR2470FT | src=Сеть 220 В; power=780; energy=2.4
 rotary-sds-plus | Makita | HR2450 | src=Сеть 220 В; power=780; energy=2.7
 rotary-sds-plus | Makita | HR2300 | src=Сеть 220 В; power=720; energy=2.3
@@ -25,7 +25,7 @@ rotary-sds-plus | Makita | HR140DWAE1 | src=Аккумулятор; volt=12
 rotary-sds-plus | Bosch | GBH 2-26 DRE | src=Сеть 220 В; power=800; energy=2.7
 rotary-sds-plus | Bosch | GBH 2-26 DFR | src=Сеть 220 В; power=800; energy=2.7
 rotary-sds-plus | Bosch | GBH 2-26 | src=Сеть 220 В; power=830; energy=2.7
-rotary-sds-plus | Bosch | GBH 2-28 F | src=Сеть 220 В; power=880; energy=3.2
+rotary-sds-plus | Bosch | GBH 2-28 F | src=Сеть 220 В; power=880; energy=3.2; weight=3.1
 rotary-sds-plus | Bosch | GBH 2-24 DRE | src=Сеть 220 В; power=790
 rotary-sds-plus | Bosch | GBH 240 | src=Сеть 220 В; power=790; energy=2.7
 rotary-sds-plus | Bosch | GBH 2-20 D | src=Сеть 220 В; power=650; energy=1.7
@@ -76,7 +76,7 @@ rotary-sds-plus | Калибр | ЭП-800/26 | src=Сеть 220 В; power=800
 
 # Перфораторы SDS-max
 rotary-sds-max | Makita | HR4003C | src=Сеть 220 В; power=1100; energy=8.3
-rotary-sds-max | Makita | HR4013C | src=Сеть 220 В; power=1100; energy=11
+rotary-sds-max | Makita | HR4013C | src=Сеть 220 В; power=1100; energy=11; weight=6.8
 rotary-sds-max | Makita | HR4501C | src=Сеть 220 В; power=1350
 rotary-sds-max | Makita | HR4511C | src=Сеть 220 В; power=1350; energy=13
 rotary-sds-max | Makita | HR5202C | src=Сеть 220 В; power=1510
@@ -85,7 +85,7 @@ rotary-sds-max | Makita | HR3541FC | src=Сеть 220 В; power=850
 rotary-sds-max | Makita | DHR400 | src=Аккумулятор; volt=36
 rotary-sds-max | Bosch | GBH 5-40 DE | src=Сеть 220 В; power=1150; energy=8.5
 rotary-sds-max | Bosch | GBH 5-40 D | src=Сеть 220 В; power=1100; energy=8.5
-rotary-sds-max | Bosch | GBH 8-45 D | src=Сеть 220 В; power=1500; energy=12.5
+rotary-sds-max | Bosch | GBH 8-45 D | src=Сеть 220 В; power=1500; energy=12.5; weight=8.2
 rotary-sds-max | Bosch | GBH 8-45 DV | src=Сеть 220 В; power=1500; energy=12.5
 rotary-sds-max | Bosch | GBH 12-52 D | src=Сеть 220 В; power=1700; energy=19
 rotary-sds-max | Bosch | GBH 12-52 DV | src=Сеть 220 В; power=1700; energy=19
@@ -111,16 +111,16 @@ rotary-sds-max | Hikoki | DH40MC | src=Сеть 220 В; power=1100
 rotary-sds-max | Hikoki | DH52ME | src=Сеть 220 В; power=1500
 
 # Отбойные молотки (SDS-max)
-breaker | Makita | HM0870C | src=Сеть 220 В; power=1100; energy=11.6; chuck=SDS-max
+breaker | Makita | HM0870C | src=Сеть 220 В; power=1100; energy=11.6; chuck=SDS-max; weight=5.1
 breaker | Makita | HM0871C | src=Сеть 220 В; power=1100; chuck=SDS-max
-breaker | Makita | HM1203C | src=Сеть 220 В; power=1510; energy=19.1; chuck=SDS-max
+breaker | Makita | HM1203C | src=Сеть 220 В; power=1510; energy=19.1; chuck=SDS-max; weight=9.7
 breaker | Makita | HM1213C | src=Сеть 220 В; power=1510; chuck=SDS-max
 breaker | Makita | HM1111C | src=Сеть 220 В; power=1300; chuck=SDS-max
 breaker | Makita | HM1101C | src=Сеть 220 В; power=1300; chuck=SDS-max
 breaker | Makita | DHK180 | src=Аккумулятор
-breaker | Bosch | GSH 5 CE | src=Сеть 220 В; power=1150; energy=8.3; chuck=SDS-max
+breaker | Bosch | GSH 5 CE | src=Сеть 220 В; power=1150; energy=8.3; chuck=SDS-max; weight=6.2
 breaker | Bosch | GSH 5 | src=Сеть 220 В; power=1100; chuck=SDS-max
-breaker | Bosch | GSH 11 E | src=Сеть 220 В; power=1500; energy=16.8; chuck=SDS-max
+breaker | Bosch | GSH 11 E | src=Сеть 220 В; power=1500; energy=16.8; chuck=SDS-max; weight=10.1
 breaker | Bosch | GSH 11 VC | src=Сеть 220 В; power=1700; energy=23; chuck=SDS-max
 breaker | Bosch | GSH 500 | src=Сеть 220 В; power=1100; chuck=SDS-max
 breaker | Bosch | GSH 501 | src=Сеть 220 В; power=1100; chuck=SDS-max
@@ -143,11 +143,11 @@ breaker | Hikoki | H65SB3 | src=Сеть 220 В; power=1340; chuck=HEX 30
 # Бетоноломы (HEX 28 / HEX 30)
 demolition-hammer | Makita | HM1307C | src=Сеть 220 В; power=1510; chuck=HEX 30
 demolition-hammer | Makita | HM1307CB | src=Сеть 220 В; power=1510; chuck=HEX 30
-demolition-hammer | Makita | HM1317C | src=Сеть 220 В; power=1510; chuck=HEX 30
+demolition-hammer | Makita | HM1317C | src=Сеть 220 В; power=1510; chuck=HEX 30; weight=17
 demolition-hammer | Makita | HM1810 | src=Сеть 220 В; power=2000
 demolition-hammer | Makita | HM1812 | src=Сеть 220 В; power=2000; chuck=HEX 28
 demolition-hammer | Makita | HM1400 | src=Сеть 220 В; power=1240; chuck=HEX 30
-demolition-hammer | Bosch | GSH 16-28 | src=Сеть 220 В; power=1750; energy=41; chuck=HEX 28
+demolition-hammer | Bosch | GSH 16-28 | src=Сеть 220 В; power=1750; energy=41; chuck=HEX 28; weight=18.3
 demolition-hammer | Bosch | GSH 16-30 | src=Сеть 220 В; power=1750; energy=45; chuck=HEX 30
 demolition-hammer | Bosch | GSH 27 VC | src=Сеть 220 В; power=2000; energy=62; chuck=HEX 28
 demolition-hammer | DeWalt | D25960K | src=Сеть 220 В; power=1600; chuck=HEX 28
@@ -240,7 +240,7 @@ grinder-180 | Hikoki | G18ST | src=Сеть 220 В; power=2000; disc=180
 grinder-180 | Интерскол | УШМ-180/1800М | src=Сеть 220 В; power=1800; disc=180
 
 # Болгарки 230 мм
-grinder-230 | Makita | GA9020 | src=Сеть 220 В; power=2200; disc=230
+grinder-230 | Makita | GA9020 | src=Сеть 220 В; power=2200; disc=230; weight=5.8
 grinder-230 | Makita | GA9020SF | src=Сеть 220 В; power=2200; disc=230
 grinder-230 | Makita | GA9050 | src=Сеть 220 В; power=2000; disc=230
 grinder-230 | Makita | GA9060 | src=Сеть 220 В; power=2200; disc=230
@@ -248,7 +248,7 @@ grinder-230 | Makita | GA9040S | src=Сеть 220 В; power=2600; disc=230
 grinder-230 | Makita | 9069 | src=Сеть 220 В; power=2000; disc=230
 grinder-230 | Makita | GA9070 | src=Сеть 220 В; power=2400; disc=230
 grinder-230 | Makita | GA038G | src=Аккумулятор; volt=80; disc=230
-grinder-230 | Bosch | GWS 22-230 H | src=Сеть 220 В; power=2200; disc=230
+grinder-230 | Bosch | GWS 22-230 H | src=Сеть 220 В; power=2200; disc=230; weight=5.2
 grinder-230 | Bosch | GWS 24-230 H | src=Сеть 220 В; power=2400; disc=230
 grinder-230 | Bosch | GWS 2200 | src=Сеть 220 В; power=2200; disc=230
 grinder-230 | Bosch | GWS 26-230 LVI | src=Сеть 220 В; power=2600; disc=230

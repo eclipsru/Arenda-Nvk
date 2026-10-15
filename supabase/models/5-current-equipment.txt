@@ -728,7 +728,7 @@ tile-cutter-manual | Rubi | Speed-62 |
 tile-cutter-manual | Montolit | Masterpiuma P3 63 | 
 tile-cutter-manual | Montolit | Masterpiuma P3 93 | 
 tile-cutter-manual | Montolit | Masterpiuma P3 125 | 
-wall-chaser | Makita | SG1251J | power=1400; disc=125
+wall-chaser | Makita | SG1251J | power=1400; disc=125; weight=4.3
 wall-chaser | Hilti | DC-SE 20 | power=2000
 core-drill-hand | Eibenstock | ETN 162/3 | power=2300; dia=162
 core-drill-hand | Husqvarna | DM 230 | dia=152

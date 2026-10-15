@@ -13,6 +13,6 @@ rotary-sds-plus|src=Сеть 220 В|src=Аккумулятор; volt=18|src(Се
 rebar-tier||volt=12; weight=2,5|volt,dia,weight|{"volt":12,"weight":2.5}
 chainsaw|src=Бензин; cc=45|src=Бензин; cc=45; volt=36|src(Бензин),cc,power,bar,weight|{"src":"Бензин","cc":45}
 chainsaw|src=Аккумулятор; volt=36|src=Аккумулятор; volt=36|src(Аккумулятор),volt,cc,power,bar,weight|{"src":"Аккумулятор","volt":36}
-pipe-bender|src=Ручной|src=Ручной|src(Ручной),pipe|{"src":"Ручной"}
+pipe-bender|src=Ручной|src=Ручной|src(Ручной),pipe,weight|{"src":"Ручной"}
 impact-wrench|src=Сжатый воздух; torque=800|src=Сжатый воздух; torque=800|src(Сжатый воздух),torque,chuck(1/2"; 3/4"; 1"; HEX 1/4"),weight|{"src":"Сжатый воздух","torque":800}
 ||src=Бензин||null
