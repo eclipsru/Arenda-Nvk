@@ -770,6 +770,62 @@ try {
       assert.ok(has(arsc14, str) || has(dex14, str), `APK 10.14: нет «${str}» — правка 10.67 не найдёт штатное поле`);
     assert.ok(/eq\("админ 10\.67: /.test(tp) && /eq\("подкатегория 10\.67: /.test(tp) && /eq\("кабинет 10\.67: /.test(tp), 'IvaPatchTest: проверки 10.67');
   }
+  // 10.86 (просьба владельца 15.10.2026, решения main4_plus и model_only): форма «Добавить» в приложении — подписи над
+  // пунктами, «Модель» под названием, «Категория / Подкатегория / Вид» над «Сгенерировать описание»; подсказки названия
+  // понимают «болгарка», «ушм», раскладку, латиницу и опечатки; «Питание» — только у выбранной модели, напряжение — при
+  // «Аккумуляторе», скрытое не сохраняется (приложение и сайт). Правка инструмента (te*) не меняется.
+  {
+    const mp = R('android/patches/IvaModelPatch.java'), kp = R('android/patches/IvaKindPatch.java'), ip = R('android/patches/IvaPatch.java');
+    const tp = R('android/patches/test/IvaPatchTest.java'), wf = R('.github/workflows/build-apk.yml'), chk = R('tools/check.sh');
+    const md = R('assets/models.js'), nw = R('new.html'), cab = R('cabinet.html'), jt = R('tests/model-search.cjs');
+    const ff = R('tests/form-fields-cases.txt'), fl = R('supabase/models/fields.txt'), sql = R('supabase/migrations/20261019_power_src.sql');
+    const fnx = (src, name) => { const mm = new RegExp(`static (?:final )?[\\w.<>, \\[\\]]+ ${name}\\(`).exec(src); assert.ok(mm, `нет ${name}`); return src.slice(mm.index, src.indexOf('\n    }\n', mm.index)); };
+    // 1. раскладка: только форма «Добавить» (atName), подписи мелким серым, группа перед блоком «Сгенерировать описание»
+    const ar = fnx(kp, 'arrange');
+    assert.ok(ar.includes('IvaClientPatch.get(a, FORM[0][5])') && !/\bte[A-Z]/.test(ar) && ar.includes('form.findViewWithTag(IvaModelPatch.HELP)')
+      && ar.includes('t.setTextSize(13f);') && ar.includes('IvaPatch.color(a, "gray", 0xff9aa1b0)') && ar.includes('int[] plan = regroup(form.getChildCount(), gi, form.indexOfChild(anchor));')
+      && ar.includes('if (plan == null) return;') && kp.includes('static final int LABEL_TOP_DP = 12, FIELD_TOP_DP = 6;'),
+      'форма 10.86: подписи и перестановка — только в форме «Добавить», без лишних движений');
+    assert.ok(fnx(kp, 'refreshRows').includes('try { arrange(a); } catch (Throwable ignore) {}') && fnx(ip, 'condRows').includes('try { IvaKindPatch.arrange(a); } catch (Throwable ignore) {}')
+      && fnx(mp, 'refresh').includes('try { IvaKindPatch.arrange(a); } catch (Throwable ignore) {}'),
+      'форма 10.86: раскладка обновляется после вида, «Состояния» и блока модели');
+    // 2. «Модель» — под названием (и его подсказками), видна и без вида; подпись мелким
+    const rf = fnx(mp, 'refresh');
+    assert.ok(rf.includes('View after = sug != null && sug.getParent() == form ? sug : nv;') && rf.includes('form.addView(block, form.indexOfChild(after) + 1')
+      && fnx(mp, 'buildBlock').includes('box.addView(small(a, MODEL_LABEL), lpTop(a, 12));') && mp.includes('block.setVisibility(View.VISIBLE);')
+      && fnx(mp, 'fillModelDrop').includes(': search(q, idx, kind, kind.isEmpty() ? "" : brandSel, MODEL_SUGGEST);'),
+      'форма 10.86: «Модель» под названием, ищет и без вида');
+    // 3. «Питание» и напряжение: одна функция в приложении и на сайте, на одних случаях; сохраняются только показанные поля
+    assert.ok(fnx(mp, 'paintSpecs').includes('List<Field> fl = visFields(kind);') && fnx(mp, 'visFields').includes('return formFields(fieldsFor(fields, kind), m == null ? null : m.specs, specVals);')
+      && mp.includes('String ex = extraBody(id, specsClean(specVals, visFields(kind)));') && mp.includes('proposalBody(kind, parts, title, specsClean(specVals, visFields(kind)));')
+      && fnx(mp, 'paintChoice').includes('if (SRC.equals(f.key)) {') && !/specsClean\(specVals, fieldsFor\(/.test(mp),
+      'форма 10.86: приложение — питание у модели, напряжение при аккумуляторе, скрытое не сохраняется');
+    assert.ok(md.includes('ivaFormFields: ivaFormFields') && nw.includes('return ivaFormFields(ivaFieldsFor(MD, F.kind), m && m.kind === F.kind ? m.specs : null, F.specs);')
+      && nw.includes('const sp = ivaSpecsClean(F.specs, specFields());') && nw.includes('if (specSig() !== was) paintCat();') && !/ivaSpecsClean\([^;]*ivaFieldsFor\(/.test(nw)
+      && cab.includes('return ivaFormFields(ivaFieldsFor(MD,k),m&&m.kind===k?m.specs:null,mdl.specs)') && !/ivaSpecsClean\([^;]*ivaFieldsFor\(/.test(cab)
+      && cab.includes('if(cfSig()!==was)paintModel()'),
+      'форма 10.86: сайт (new.html, кабинет) — те же поля, сохраняются только показанные');
+    assert.ok(nw.includes('clearTimeout(autoTimer);   /* 10.86') && cab.includes('clearTimeout(autoT);   /* 10.86'),
+      'форма 10.86: выбор модели отменяет отложенный автоподбор (раньше сбрасывал вид и модель)');
+    for (const f of ['models.js', 'model-form.js']) assert.ok(nw.includes(`assets/${f}?v=20261020-power`) && cab.includes(`assets/${f}?v=20261020-power`), 'новая версия ' + f);
+    assert.ok(R('catalog.html').includes('assets/models.js?v=20261020-power') && R('tool.html').includes('assets/models.js?v=20261020-power'), 'models.js — новая версия везде');
+    // 4. варианты «Питания»: 4 основных, редкие — только где бывают; SQL для применённой базы
+    const srcOpts = (fl.match(/\bsrc\(([^)]*)\)/g) || []).map(x => x.slice(4, -1).split(/;\s*/));
+    const RARE = ['Сеть 380 В', 'Сжатый воздух', 'Ручной'];
+    assert.ok(srcOpts.length > 50 && srcOpts.every(o => o.slice(0, 4).join(';') === 'Сеть 220 В;Аккумулятор;Бензин;Дизель' && o.slice(4).every(x => RARE.includes(x))),
+      'fields.txt: «Питание» — 4 основных варианта, редкие только 380 В / сжатый воздух / ручной');
+    assert.ok(sql.includes("array['Сеть 220 В', 'Аккумулятор', 'Бензин', 'Дизель']") && sql.includes("where specs ->> 'src' in ('Газ', 'Гидравлический', '12 В');")
+      && / power-src-browser[ ;]/.test(chk) && chk.includes('tools/power-src-stand.py'), 'SQL 20261019 и стенд «Питания» в check.sh');
+    // 5. поиск: раскладка, транслит, опечатки — одинаково; случаи общие; сборка видит файлы
+    assert.ok(md.includes('function ivaTranslit(') && md.includes('out.words = words.sort(byCode);') && fnx(mp, 'known').includes('for (String t : ix.words) if (t.startsWith(w)) return true;')
+      && /^болгарка\|/m.test(R('tests/model-search-cases.txt')) && /^ушм\|/m.test(R('tests/model-search-cases.txt')),
+      'поиск 10.86: «болгарка», «ушм», раскладка и опечатки — в приложении и на сайте');
+    assert.ok(tp.includes('java.nio.file.Paths.get("tests/form-fields-cases.txt")') && jt.includes('form-fields-cases.txt') && ff.split('\n').filter(l => l && !l.startsWith('#')).length >= 12
+      && wf.includes('            tests/form-fields-cases.txt\n'), 'форма 10.86: общие случаи полей — в обоих тестах и в сборке');
+    assert.ok((tp.match(/eq\("форма 10\.86: /g) || []).length >= 6 && (tp.match(/eq\("поиск 10\.86: /g) || []).length >= 2
+      && !/customer_profiles|passport|phone|surname/.test(mp + kp), 'IvaPatchTest: проверки 10.86');
+    assert.ok(/NEW_NAME: '10\.86'/.test(wf) && /NEW_CODE: '160'/.test(wf) && /TEST_NOTES: 'Тестовая сборка 10\.86: /.test(wf), 'версия 10.86 (160)');
+  }
   // 10.85 (решение владельца 15.10.2026: «и то и другое» — доделка этапа 3 справочника моделей): в шторке «Фильтр»
   // приложения — числа «от–до» для числовых характеристик вида; объявления без нужной характеристики — в конце списка.
   // На сайте — то же в каталоге (catalog.html): «Вид», характеристики-выбор, числа, ссылка с условиями.
@@ -797,7 +853,7 @@ try {
     // 4. сайт: отдельный запрос активных объявлений (общий список полей не меняется), без SQL — как раньше
     assert.ok(md.includes("var base = '/rest/v1/tools?status=eq.active&active=eq.true&limit=1000&select=';") && md.includes("api(base + 'id,kind,specs')")
       && md.includes(".catch(function () { return api(base + 'id,kind'); })") && !/TOOL_FIELDS = [^;]*\b(kind|specs)\b/.test(sb)
-      && cat.includes('<script src="assets/models.js?v=20261019-filter"></script>') && cat.includes('var rows = byKind(sortAds(applyFilters(ADS, F), SORT), F);')
+      && /<script src="assets\/models\.js\?v=[\w-]+"><\/script>/.test(cat) && cat.includes('var rows = byKind(sortAds(applyFilters(ADS, F), SORT), F);')
       && cat.includes("return rows.filter(function(r){ return r.st === 1; }).concat(rows.filter(function(r){ return r.st === 0; }));")
       && cat.includes('if (F.kind && !kindOn()) clearKind();'),
       'фильтр 10.85: каталог сайта — вид и характеристики отдельным запросом, без характеристики — в конце, без SQL — как раньше');
@@ -807,7 +863,6 @@ try {
       && ["await run('full');", "await run('nospecs');", "await run('old');"].every(x => bt.includes(x)),
       'фильтр 10.85: приложение и сайт — на одних случаях; браузерный тест каталога в трёх режимах');
     assert.ok((tp.match(/eq\("фильтр 10\.85: /g) || []).length >= 5 && !/customer_profiles|passport|phone|surname/.test(mp), 'IvaPatchTest: проверки 10.85');
-    assert.ok(/NEW_NAME: '10\.85'/.test(wf) && /NEW_CODE: '159'/.test(wf) && /TEST_NOTES: 'Тестовая сборка 10\.85: /.test(wf), 'версия 10.85 (159)');
   }
   // 10.84 (этап 4 справочника моделей, решение владельца 15.10.2026, №30): «Предложить модель» с одобрением главного админа
   // (вкладка «Модели» в chief.html), «Комплектация» (tools.kit), подсказка цены с «Подставить», «Сгенерировать описание» —

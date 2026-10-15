@@ -314,7 +314,7 @@ with v(kind, brand, model, title, specs) as (values
   ('pipe-bender', 'Rems', 'Swing', 'Трубогиб Rems Swing', '{"src":"Ручной"}'),
   ('pipe-bender', 'Rothenberger', 'Robend 4000', 'Трубогиб Rothenberger Robend 4000', '{"src":"Сеть 220 В"}'),
   ('pipe-bender', 'Rothenberger', 'Robend H+P', 'Трубогиб Rothenberger Robend H+P', '{"src":"Ручной"}'),
-  ('pipe-bender', 'Rothenberger', 'Robull', 'Трубогиб Rothenberger Robull', '{"src":"Гидравлический"}'),
+  ('pipe-bender', 'Rothenberger', 'Robull', 'Трубогиб Rothenberger Robull', '{}'),
   ('pipe-cutter', 'Rems', 'Cento', 'Труборез Rems Cento', '{"src":"Сеть 220 В"}'),
   ('pipe-cutter', 'Rems', 'Cento 22 V', 'Труборез Rems Cento 22 V', '{}'),
   ('pipe-cutter', 'Rems', 'RAS Cu-INOX', 'Труборез Rems RAS Cu-INOX', '{"src":"Ручной"}'),

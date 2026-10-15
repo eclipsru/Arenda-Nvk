@@ -1,0 +1,18 @@
+# 10.86 · Какие характеристики показывать в форме добавления (решение владельца 15.10.2026).
+# «Питание» — только если у выбранной модели оно указано, одним вариантом — её; без модели или без данных — поля нет.
+# «Напряжение аккумулятора» — только при питании «Аккумулятор» (у вида без «Питания» — всегда).
+# Строка: вид | характеристики модели «ключ=значение; …» (пусто — модель не выбрана) | что сейчас в форме |
+#         поля к показу «ключ», у выбора — «ключ(вариант; вариант)» через запятую | что сохранится (JSON, null — ничего).
+# Проверяют один и тот же файл: tests/model-search.cjs (сайт) и IvaPatchTest (приложение). Поля — настоящие (20261017_models.sql).
+rotary-sds-plus|src=Сеть 220 В; power=780; energy=2.4|src=Сеть 220 В; power=780; energy=2.4|src(Сеть 220 В),power,energy,weight|{"src":"Сеть 220 В","power":780,"energy":2.4}
+rotary-sds-plus|src=Аккумулятор; volt=18|src=Аккумулятор; volt=18|src(Аккумулятор),volt,power,energy,weight|{"src":"Аккумулятор","volt":18}
+rotary-sds-plus|src=Аккумулятор; volt=18|src=; volt=18|src(Аккумулятор),power,energy,weight|null
+rotary-sds-plus||src=Аккумулятор; volt=18; power=800|power,energy,weight|{"power":800}
+rotary-sds-plus|power=780|power=780; volt=18|power,energy,weight|{"power":780}
+rotary-sds-plus|src=Сеть 220 В|src=Аккумулятор; volt=18|src(Сеть 220 В),power,energy,weight|null
+rebar-tier||volt=12; weight=2,5|volt,dia,weight|{"volt":12,"weight":2.5}
+chainsaw|src=Бензин; cc=45|src=Бензин; cc=45; volt=36|src(Бензин),cc,power,bar,weight|{"src":"Бензин","cc":45}
+chainsaw|src=Аккумулятор; volt=36|src=Аккумулятор; volt=36|src(Аккумулятор),volt,cc,power,bar,weight|{"src":"Аккумулятор","volt":36}
+pipe-bender|src=Ручной|src=Ручной|src(Ручной),pipe|{"src":"Ручной"}
+impact-wrench|src=Сжатый воздух; torque=800|src=Сжатый воздух; torque=800|src(Сжатый воздух),torque,chuck(1/2"; 3/4"; 1"; HEX 1/4"),weight|{"src":"Сжатый воздух","torque":800}
+||src=Бензин||null

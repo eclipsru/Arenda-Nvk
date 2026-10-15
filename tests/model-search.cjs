@@ -120,9 +120,31 @@ const F = D.fields['rotary-sds-plus'];
 ok(JSON.stringify(M.ivaSpecsClean({ src: 'Аккумулятор', volt: '18', power: ' 780 ', energy: '2,4', weight: 'abc', zzz: '1' }, F))
    === JSON.stringify({ src: 'Аккумулятор', volt: 18, power: 780, energy: 2.4 }), 'числа с запятой, лишние и плохие поля отбрасываются',
    JSON.stringify(M.ivaSpecsClean({ src: 'Аккумулятор', volt: '18', power: ' 780 ', energy: '2,4', weight: 'abc', zzz: '1' }, F)));
-ok(M.ivaSpecsClean({ src: 'Бензин' }, F) === null && M.ivaSpecsClean({}, F) === null && M.ivaSpecsClean(null, F) === null, 'чужой вариант и пусто → null');
+ok(M.ivaSpecsClean({ src: 'Газ' }, F) === null && M.ivaSpecsClean({}, F) === null && M.ivaSpecsClean(null, F) === null, 'чужой вариант и пусто → null');
 const T = D.fields['pp-welder'];
 ok(JSON.stringify(M.ivaSpecsClean({ pipe: '  20–63 ' }, T)) === '{"pipe":"20–63"}', 'строка — без пробелов по краям');
+
+// 10.86: какие характеристики показывать в форме (общие случаи с приложением) и что из них сохранится
+{
+  const kv = t => { const o = {}; (t || '').split(';').map(x => x.trim()).filter(Boolean).forEach(x => { const i = x.indexOf('='); o[x.slice(0, i).trim()] = x.slice(i + 1).trim(); }); return o; };
+  const lines = fs.readFileSync(path.join(ROOT, 'tests/form-fields-cases.txt'), 'utf8').split('\n').filter(l => l.trim() !== '' && !l.startsWith('#'));
+  let nf = 0;
+  for (const l of lines) {
+    const [kind, ms, vs, want, save] = l.split('|');
+    const fl = kind ? D.fields[kind].map((f, i) => Object.assign({ kind, sort: i + 1 }, f)) : [];
+    const vis = M.ivaFormFields(fl, kv(ms), kv(vs));
+    const got = vis.map(f => f.type === 'choice' ? f.key + '(' + f.options.join('; ') + ')' : f.key).join(',');
+    ok(got === want, 'форма 10.86: ' + l, got);
+    const sv = M.ivaSpecsClean(kv(vs), vis);
+    ok(JSON.stringify(sv) === save, 'форма 10.86, сохранение: ' + l, JSON.stringify(sv));
+    nf++;
+  }
+  ok(nf >= 12, 'случаев формы 10.86: ' + nf);
+  const fl = D.fields['rotary-sds-plus'].map((f, i) => Object.assign({ kind: 'rotary-sds-plus', sort: i + 1 }, f));
+  const vis = M.ivaFormFields(fl, { src: 'Сеть 220 В' }, {});
+  ok(fl[0].options.length === 4 && vis[0].options.length === 1, 'поле вида не меняется (вариант модели — в копии)');
+  ok(M.ivaFormFields(null, null, null).length === 0, 'нет полей — пусто');
+}
 
 // поля вида по порядку; загрузка справочника страницами по 1000, ошибки → null
 const allF = Object.keys(D.fields).reduce((acc, k) => acc.concat(D.fields[k].map((f, i) => Object.assign({ kind: k, sort: i + 1 }, f))), []);

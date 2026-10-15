@@ -328,8 +328,8 @@ textarea.inp{resize:vertical;min-height:70px}
 <script src="assets/geo.js?v=20260923-photon"></script>
 <script src="assets/email-guard.js?v=20260926-email"></script>
 <script src="assets/kind-guess.js?v=20261016-kind"></script>
-<script src="assets/models.js?v=20261018-stage4"></script>
-<script src="assets/model-form.js?v=20261018-stage4"></script>
+<script src="assets/models.js?v=20261020-power"></script>
+<script src="assets/model-form.js?v=20261020-power"></script>
 </head>
 <body>
 <div class="app" id="app">
@@ -1258,10 +1258,14 @@ function toolForm(id){
   function mText(m){return m?m.brand+' '+m.model:''}
   function mById(id){return MD&&id?MD.byId[id]||null:null}
   function modelKeep(){var m=mById(mdl.id);if(mdl.id&&(!m||m.kind!==kindNow()||!ivaModelStillFits($('fName').value,m)))mdl.id=null}
+  /* 10.86 (решение владельца 15.10): «Питание» — только у выбранной модели, напряжение — при «Аккумуляторе»; сохраняются только показанные поля */
+  function cfFields(){var k=kindNow(),m=mById(mdl.id);if(!MD||!k)return [];return ivaFormFields(ivaFieldsFor(MD,k),m&&m.kind===k?m.specs:null,mdl.specs)}
+  function cfSig(){return kindNow()+'|'+cfFields().map(function(f){return f.key+':'+(f.options||[]).join(';')}).join('|')}
   function paintModel(force){
     if(!MD||t){$('fModelBox').classList.add('hide');$('fSpecs').classList.add('hide');return}
-    var k=kindNow(),bs=k?ivaModelBrands(MD.index,k):[],fl=ivaFieldsFor(MD,k);
+    var k=kindNow(),bs=k?ivaModelBrands(MD.index,k):[];
     var hadModel=mdl.id;modelKeep();
+    var fl=cfFields(),sig=cfSig();
     if(mdl.brand&&bs.indexOf(mdl.brand)<0)mdl.brand='';
     $('fModelBox').classList.toggle('hide',!k);   /* 10.84: и без брендов — чтобы предложить модель */
     $('fBrands').innerHTML=bs.map(function(b){return '<button type="button" class="chip'+(b===mdl.brand?' on':'')+'" data-mbrand="'+esc(b)+'">'+esc(b)+'</button>'}).join('');
@@ -1269,8 +1273,8 @@ function toolForm(id){
     if(m)$('fModel').value=mText(m);else if(hadModel)$('fModel').value='';
     var ex=bs.length?ivaModelSearch('',MD.index,{kind:k,limit:1})[0]:null;
     $('fModel').placeholder=ex?'Например: '+mText(ex):'Модель';
-    if(force||k!==specsKind){
-      specsKind=k;   /* mdl.specs уже содержит правки — поля пишут в него при вводе */
+    if(force||sig!==specsKind){
+      specsKind=sig;   /* mdl.specs уже содержит правки — поля пишут в него при вводе */
       $('fSpecs').innerHTML=fl.length?'<span class="lbl">Характеристики (необязательно)</span>'+ivaSpecsHTML(fl,mdl.specs,function(x){return '<span class="lbl">'+esc(x)+'</span>'}):'';
     }
     $('fSpecs').classList.toggle('hide',!fl.length);
@@ -1293,7 +1297,7 @@ function toolForm(id){
     if(!e.target.closest('[data-mprop]'))return;
     var p=propParts();if(!p)return;var key=propKey(p);if(PROP[key]==='sending'||PROP[key]==='ok')return;
     var k=kindNow(),kd=(S.kinds||[]).filter(function(x){return x.key===k})[0];
-    var row={kind:k,brand:p.brand,model:p.model,title:ivaProposalTitle($('fName').value,p,kd?kd.title:''),specs:ivaSpecsClean(Object.assign({},mdl.specs,ivaSpecsRead($('fSpecs'))),ivaFieldsFor(MD,k))||{}};
+    var row={kind:k,brand:p.brand,model:p.model,title:ivaProposalTitle($('fName').value,p,kd?kd.title:''),specs:ivaSpecsClean(Object.assign({},mdl.specs,ivaSpecsRead($('fSpecs'))),cfFields())||{}};
     PROP[key]='sending';paintProp();
     ivaProposalSend(api,row).then(function(err){PROP[key]=err||'ok';if($('fProp'))paintProp()});
   };
@@ -1318,7 +1322,7 @@ function toolForm(id){
   };
   /* 10.84: «Сгенерировать описание» — в пустое описание или вместо нашего прошлого; написанное руками не трогаем */
   if($('fGen'))$('fGen').onclick=function(){
-    var k=kindNow(),fl=k?ivaFieldsFor(MD,k):[];
+    var k=kindNow(),fl=k?cfFields():[];
     var rows=fl.length?ivaSpecRows(ivaSpecsClean(Object.assign({},mdl.specs,ivaSpecsRead($('fSpecs'))),fl)||{},fl):[];
     var txt=ivaDescribe($('fName').value,rows,k&&MD.kit?ivaKitClean(kitSel,MD.kit[k]):null),d=$('fDescr'),note='';
     if(!txt)note='Сначала напишите название.';
@@ -1327,6 +1331,7 @@ function toolForm(id){
     $('fGenNote').textContent=note?' '+note:'';
   };
   function chooseModel(m){
+    clearTimeout(autoT);   /* 10.86: отложенный автоподбор от набора — не после выбора модели */
     var kd=(S.kinds||[]).filter(function(x){return x.key===m.kind})[0];
     $('fName').value=m.title;
     if(kd&&S.cats.some(function(c){return c.key===kd.cat})){
@@ -1342,7 +1347,7 @@ function toolForm(id){
     paintModel(true);
   }
   $('fBrands').onclick=function(e){var b=e.target.closest('[data-mbrand]');if(!b)return;var v=b.getAttribute('data-mbrand');mdl.brand=mdl.brand===v?'':v;paintModel();$('fModel').focus()};
-  $('fSpecs').oninput=function(e){var el=e.target.closest('[data-spec]');if(el)mdl.specs[el.getAttribute('data-spec')]=el.value};
+  $('fSpecs').oninput=function(e){var el=e.target.closest('[data-spec]');if(!el)return;var was=cfSig();mdl.specs[el.getAttribute('data-spec')]=el.value;if(cfSig()!==was)paintModel()};   /* 10.86: сменили питание — напряжение появляется / пропадает */
   $('fSpecs').onchange=$('fSpecs').oninput;
   $('fModel').addEventListener('input',function(){var m=mById(mdl.id);if(m&&this.value.trim()!==mText(m))mdl.id=null;if(MD)paintProp()});
   if(!t&&typeof ivaModelsLoad==='function')loadKinds().then(function(ks){return ivaModelsLoad(api,ks)}).then(function(md){
@@ -1391,7 +1396,7 @@ function toolForm(id){
     if(S.kinds&&S.kinds.length){var kv=$('fKind').classList.contains('hide')?'':$('fKind').value;if(kv||t)body.kind=kv||null}   /* 10.81: вид — только когда справочник видов есть в базе */
     if(MD&&!t&&body.kind){   /* 10.82: модель и характеристики — справочник загружен, вид выбран */
       modelKeep();if(mdl.id)body.model_id=mdl.id;
-      var sp=ivaSpecsClean(Object.assign(mdl.specs,ivaSpecsRead($('fSpecs'))),ivaFieldsFor(MD,body.kind));if(sp)body.specs=sp;
+      var sp=ivaSpecsClean(Object.assign(mdl.specs,ivaSpecsRead($('fSpecs'))),cfFields());   /* 10.86: только показанные поля */if(sp)body.specs=sp;
       var kt=MD.kit?ivaKitClean(kitSel,MD.kit[body.kind]):null;if(kt)body.kit=kt;   /* 10.84 */
     }
     var btn=$('fSave');btn.textContent='Сохраняем…';btn.disabled=true;

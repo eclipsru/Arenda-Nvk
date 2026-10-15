@@ -71,12 +71,14 @@ final class IvaModelPatch {
         Model m;
         List<String> strong = new ArrayList<String>(), weak = new ArrayList<String>(), stems, codeToks;
         String key;
-        int code;
+        int code, kn;                                  // kn (10.86) — сколько моделей у вида
     }
 
     static final class Index {
         final List<Entry> list = new ArrayList<Entry>();
         final List<String> brandToks = new ArrayList<String>(), stemToks = new ArrayList<String>();
+        final List<String> vocab = new ArrayList<String>();   // 10.86: словарь для исправления опечаток (от 4 букв)
+        final List<String> words = new ArrayList<String>();   // 10.86: все слова без цифр — «слово есть в справочнике»
     }
 
     static String s(String v) { return v == null ? "" : v; }
@@ -143,7 +145,22 @@ final class IvaModelPatch {
             e.codeToks = mt;
             ix.list.add(e);
         }
+        Map<String, Integer> perKind = new HashMap<String, Integer>();       // 10.86
+        for (Entry e : ix.list) { Integer n = perKind.get(e.m.kind); perKind.put(e.m.kind, n == null ? 1 : n + 1); }
+        for (Entry e : ix.list) e.kn = perKind.get(e.m.kind);
+        java.util.Set<String> seen = new java.util.HashSet<String>();
+        for (Entry e : ix.list) { for (String t : e.strong) addV(ix, seen, t); for (String t : e.weak) addV(ix, seen, t); }
+        for (String t : ix.stemToks) addV(ix, seen, t);
+        for (String t : ix.brandToks) addV(ix, seen, t);
+        Collections.sort(ix.vocab);
+        Collections.sort(ix.words);
         return ix;
+    }
+
+    static void addV(Index ix, java.util.Set<String> seen, String t) {
+        if (DIGIT.matcher(t).find() || !seen.add(t)) return;
+        ix.words.add(t);
+        if (t.length() >= 4) ix.vocab.add(t);
     }
 
     static String join(List<String> l) {
@@ -183,11 +200,15 @@ final class IvaModelPatch {
         return n;
     }
 
-    /** Очки модели или null; miss[0] — сколько слов запроса не совпало. */
+    /** 10.86: слова-связки — не слово вида. */
+    static final List<String> STOP = java.util.Arrays.asList("для", "под", "над", "без", "при", "или");
+
+    /** Очки модели или null; miss[0] — сколько слов запроса не совпало, miss[1] — было ли сильное совпадение (1/0),
+     *  miss[2] — сколько слов совпало со словом названия (10.86). */
     static Integer score(Entry e, List<QTok> qi, int[] miss) {
         int total = 0;
-        boolean hasStrong = false;
-        miss[0] = 0;
+        boolean hasStrong = false, kindHit = false;
+        miss[0] = 0; miss[1] = 0; miss[2] = 0;
         for (QTok q : qi) {
             String w = q.w;
             int best = 0;
@@ -196,47 +217,174 @@ final class IvaModelPatch {
                 if (w.length() >= 2 && st.startsWith(w) && 2 * w.length() > best) best = 2 * w.length();
             }
             if (best > 0) { hasStrong = true; total += best; continue; }
-            boolean weak = false;
+            boolean weak = false, kh = false;
             for (String x : e.weak) if (x.startsWith(w)) { weak = true; break; }
+            if (weak) { kh = true; miss[2]++; }
             if (!weak) for (String x : e.stems) if (w.startsWith(x)) { weak = true; break; }
+            // 10.86: слово вида — начало слова названия, начало слова вида или слово вида с другим окончанием (до 2 букв)
+            if (!q.digit && w.length() >= 3 && !STOP.contains(w)) {
+                if (!kh) for (String x : e.stems) if (x.startsWith(w) || (w.startsWith(x) && w.length() - x.length() <= 2)) { kh = true; break; }
+            } else kh = false;
+            if (kh) { weak = true; kindHit = true; }
             if (weak) { total += w.length(); continue; }
             if (q.digit || q.brand) return null;
             miss[0]++;
             total -= q.stem ? 2 * w.length() : w.length();
         }
-        return hasStrong && total > 0 ? Integer.valueOf(total) : null;
+        miss[1] = hasStrong ? 1 : 0;
+        return (hasStrong || kindHit) && total > 0 ? Integer.valueOf(total) : null;
+    }
+
+    /** 10.86: другая раскладка — латиница ↔ кириллица по клавишам (строчные). */
+    static final String LAY_EN = "`qwertyuiop[]asdfghjkl;'zxcvbnm,.", LAY_RU = "ёйцукенгшщзхъфывапролджэячсмитьбю";
+
+    static String swapLayout(String s) {
+        String t = s(s).toLowerCase(Locale.ROOT);
+        StringBuilder b = new StringBuilder();
+        for (int i = 0; i < t.length(); i++) {
+            char c = t.charAt(i);
+            int k = LAY_EN.indexOf(c);
+            if (k >= 0) b.append(LAY_RU.charAt(k));
+            else if ((k = LAY_RU.indexOf(c)) >= 0) b.append(LAY_EN.charAt(k));
+            else b.append(c);
+        }
+        return b.toString();
+    }
+
+    /** 10.86: число ошибок между словами (вставка, удаление, замена, перестановка соседних букв). */
+    static int typoDist(String a, String b) {
+        int n = a.length(), m = b.length();
+        int[][] d = new int[n + 1][m + 1];
+        for (int i = 0; i <= n; i++) d[i][0] = i;
+        for (int j = 0; j <= m; j++) d[0][j] = j;
+        for (int i = 1; i <= n; i++) {
+            for (int j = 1; j <= m; j++) {
+                int c = a.charAt(i - 1) == b.charAt(j - 1) ? 0 : 1;
+                int v = Math.min(Math.min(d[i - 1][j] + 1, d[i][j - 1] + 1), d[i - 1][j - 1] + c);
+                if (i > 1 && j > 1 && a.charAt(i - 1) == b.charAt(j - 2) && a.charAt(i - 2) == b.charAt(j - 1)) v = Math.min(v, d[i - 2][j - 2] + 1);
+                d[i][j] = v;
+            }
+        }
+        return d[n][m];
+    }
+
+    static boolean known(String w, Index ix) {
+        for (String t : ix.words) if (t.startsWith(w)) return true;
+        for (String t : ix.stemToks) if (w.startsWith(t)) return true;
+        for (String t : ix.brandToks) if (t.startsWith(w)) return true;
+        return false;
+    }
+
+    /** 10.86: запрос с исправленными опечатками или null (как ivaFuzzyQuery на сайте). */
+    static String fuzzyQuery(String query, Index ix) {
+        List<String> q = toks(query);
+        boolean changed = false;
+        for (int i = 0; ix != null && i < q.size(); i++) {
+            String w = q.get(i);
+            if (w.length() < 4 || DIGIT.matcher(w).find() || known(w, ix)) continue;
+            int lim = w.length() >= 8 ? 2 : 1, bd = lim + 1;
+            String best = null;
+            for (String t : ix.vocab) {
+                if (t.length() < w.length() - lim) continue;
+                int d = typoDist(w, t);
+                if (t.length() > w.length()) d = Math.min(d, typoDist(w, t.substring(0, w.length())));
+                if (d < bd) { bd = d; best = t; }
+            }
+            if (best != null) { q.set(i, best); changed = true; }
+        }
+        return changed ? joinSp(q) : null;
+    }
+
+    static String joinSp(List<String> l) {
+        StringBuilder b = new StringBuilder();
+        for (String x : l) { if (b.length() > 0) b.append(' '); b.append(x); }
+        return b.toString();
+    }
+
+    /** 10.86: латиница → кириллица для слов только из латинских букв, которых нет в справочнике (как ivaTranslit). */
+    static final String[][] TR2 = {{"shch", "щ"}, {"sch", "щ"}, {"zh", "ж"}, {"kh", "х"}, {"ts", "ц"}, {"ch", "ч"}, {"sh", "ш"},
+        {"yu", "ю"}, {"ya", "я"}, {"yo", "е"}, {"ye", "е"}};
+    static final String TR1_EN = "abcdefghijklmnopqrstuvwxz", TR1_RU = "абкдефгхийклмнопкрстуввкз";
+    static final Pattern LATIN = Pattern.compile("^[a-z]+$");
+
+    static String translit(String query, Index ix) {
+        List<String> q = toks(query);
+        boolean changed = false;
+        for (int i = 0; ix != null && i < q.size(); i++) {
+            String w = q.get(i);
+            if (!LATIN.matcher(w).matches() || known(w, ix)) continue;
+            StringBuilder out = new StringBuilder();
+            int p = 0;
+            while (p < w.length()) {
+                String[] hit = null;
+                for (String[] t : TR2) if (w.startsWith(t[0], p)) { hit = t; break; }
+                if (hit != null) { out.append(hit[1]); p += hit[0].length(); continue; }
+                char c = w.charAt(p);
+                if (c == 'y') out.append(p > 0 && "aeiouy".indexOf(w.charAt(p - 1)) >= 0 ? 'й' : 'ы');
+                else if (c == 'x') out.append("кс");
+                else out.append(TR1_RU.charAt(TR1_EN.indexOf(c)));
+                p++;
+            }
+            if (!out.toString().equals(w)) { q.set(i, out.toString()); changed = true; }
+        }
+        return changed ? joinSp(q) : null;
     }
 
     static final class Hit {
-        final Entry e; final int s, miss, u, c;
-        Hit(Entry e, int s, int miss, int u, int c) { this.e = e; this.s = s; this.miss = miss; this.u = u; this.c = c; }
+        final Entry e; final int s, miss, u, c, kn, th; final boolean st;
+        Hit(Entry e, int s, int miss, boolean st, int u, int c, int kn, int th) {
+            this.e = e; this.s = s; this.miss = miss; this.st = st; this.u = u; this.c = c; this.kn = kn; this.th = th;
+        }
     }
 
-    /** Подсказки: kind и brand — фильтр (пусто — без фильтра); пустой запрос с видом — модели вида по названию. */
+    static final class Found {
+        final List<Model> list; final boolean full;
+        Found(List<Model> list, boolean full) { this.list = list; this.full = full; }
+    }
+
+    /** Подсказки: kind и brand — фильтр (пусто — без фильтра); пустой запрос с видом — модели вида по названию.
+     *  10.86: не совпали все слова — ещё раз с другой раскладкой, латиницей по-русски, исправлением опечаток
+     *  (первый вариант, где совпали все слова, иначе первый непустой) — как ivaModelSearch на сайте. */
     static List<Model> search(String query, Index ix, String kind, String brand, int limit) {
+        Found first = searchOnce(query, ix, kind, brand, limit);
+        if (first.full || ix == null || toks(query).isEmpty()) return first.list;
+        String sw = swapLayout(query);
+        String[] alts = {sw.equals(s(query).toLowerCase(Locale.ROOT)) ? null : sw, translit(query, ix), fuzzyQuery(query, ix)};
+        List<Model> any = first.list.isEmpty() ? null : first.list;
+        for (String alt : alts) {
+            if (alt == null) continue;
+            Found r = searchOnce(alt, ix, kind, brand, limit);
+            if (r.full) return r.list;
+            if (any == null && !r.list.isEmpty()) any = r.list;
+        }
+        return any == null ? new ArrayList<Model>() : any;
+    }
+
+    static Found searchOnce(String query, Index ix, String kind, String brand, int limit) {
         if (limit <= 0) limit = 8;
         List<String> q = toks(query);
         List<Model> out = new ArrayList<Model>();
-        if (ix == null) return out;
+        if (ix == null) return new Found(out, false);
         List<QTok> qi = queryInfo(q, ix);
         List<Hit> res = new ArrayList<Hit>();
         boolean full = false;
-        int[] miss = new int[1];
+        int[] miss = new int[3];
         boolean byKind = kind != null && !kind.isEmpty(), byBrand = brand != null && !brand.isEmpty();
         for (Entry e : ix.list) {
             if (byKind && !e.m.kind.equals(kind)) continue;
             if (byBrand && !e.m.brand.equals(brand)) continue;
-            int sc, ms = 0;
+            int sc, ms = 0, th = 0;
+            boolean st = false;
             if (q.isEmpty()) {
                 if (!byKind) continue;
                 sc = 0;
             } else {
                 Integer r = score(e, qi, miss);
                 if (r == null) continue;
-                sc = r; ms = miss[0];
+                sc = r; ms = miss[0]; st = miss[1] == 1; th = miss[2];
             }
             if (ms == 0) full = true;
-            res.add(new Hit(e, sc, ms, q.isEmpty() ? 0 : uncovered(e, qi), q.isEmpty() ? 0 : e.code));
+            res.add(new Hit(e, sc, ms, st, st ? uncovered(e, qi) : 0, st ? e.code : 0, st || q.isEmpty() ? 0 : e.kn, st || q.isEmpty() ? 0 : th));
         }
         if (full) {
             List<Hit> f = new ArrayList<Hit>();
@@ -245,14 +393,17 @@ final class IvaModelPatch {
         }
         Collections.sort(res, new Comparator<Hit>() {
             @Override public int compare(Hit a, Hit b) {
+                if (a.st != b.st) return a.st ? -1 : 1;
                 if (a.s != b.s) return b.s - a.s;
+                if (a.th != b.th) return b.th - a.th;
+                if (a.kn != b.kn) return b.kn - a.kn;
                 if (a.u != b.u) return a.u - b.u;
                 if (a.c != b.c) return a.c - b.c;
                 return a.e.key.compareTo(b.e.key);
             }
         });
         for (int i = 0; i < res.size() && out.size() < limit; i++) out.add(res.get(i).e.m);
-        return out;
+        return new Found(out, full);
     }
 
     /** Бренды, у которых есть модели этого вида — по алфавиту (без приоритетов). */
@@ -430,6 +581,30 @@ final class IvaModelPatch {
         return out;
     }
 
+    /** 10.86 (решение владельца 15.10): поля характеристик к показу в форме «Добавить». fl — поля вида, modelSpecs —
+     *  характеристики выбранной модели (нет — пусто), values — что в форме. «Питание» — только если у модели оно указано,
+     *  одним вариантом — её; «Напряжение аккумулятора» — только при выбранном «Аккумуляторе» (у вида без «Питания» —
+     *  всегда). Как ivaFormFields на сайте; общие случаи — tests/form-fields-cases.txt. */
+    static final String SRC = "src", VOLT = "volt", BATTERY = "Аккумулятор";
+
+    static List<Field> formFields(List<Field> fl, Map<String, String> modelSpecs, Map<String, String> values) {
+        List<Field> out = new ArrayList<Field>();
+        if (fl == null) return out;
+        String src = modelSpecs == null ? "" : g(modelSpecs, SRC).trim();
+        boolean hasSrc = false;
+        for (Field f : fl) if (SRC.equals(f.key)) hasSrc = true;
+        boolean srcOn = hasSrc && !src.isEmpty();
+        String cur = srcOn && values != null && g(values, SRC).trim().equals(src) ? src : "";
+        for (Field f : fl) {
+            if (SRC.equals(f.key)) {
+                if (srcOn) out.add(new Field(f.kind, f.key, f.title, f.unit, f.type, new String[]{src}, f.sort));
+            } else if (VOLT.equals(f.key)) {
+                if (!hasSrc || BATTERY.equals(cur)) out.add(f);
+            } else out.add(f);
+        }
+        return out;
+    }
+
     /** Надпись модели в поле «Модель»: «Makita HR2470». */
     static String modelText(Model m) { return m == null ? "" : (m.brand + " " + m.model).trim(); }
 
@@ -571,7 +746,7 @@ final class IvaModelPatch {
     static String brandSel = "";                                  // бренд-фильтр поля «Модель»
     static LinkedHashMap<String, String> specVals = new LinkedHashMap<String, String>(), specAuto = new LinkedHashMap<String, String>();
     static String shown = "";                                     // что поставили в поле «Модель» сами
-    static String specsKind = null;                               // для какого вида построены поля характеристик
+    static String specsKind = null;                               // для каких полей построены характеристики (10.86: вид + поля + варианты)
     static boolean quiet = false;                                 // меняем поля сами — слушатели молчат
     static int nameSeq = 0, modelSeq = 0;
     static final Map<View, Boolean> watched = new java.util.WeakHashMap<View, Boolean>();
@@ -600,12 +775,18 @@ final class IvaModelPatch {
         View kindRow = form.findViewWithTag(IvaKindPatch.ROW_TAG + IvaKindPatch.FORM[0][2]);
         View block = form.findViewWithTag(BLOCK), specs = form.findViewWithTag(SPECS);
         if (kindRow == null || kindRow.getParent() != form) { hideAll(nv); return; }
-        if (block == null) { block = buildBlock(a, nv); form.addView(block, form.indexOfChild(kindRow) + 1, new LinearLayout.LayoutParams(-1, -2)); }
+        if (block == null) {                                                     // 10.86: «Модель» — сразу под названием (и его подсказками)
+            View sug = form.findViewWithTag(NAME_SUG);
+            View after = sug != null && sug.getParent() == form ? sug : nv;
+            block = buildBlock(a, nv);
+            form.addView(block, form.indexOfChild(after) + 1, new LinearLayout.LayoutParams(-1, -2));
+        }
         if (specs == null) { specs = new LinearLayout(a); ((LinearLayout) specs).setOrientation(LinearLayout.VERTICAL); specs.setTag(SPECS);
             form.addView(specs, form.indexOfChild(block) + 1, new LinearLayout.LayoutParams(-1, -2)); }
         paintBlock(a, (LinearLayout) block, kind);
         paintSpecs(a, (LinearLayout) specs, kind, false);
         paintExtras(a, form, specs, kind);                                       // 10.84: комплектация, цена, описание
+        try { IvaKindPatch.arrange(a); } catch (Throwable ignore) {}             // 10.86: подписи и «Категория…» над «Сгенерировать описание»
     }
 
     static void hideAll(View any) {
@@ -732,7 +913,7 @@ final class IvaModelPatch {
         LinearLayout box = new LinearLayout(a);
         box.setTag(BLOCK);
         box.setOrientation(LinearLayout.VERTICAL);
-        box.addView(label(a, MODEL_LABEL), lpTop(a, 14));
+        box.addView(small(a, MODEL_LABEL), lpTop(a, 12));                       // 10.86: подпись мелким, как «Состояние»
         HorizontalScrollView hs = new HorizontalScrollView(a);
         hs.setHorizontalScrollBarEnabled(false);
         hs.setOverScrollMode(View.OVER_SCROLL_NEVER);
@@ -788,7 +969,9 @@ final class IvaModelPatch {
         d.removeAllViews();
         String kind = kindNow();
         String q = String.valueOf(f.getText());
-        List<Model> hits = kind.isEmpty() || !f.hasFocus() ? new ArrayList<Model>() : search(q, idx, kind, brandSel, MODEL_SUGGEST);
+        // 10.86: «Модель» под названием — и без вида (тогда по всем моделям, нужен хоть один символ)
+        List<Model> hits = !f.hasFocus() || (kind.isEmpty() && q.trim().isEmpty()) ? new ArrayList<Model>()
+            : search(q, idx, kind, kind.isEmpty() ? "" : brandSel, MODEL_SUGGEST);
         if (chosen != null && q.trim().equals(modelText(chosen))) hits.clear();     // модель уже выбрана — список не нужен
         TextView nv = nameView(a);
         for (Model m : hits) d.addView(item(a, m, modelText(m), nv), new LinearLayout.LayoutParams(-1, -2));
@@ -799,7 +982,7 @@ final class IvaModelPatch {
 
     static void paintBlock(final Activity a, LinearLayout block, String kind) {
         List<String> bs = kind.isEmpty() ? new ArrayList<String>() : brands(idx, kind);
-        block.setVisibility(kind.isEmpty() ? View.GONE : View.VISIBLE);          // 10.84: и без брендов — чтобы предложить модель
+        block.setVisibility(View.VISIBLE);                                       // 10.86: всегда (под названием); бренды — когда вид известен
         if (!bs.contains(brandSel)) brandSel = "";
         View cv = block.findViewWithTag(BLOCK + ":chips");
         if (cv instanceof LinearLayout) {
@@ -843,11 +1026,24 @@ final class IvaModelPatch {
 
     // ───── «Характеристики» ─────
 
+    /** 10.86: поля к показу — «Питание» только у выбранной модели, напряжение — при аккумуляторе (formFields). */
+    static List<Field> visFields(String kind) {
+        Model m = chosen != null && chosen.kind.equals(kind) ? chosen : null;
+        return formFields(fieldsFor(fields, kind), m == null ? null : m.specs, specVals);
+    }
+
+    static String sigOf(String kind, List<Field> fl) {
+        StringBuilder b = new StringBuilder(kind);
+        for (Field f : fl) { b.append('|').append(f.key); for (String o : f.options) b.append(';').append(o); }
+        return b.toString();
+    }
+
     static void paintSpecs(final Activity a, LinearLayout box, String kind, boolean force) {
-        List<Field> fl = fieldsFor(fields, kind);
+        List<Field> fl = visFields(kind);
         box.setVisibility(fl.isEmpty() ? View.GONE : View.VISIBLE);
-        if (!force && kind.equals(specsKind)) return;
-        specsKind = kind;
+        String sig = sigOf(kind, fl);
+        if (!force && sig.equals(specsKind)) return;
+        specsKind = sig;
         box.removeAllViews();
         if (fl.isEmpty()) return;
         TextView nv = nameView(a);
@@ -889,6 +1085,10 @@ final class IvaModelPatch {
                 @Override public void onClick(View v) {
                     specVals.put(f.key, o.equals(g(specVals, f.key)) ? "" : o);
                     paintChoice(a, row, f);
+                    if (SRC.equals(f.key)) {                                     // 10.86: питание сменилось — напряжение аккумулятора появляется / пропадает
+                        View root = v.getRootView(), box = root == null ? null : root.findViewWithTag(SPECS);
+                        if (box instanceof LinearLayout) try { paintSpecs(a, (LinearLayout) box, kindNow(), false); } catch (Throwable ignore) {}
+                    }
                 }
             });
             LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-2, -2);
@@ -938,7 +1138,7 @@ final class IvaModelPatch {
     static String saveExtra(Activity a, String kind, String name) {
         if (!ready() || kind == null || kind.isEmpty()) return "";
         long id = chosen != null && chosen.kind.equals(kind) && stillFits(name, chosen) ? chosen.id : 0;
-        String ex = extraBody(id, specsClean(specVals, fieldsFor(fields, kind)));
+        String ex = extraBody(id, specsClean(specVals, visFields(kind)));      // 10.86: только показанные поля
         List<String> kit = kitClean(kitSel, kitMap.get(kind));                   // 10.84: комплектация — всегда последней (dropKit)
         if (kit != null) ex += (ex.isEmpty() ? "" : ",") + "\"kit\":" + kitJson(kit);
         return ex;
@@ -1577,7 +1777,7 @@ final class IvaModelPatch {
     static void sendProposal(final Activity a, String kind, String[] parts, final String key) {
         TextView nv = nameView(a);
         String title = proposalTitle(nv == null ? "" : String.valueOf(nv.getText()), parts, IvaKindPatch.titleOf(IvaKindPatch.list(), kind));
-        final String body = proposalBody(kind, parts, title, specsClean(specVals, fieldsFor(fields, kind)));
+        final String body = proposalBody(kind, parts, title, specsClean(specVals, visFields(kind)));
         propState.put(key, "sending");
         refresh(a);
         new Thread(new Runnable() {

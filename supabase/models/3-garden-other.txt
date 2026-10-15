@@ -570,11 +570,11 @@ scrubber-dryer | Nilfisk | SC 351 | src=Аккумулятор
 scrubber-dryer | Nilfisk | SC 401 | src=Аккумулятор
 scrubber-dryer | Nilfisk | SC 450 | src=Аккумулятор
 scrubber-dryer | Nilfisk | SC 500 | src=Аккумулятор
-sweeper | Karcher | S 4 | src=Ручная
-sweeper | Karcher | S 4 Twin | src=Ручная
-sweeper | Karcher | S 6 | src=Ручная
-sweeper | Karcher | S 6 Twin | src=Ручная
-sweeper | Karcher | KM 70/20 C | src=Ручная
+sweeper | Karcher | S 4 | src=Ручной
+sweeper | Karcher | S 4 Twin | src=Ручной
+sweeper | Karcher | S 6 | src=Ручной
+sweeper | Karcher | S 6 Twin | src=Ручной
+sweeper | Karcher | KM 70/20 C | src=Ручной
 sweeper | Karcher | KM 70/30 C Bp | src=Аккумулятор
 
 # ─── Климат ───
@@ -994,7 +994,7 @@ pipe-bender | Rems | Curvo 50 | src=Сеть 220 В
 pipe-bender | Rems | Swing | src=Ручной
 pipe-bender | Rothenberger | Robend 4000 | src=Сеть 220 В
 pipe-bender | Rothenberger | Robend H+P | src=Ручной
-pipe-bender | Rothenberger | Robull | src=Гидравлический
+pipe-bender | Rothenberger | Robull | 
 pipe-cutter | Rems | Cento | src=Сеть 220 В
 pipe-cutter | Rems | Cento 22 V | 
 pipe-cutter | Rems | RAS Cu-INOX | src=Ручной

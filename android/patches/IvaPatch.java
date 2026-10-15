@@ -912,6 +912,7 @@ public final class IvaPatch {
     static void condRows(Activity a) {
         condRow(a, "atTerms", "atSave", 0);
         condRow(a, "teTerms", "teSave", 1);
+        try { IvaKindPatch.arrange(a); } catch (Throwable ignore) {}   // 10.86: «Условия аренды» — подпись над полем, под «Состоянием»
     }
 
     static void condRow(final Activity a, String termsField, String saveField, final int k) {

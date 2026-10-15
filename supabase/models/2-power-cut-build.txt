@@ -328,8 +328,8 @@ nailer | Hikoki | NV83A5 | src=Сжатый воздух; nail=83
 nailer | Fubag | N90 | src=Сжатый воздух; nail=90
 nailer | Fubag | N64 | src=Сжатый воздух; nail=64
 nailer | Fubag | N50 | src=Сжатый воздух; nail=50
-nailer | Paslode | IM350+ | src=Газ; nail=90
-nailer | Paslode | IM250 II | src=Газ; nail=64
+nailer | Paslode | IM350+ | nail=90
+nailer | Paslode | IM250 II | nail=64
 nailer | Metabo | NFR 18 LTX 90 BL | src=Аккумулятор; volt=18; nail=90
 nailer | Ryobi | R18N18G | src=Аккумулятор; volt=18
 nailer | Ryobi | R18N16G | src=Аккумулятор; volt=18

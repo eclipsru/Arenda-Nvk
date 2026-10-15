@@ -1558,7 +1558,7 @@ public class IvaPatchTest {
                 eq("модели 10.82: числа с запятой, лишние и плохие поля отбрасываются (как на сайте)", IvaModelPatch.specsClean(mdV, mdRf),
                     "{\"src\":\"Аккумулятор\",\"volt\":18,\"power\":780,\"energy\":2.4}");
                 java.util.Map<String, String> mdV2 = new java.util.HashMap<String, String>();
-                mdV2.put("src", "Бензин");
+                mdV2.put("src", "Газ");                                             // 10.86: «Бензин» теперь есть у всех видов
                 java.util.Map<String, String> mdV3 = new java.util.HashMap<String, String>();
                 mdV3.put("pipe", "  20–63 ");
                 eq("модели 10.82: чужой вариант и пусто → null; строка — без пробелов по краям",
@@ -1766,6 +1766,67 @@ public class IvaPatchTest {
                 eq("фильтр 10.85: «от–до» в счётчике, копия независима, без характеристики — 0 (в конце), другой вид снимает, «Сбросить» очищает",
                     sfS1 + "|" + sfS2 + "|" + sfS3 + "|" + sfC.ranges.size() + "," + sfB2.ranges.size() + "," + sfB2.specCount(),
                     "2,1,600.0|3|10-1|0,1,true|[power]|1,0,0");
+                // 10.86: форма «Добавить» — какие характеристики показывать (общие случаи tests/form-fields-cases.txt, их же
+                // проверяет tests/model-search.cjs) и что из них сохранится; поиск — раскладка, латиница, опечатки
+                int ffOk = 0, ffTot = 0;
+                StringBuilder ffBad = new StringBuilder();
+                for (String ffL : new String(java.nio.file.Files.readAllBytes(java.nio.file.Paths.get("tests/form-fields-cases.txt")), "UTF-8").split("\n")) {
+                    if (ffL.trim().isEmpty() || ffL.startsWith("#")) continue;
+                    String[] ffC = ffL.split("\\|", -1);
+                    java.util.LinkedHashMap<String, String>[] ffKv = new java.util.LinkedHashMap[2];
+                    for (int ffI = 0; ffI < 2; ffI++) {
+                        ffKv[ffI] = new java.util.LinkedHashMap<String, String>();
+                        for (String ffX : ffC[1 + ffI].split(";")) {
+                            if (ffX.trim().isEmpty()) continue;
+                            int ffE = ffX.indexOf('=');
+                            ffKv[ffI].put(ffX.substring(0, ffE).trim(), ffX.substring(ffE + 1).trim());
+                        }
+                    }
+                    java.util.List<IvaModelPatch.Field> ffV = IvaModelPatch.formFields(IvaModelPatch.fieldsFor(mdFl, ffC[0]), ffKv[0], ffKv[1]);
+                    StringBuilder ffG = new StringBuilder();
+                    for (IvaModelPatch.Field ffF : ffV) {
+                        if (ffG.length() > 0) ffG.append(',');
+                        ffG.append(ffF.key);
+                        if ("choice".equals(ffF.type)) {
+                            ffG.append('(');
+                            for (int ffI = 0; ffI < ffF.options.length; ffI++) ffG.append(ffI == 0 ? "" : "; ").append(ffF.options[ffI]);
+                            ffG.append(')');
+                        }
+                    }
+                    String ffS = IvaModelPatch.specsClean(ffKv[1], ffV);
+                    ffTot++;
+                    if (ffG.toString().equals(ffC[3]) && String.valueOf(ffS).equals(ffC[4])) ffOk++;
+                    else ffBad.append(" [").append(ffL).append(" → ").append(ffG).append(" | ").append(ffS).append("]");
+                }
+                eq("форма 10.86: общие случаи tests/form-fields-cases.txt (питание — только у модели, напряжение — при аккумуляторе)",
+                    ffOk + "/" + ffTot + ffBad, ffTot + "/" + ffTot);
+                eq("форма 10.86: случаев не меньше 12", ffTot >= 12, true);
+                java.util.List<IvaModelPatch.Field> ffRot = IvaModelPatch.fieldsFor(mdFl, "rotary-sds-plus");
+                java.util.Map<String, String> ffMs = new java.util.HashMap<String, String>();
+                ffMs.put("src", "Сеть 220 В");
+                eq("форма 10.86: поле вида не меняется (вариант модели — в копии); нет полей — пусто",
+                    ffRot.get(0).options.length + "," + IvaModelPatch.formFields(ffRot, ffMs, null).get(0).options.length + ","
+                        + IvaModelPatch.formFields(null, ffMs, null).size(), "4,1,0");
+                eq("поиск 10.86: раскладка, опечатки, латиница",
+                    IvaModelPatch.swapLayout(",jkufhrf") + "|" + IvaModelPatch.swapLayout("ЬФЛШЕФ") + "|" + IvaModelPatch.typoDist("балгарка", "болгарка")
+                        + IvaModelPatch.typoDist("пефроратор", "перфоратор") + IvaModelPatch.typoDist("abc", "") + "|"
+                        + IvaModelPatch.fuzzyQuery("балгарка makita", mdIx) + "|" + IvaModelPatch.translit("bolgarka moyka shchetka bosch", mdIx) + "|"
+                        + IvaModelPatch.fuzzyQuery("болгарка", mdIx) + "|" + IvaModelPatch.translit("болгарка gws", mdIx),
+                    "болгарка|makita|113|болгарка makita|болгарка мойка щетка bosch|null|null");
+                eq("форма 10.86: «Категория/Подкатегория/Вид» — подряд перед «Сгенерировать описание», остальное на месте; уже на месте — ничего",
+                    java.util.Arrays.toString(IvaKindPatch.regroup(10, new int[]{2, 3, 4}, 8)) + "|" + IvaKindPatch.regroup(10, new int[]{5, 6, 7}, 8)
+                        + "|" + java.util.Arrays.toString(IvaKindPatch.regroup(6, new int[]{4, 5}, 1)) + "|" + IvaKindPatch.regroup(5, new int[]{1, 2}, 2)
+                        + "|" + IvaKindPatch.regroup(5, new int[]{1, 1}, 4) + "|" + IvaKindPatch.regroup(5, new int[]{}, 4) + "|" + IvaKindPatch.regroup(5, new int[]{1}, 7),
+                    "[0, 1, 5, 6, 7, 2, 3, 4, 8, 9]|null|[0, 4, 5, 1, 2, 3]|null|null|null|null");
+                StringBuilder ffLb = new StringBuilder();
+                for (String[] ffX : IvaKindPatch.LABELS) ffLb.append(ffX[1]).append(';');
+                eq("форма 10.86: подписи пунктов формы «Добавить»", ffLb.toString(),
+                    "Фотографии;Название инструмента;Категория;Подкатегория;Вид инструмента;Цена за сутки, ₽;Залог, ₽;Описание;Условия аренды;");
+                eq("форма 10.86: группа — подписи, поля и выпадающие списки категории, подкатегории и вида",
+                    java.util.Arrays.toString(IvaKindPatch.GROUP), "[iva_lbl:atCat, atCat, atCatSug, iva_lbl:atSub, atSub, atSubSug, iva_lbl:kind, kind]");
+                eq("поиск 10.86: словарь опечаток — слова без цифр от 4 букв, по порядку",
+                    mdIx.vocab.size() > 500 && mdIx.vocab.contains("болгарка") && !mdIx.vocab.contains("hr2470")
+                        && mdIx.vocab.get(0).compareTo(mdIx.vocab.get(1)) < 0, true);
             } catch (Throwable mdE) { eq("модели 10.82: настоящий справочник", "исключение " + mdE, ""); }
         }
         if (fail > 0) { System.out.println("ошибок: " + fail); System.exit(1); }

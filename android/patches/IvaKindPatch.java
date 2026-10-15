@@ -421,6 +421,7 @@ final class IvaKindPatch {
         for (int k = 0; k < 2; k++) {
             try { refreshRow(a, k); } catch (Throwable ignore) {}
         }
+        try { arrange(a); } catch (Throwable ignore) {}               // 10.86: подписи и порядок пунктов формы «Добавить»
     }
 
     static void refreshRow(final Activity a, final int k) {
@@ -744,6 +745,111 @@ final class IvaKindPatch {
                 } catch (Throwable ignore) {}
             }
         }).start();
+    }
+
+    // ════════════════════════════════ 10.86: раскладка формы «Добавить» (просьба владельца 15.10.2026) ════════════
+    //  * Над каждым пунктом — его название мелким серым шрифтом, как над «Состоянием» (IvaPatch.condBuild): «Фотографии»,
+    //    «Название инструмента», «Категория», «Подкатегория», «Вид инструмента», «Цена за сутки, ₽», «Залог, ₽»,
+    //    «Описание», «Условия аренды» («Модель» — в своём блоке, IvaModelPatch.buildBlock).
+    //  * «Категория», «Подкатегория» и «Вид инструмента» (с подписями и выпадающими списками) — над «Сгенерировать
+    //    описание» (блок IvaModelPatch.HELP; нет справочника — над «Ценой»). «Модель» — под названием (IvaModelPatch.refresh).
+    //  Штатные поля только переставляются внутри той же формы (removeView / addView — их слушатели и id не меняются);
+    //  правка инструмента не меняется. Повторный вызов ничего не двигает, если всё уже на месте.
+
+    static final String LBL = "iva_lbl:";
+    static final String KIND_KEY = "kind";
+    static final String[][] LABELS = {
+        {"atPhotos", "Фотографии"}, {"atName", "Название инструмента"}, {"atCat", "Категория"}, {"atSub", "Подкатегория"},
+        {KIND_KEY, "Вид инструмента"}, {"atPrice", "Цена за сутки, ₽"}, {"atDep", "Залог, ₽"}, {"atDescr", "Описание"},
+        {"atTerms", "Условия аренды"},
+    };
+    static final String[] GROUP = {LBL + "atCat", "atCat", "atCatSug", LBL + "atSub", "atSub", "atSubSug", LBL + KIND_KEY, KIND_KEY};
+    static final int LABEL_TOP_DP = 12, FIELD_TOP_DP = 6;
+
+    /** Новый порядок детей формы: group (индексы, в этом порядке) — подряд прямо перед anchor, остальные — как были.
+     *  null — уже на месте (или нечего двигать). Чистая логика — под тестом. */
+    static int[] regroup(int count, int[] group, int anchor) {
+        if (group == null || group.length == 0 || anchor < 0 || anchor >= count) return null;
+        boolean inPlace = true;
+        for (int i = 0; i < group.length; i++) {
+            if (group[i] < 0 || group[i] >= count || group[i] == anchor) return null;
+            if (group[i] != anchor - group.length + i) inPlace = false;
+        }
+        if (inPlace) return null;
+        java.util.Set<Integer> g = new java.util.HashSet<Integer>();
+        for (int x : group) g.add(x);
+        if (g.size() != group.length) return null;
+        int[] out = new int[count];
+        int k = 0;
+        for (int i = 0; i < count; i++) {
+            if (g.contains(i)) continue;
+            if (i == anchor) for (int x : group) out[k++] = x;
+            out[k++] = i;
+        }
+        return out;
+    }
+
+    static View formChild(Activity a, LinearLayout form, String key) {
+        if (key.startsWith(LBL)) return form.findViewWithTag(key);
+        View v;
+        if (KIND_KEY.equals(key)) v = form.findViewWithTag(ROW_TAG + FORM[0][2]);
+        else {
+            Object o = IvaClientPatch.get(a, key);
+            v = o instanceof View ? (View) o : null;
+            if (v != null && "atPhotos".equals(key) && v.getParent() instanceof View) v = (View) v.getParent();   // лента фото — в HorizontalScrollView
+        }
+        return v != null && v.getParent() == form ? v : null;
+    }
+
+    static void topMargin(View v, int dp, Activity a) {
+        if (v == null || !(v.getLayoutParams() instanceof android.view.ViewGroup.MarginLayoutParams)) return;
+        android.view.ViewGroup.MarginLayoutParams lp = (android.view.ViewGroup.MarginLayoutParams) v.getLayoutParams();
+        int px = IvaPatch.dp(a, dp);
+        if (lp.topMargin != px) { lp.topMargin = px; v.setLayoutParams(lp); }
+    }
+
+    static void arrange(Activity a) {
+        Object no = IvaClientPatch.get(a, FORM[0][5]);
+        if (!(no instanceof View) || !(((View) no).getParent() instanceof LinearLayout)) return;
+        LinearLayout form = (LinearLayout) ((View) no).getParent();
+        // 1. подписи: есть у каждого пункта, стоят прямо над ним, видны вместе с ним
+        for (String[] l : LABELS) {
+            View f = formChild(a, form, l[0]);
+            View lb = form.findViewWithTag(LBL + l[0]);
+            if (f == null) { if (lb != null) lb.setVisibility(View.GONE); continue; }
+            if (lb == null) {
+                TextView t = new TextView(a);
+                t.setTag(LBL + l[0]);
+                t.setText(l[1]);
+                t.setTextColor(IvaPatch.color(a, "gray", 0xff9aa1b0));
+                t.setTextSize(13f);
+                LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-2, -2);
+                lp.topMargin = IvaPatch.dp(a, LABEL_TOP_DP);
+                form.addView(t, form.indexOfChild(f), lp);
+                lb = t;
+            } else if (lb.getParent() == form && form.indexOfChild(lb) != form.indexOfChild(f) - 1) {
+                form.removeView(lb);
+                form.addView(lb, form.indexOfChild(f));
+            }
+            int vis = f.getVisibility() == View.VISIBLE ? View.VISIBLE : View.GONE;
+            if (lb.getVisibility() != vis) lb.setVisibility(vis);
+            if (KIND_KEY.equals(l[0])) topMargin(f.findViewWithTag(ROW_TAG + FORM[0][2] + ":field"), FIELD_TOP_DP, a);
+            else topMargin(f, FIELD_TOP_DP, a);
+        }
+        // 2. «Категория», «Подкатегория», «Вид» — над «Сгенерировать описание» (нет его — над «Ценой»)
+        List<View> grp = new ArrayList<View>();
+        for (String k : GROUP) { View v = formChild(a, form, k); if (v != null) grp.add(v); }
+        View anchor = form.findViewWithTag(IvaModelPatch.HELP);
+        if (anchor == null || anchor.getParent() != form) anchor = formChild(a, form, LBL + "atPrice");
+        if (anchor == null) anchor = formChild(a, form, "atPrice");
+        if (anchor == null || grp.isEmpty()) return;
+        int[] gi = new int[grp.size()];
+        for (int i = 0; i < gi.length; i++) gi[i] = form.indexOfChild(grp.get(i));
+        int[] plan = regroup(form.getChildCount(), gi, form.indexOfChild(anchor));
+        if (plan == null) return;
+        for (View v : grp) form.removeView(v);
+        int at = form.indexOfChild(anchor);
+        for (int i = 0; i < grp.size(); i++) form.addView(grp.get(i), at + i);
     }
 
     /** Каталог в памяти уже мог прийти без вида — дописываем, чтобы фильтр «Вид» сразу видел объявление. */

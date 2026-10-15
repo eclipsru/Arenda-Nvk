@@ -98,8 +98,8 @@ textarea.inp{resize:vertical;min-height:110px;font-family:inherit;line-height:1.
 <script src="assets/geo.js?v=20260923-photon"></script>
 <script src="assets/sb.js?v=20261018-stage4"></script>
 <script src="assets/kind-guess.js?v=20261016-kind"></script>
-<script src="assets/models.js?v=20261018-stage4"></script>
-<script src="assets/model-form.js?v=20261018-stage4"></script>
+<script src="assets/models.js?v=20261020-power"></script>
+<script src="assets/model-form.js?v=20261020-power"></script>
 <script src="assets/app-release.js?v=20261009-rel"></script>
 <script src="assets/app.js?v=20261009-rel"></script>
 <script>
@@ -202,6 +202,7 @@ textarea.inp{resize:vertical;min-height:110px;font-family:inherit;line-height:1.
     if (F.model_id && (!m || m.kind !== F.kind || !ivaModelStillFits(F.name, m))) F.model_id = null;
   }
   function chooseModel(m){
+    clearTimeout(autoTimer);   /* 10.86: отложенный автоподбор от набора не должен сработать после выбора модели (сбрасывал вид и модель) */
     const k = KINDS_DB.find(function(x){ return x.key === m.kind; });
     F.name = m.title;
     if (k && CATS_DB.some(function(c){ return c.key === k.cat; })){
@@ -215,10 +216,18 @@ textarea.inp{resize:vertical;min-height:110px;font-family:inherit;line-height:1.
     F.specs = r.values; F.specsAuto = r.auto;
     saveDraft(); render();
   }
+  /* 10.86 (решение владельца 15.10): «Питание» — только у выбранной модели (одним вариантом), «Напряжение
+     аккумулятора» — только при «Аккумуляторе»; сохраняются только показанные поля */
+  function specFields(){
+    if (!MD || !F.kind) return [];
+    const m = modelById(F.model_id);
+    return ivaFormFields(ivaFieldsFor(MD, F.kind), m && m.kind === F.kind ? m.specs : null, F.specs);
+  }
+  function specSig(){ return specFields().map(function(f){ return f.key + ':' + (f.options || []).join(';'); }).join('|'); }
   function modelHTML(){
     if (!mdOn() || !F.kind) return '';
     modelKeep();
-    const brands = ivaModelBrands(MD.index, F.kind), fields = ivaFieldsFor(MD, F.kind);
+    const brands = ivaModelBrands(MD.index, F.kind), fields = specFields();
     if (F.mbrand && brands.indexOf(F.mbrand) < 0) F.mbrand = '';
     const ex = brands.length ? ivaModelSearch('', MD.index, { kind:F.kind, limit:1 })[0] : null;
     const kitItems = (MD.kit && MD.kit[F.kind]) || [];
@@ -260,13 +269,13 @@ textarea.inp{resize:vertical;min-height:110px;font-family:inherit;line-height:1.
     if (PROP[key] === 'sending' || PROP[key] === 'ok') return;
     const k = KINDS_DB.find(function(x){ return x.key === F.kind; });
     const row = { kind:F.kind, brand:p.brand, model:p.model, title:ivaProposalTitle(F.name, p, k ? k.title : ''),
-      specs:ivaSpecsClean(F.specs, ivaFieldsFor(MD, F.kind)) || {} };
+      specs:ivaSpecsClean(F.specs, specFields()) || {} };
     PROP[key] = 'sending'; paintProp();
     ivaProposalSend(api, row).then(function(err){ PROP[key] = err || 'ok'; paintProp(); });
   }
   /* 10.84: «Сгенерировать описание» — в пустое описание или вместо нашего прошлого; написанное руками не трогаем */
   function genDescr(){
-    const fl = F.kind ? ivaFieldsFor(MD, F.kind) : [];
+    const fl = F.kind ? specFields() : [];
     const rows = fl.length ? ivaSpecRows(ivaSpecsClean(F.specs, fl) || {}, fl) : [];
     const kit = F.kind && MD.kit ? ivaKitClean(F.kit, MD.kit[F.kind]) : null;
     const txt = ivaDescribe(F.name, rows, kit).slice(0, 1200);
@@ -610,7 +619,11 @@ textarea.inp{resize:vertical;min-height:110px;font-family:inherit;line-height:1.
     /* 10.82: характеристики — правки руками (их подстановка модели не перезапишет) */
     root.oninput = function(e){
       const sp = e.target.closest && e.target.closest('[data-spec]');
-      if (sp){ F.specs[sp.getAttribute('data-spec')] = sp.value; saveDraft(); }
+      if (sp){
+        const was = specSig();
+        F.specs[sp.getAttribute('data-spec')] = sp.value; saveDraft();
+        if (specSig() !== was) paintCat();   /* 10.86: питание сменили — напряжение аккумулятора появляется / пропадает */
+      }
     };
     root.onchange = root.oninput;
     bindModel();
@@ -806,7 +819,7 @@ textarea.inp{resize:vertical;min-height:110px;font-family:inherit;line-height:1.
     if (mdOn() && payload.kind){
       modelKeep();
       if (F.model_id) payload.model_id = F.model_id;
-      const sp = ivaSpecsClean(F.specs, ivaFieldsFor(MD, payload.kind));
+      const sp = ivaSpecsClean(F.specs, specFields());   /* 10.86: только показанные поля */
       if (sp) payload.specs = sp;
       const kit = MD.kit ? ivaKitClean(F.kit, MD.kit[payload.kind]) : null;   /* 10.84 */
       if (kit) payload.kit = kit;

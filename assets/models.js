@@ -15,7 +15,18 @@
    Модель подходит, если хоть одно слово совпало сильно и очков больше нуля. Если есть модели, где совпали все слова
    запроса, показываются только они (makita dga — только DGA, без остальных Makita). Порядок: очки по убыванию, затем меньше
    слов модели, которых нет в запросе (Гном 10-10 раньше Гном 6-10), затем более короткий код модели (слитно), затем название (строчные, по кодам символов — так же сравнивает Java).
-   Пустой запрос (поле «Модель» с известным видом) — по названию. По умолчанию 8 подсказок. */
+   Пустой запрос (поле «Модель» с известным видом) — по названию. По умолчанию 8 подсказок.
+   10.86 (просьба владельца: «ушм» подсказывал, а «болгарка» — нет): модель подходит и без сильного совпадения, если
+   хоть одно слово запроса (не цифры, от 3 букв, не «для/под/…») совпало со словом названия или вида — запрос
+   «болгарка», «болг», «перфоратор» показывает модели этого вида. Такие модели идут после моделей с сильным
+   совпадением («ушм» — сначала Интерскол УШМ-125, затем остальные болгарки), между собой — по очкам, затем
+   больше слов совпало со словом названия («дрель» — сначала дрели, потом шуруповёрты), затем вид, где моделей
+   больше, затем по названию.
+   Ничего не нашлось или не совпали все слова — ещё раз с другой раскладкой (",jkufhrf" → «болгарка», «ьфлшеф» →
+   makita), латиницей по-русски («bolgarka»), затем с исправлением опечаток (берётся первый вариант, где совпали все
+   слова, иначе первый непустой): слово от 4 букв без цифр, которого нет в справочнике, заменяется ближайшим словом справочника
+   (до 1 ошибки, от 8 букв — до 2; перестановка соседних букв — одна ошибка; недописанное сравнивается с началом
+   слова): «балгарка» → «болгарка», «макито» → «макита». */
 (function (root) {
   'use strict';
 
@@ -72,8 +83,28 @@
       for (j = 0; j < tt.length; j++) if (strong.indexOf(tt[j]) < 0) pushU(weak, tt[j]);
       out.push({ m: m, strong: strong, weak: weak, stems: kw[m.kind] || [], key: String(m.title || '').toLowerCase(), code: mt.join('').length, codeToks: mt });
     }
+    var perKind = {};   /* 10.86: сколько моделей у вида — модели по слову вида: сначала вид, где моделей больше */
+    for (i = 0; i < out.length; i++) perKind[out[i].m.kind] = (perKind[out[i].m.kind] || 0) + 1;
+    for (i = 0; i < out.length; i++) out[i].kn = perKind[out[i].m.kind];
     out.brandToks = allB;
     out.stemToks = allS;
+    /* 10.86: словарь для исправления опечаток — слова без цифр от 4 букв, по кодам символов (как Java compareTo) */
+    var voc = [], words = [], seen = {};
+    function addV(t) {
+      if (/[0-9]/.test(t) || seen[t]) return;
+      seen[t] = 1;
+      words.push(t);
+      if (t.length >= 4) voc.push(t);
+    }
+    for (i = 0; i < out.length; i++) {
+      for (j = 0; j < out[i].strong.length; j++) addV(out[i].strong[j]);
+      for (j = 0; j < out[i].weak.length; j++) addV(out[i].weak[j]);
+    }
+    for (j = 0; j < allS.length; j++) addV(allS[j]);
+    for (j = 0; j < allB.length; j++) addV(allB[j]);
+    var byCode = function (x, y) { return x < y ? -1 : x > y ? 1 : 0; };
+    out.vocab = voc.sort(byCode);
+    out.words = words.sort(byCode);   /* все слова без цифр — «слово есть в справочнике» */
     return out;
   }
 
@@ -105,10 +136,15 @@
     return n;
   }
 
-  /* Очки модели или null; e.miss — сколько слов запроса не совпало. */
+  /* 10.86: слова-связки — не слово вида */
+  var STOP = ['для', 'под', 'над', 'без', 'при', 'или'];
+
+  /* Очки модели или null; e.miss — сколько слов запроса не совпало, e.strongHit — было ли сильное совпадение. */
   function score(e, qi) {
-    var total = 0, hasStrong = false;
+    var total = 0, hasStrong = false, kindHit = false;
     e.miss = 0;
+    e.strongHit = false;
+    e.th = 0;
     for (var i = 0; i < qi.length; i++) {
       var w = qi[i].w, best = 0, j;
       for (j = 0; j < e.strong.length; j++) {
@@ -117,19 +153,127 @@
         if (w.length >= 2 && s.lastIndexOf(w, 0) === 0 && 2 * w.length > best) best = 2 * w.length;
       }
       if (best) { hasStrong = true; total += best; continue; }
-      var weak = false;
+      var weak = false, kh = false;
       for (j = 0; j < e.weak.length && !weak; j++) if (e.weak[j].lastIndexOf(w, 0) === 0) weak = true;
+      if (weak) { kh = true; e.th++; }
       for (j = 0; j < e.stems.length && !weak; j++) if (w.lastIndexOf(e.stems[j], 0) === 0) weak = true;
+      /* 10.86: слово вида — начало слова названия, начало слова вида или слово вида с другим окончанием (до 2 букв) */
+      if (!qi[i].digit && w.length >= 3 && STOP.indexOf(w) < 0) {
+        for (j = 0; j < e.stems.length && !kh; j++) {
+          var x = e.stems[j];
+          if (x.lastIndexOf(w, 0) === 0 || (w.lastIndexOf(x, 0) === 0 && w.length - x.length <= 2)) kh = true;
+        }
+      } else kh = false;
+      if (kh) { weak = true; kindHit = true; }
       if (weak) { total += w.length; continue; }
       if (qi[i].digit || qi[i].brand) return null;
       e.miss++;
       total -= qi[i].stem ? 2 * w.length : w.length;
     }
-    return hasStrong && total > 0 ? total : null;
+    e.strongHit = hasStrong;
+    return (hasStrong || kindHit) && total > 0 ? total : null;
   }
 
-  /* opts: {kind, brand, limit}. Пустой запрос с видом — модели вида (и бренда) по названию. */
+  /* 10.86: другая раскладка — латиница ↔ кириллица по клавишам (строчные). */
+  var LAY_EN = "`qwertyuiop[]asdfghjkl;'zxcvbnm,.", LAY_RU = 'ёйцукенгшщзхъфывапролджэячсмитьбю';
+  function ivaSwapLayout(s) {
+    var t = String(s == null ? '' : s).toLowerCase(), out = '';
+    for (var i = 0; i < t.length; i++) {
+      var c = t.charAt(i), k = LAY_EN.indexOf(c);
+      if (k >= 0) out += LAY_RU.charAt(k);
+      else if ((k = LAY_RU.indexOf(c)) >= 0) out += LAY_EN.charAt(k);
+      else out += c;
+    }
+    return out;
+  }
+
+  /* 10.86: число ошибок между словами (вставка, удаление, замена, перестановка соседних букв). */
+  function ivaTypoDist(a, b) {
+    var n = a.length, m = b.length, d = [], i, j;
+    for (i = 0; i <= n; i++) { d.push([]); d[i][0] = i; }
+    for (j = 0; j <= m; j++) d[0][j] = j;
+    for (i = 1; i <= n; i++) {
+      for (j = 1; j <= m; j++) {
+        var c = a.charAt(i - 1) === b.charAt(j - 1) ? 0 : 1;
+        var v = Math.min(d[i - 1][j] + 1, d[i][j - 1] + 1, d[i - 1][j - 1] + c);
+        if (i > 1 && j > 1 && a.charAt(i - 1) === b.charAt(j - 2) && a.charAt(i - 2) === b.charAt(j - 1)) v = Math.min(v, d[i - 2][j - 2] + 1);
+        d[i][j] = v;
+      }
+    }
+    return d[n][m];
+  }
+
+  /* 10.86: запрос с исправленными опечатками или null (исправлять нечего). Слово от 4 букв без цифр, которое не
+     начало слова справочника и не начинается с основы вида, заменяется ближайшим словом словаря (до 1 ошибки, от 8
+     букв — до 2; недописанное — по началу слова); равные — первое по порядку словаря. */
+  function known(w, index) {
+    var voc = index.words || [], j;
+    for (j = 0; j < voc.length; j++) if (voc[j].lastIndexOf(w, 0) === 0) return true;
+    for (j = 0; j < index.stemToks.length; j++) if (w.lastIndexOf(index.stemToks[j], 0) === 0) return true;
+    for (j = 0; j < index.brandToks.length; j++) if (index.brandToks[j].lastIndexOf(w, 0) === 0) return true;
+    return false;
+  }
+
+  function ivaFuzzyQuery(query, index) {
+    var q = tokens(query), voc = (index && index.vocab) || [], changed = false, i, j;
+    for (i = 0; index && i < q.length; i++) {
+      var w = q[i];
+      if (w.length < 4 || /[0-9]/.test(w) || known(w, index)) continue;
+      var lim = w.length >= 8 ? 2 : 1, best = null, bd = lim + 1;
+      for (j = 0; j < voc.length; j++) {
+        var t = voc[j];
+        if (t.length < w.length - lim) continue;
+        var d = ivaTypoDist(w, t);
+        if (t.length > w.length) d = Math.min(d, ivaTypoDist(w, t.slice(0, w.length)));
+        if (d < bd) { bd = d; best = t; }
+      }
+      if (best !== null) { q[i] = best; changed = true; }
+    }
+    return changed ? q.join(' ') : null;
+  }
+
+  /* 10.86: латиница → кириллица («bolgarka» → «болгарка», «moyka» → «мойка») для слов только из латинских букв,
+     которых нет в справочнике (bosch, makita, gws не трогаем). null — менять нечего. */
+  var TR2 = [['shch', 'щ'], ['sch', 'щ'], ['zh', 'ж'], ['kh', 'х'], ['ts', 'ц'], ['ch', 'ч'], ['sh', 'ш'], ['yu', 'ю'], ['ya', 'я'], ['yo', 'е'], ['ye', 'е']];
+  var TR1_EN = 'abcdefghijklmnopqrstuvwxz', TR1_RU = 'абкдефгхийклмнопкрстуввкз';
+  function ivaTranslit(query, index) {
+    var q = tokens(query), changed = false;
+    for (var i = 0; index && i < q.length; i++) {
+      var w = q[i];
+      if (!/^[a-z]+$/.test(w) || known(w, index)) continue;
+      var out = '', p = 0;
+      while (p < w.length) {
+        var hit = null;
+        for (var t = 0; t < TR2.length && !hit; t++) if (w.lastIndexOf(TR2[t][0], p) === p) hit = TR2[t];
+        if (hit) { out += hit[1]; p += hit[0].length; continue; }
+        var c = w.charAt(p);
+        if (c === 'y') out += p > 0 && 'aeiouy'.indexOf(w.charAt(p - 1)) >= 0 ? 'й' : 'ы';
+        else if (c === 'x') out += 'кс';
+        else out += TR1_RU.charAt(TR1_EN.indexOf(c));
+        p++;
+      }
+      if (out !== w) { q[i] = out; changed = true; }
+    }
+    return changed ? q.join(' ') : null;
+  }
+
+  /* opts: {kind, brand, limit}. Пустой запрос с видом — модели вида (и бренда) по названию. Ничего не нашлось —
+     другая раскладка, затем исправление опечаток (10.86). */
   function ivaModelSearch(query, index, opts) {
+    var first = searchOnce(query, index, opts);
+    if (first.full || !index || !tokens(query).length) return first.list;
+    var sw = ivaSwapLayout(query), alts = [sw !== String(query).toLowerCase() ? sw : null, ivaTranslit(query, index), ivaFuzzyQuery(query, index)];
+    var any = first.list.length ? first.list : null;
+    for (var i = 0; i < alts.length; i++) {
+      if (alts[i] === null) continue;
+      var r = searchOnce(alts[i], index, opts);
+      if (r.full) return r.list;
+      if (!any && r.list.length) any = r.list;
+    }
+    return any || [];
+  }
+
+  function searchOnce(query, index, opts) {
     opts = opts || {};
     var limit = opts.limit || 8, q = tokens(query), res = [], qi = index ? queryInfo(q, index) : [], full = false;
     for (var i = 0; index && i < index.length; i++) {
@@ -144,20 +288,23 @@
         sc = score(e, qi);
         if (sc === null) continue;
       }
-      var miss = q.length ? e.miss : 0;
+      var miss = q.length ? e.miss : 0, st = q.length ? e.strongHit : false;
       if (!miss) full = true;
-      res.push({ e: e, s: sc, miss: miss, u: q.length ? uncovered(e, qi) : 0, c: q.length ? e.code : 0 });
+      res.push({ e: e, s: sc, miss: miss, st: st, u: st ? uncovered(e, qi) : 0, c: st ? e.code : 0, kn: st || !q.length ? 0 : e.kn, th: st || !q.length ? 0 : e.th });
     }
     if (full) res = res.filter(function (r) { return !r.miss; });
     res.sort(function (a, b) {
+      if (a.st !== b.st) return a.st ? -1 : 1;
       if (a.s !== b.s) return b.s - a.s;
+      if (a.th !== b.th) return b.th - a.th;
+      if (a.kn !== b.kn) return b.kn - a.kn;
       if (a.u !== b.u) return a.u - b.u;
       if (a.c !== b.c) return a.c - b.c;
       return a.e.key < b.e.key ? -1 : a.e.key > b.e.key ? 1 : 0;
     });
     var out = [];
     for (var r = 0; r < res.length && out.length < limit; r++) out.push(res[r].e.m);
-    return out;
+    return { list: out, full: full };
   }
 
   /* Бренды, у которых есть модели этого вида — по алфавиту (без приоритетов). */
@@ -235,6 +382,31 @@
       if ((a.sort || 0) !== (b.sort || 0)) return (a.sort || 0) - (b.sort || 0);
       return a.key < b.key ? -1 : a.key > b.key ? 1 : 0;
     });
+  }
+
+  /* 10.86 (решение владельца 15.10): какие поля характеристик показывать в форме добавления. fields — поля вида
+     (ivaFieldsFor), modelSpecs — характеристики выбранной модели (нет модели — пусто), values — что сейчас в форме.
+     «Питание» — только если у выбранной модели оно указано, и одним вариантом — её; без модели или без данных —
+     поля нет. «Напряжение аккумулятора» — только когда выбрано питание «Аккумулятор» (у вида без «Питания», например
+     пистолета для вязки арматуры, — всегда). Остальные поля — как есть. Как IvaModelPatch.formFields. */
+  var SRC = 'src', VOLT = 'volt', BATTERY = 'Аккумулятор';
+  function ivaFormFields(fields, modelSpecs, values) {
+    var out = [], src = str((modelSpecs || {})[SRC]).trim(), hasSrc = false, i, f;
+    for (i = 0; fields && i < fields.length; i++) if (fields[i].key === SRC) hasSrc = true;
+    var srcOn = hasSrc && src !== '', cur = srcOn && str((values || {})[SRC]).trim() === src ? src : '';
+    for (i = 0; fields && i < fields.length; i++) {
+      f = fields[i];
+      if (f.key === SRC) {
+        if (!srcOn) continue;
+        var c = {};
+        for (var k in f) if (Object.prototype.hasOwnProperty.call(f, k)) c[k] = f[k];
+        c.options = [src];
+        out.push(c);
+      } else if (f.key === VOLT) {
+        if (!hasSrc || cur === BATTERY) out.push(f);
+      } else out.push(f);
+    }
+    return out;
   }
 
   /* 10.83: строки карточки [подпись, значение] по полям вида в их порядке: число — с запятой, единица — через
@@ -600,6 +772,7 @@
 
   var api = {
     ivaModelIndex: ivaModelIndex, ivaModelSearch: ivaModelSearch, ivaModelBrands: ivaModelBrands,
+    ivaSwapLayout: ivaSwapLayout, ivaTypoDist: ivaTypoDist, ivaFuzzyQuery: ivaFuzzyQuery, ivaFormFields: ivaFormFields,
     ivaSpecsFill: ivaSpecsFill, ivaModelStillFits: ivaModelStillFits, ivaSpecsClean: ivaSpecsClean,
     ivaFieldsFor: ivaFieldsFor, ivaModelsLoad: ivaModelsLoad,
     ivaSpecRows: ivaSpecRows, ivaSpecsMatch: ivaSpecsMatch, ivaToolSpecs: ivaToolSpecs,

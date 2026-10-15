@@ -224,6 +224,16 @@ if "$PG_PY" -c "import pgserver" >/dev/null 2>&1; then
 else
   skip "стенд этапа 4 справочника: нет pgserver (PG_PY=<python с pgserver> bash tools/check.sh)"
 fi
+# 10.86: «Питание» — Сеть 220 В / Аккумулятор / Бензин / Дизель и редкие варианты только там, где они бывают
+if "$PG_PY" -c "import pgserver" >/dev/null 2>&1; then
+  if "$PG_PY" tools/power-src-stand.py >/tmp/iva-test-power-src.log 2>&1; then
+    ok "«Питание» (20261019_power_src.sql): $(grep -c '✔' /tmp/iva-test-power-src.log) проверок SQL на PostgreSQL"
+  else
+    bad "стенд «Питания»"; grep -E '✘|ИТОГ|Error|ERROR' /tmp/iva-test-power-src.log | head -8 | sed 's/^/      /'
+  fi
+else
+  skip "стенд «Питания»: нет pgserver (PG_PY=<python с pgserver> bash tools/check.sh)"
+fi
 
 head_ "4.6. Скачивание приложения у всех: файл выпущенной версии на месте"
 # Выпущенная версия живёт строкой в базе (app_releases) и ссылается на файл в корне сайта.
@@ -257,7 +267,7 @@ else
   done
   if [ "$READY" = "1" ]; then
     ok "локальный сервер поднят: http://127.0.0.1:$PORT"
-    for t in photon rental-profile new-tool-prefill order-and-fee order-consent-browser reviews-system app-banner chief-and-apk empty-states-browser kind-guess-browser model-form-browser model-stage4-browser spec-filter-browser; do
+    for t in photon rental-profile new-tool-prefill order-and-fee order-consent-browser reviews-system app-banner chief-and-apk empty-states-browser kind-guess-browser model-form-browser model-stage4-browser spec-filter-browser power-src-browser; do
       if SITE_BASE_URL="http://127.0.0.1:$PORT" node "tests/$t.cjs" >"/tmp/iva-test-$t.log" 2>&1; then ok "tests/$t.cjs"
       else bad "tests/$t.cjs"; tail -6 "/tmp/iva-test-$t.log" | sed 's/^/      /'; fi
     done
