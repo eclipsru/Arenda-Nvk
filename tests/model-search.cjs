@@ -89,7 +89,7 @@ ok(bad.length === 0, 'бренд + модель находит модель ср
 const bs = M.ivaModelBrands(idx, 'rotary-sds-plus');
 ok(bs.length > 5 && bs.join() === [...new Set(bs)].sort((a, b) => a.toLowerCase() < b.toLowerCase() ? -1 : 1).join() && bs.includes('Makita'),
    'бренды вида по алфавиту', bs.join(', '));
-ok(M.ivaModelBrands(idx, 'scaffold').length === 0, 'у вида без моделей брендов нет');
+ok(M.ivaModelBrands(idx, 'bottle-jack').length === 0, 'у вида без моделей брендов нет');
 const mini = M.ivaModelIndex([{ kind: 'k', brand: 'Denzel', model: 'A1', title: 'X Denzel A1' }, { kind: 'k', brand: 'DeWalt', model: 'B2', title: 'X DeWalt B2' },
   { kind: 'k', brand: 'AEG', model: 'C3', title: 'X AEG C3' }, { kind: 'z', brand: 'Bosch', model: 'D4', title: 'X Bosch D4' }], [], []);
 ok(M.ivaModelBrands(mini, 'k').join() === 'AEG,Denzel,DeWalt', 'бренды без учёта регистра (Denzel раньше DeWalt), только свой вид', M.ivaModelBrands(mini, 'k').join());

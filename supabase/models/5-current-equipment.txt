@@ -1,0 +1,1101 @@
+# Справочник моделей, часть 5 (10.87, 15.10.2026): пополнение — техника, которую чаще всего сдают в прокат.
+# Генераторы, сварка, компрессоры, мойки, пылесосы, садовая техника, строительное оборудование, измерения.
+# Строка: вид | бренд | модель | характеристики «ключ=значение; …» | (необязательно) своё слово для названия
+# Характеристики — только те, в которых уверены (объём ресивера и производительность — из названия модели).
+# Модели, уже записанные в частях 1–4, сюда не попадают; одна модель — только в одном виде.
+
+# Сварка
+mma-welder | Ресанта | САИ-160ПН | phase=220 В; amp=160
+mma-welder | Ресанта | САИ-190ПН | phase=220 В; amp=190
+mma-welder | Ресанта | САИ-220ПН | phase=220 В; amp=220
+mma-welder | Ресанта | САИ-250ПН | phase=220 В; amp=250
+mma-welder | Ресанта | САИ-250ПРОФ | phase=220 В; amp=250
+mma-welder | Ресанта | САИ-315 | phase=380 В; amp=315
+mma-welder | Kemppi | Master M 205 | phase=220 В; amp=200
+mma-welder | Telwin | Force 165 | phase=220 В
+mma-welder | Telwin | Tecnica 211/S | phase=220 В; amp=200
+mma-welder | ESAB | Buddy Arc 145 | phase=220 В; amp=145
+mma-welder | ESAB | Buddy Arc 180 | phase=220 В; amp=180
+mma-welder | ESAB | Rogue ES 180i | phase=220 В; amp=180
+mig-welder | Ресанта | САИПА-200С | phase=220 В; amp=200
+mig-welder | Aurora | Overman 160 | phase=220 В; amp=160
+mig-welder | Aurora | Overman 180 | phase=220 В; amp=180
+mig-welder | Kemppi | Kempact RA 181A | phase=220 В; amp=180
+mig-welder | Kemppi | Kempact RA 251A | phase=380 В; amp=250
+mig-welder | Kemppi | X5 FastMig 400 | phase=380 В; amp=400
+mig-welder | Telwin | Technomig 210 Dual Synergic | phase=220 В; amp=200
+mig-welder | ESAB | Rebel EMP 215ic | phase=220 В; amp=200; mode=MIG/MAG, MMA и TIG
+mig-welder | ESAB | Rebel EMP 235ic | phase=220 В; amp=235; mode=MIG/MAG, MMA и TIG
+tig-welder | ESAB | Rogue ET 200iP AC/DC | ac=AC/DC; phase=220 В; amp=200
+tig-welder | Telwin | Superior TIG 222 AC/DC-HF/LIFT | ac=AC/DC; phase=220 В; amp=220
+plasma-cutter | Hypertherm | Powermax30 XP | amp=30; phase=220 В; comp=Внешний
+plasma-cutter | Hypertherm | Powermax45 XP | amp=45; phase=220 В; comp=Внешний
+plasma-cutter | Hypertherm | Powermax65 | amp=65; phase=380 В; comp=Внешний
+plasma-cutter | Hypertherm | Powermax85 | amp=85; phase=380 В; comp=Внешний
+plasma-cutter | ESAB | Cutmaster 40 | amp=40; phase=220 В; comp=Внешний
+plasma-cutter | Telwin | Technology Plasma 41 | amp=35; phase=220 В; comp=Внешний
+plasma-cutter | Telwin | Technology Plasma 54 Kompressor | amp=40; phase=220 В; comp=Встроенный
+
+# Компрессоры
+piston-compressor | Metabo | Basic 250-50 W | src=Сеть 220 В; tank=50
+piston-compressor | Metabo | Power 180-5 W OF | src=Сеть 220 В; tank=5
+piston-compressor | Metabo | Power 250-10 W OF | src=Сеть 220 В; tank=10
+piston-compressor | Metabo | Power 400-20 W OF | src=Сеть 220 В; tank=20
+piston-compressor | Metabo | Mega 350-50 W | src=Сеть 220 В; tank=50
+piston-compressor | Metabo | Mega 400-50 W | src=Сеть 220 В; tank=50
+piston-compressor | Metabo | Mega 550-90 D | src=Сеть 380 В; tank=90
+piston-compressor | Makita | AC640 | src=Сеть 220 В
+piston-compressor | Fubag | B4800B/100 CM3 | src=Сеть 220 В; tank=100
+
+# Мойки высокого давления
+pressure-washer | Karcher | K 2 Compact | src=Сеть 220 В; pressure=110
+pressure-washer | Karcher | K 2 Power Control | src=Сеть 220 В; pressure=110
+pressure-washer | Karcher | K 3 Power Control | src=Сеть 220 В; pressure=120
+pressure-washer | Karcher | K 4 Compact | src=Сеть 220 В; pressure=130
+pressure-washer | Karcher | K 4 Power Control | src=Сеть 220 В; pressure=130
+pressure-washer | Karcher | K 5 Compact | src=Сеть 220 В; pressure=145
+pressure-washer | Karcher | K 5 Power Control | src=Сеть 220 В; pressure=145
+pressure-washer | Karcher | K 5 Premium Power Control | src=Сеть 220 В; pressure=145
+pressure-washer | Karcher | K 7 Compact | src=Сеть 220 В; pressure=180
+pressure-washer | Karcher | K 7 Power | src=Сеть 220 В; pressure=180
+pressure-washer | Karcher | K 7 Premium Smart Control | src=Сеть 220 В; pressure=180
+pressure-washer | Karcher | K 7 Smart Control | src=Сеть 220 В; pressure=180
+pressure-washer | Karcher | OC 3 | src=Аккумулятор
+pressure-washer | Karcher | HD 5/11 P | src=Сеть 220 В; pressure=110; lph=500
+pressure-washer | Karcher | HD 6/13 C | src=Сеть 220 В; pressure=130; lph=600
+pressure-washer | Karcher | HD 6/15 M | src=Сеть 220 В; pressure=150; lph=600
+pressure-washer | Karcher | HD 7/17 M | src=Сеть 380 В; pressure=170; lph=700
+pressure-washer | Karcher | HD 8/23 G | src=Бензин; pressure=230; lph=800
+pressure-washer | Karcher | HD 9/23 De | src=Дизель; pressure=230; lph=900
+pressure-washer | Bosch | EasyAquatak 100 | src=Сеть 220 В; pressure=100
+pressure-washer | Bosch | EasyAquatak 110 | src=Сеть 220 В; pressure=110
+pressure-washer | Bosch | EasyAquatak 120 | src=Сеть 220 В; pressure=120
+pressure-washer | Bosch | UniversalAquatak 130 | src=Сеть 220 В; pressure=130
+pressure-washer | Bosch | AdvancedAquatak 150 | src=Сеть 220 В; pressure=150
+pressure-washer | Bosch | AdvancedAquatak 160 | src=Сеть 220 В; pressure=160
+pressure-washer | Bosch | Fontus | src=Аккумулятор
+pressure-washer | Bosch | GHP 5-14 | src=Сеть 220 В; pressure=140
+pressure-washer | Bosch | GHP 6-14 | src=Сеть 220 В; pressure=150
+pressure-washer | Bosch | GHP 8-15 XD | src=Сеть 220 В; pressure=190
+pressure-washer | Makita | HW151 | src=Сеть 220 В; pressure=150
+pressure-washer | Makita | DHW080 | src=Аккумулятор
+pressure-washer | Makita | HW001G | src=Аккумулятор
+pressure-washer | Stihl | RE 100 | src=Сеть 220 В; pressure=110
+pressure-washer | Stihl | RE 150 | src=Сеть 220 В; pressure=140
+pressure-washer | Stihl | RE 163 | src=Сеть 220 В; pressure=160
+pressure-washer | Stihl | RE 232 | src=Сеть 220 В; pressure=170
+pressure-washer | Stihl | RE 272 Plus | src=Сеть 220 В; pressure=180
+pressure-washer | Stihl | RE 80 | src=Сеть 220 В; pressure=100
+pressure-washer | Stihl | REA 100 Plus | src=Аккумулятор
+pressure-washer | Nilfisk | Core 125 | src=Сеть 220 В; pressure=125
+pressure-washer | Nilfisk | Core 130 | src=Сеть 220 В; pressure=130
+pressure-washer | Nilfisk | Core 140 | src=Сеть 220 В; pressure=140
+pressure-washer | Nilfisk | MC 3C-150/650 | src=Сеть 220 В; pressure=150; lph=650
+pressure-washer | Huter | W105-P | src=Сеть 220 В; pressure=105
+pressure-washer | Elitech | М 1800РКБ | src=Сеть 220 В
+pressure-washer | Lavor | Space 180 | src=Сеть 220 В; pressure=180
+pressure-washer | Lavor | STM 160 WPS | src=Сеть 220 В; pressure=160
+hot-pressure-washer | Karcher | HDS 6/14 C | phase=220 В; pressure=140; lph=560; heat=Дизель
+hot-pressure-washer | Karcher | HDS 13/20-4 S | phase=380 В; pressure=200; lph=1300; heat=Дизель
+hot-pressure-washer | Karcher | HDS-E 8/16-4 M | phase=380 В; pressure=160; lph=760; heat=Электрический
+hot-pressure-washer | Nilfisk | MH 4M-200/1000 | phase=380 В; pressure=200; lph=1000; heat=Дизель
+
+# Пылесосы, уборка
+industrial-vacuum | Karcher | IVR 35/20-2 Pc | tank=35; phase=220 В
+industrial-vacuum | Karcher | NT 611 Eco K | tank=55; phase=220 В
+industrial-vacuum | Nilfisk | VHC 110 | phase=380 В
+industrial-vacuum | Nilfisk | S3 | phase=380 В
+industrial-vacuum | Nilfisk | VHW 321 | phase=220 В
+industrial-vacuum | Hilti | VC 300-17 X | tank=17; phase=220 В
+industrial-vacuum | Husqvarna | S 26 | phase=220 В
+industrial-vacuum | Husqvarna | S 36 | phase=220 В
+industrial-vacuum | Husqvarna | T 4000 | phase=220 В
+industrial-vacuum | Husqvarna | T 7500 | phase=380 В
+washing-vacuum | Karcher | SE 6.100 | power=1400; tank=4
+washing-vacuum | Karcher | Puzzi 8/1 | power=1200; tank=8
+washing-vacuum | Thomas | Twin T1 Aquafilter | power=1600
+washing-vacuum | Thomas | Bravo 20 | power=1400; tank=20
+washing-vacuum | Thomas | Pet & Family | power=1700
+washing-vacuum | Thomas | Aqua-Box Compact | power=1700
+extractor | Karcher | Puzzi 100 Super | tank=10
+extractor | Karcher | Puzzi 200 | tank=10
+extractor | Karcher | BRC 30/15 C | tank=30
+extractor | Karcher | BRC 40/22 C | tank=40
+extractor | Nilfisk | TW 300 S | tank=30
+steam-cleaner | Karcher | SC 2 EasyFix | power=1500; pressure=3.2
+steam-cleaner | Karcher | SC 3 EasyFix | power=1900; pressure=3.5
+steam-cleaner | Karcher | SC 4 EasyFix | power=2000; pressure=3.5
+steam-cleaner | Karcher | SC 5 EasyFix | power=2200; pressure=4.2
+steam-cleaner | Karcher | SGV 6/5 | power=3000; pressure=6
+scrubber-dryer | Karcher | B 40 C Bp | src=Аккумулятор; tank=40
+scrubber-dryer | Karcher | BD 30/4 C | src=Сеть 220 В; tank=4
+scrubber-dryer | Nilfisk | SC100 | src=Сеть 220 В
+scrubber-dryer | Nilfisk | SC250 | src=Аккумулятор
+sweeper | Karcher | KM 75/40 W Bp | src=Аккумулятор
+sweeper | Karcher | KM 85/50 W G | src=Бензин
+sweeper | Nilfisk | SW200 | src=Аккумулятор
+sweeper | Nilfisk | SW750 | src=Аккумулятор
+floor-polisher | Karcher | FP 303 | power=600
+
+# Садовая техника: триммеры
+trimmer | Stihl | FS 45 | src=Бензин; cc=27.2
+trimmer | Stihl | FS 70 C-E | src=Бензин; cc=27.2
+trimmer | Stihl | FS 350 | src=Бензин; cc=40.2
+trimmer | Stihl | FS 561 C-EM | src=Бензин; cc=57.1
+trimmer | Stihl | FSA 60 R | src=Аккумулятор; volt=36
+trimmer | Stihl | FSA 65 | src=Аккумулятор; volt=36
+trimmer | Stihl | FSA 85 | src=Аккумулятор; volt=36
+trimmer | Husqvarna | 122C | src=Бензин; cc=21.7
+trimmer | Husqvarna | 129R | src=Бензин; cc=27.5
+trimmer | Husqvarna | 135R | src=Бензин; cc=34.6
+trimmer | Husqvarna | 535RX | src=Бензин; cc=34.6
+trimmer | Husqvarna | 535iRX | src=Аккумулятор; volt=36
+trimmer | Echo | SRM-22GES | src=Бензин; cc=21.2
+trimmer | Echo | SRM-265TES | src=Бензин; cc=25.4
+trimmer | Echo | SRM-330ES | src=Бензин; cc=31.3
+trimmer | Echo | SRM-420ES | src=Бензин; cc=41.5
+trimmer | Makita | EM4350UH | src=Бензин; cc=43
+trimmer | Makita | DUR189 | src=Аккумулятор; volt=18
+trimmer | Makita | DUR191U | src=Аккумулятор; volt=18
+trimmer | Makita | DUR193 | src=Аккумулятор; volt=18
+trimmer | Makita | DUR369A | src=Аккумулятор; volt=36
+trimmer | Makita | UR001G | src=Аккумулятор; volt=40
+trimmer | Bosch | ART 24 | src=Сеть 220 В; power=400
+trimmer | Bosch | EasyGrassCut 23 | src=Сеть 220 В; power=280
+trimmer | Bosch | EasyGrassCut 26 | src=Сеть 220 В; power=280
+trimmer | Bosch | UniversalGrassCut 18V-26 | src=Аккумулятор; volt=18
+trimmer | Huter | GGT-1500S | src=Бензин
+trimmer | Huter | GGT-1900S | src=Бензин
+trimmer | Huter | GGT-2500S | src=Бензин
+trimmer | Huter | GGT-1500T | src=Бензин
+trimmer | Huter | GGT-1900T | src=Бензин
+trimmer | Huter | GGT-2500T | src=Бензин
+trimmer | Champion | T433-2 | src=Бензин
+trimmer | Champion | T523 | src=Бензин
+trimmer | Patriot | PT 3355 | src=Бензин
+trimmer | Patriot | PT 555 | src=Бензин
+trimmer | Greenworks | GD40BCB | src=Аккумулятор; volt=40
+trimmer | Greenworks | G40LT | src=Аккумулятор; volt=40
+trimmer | Greenworks | GD60LT | src=Аккумулятор; volt=60
+trimmer | Ryobi | RY18LT33A | src=Аккумулятор; volt=18
+trimmer | Ryobi | OLT1832 | src=Аккумулятор; volt=18
+trimmer | Ryobi | RBC254SESO | src=Бензин; cc=25.4
+trimmer | Einhell | GC-ET 3023 | src=Сеть 220 В; power=300
+trimmer | Einhell | GE-CT 18 Li | src=Аккумулятор; volt=18
+trimmer | Einhell | GC-BC 52 I AS | src=Бензин; cc=51.7
+
+# Газонокосилки
+lawn-mower | Stihl | RMA 239 | src=Аккумулятор; volt=36; width=37; self=Нет
+lawn-mower | Stihl | RMA 453 | src=Аккумулятор; volt=36; width=51; self=Нет
+lawn-mower | Stihl | RM 545 | src=Бензин; width=43; self=Нет
+lawn-mower | Stihl | RM 545 T | src=Бензин; width=43; self=Да
+lawn-mower | Stihl | RM 650 T | src=Бензин; width=48; self=Да
+lawn-mower | Stihl | RM 655 V | src=Бензин; width=53; self=Да
+lawn-mower | Husqvarna | LC 140S | src=Бензин; width=40; self=Да
+lawn-mower | Husqvarna | LC 151 | src=Бензин; width=51; self=Нет
+lawn-mower | Husqvarna | LC 151S | src=Бензин; width=51; self=Да
+lawn-mower | Husqvarna | LC 347iVX | src=Аккумулятор; volt=36; width=47; self=Да
+lawn-mower | Makita | PLM4620N | src=Бензин; width=46; self=Нет
+lawn-mower | Makita | DLM462 | src=Аккумулятор; volt=36; width=46; self=Да
+lawn-mower | Makita | DLM330 | src=Аккумулятор; volt=18; width=33; self=Нет
+lawn-mower | Makita | LM001G | src=Аккумулятор; volt=40; width=43; self=Нет
+lawn-mower | Bosch | Rotak 34 | src=Сеть 220 В; width=34; self=Нет
+lawn-mower | Bosch | ARM 32 | src=Сеть 220 В; width=32; self=Нет
+lawn-mower | Bosch | AdvancedRotak 36-660 | src=Аккумулятор; volt=36; width=40; self=Нет
+lawn-mower | Bosch | EasyRotak 36-550 | src=Аккумулятор; volt=36; width=36; self=Нет
+lawn-mower | Champion | LM5131 | src=Бензин; width=51; self=Да
+lawn-mower | Champion | LM5347 | src=Бензин; width=53; self=Да
+lawn-mower | Huter | GLM-460ST | src=Бензин; width=46; self=Да
+lawn-mower | Huter | ELM-1100 | src=Сеть 220 В; self=Нет
+lawn-mower | Greenworks | GD40LM46SP | src=Аккумулятор; volt=40; width=46; self=Да
+lawn-mower | Greenworks | G40LM41 | src=Аккумулятор; volt=40; width=41; self=Нет
+lawn-mower | Einhell | GC-EM 1032 | src=Сеть 220 В; width=32; self=Нет
+lawn-mower | Einhell | GE-CM 36/37 Li | src=Аккумулятор; volt=36; width=37; self=Нет
+lawn-mower | Einhell | GC-PM 46 S | src=Бензин; width=46; self=Да
+lawn-mower | Ryobi | RY18LMX37A | src=Аккумулятор; volt=18; width=37; self=Нет
+lawn-mower | Ryobi | RLM18X41H240 | src=Аккумулятор; volt=36; width=40; self=Нет
+lawn-mower | Al-ko | Highline 46.5 SP-A | src=Бензин; width=46; self=Да
+lawn-mower | Al-ko | Classic 3.82 SE | src=Сеть 220 В; width=38; self=Нет
+
+# Бензопилы и электропилы
+chainsaw | Stihl | MS 162 | src=Бензин; cc=30.1
+chainsaw | Stihl | MS 172 | src=Бензин; cc=31.8
+chainsaw | Stihl | MS 182 | src=Бензин; cc=35.8
+chainsaw | Stihl | MS 212 | src=Бензин; cc=38.6
+chainsaw | Stihl | MS 251 | src=Бензин; cc=45.6
+chainsaw | Stihl | MS 271 | src=Бензин; cc=50.2
+chainsaw | Stihl | MS 291 | src=Бензин; cc=55.5
+chainsaw | Stihl | MS 391 | src=Бензин; cc=64.1
+chainsaw | Stihl | MS 400 C-M | src=Бензин; cc=66.8
+chainsaw | Stihl | MS 500i | src=Бензин; cc=79.2
+chainsaw | Stihl | MS 881 | src=Бензин; cc=121.6
+chainsaw | Stihl | MSA 120 C-B | src=Аккумулятор; volt=36
+chainsaw | Stihl | MSA 140 C-B | src=Аккумулятор; volt=36
+chainsaw | Stihl | MSA 160 C-B | src=Аккумулятор; volt=36
+chainsaw | Stihl | MSA 200 C-B | src=Аккумулятор; volt=36
+chainsaw | Stihl | MSA 220 C-B | src=Аккумулятор; volt=36
+chainsaw | Stihl | MSE 141 C | src=Сеть 220 В; power=1400
+chainsaw | Stihl | MSE 170 C | src=Сеть 220 В; power=1700
+chainsaw | Stihl | MSE 210 C | src=Сеть 220 В; power=2100
+chainsaw | Stihl | MSE 250 C | src=Сеть 220 В; power=2500
+chainsaw | Husqvarna | 135 Mark II | src=Бензин; cc=38
+chainsaw | Husqvarna | 450 II | src=Бензин; cc=50.2
+chainsaw | Husqvarna | 545 Mark II | src=Бензин; cc=50.1
+chainsaw | Husqvarna | 550 XP Mark II | src=Бензин; cc=50.1
+chainsaw | Husqvarna | 565 | src=Бензин; cc=70.6
+chainsaw | Husqvarna | 572 XP | src=Бензин; cc=70.6
+chainsaw | Husqvarna | 225i | src=Аккумулятор; volt=36
+chainsaw | Husqvarna | 418EL | src=Сеть 220 В; power=1800
+chainsaw | Husqvarna | 420EL | src=Сеть 220 В; power=2000
+chainsaw | Echo | CS-353ES | src=Бензин; cc=34
+chainsaw | Echo | CS-510 | src=Бензин; cc=50.2
+chainsaw | Echo | CS-620SX | src=Бензин; cc=59.8
+chainsaw | Makita | EA3202S | src=Бензин; cc=32
+chainsaw | Makita | EA3203S | src=Бензин; cc=32
+chainsaw | Makita | EA5000P | src=Бензин; cc=50
+chainsaw | Makita | EA7900P | src=Бензин; cc=79
+chainsaw | Makita | DUC355 | src=Аккумулятор; volt=36
+chainsaw | Makita | DUC357 | src=Аккумулятор; volt=36
+chainsaw | Makita | DUC400 | src=Аккумулятор; volt=36
+chainsaw | Makita | UC015G | src=Аккумулятор; volt=40
+chainsaw | Makita | UC016G | src=Аккумулятор; volt=40
+chainsaw | Makita | UC4551A | src=Сеть 220 В; power=2000
+chainsaw | Bosch | UniversalChain 40 | src=Сеть 220 В; power=1800
+chainsaw | Bosch | AdvancedChain 36V-35-40 | src=Аккумулятор; volt=36
+chainsaw | Bosch | UniversalChain 18 | src=Аккумулятор; volt=18
+chainsaw | Bosch | GKE 35 BCE | src=Сеть 220 В; power=2100
+chainsaw | Bosch | GKE 40 BCE | src=Сеть 220 В; power=2100
+chainsaw | Bosch | GKE 18V-40 | src=Аккумулятор; volt=18
+chainsaw | Milwaukee | M12 FHS | src=Аккумулятор; volt=12
+chainsaw | Hikoki | CS3635DB | src=Аккумулятор; volt=36
+chainsaw | Partner | P350S | src=Бензин; cc=36
+chainsaw | Huter | BS-62 | src=Бензин
+chainsaw | Huter | ELS-2400 | src=Сеть 220 В; power=2400
+chainsaw | Greenworks | GD40CS15 | src=Аккумулятор; volt=40
+chainsaw | Greenworks | GD40CS18 | src=Аккумулятор; volt=40
+chainsaw | Ryobi | OCS1830 | src=Аккумулятор; volt=18
+chainsaw | Ryobi | RY36CSX35A | src=Аккумулятор; volt=36
+chainsaw | Einhell | GC-PC 2040 I | src=Бензин
+chainsaw | Einhell | GE-LC 18 Li | src=Аккумулятор; volt=18
+chainsaw | Patriot | PT 4518 | src=Бензин
+chainsaw | Patriot | ES 2416 | src=Сеть 220 В
+chainsaw | Интерскол | ПЦ-16/2000Т | src=Сеть 220 В; power=2000
+chainsaw | Интерскол | ПЦБ-14/36В | src=Бензин; cc=36
+
+# Кусторезы, высоторезы, воздуходувки
+hedge-trimmer | Stihl | HSA 26 | src=Аккумулятор; volt=10.8
+hedge-trimmer | Stihl | HSA 45 | src=Аккумулятор; volt=18
+hedge-trimmer | Stihl | HSA 50 | src=Аккумулятор; volt=36
+hedge-trimmer | Stihl | HSE 42 | src=Сеть 220 В
+hedge-trimmer | Stihl | HS 56 C-E | src=Бензин
+hedge-trimmer | Stihl | HLA 56 | src=Аккумулятор; volt=36
+hedge-trimmer | Stihl | HLA 66 | src=Аккумулятор; volt=36
+hedge-trimmer | Stihl | HLA 86 | src=Аккумулятор; volt=36
+hedge-trimmer | Husqvarna | 522HDR60X | src=Бензин
+hedge-trimmer | Makita | UH4261 | src=Сеть 220 В
+hedge-trimmer | Makita | UH6580 | src=Сеть 220 В
+hedge-trimmer | Makita | DUH607 | src=Аккумулятор; volt=18
+hedge-trimmer | Makita | DUN461W | src=Аккумулятор; volt=18
+hedge-trimmer | Makita | DUN500W | src=Аккумулятор; volt=18
+hedge-trimmer | Makita | UH004G | src=Аккумулятор; volt=40
+hedge-trimmer | Bosch | EasyHedgeCut 45 | src=Сеть 220 В
+hedge-trimmer | Bosch | UniversalHedgeCut 50 | src=Сеть 220 В
+hedge-trimmer | Bosch | UniversalHedgeCut 18V-50 | src=Аккумулятор; volt=18
+hedge-trimmer | Bosch | AdvancedHedgeCut 36V-65-28 | src=Аккумулятор; volt=36
+hedge-trimmer | Bosch | UniversalHedgePole 18 | src=Аккумулятор; volt=18
+hedge-trimmer | Greenworks | G40HT61 | src=Аккумулятор; volt=40
+hedge-trimmer | Ryobi | RY18HT55A | src=Аккумулятор; volt=18
+hedge-trimmer | Ryobi | OHT1855R | src=Аккумулятор; volt=18
+hedge-trimmer | Einhell | GC-EH 5747 | src=Сеть 220 В
+hedge-trimmer | Einhell | GE-CH 1846 Li | src=Аккумулятор; volt=18
+pole-saw | Stihl | HT 105 | src=Бензин; cc=31.4
+pole-saw | Husqvarna | 530iP4 | src=Аккумулятор; volt=36
+pole-saw | Husqvarna | 120iTK4-P | src=Аккумулятор; volt=36
+pole-saw | Makita | DUA301 | src=Аккумулятор; volt=36
+pole-saw | Bosch | UniversalChainPole 18 | src=Аккумулятор; volt=18
+pole-saw | Ryobi | RY18PSX10A | src=Аккумулятор; volt=18
+leaf-blower | Stihl | BR 200 | src=Бензин; cc=27.2; pack=Ранцевая
+leaf-blower | Stihl | BGA 45 | src=Аккумулятор; volt=18; pack=Ручная
+leaf-blower | Stihl | BGA 60 | src=Аккумулятор; volt=36; pack=Ручная
+leaf-blower | Husqvarna | 230iB | src=Аккумулятор; volt=36; pack=Ручная
+leaf-blower | Makita | DUB362 | src=Аккумулятор; volt=36; pack=Ручная
+leaf-blower | Makita | BHX2501 | src=Бензин; cc=24.5; pack=Ручная
+leaf-blower | Makita | EB5300TH | src=Бензин; cc=52.5; pack=Ранцевая
+leaf-blower | Makita | EB7660TH | src=Бензин; cc=75.6; pack=Ранцевая
+leaf-blower | Echo | PB-580 | src=Бензин; cc=58.2; pack=Ранцевая
+leaf-blower | Echo | PB-770 | src=Бензин; cc=63.3; pack=Ранцевая
+leaf-blower | Bosch | UniversalLeafBlower 18V-130 | src=Аккумулятор; volt=18; pack=Ручная
+leaf-blower | Bosch | AdvancedLeafBlower 36V-750 | src=Аккумулятор; volt=36; pack=Ручная
+leaf-blower | Greenworks | GD40AB | src=Аккумулятор; volt=40; pack=Ручная
+leaf-blower | Greenworks | G40AB | src=Аккумулятор; volt=40; pack=Ручная
+leaf-blower | Ryobi | RY18BLA | src=Аккумулятор; volt=18; pack=Ручная
+garden-vacuum | Stihl | SHA 56 | src=Аккумулятор
+garden-vacuum | Bosch | ALS 2500 | src=Сеть 220 В; power=2500
+garden-vacuum | Makita | UB0800 | src=Сеть 220 В; power=1650
+garden-vacuum | Black+Decker | GW3030 | src=Сеть 220 В; power=3000
+garden-vacuum | Black+Decker | BEBLV300 | src=Сеть 220 В; power=3000
+
+# Измельчители, скарификаторы, мотобуры
+wood-chipper | Bosch | AXT 22 D | src=Сеть 220 В; power=2200; dia=40
+wood-chipper | Stihl | GHE 150 | src=Сеть 220 В; power=2500; dia=35
+wood-chipper | Stihl | GH 460 | src=Бензин; dia=100
+wood-chipper | Einhell | GC-RS 2845 CB | src=Сеть 220 В; power=2800; dia=45
+wood-chipper | Patriot | PT SE24 | src=Сеть 220 В
+wood-chipper | Patriot | PT SB76 | src=Бензин
+wood-chipper | Al-ko | Easy Crush LH 2800 | src=Сеть 220 В; power=2800
+lawn-scarifier | Stihl | RLA 240 | src=Аккумулятор; width=34
+lawn-scarifier | Einhell | GC-SA 1231 | src=Сеть 220 В; power=1200; width=31
+lawn-scarifier | Al-ko | Combi Care 38 E Comfort | src=Сеть 220 В; width=38
+lawn-scarifier | Greenworks | GD40SC36 | src=Аккумулятор; width=36
+earth-auger | Stihl | BT 130 | src=Бензин; cc=36.3
+earth-auger | Champion | AG364 | src=Бензин
+earth-auger | Huter | GGD-300 | src=Бензин
+earth-auger | ADA | Ground Drill-7 | src=Бензин
+earth-auger | ADA | Ground Drill-14 | src=Бензин
+
+# Мотоблоки, культиваторы, снегоуборщики
+tiller | Huter | GMC-9.0 | src=Бензин; hp=9
+tiller | Нева | МБ-Компакт | src=Бензин
+tiller | Угра | НМБ-1Н16 | src=Бензин
+tiller | Мобил К | Ganz | src=Бензин
+tiller | Мобил К | Lander | src=Бензин
+tiller | Patriot | Калуга | src=Бензин
+tiller | Patriot | Невада 9 | src=Бензин; hp=9
+tiller | Patriot | Урал | src=Бензин
+tiller | Champion | BC1193 | src=Бензин
+tiller | Champion | DC1193E | src=Дизель
+tiller | Hyundai | T 700 | src=Бензин
+cultivator | Huter | EMC-1400 | src=Сеть 220 В
+cultivator | Champion | BC4311 | src=Бензин
+cultivator | Champion | BC5712 | src=Бензин
+cultivator | Patriot | Детройт | src=Бензин
+cultivator | Hyundai | T 500 | src=Бензин
+cultivator | Hyundai | T 800 | src=Бензин
+cultivator | Мобил К | МКМ-3 | src=Бензин
+cultivator | Мобил К | МКМ-4 | src=Бензин
+cultivator | Einhell | GC-RT 1440 M | src=Сеть 220 В
+cultivator | Einhell | GC-MT 2560 LD | src=Бензин
+cultivator | Greenworks | G40TL | src=Аккумулятор
+snow-blower | Huter | SGC 1000E | src=Сеть 220 В; self=Нет
+snow-blower | Huter | SGC 2000E | src=Сеть 220 В; self=Нет
+snow-blower | Champion | ST656 | src=Бензин; self=Да
+snow-blower | Champion | STE1650 | src=Сеть 220 В; self=Нет
+snow-blower | Patriot | PS 603 | src=Бензин; self=Да
+snow-blower | Patriot | PS 710 E | src=Бензин; self=Да
+snow-blower | Hyundai | S 5560 | src=Бензин; self=Да
+snow-blower | Hyundai | S 7066 | src=Бензин; self=Да
+snow-blower | Greenworks | GD40SB | src=Аккумулятор; self=Нет
+snow-blower | Einhell | GE-ST 36/40 Li E | src=Аккумулятор; self=Нет
+
+# Насосы
+motor-pump | Champion | GTP101E | src=Бензин; water=Грязная
+motor-pump | Champion | GHP40-2 | src=Бензин; water=Чистая
+motor-pump | Huter | MP-25 | src=Бензин; water=Чистая
+motor-pump | Huter | MPD-80 | src=Бензин; water=Грязная
+motor-pump | Fubag | PTH 600 | src=Бензин; water=Грязная
+motor-pump | Fubag | PTH 1000 | src=Бензин; water=Грязная
+motor-pump | Patriot | MP 3060 S | src=Бензин; water=Чистая
+motor-pump | Patriot | MP 4090 S | src=Бензин; water=Чистая
+motor-pump | Koshin | SEH-50X | src=Бензин; water=Слабозагрязнённая
+motor-pump | Koshin | SEH-80X | src=Бензин; water=Слабозагрязнённая
+motor-pump | Koshin | KTH-50X | src=Бензин; water=Грязная
+motor-pump | Koshin | KTH-80X | src=Бензин; water=Грязная
+motor-pump | Daishin | SCR-50HX | src=Бензин; water=Чистая
+motor-pump | Daishin | SCR-80HX | src=Бензин; water=Чистая
+motor-pump | Daishin | SWT-80HX | src=Бензин; water=Грязная
+drainage-pump | Karcher | SP 22.000 Dirt | power=750
+drainage-pump | Makita | PF0300 | power=300
+drainage-pump | Makita | PF0410 | power=400
+drainage-pump | Makita | PF1110 | power=1100
+drainage-pump | Makita | DPF300 | 
+drainage-pump | Вихрь | ДН-300 | power=300
+drainage-pump | Вихрь | ДН-400 | power=400
+drainage-pump | Вихрь | ДН-900Н | power=900
+drainage-pump | Вихрь | ДН-1100Н | power=1100
+drainage-pump | Вихрь | ДН-1500Н | power=1500
+drainage-pump | Patriot | F 400 | power=400
+drainage-pump | Einhell | GC-DP 3730 | power=370
+drainage-pump | Einhell | GE-DP 7330 LL ECO | power=730
+drainage-pump | Wacker Neuson | PS2 400 | power=400
+drainage-pump | Wacker Neuson | PS2 500 | power=500
+drainage-pump | Wacker Neuson | PS4 1500 | power=1500
+sewage-pump | Grundfos | Unilift AP 35B | power=500
+sewage-pump | Grundfos | Unilift AP 50B | power=700
+sewage-pump | Вихрь | ФН-1100Л | power=1100
+sewage-pump | Вихрь | ФН-1500Л | power=1500
+sewage-pump | Вихрь | ФН-2200Л | power=2200
+sewage-pump | Джилекс | Фекальник 200/10 Н | chop=Нет
+sewage-pump | Джилекс | Фекальник 255/11 Н | chop=Нет
+sewage-pump | Unipump | Fekacut V1300DF | chop=Есть
+sewage-pump | Wacker Neuson | PSA2 500 | power=500
+vibration-pump | Ливгидромаш | Малыш-3 | power=245; intake=Верхний
+vibration-pump | Unipump | Бавленец БВ 0,12-40 | intake=Верхний
+vibration-pump | Patriot | VP-10В | intake=Верхний
+vibration-pump | Patriot | VP-10Н | intake=Нижний
+
+# Тепловые пушки, обогреватели, осушители
+heat-gun-big | Ballu | BHP-P2-2 | fuel=Электричество; kw=2; phase=220 В
+heat-gun-big | Ballu | BHP-PE2-3 | fuel=Электричество; kw=3; phase=220 В
+heat-gun-big | Ballu | BHP-PE2-5 | fuel=Электричество; kw=5; phase=380 В
+heat-gun-big | Ballu | BHP-PE2-9 | fuel=Электричество; kw=9; phase=380 В
+heat-gun-big | Ballu | BHP-PE2-15 | fuel=Электричество; kw=15; phase=380 В
+heat-gun-big | Ballu | BHDN-80 | fuel=Дизель; kw=80; heat=Непрямой
+heat-gun-big | Ресанта | ТЭПК-2000К | fuel=Электричество; kw=2; phase=220 В
+heat-gun-big | Ресанта | ТЭП-5000К | fuel=Электричество; kw=5; phase=380 В
+heat-gun-big | Ресанта | ТЭП-9000К | fuel=Электричество; kw=9; phase=380 В
+heat-gun-big | Ресанта | ТЭП-15000К | fuel=Электричество; kw=15; phase=380 В
+heat-gun-big | Ресанта | ТГП-30000 | fuel=Газ; kw=30; heat=Прямой
+heat-gun-big | Ресанта | ТДПН-30000 | fuel=Дизель; kw=30; heat=Непрямой
+heat-gun-big | Elitech | ТП 30ГБ | fuel=Газ; kw=30; heat=Прямой
+heat-gun-big | Patriot | PT-Q 3 | fuel=Электричество; kw=3; phase=220 В
+heat-gun-big | Patriot | PT-Q 5 | fuel=Электричество; kw=5; phase=380 В
+heat-gun-big | Patriot | PT-Q 9 | fuel=Электричество; kw=9; phase=380 В
+heat-gun-big | Patriot | GS 16 | fuel=Газ; kw=16; heat=Прямой
+heat-gun-big | Patriot | GS 30 | fuel=Газ; kw=30; heat=Прямой
+heat-gun-big | Patriot | GS 53 | fuel=Газ; kw=53; heat=Прямой
+heat-gun-big | Patriot | DTC 228 | fuel=Дизель; heat=Прямой
+heat-gun-big | Patriot | DTC 368 | fuel=Дизель; heat=Прямой
+heat-gun-big | Patriot | DTC 629 | fuel=Дизель; heat=Прямой
+heat-gun-big | Trotec | TDS 20 | fuel=Электричество; kw=3.3; phase=220 В
+heat-gun-big | Trotec | TDS 50 | fuel=Электричество; kw=9; phase=380 В
+heat-gun-big | Trotec | IDE 30 D | fuel=Дизель; heat=Непрямой
+infrared-heater | Ballu | BIH-AP-1.0 | fuel=Электричество; kw=1
+infrared-heater | Ballu | BIH-AP-2.0 | fuel=Электричество; kw=2
+infrared-heater | Ballu | BIH-L-2.0 | fuel=Электричество; kw=2
+infrared-heater | Ballu | BIH-L-3.0 | fuel=Электричество; kw=3
+infrared-heater | Ballu | BIGH-4 | fuel=Газ; kw=4
+infrared-heater | Master | XL 9 | fuel=Дизель
+infrared-heater | Master | XL 61 | fuel=Дизель
+infrared-heater | Timberk | TGH 4200 M1 | fuel=Газ; kw=4.2
+convector | Ballu | BEC/EVU-1500 | kw=1.5
+convector | Ballu | BEC/EVU-2000 | kw=2
+convector | Electrolux | ECH/AG2-1500 T | kw=1.5
+convector | Electrolux | ECH/AG2-2000 T | kw=2
+convector | Noirot | Spot E-5 1500 | kw=1.5
+convector | Noirot | Spot E-5 2000 | kw=2
+dehumidifier | Master | DH 720 | lday=20
+dehumidifier | Master | DH 732 | lday=32
+dehumidifier | Master | DH 745 | lday=45
+dehumidifier | Master | DH 26 | lday=26
+dehumidifier | Master | DH 44 | lday=44
+dehumidifier | Master | DH 62 | lday=62
+dehumidifier | Trotec | TTK 71 E | lday=20
+dehumidifier | Trotec | TTK 350 S | lday=50
+dehumidifier | Ballu | BD15U | lday=15
+dehumidifier | Ballu | BD20U | lday=20
+dehumidifier | Ballu | BDH-25L | lday=25
+dehumidifier | Ballu | BDI-30L | lday=30
+fan | Master | DFX 20 | 
+fan | Ballu | BIF-4B | 
+fan | Ballu | BIF-8B | 
+fan | Trotec | TTV 4500 HP | 
+fan | Karcher | AB 20 | power=220
+fan | Karcher | AB 84 | power=310
+mobile-ac | Electrolux | EACM-10 HR/N3 | kw=2.6
+mobile-ac | Electrolux | EACM-12 CG/N3 | kw=3.5
+mobile-ac | Master | AC 14 | kw=4
+mobile-ac | Trotec | PAC 2600 X | kw=2.6
+mobile-ac | Trotec | PAC 3500 X | kw=3.5
+mobile-ac | Zanussi | ZACM-09 MS/N1 | kw=2.6
+mobile-ac | Zanussi | ZACM-12 MS/N1 | kw=3.5
+
+# Стабилизаторы, прожекторы, щиты
+stabilizer | Ресанта | АСН-3000/1-Ц | kw=3; phase=220 В; stype=Релейный
+stabilizer | Ресанта | АСН-9000/3-ЭМ | kw=9; phase=380 В; stype=Электромеханический
+stabilizer | Энергия | Voltron 5000 | kw=5; phase=220 В; stype=Релейный
+stabilizer | Энергия | Classic 5000 | kw=5; phase=220 В; stype=Электронный
+stabilizer | Huter | 400GS | kw=0.4; phase=220 В
+stabilizer | Huter | 5000GS | kw=5; phase=220 В
+stabilizer | Huter | 10000GS | kw=10; phase=220 В
+floodlight | Makita | DML809 | src=Аккумулятор
+floodlight | Makita | ML003G | src=Аккумулятор
+floodlight | Milwaukee | M18 ONESLSP | src=Аккумулятор
+floodlight | Milwaukee | M18 HAL | src=Аккумулятор
+floodlight | Bosch | GLI 18V-10000 C | src=Аккумулятор
+floodlight | Bosch | GLI 18V-2200 C | src=Аккумулятор
+floodlight | Bosch | GLI VariLED | src=Аккумулятор
+floodlight | Hilti | SL 6-22 | src=Аккумулятор
+light-tower | Atlas Copco | HiLight B5+ | src=Аккумулятор
+light-tower | Generac | MLT6SMD | src=Дизель
+light-tower | Wacker Neuson | LTV6L | src=Дизель
+light-tower | Wacker Neuson | LTV8K | src=Дизель
+light-tower | Wacker Neuson | LTC4L | src=Дизель
+light-tower | Wacker Neuson | LTN6L | src=Дизель
+site-board | ИЭК | ЯТП-0,25 220/36 | phase=220 В
+site-board | ИЭК | ЯТП-0,25 220/12 | phase=220 В
+
+# Строительное оборудование
+plate-compactor | Mikasa | MVC-F60 | src=Бензин; rev=Нет
+plate-compactor | Mikasa | MVC-88 | src=Бензин; rev=Нет
+plate-compactor | Mikasa | MVH-R60 | src=Бензин; rev=Есть
+plate-compactor | Mikasa | MVH-308 | src=Дизель; rev=Есть
+plate-compactor | Masalta | MS60 | src=Бензин; rev=Нет
+plate-compactor | Masalta | MS90 | src=Бензин; rev=Нет
+plate-compactor | Masalta | MS125 | src=Бензин; rev=Нет
+plate-compactor | Husqvarna | LF 75 LAT | src=Бензин; rev=Нет
+plate-compactor | Husqvarna | LF 100 LAT | src=Бензин; rev=Нет
+plate-compactor | Husqvarna | LG 300 | src=Дизель; rev=Есть
+plate-compactor | Husqvarna | LG 400 | src=Дизель; rev=Есть
+plate-compactor | Husqvarna | LG 504 | src=Дизель; rev=Есть
+plate-compactor | Bomag | BVP 10/36 | src=Бензин; rev=Нет
+plate-compactor | Bomag | BVP 18/45 | src=Бензин; rev=Нет
+plate-compactor | Bomag | BPR 25/50 | src=Бензин; rev=Есть
+plate-compactor | Bomag | BPR 35/60 | src=Дизель; rev=Есть
+plate-compactor | Bomag | BPR 45/55 | src=Дизель; rev=Есть
+plate-compactor | Wacker Neuson | AP1850e | src=Аккумулятор; rev=Нет
+plate-compactor | Wacker Neuson | AP2560e | src=Аккумулятор; rev=Нет
+rammer | Wacker Neuson | BS 50-2 | src=Бензин
+rammer | Wacker Neuson | BS 60-2 | src=Бензин
+rammer | Wacker Neuson | BS 60-4s | src=Бензин
+rammer | Wacker Neuson | AS30e | src=Аккумулятор
+rammer | Mikasa | MT-72FW | src=Бензин
+rammer | Bomag | BT 60 | src=Бензин
+rammer | Husqvarna | LT 5005 | src=Бензин
+rammer | Husqvarna | LT 6005 | src=Бензин
+concrete-mixer | Belle | Minimix 130 | drum=130; src=Сеть 220 В
+concrete-mixer | Зубр | ЗБР-130 | drum=130; src=Сеть 220 В
+concrete-mixer | Зубр | ЗБР-160 | drum=160; src=Сеть 220 В
+concrete-mixer | Зубр | ЗБР-200 | drum=200; src=Сеть 220 В
+concrete-mixer | Красный Маяк | СБР-132А.3 | drum=132; src=Сеть 220 В
+concrete-mixer | Красный Маяк | СБР-160А.3 | drum=160; src=Сеть 220 В
+concrete-mixer | Красный Маяк | СБР-200А.3 | drum=200; src=Сеть 220 В
+mortar-mixer | Collomix | Collomatic XM 2-650 | 
+mortar-mixer | Collomix | Collomatic TMS 2000 | 
+mortar-mixer | Imer | Mix 360 | drum=360; src=Сеть 380 В
+poker-vibrator | Wacker Neuson | IRFU 30 | dia=30
+poker-vibrator | Wacker Neuson | IRFU 38 | dia=38
+poker-vibrator | Wacker Neuson | IRFU 45 | dia=45
+poker-vibrator | Wacker Neuson | IRFU 57 | dia=57
+poker-vibrator | Wacker Neuson | IREN 30 | dia=30
+poker-vibrator | Wacker Neuson | ACBe | 
+poker-vibrator | Makita | DVR450 | 
+poker-vibrator | Makita | DVR850 | 
+poker-vibrator | Milwaukee | MXF CVBC | 
+poker-vibrator | Husqvarna | AME 1600 | power=1600
+poker-vibrator | Husqvarna | AME 2400 | power=2400
+poker-vibrator | Husqvarna | Smart 36 | dia=36
+poker-vibrator | Husqvarna | Smart 45 | dia=45
+screed-vibrator | Enar | QZH | src=Бензин
+power-trowel | Husqvarna | BG 245 | src=Бензин; dia=600
+power-trowel | Husqvarna | BG 375 | src=Бензин; dia=900
+power-trowel | Husqvarna | BG 475 | src=Бензин; dia=1200
+rebar-cutter | Makita | SC09 | power=780
+rebar-cutter | Makita | DSC191 | 
+rebar-cutter | Hikoki | CF18DSL | 
+rebar-tier | Max | RB401T-E | 
+rebar-tier | Max | RB519 | 
+props | Doka | Eurex 20 300 | 
+props | Doka | Eurex 20 350 | 
+props | Doka | Eurex 30 top 300 | 
+props | Peri | PEP Ergo D-300 | 
+props | Peri | PEP 20-300 | 
+wall-formwork | Peri | Domino | 
+wall-formwork | Meva | StarTec | 
+scaffold | Layher | Allround | scaf=Клиновые
+scaffold | Layher | Blitz | scaf=Рамные
+scaffold | Altrad | ЛРСП-40 | scaf=Рамные
+scaffold | Altrad | ЛСПК-40 | scaf=Клиновые
+scaffold | Peri | UP Flex | scaf=Клиновые
+scaffold | Ulma | BRIO | scaf=Клиновые
+mobile-tower | Krause | Stabilo 1000 | 
+mobile-tower | Krause | ClimTec | 
+mobile-tower | Zarges | Z600 | 
+mobile-tower | Layher | Uni Standard | 
+ladder | Krause | Monto Tribilo 3x9 | lad=Трёхсекционная; sect=3; steps=9
+ladder | Krause | Monto Tribilo 3x12 | lad=Трёхсекционная; sect=3; steps=12
+ladder | Krause | Monto Multimatic | lad=Трансформер
+ladder | Алюмет | Т443 | lad=Трансформер; sect=4; steps=4
+ladder | Алюмет | Т444 | lad=Трансформер; sect=4; steps=4
+ladder | Алюмет | Т445 | lad=Трансформер; sect=4; steps=5
+ladder | Алюмет | Т446 | lad=Трансформер; sect=4; steps=6
+ladder | Zarges | Skymaster X | lad=Трёхсекционная
+ladder | Новая высота | NV 1230 | lad=Трёхсекционная; sect=3
+ladder | Новая высота | NV 3320 | lad=Трансформер
+stepladder | Krause | Monto Tritto 6 | steps=6
+stepladder | Krause | Monto Tritto 8 | steps=8
+stepladder | Krause | Monto Secury 6 | steps=6
+stepladder | Алюмет | AM706 | steps=6
+stepladder | Алюмет | AM708 | steps=8
+stepladder | Алюмет | AM710 | steps=10
+stepladder | Hailo | ProfiStep Duo 6 | steps=6
+stepladder | Hailo | L60 StandardLine 6 | steps=6
+stepladder | Hailo | L100 TopLine 6 | steps=6
+drywall-lift | Edma | Plaxter Lift | 
+winch | Tractel | Tirfor T-508 | src=Ручной; load=0.8
+winch | Tractel | Tirfor T-516 | src=Ручной; load=1.6
+winch | Tractel | Tirfor T-532 | src=Ручной; load=3.2
+winch | Tractel | Tirfor TU-16 | src=Ручной; load=1.6
+winch | Tractel | Tirfor TU-28 | src=Ручной; load=3
+winch | Warn | VR EVO 8 | src=Аккумулятор; load=3.6
+winch | Warn | ZEON 10-S | src=Аккумулятор; load=4.5
+winch | Comeup | Seal Gen2 9.5 | src=Аккумулятор; load=4.3
+hoist | TOR | HSZ-1 | src=Ручной; load=1
+hoist | TOR | HSZ-2 | src=Ручной; load=2
+hoist | TOR | HSZ-3 | src=Ручной; load=3
+hoist | TOR | HSZ-5 | src=Ручной; load=5
+hoist | TOR | PA-250 | src=Сеть 220 В; load=0.25
+hoist | TOR | PA-500 | src=Сеть 220 В; load=0.5
+hoist | TOR | PA-800 | src=Сеть 220 В; load=0.8
+hoist | TOR | PA-1000 | src=Сеть 220 В; load=1
+hoist | Tractel | Bravo | src=Ручной
+hoist | Tractel | Tralift | src=Ручной
+rack-jack | Hi-Lift | HL-485 | load=2.1
+rack-jack | Hi-Lift | HL-605 | load=2.1
+rack-jack | Hi-Lift | X-Treme XT-485 | load=2.1
+pallet-truck | Jungheinrich | AM 22 | load=2.2; forks=1150
+pallet-truck | Jungheinrich | AMX 10 | load=1
+pallet-truck | Jungheinrich | EJE 116 | load=1.6
+
+# Отделка и окраска
+airless-sprayer | Wagner | Control Pro 350 R | src=Сеть 220 В
+airless-sprayer | Wagner | ProSpray 3.21 | src=Сеть 220 В
+airless-sprayer | Wagner | ProSpray 3.25 | src=Сеть 220 В
+airless-sprayer | Wagner | ProSpray 3.31 | src=Сеть 220 В
+airless-sprayer | Wagner | ProSpray 3.39 | src=Сеть 220 В
+airless-sprayer | Wagner | HeavyCoat 750 | src=Сеть 220 В
+airless-sprayer | Graco | Magnum ProX17 | src=Сеть 220 В
+airless-sprayer | Graco | Magnum ProX19 | src=Сеть 220 В
+airless-sprayer | Graco | Ultra 395 | src=Сеть 220 В
+airless-sprayer | Graco | Ultra 495 | src=Сеть 220 В
+airless-sprayer | Graco | Ultra 595 | src=Сеть 220 В
+airless-sprayer | Graco | Ultra Max II 795 | src=Сеть 220 В
+airless-sprayer | Graco | GMAX II 7900 | src=Бензин
+airless-sprayer | Titan | PowrTwin 8900 | src=Бензин
+paint-sprayer | Wagner | W 990 Flexio | src=Сеть 220 В
+paint-sprayer | Wagner | XVLP Universal Sprayer | src=Сеть 220 В
+paint-sprayer | Bosch | EasySpray 18V-100 | src=Аккумулятор; volt=18
+paint-sprayer | Ryobi | R18SPR | src=Аккумулятор; volt=18
+paint-sprayer | Einhell | TC-SY 400 P | src=Сеть 220 В; power=400
+paint-sprayer | Einhell | TC-SY 600 S | src=Сеть 220 В; power=600
+paint-sprayer | Einhell | TC-SY 700 S | src=Сеть 220 В; power=700
+paint-sprayer | Devilbiss | GTi Pro Lite | src=Сжатый воздух
+paint-sprayer | Sata | Satajet 1000 B | src=Сжатый воздух
+paint-sprayer | Sata | Satajet 5000 B | src=Сжатый воздух
+paint-sprayer | Sata | Satajet X 5500 | src=Сжатый воздух
+plaster-machine | PFT | G5 c | phase=380 В
+putty-sprayer | Wagner | PlastCoat 830 | 
+putty-sprayer | Wagner | HeavyCoat 970 | 
+putty-sprayer | Titan | Impact 1140 | 
+drywall-sander-long | Festool | Planex LHS 2 225 EQI | power=400; disc=215
+drywall-sander-long | Festool | Planex Easy LHS-E 225 | power=400; disc=215
+drywall-sander-long | Makita | SL001G | disc=225
+drywall-sander-long | Flex | GCE 6-EC | disc=225
+drywall-sander-long | Flex | GSE 5 R | disc=225
+drywall-sander-long | Mirka | LEROS 950CV | power=350; disc=225
+drywall-sander-long | Mirka | LEROS-S 950CV | power=350; disc=225
+drywall-sander-long | DeWalt | DWE7800 | power=710; disc=225
+drywall-sander-long | DeWalt | DCE800 | disc=225
+drywall-sander-long | Einhell | TE-DW 225 X | power=600; disc=225
+
+# Полы
+drum-floor-sander | Bona | Scorpion | width=200
+flat-floor-sander | Lägler | Single | 
+flat-floor-sander | Bona | FlexiSand 1.5 | 
+flat-floor-sander | Bona | Power Drive | 
+edge-sander | Bona | Mini Edge | 
+concrete-grinder | Husqvarna | PG 540 | phase=380 В; width=540
+concrete-grinder | Husqvarna | PG 680 RC | phase=380 В; width=680
+concrete-grinder | Husqvarna | PG 820 RC | phase=380 В; width=820
+concrete-grinder | Сплитстоун | СО-327 | phase=380 В
+concrete-grinder | Сплитстоун | СО-335 | phase=380 В
+scarifier | Von Arx | FR 200 | 
+scarifier | Von Arx | FR 247 | 
+scarifier | Von Arx | FR 300 | 
+scarifier | Edco | CPM-8 | 
+
+# Резка камня и бетона
+tile-cutter-electric | Rubi | DC-250 | disc=250
+tile-cutter-electric | Rubi | DS-250 | disc=250
+tile-cutter-electric | Rubi | DX-350 | disc=350
+tile-cutter-electric | Battipav | Prime 100 | 
+tile-cutter-electric | Battipav | Prime 120 | 
+tile-cutter-electric | Battipav | Super Prime 85 | 
+tile-cutter-electric | Battipav | Super Prime 100 | 
+tile-cutter-electric | Makita | 4100NH3 | disc=110
+tile-cutter-electric | Makita | CC301D | disc=85
+tile-cutter-electric | Makita | DCC500 | disc=125
+tile-cutter-electric | Bosch | GDM 13-34 | disc=110
+tile-cutter-electric | Bosch | GDC 140 | disc=110
+tile-cutter-electric | DeWalt | D24000 | disc=250
+tile-cutter-electric | DeWalt | DWC410 | disc=110
+tile-cutter-electric | Einhell | TC-TC 618 | 
+tile-cutter-manual | Rubi | TX-700 | 
+tile-cutter-manual | Rubi | TX-900 | 
+tile-cutter-manual | Rubi | TS-60 | 
+tile-cutter-manual | Rubi | TP-T 93 | 
+tile-cutter-manual | Rubi | TP-T 125 | 
+tile-cutter-manual | Rubi | Speed-62 | 
+tile-cutter-manual | Montolit | Masterpiuma P3 63 | 
+tile-cutter-manual | Montolit | Masterpiuma P3 93 | 
+tile-cutter-manual | Montolit | Masterpiuma P3 125 | 
+wall-chaser | Makita | SG1251J | power=1400; disc=125
+wall-chaser | Hilti | DC-SE 20 | power=2000
+core-drill-hand | Eibenstock | ETN 162/3 | power=2300; dia=162
+core-drill-hand | Husqvarna | DM 230 | dia=152
+core-drill-stand | Husqvarna | DM 540i | 
+core-drill-hand | Milwaukee | DD 2-160 XE | power=1500; dia=162
+core-drill-hand | Milwaukee | DD 3-152 | power=1900; dia=152
+core-drill-hand | Milwaukee | MXF DCD150 | 
+power-cutter | Stihl | TS 440 | src=Бензин; cc=66.7; disc=350
+power-cutter | Husqvarna | K 3000 Wet | src=Сеть 220 В; disc=350
+power-cutter | Makita | 4114S | src=Сеть 220 В; disc=355
+power-cutter | Milwaukee | MXF COS350 | src=Аккумулятор; disc=350
+power-cutter | DeWalt | DCS690 | src=Аккумулятор; disc=230
+power-cutter | Wacker Neuson | BTS 635s | src=Бензин; cc=63.3; disc=350
+power-cutter | Wacker Neuson | BTS 1035L3 | src=Бензин; cc=98.5; disc=350
+floor-saw | Husqvarna | FS 500 E | src=Сеть 380 В
+floor-saw | Husqvarna | FS 520 | src=Бензин
+stone-saw | Norton | Clipper TT 350 | disc=350
+stone-saw | Norton | Clipper Major M1 | disc=350
+stone-saw | Cedima | CTS-57 | disc=350
+stone-saw | Imer | Combi 250 | disc=250
+stone-saw | Imer | Combi 350 | disc=350
+
+# Трубы и сантехника
+press-tool | Rems | Power-Press SE | src=Сеть 220 В
+press-tool | Rothenberger | Romax Pressliner | src=Сеть 220 В
+press-tool | Viega | Picco 6 | src=Аккумулятор
+press-tool | Ridgid | RP 240 | src=Аккумулятор
+press-tool | Milwaukee | M18 ONEBLHPT | src=Аккумулятор; volt=18
+press-tool | Makita | DPP200 | src=Аккумулятор; volt=18
+press-tool | Uponor | UP 110 | src=Аккумулятор
+press-tool | Uponor | UP 75 | src=Аккумулятор
+press-tool | Rehau | RAUTOOL A3 | src=Аккумулятор
+press-tool | Rehau | RAUTOOL A-light 2 | src=Аккумулятор
+press-tool | Rehau | RAUTOOL M1 | src=Ручной
+pp-welder | Rothenberger | Roweld P 63 S-5 | power=800
+pp-welder | Ridgid | P-110 | power=1200
+pp-welder | Вихрь | АСПТ-1000 | power=1000
+pp-welder | Вихрь | АСПТ-2000 | power=2000
+butt-welder | Rothenberger | Roweld P 160 B | 
+butt-welder | Rothenberger | Roweld P 250 B | 
+butt-welder | Rothenberger | Roweld P 315 B | 
+butt-welder | Ritmo | Basic 160 | 
+butt-welder | Ritmo | Basic 250 | 
+butt-welder | Ritmo | Basic 315 | 
+butt-welder | Ritmo | Delta Dragon 315 | 
+pipe-threader | Rems | Amigo E | power=1200
+pipe-threader | Rems | Magnum 2000 L-T | power=1700
+pipe-threader | Rothenberger | Ropower 50 R | 
+pipe-threader | Milwaukee | M18 FPT114 | 
+pipe-bender | Rems | Curvo 22 V | src=Аккумулятор
+pipe-bender | Rems | Python | src=Ручной
+pipe-bender | Rems | Sinus | src=Ручной
+pipe-bender | Ridgid | HB382 | src=Ручной
+pipe-cutter | Rems | Ras Cu-Inox 3-28 | src=Ручной
+pipe-cutter | Rothenberger | Rocut TC 50 | src=Ручной
+pipe-cutter | Ridgid | 2-A | src=Ручной
+pipe-cutter | Ridgid | 15 | src=Ручной
+pipe-cutter | Ridgid | 202 | src=Ручной
+pipe-cutter | Ridgid | PC 1375 | src=Ручной
+pipe-cutter | Milwaukee | M12 PCSS | src=Аккумулятор
+drain-cleaner | Ridgid | K-60SP | 
+drain-cleaner | Ridgid | K-3800 | 
+drain-cleaner | Ridgid | K-9-204 | 
+drain-cleaner | Rothenberger | R 650 | 
+drain-cleaner | Rems | Mini-Cobra | 
+drain-cleaner | Milwaukee | M18 FFSDC10 | 
+drain-cleaner | Milwaukee | M12 BDC6 | 
+drain-cleaner | Spartan | 100 | 
+drain-cleaner | Spartan | 300 | 
+drain-cleaner | Spartan | 1065 | 
+pipe-camera | Ridgid | SeeSnake Compact C40 | 
+pipe-camera | Rothenberger | Roscope 1000 | 
+pipe-camera | Wöhler | VIS 400 | 
+pipe-camera | Bosch | GIC 120 C | 
+pipe-camera | Milwaukee | M12 IC AV3 | 
+pressure-tester | Rems | Multi-Push SL | src=Сеть 220 В
+pressure-tester | Rothenberger | RP Pro III | src=Сеть 220 В
+
+# Измерения
+laser-level | ADA | Cube 360 | lines=2×360°; beam=Красный
+laser-level | ADA | 6D Servoliner | lines=3D (3×360°); beam=Красный
+laser-level | ADA | Cube 360 Green | lines=2×360°; beam=Зелёный
+laser-level | ADA | LaserTank 4-360 Green | lines=4D (4×360°); beam=Зелёный
+laser-level | Condtrol | XLiner Pento | beam=Красный
+laser-level | Condtrol | Unix 360 | lines=2×360°; beam=Красный
+laser-level | Condtrol | Unix 360 Green Pro | lines=2×360°; beam=Зелёный
+laser-level | Condtrol | QB Green | lines=Крест (2 линии); beam=Зелёный
+laser-level | Condtrol | GFX 360-3 | lines=3D (3×360°); beam=Зелёный
+laser-level | Instrumax | Element 2D | lines=Крест (2 линии); beam=Красный
+laser-level | RGK | PR-3M | lines=3D (3×360°); beam=Красный
+laser-level | RGK | PR-3G | lines=3D (3×360°); beam=Зелёный
+laser-level | RGK | PR-4D | lines=4D (4×360°); beam=Красный
+laser-level | RGK | UL-11 | 
+laser-level | Bosch | GLL 3-80 C | lines=3D (3×360°); beam=Красный; range=30
+laser-level | Bosch | GLL 2-50 | beam=Красный
+laser-level | Bosch | GCL 2-50 | lines=Крест (2 линии); beam=Красный
+laser-level | Bosch | GCL 2-50 C | lines=Крест (2 линии); beam=Красный
+laser-level | Bosch | GCL 2-50 CG | lines=Крест (2 линии); beam=Зелёный
+laser-level | Bosch | Quigo Green | lines=Крест (2 линии); beam=Зелёный
+laser-level | Bosch | UniversalLevel 2 | lines=Крест (2 линии); beam=Красный
+laser-level | Makita | SK103PZ | lines=Крест (2 линии); beam=Красный
+laser-level | Makita | SK105DZ | lines=Крест (2 линии); beam=Красный
+laser-level | Makita | SK105GDZ | lines=Крест (2 линии); beam=Зелёный
+laser-level | DeWalt | DCE089LR | lines=3D (3×360°); beam=Красный
+laser-level | DeWalt | DCE089NG18 | lines=3D (3×360°); beam=Зелёный
+laser-level | DeWalt | DCE0822D1G | beam=Зелёный
+laser-level | DeWalt | DCE0825LR | beam=Красный
+laser-level | Leica | Lino L2G | lines=Крест (2 линии); beam=Зелёный
+laser-level | Leica | Lino L360 | beam=Красный
+laser-level | Leica | Lino L4P1 | beam=Красный
+laser-level | Hilti | PM 2-P | 
+laser-level | Hilti | PM 2-PL | 
+laser-level | Milwaukee | L4 CLLP | beam=Зелёный
+laser-level | Milwaukee | M12 CLL4P | beam=Зелёный
+laser-level | Stanley | Cross 90 | lines=Крест (2 линии); beam=Красный
+laser-level | Stanley | FatMax CL90i | lines=Крест (2 линии); beam=Красный
+laser-level | Fubag | Crystal 20G VH | lines=Крест (2 линии); beam=Зелёный
+laser-level | Fubag | Pyramid 30R V2 | lines=3D (3×360°); beam=Красный
+laser-level | Laserliner | PrecisionPlane-Laser 3G Pro | lines=3D (3×360°); beam=Зелёный
+laser-level | Huepar | 902CG | lines=2×360°; beam=Зелёный
+laser-level | Huepar | 603CG | lines=3D (3×360°); beam=Зелёный
+laser-level | Huepar | S04CG | lines=4D (4×360°); beam=Зелёный
+laser-level | Einhell | TE-LL 360 | lines=2×360°; beam=Красный
+rotary-laser | Bosch | GRL 250 HV | beam=Красный
+rotary-laser | ADA | Rotary 400 HV Servo | beam=Красный
+rotary-laser | ADA | Rotary 500 HV Servo | beam=Красный
+rotary-laser | Condtrol | Drive | beam=Красный
+rotary-laser | Leica | Rugby 670 | beam=Красный
+rotary-laser | Topcon | RL-200 2S | beam=Красный
+rotary-laser | Hilti | PR 2-HS A12 | beam=Красный
+rotary-laser | Hilti | PR 30-HVS A12 | beam=Красный
+rotary-laser | Hilti | PR 300-HV2S A12 | beam=Красный
+rotary-laser | Hilti | PRI 2 | beam=Красный
+rotary-laser | DeWalt | DCE079D1R | beam=Красный
+rotary-laser | DeWalt | DCE079D1G | beam=Зелёный
+rotary-laser | Spectra Precision | LL300N | beam=Красный
+rotary-laser | Spectra Precision | LL500 | beam=Красный
+rotary-laser | Spectra Precision | GL412N | beam=Красный
+rotary-laser | Spectra Precision | GL422N | beam=Красный
+rotary-laser | Stabila | LAR 160 | beam=Красный
+rotary-laser | Stabila | LAR 250 | beam=Красный
+rotary-laser | Stabila | LAR 350 | beam=Красный
+rotary-laser | Geomax | Zone20 H | beam=Красный
+rotary-laser | Geomax | Zone40 H | beam=Красный
+optical-level | ADA | Basis | zoom=20
+optical-level | Topcon | AT-B3A | zoom=28
+optical-level | Nikon | AC-2S | zoom=24
+optical-level | Nikon | AE-7 | zoom=24
+optical-level | Nikon | AX-2S | zoom=24
+optical-level | Sokkia | B40A | zoom=24
+optical-level | Sokkia | B30A | zoom=28
+optical-level | Sokkia | B20 | zoom=32
+optical-level | RGK | C-24 | zoom=24
+optical-level | RGK | C-28 | zoom=28
+optical-level | RGK | C-32 | zoom=32
+optical-level | Geobox | N7-26 | zoom=26
+optical-level | Geobox | N8-32 | zoom=32
+optical-level | DeWalt | DW096PK | zoom=26
+optical-level | Stabila | OLS 26 | zoom=26
+laser-meter | Bosch | GLM 50-27 CG | range=50
+laser-meter | Bosch | PLR 15 | range=15
+laser-meter | Bosch | UniversalDistance 50 | range=50
+laser-meter | Bosch | AdvancedDistance 50C | range=50
+laser-meter | Leica | Disto X6 | range=250
+laser-meter | ADA | Cosmo 40 | range=40
+laser-meter | ADA | Cosmo 60 | range=60
+laser-meter | ADA | Cosmo 100 | range=100
+laser-meter | ADA | Cosmo 120 Video | range=120
+laser-meter | Condtrol | Smart 20 | range=20
+laser-meter | Milwaukee | LDM 30 | range=30
+laser-meter | Milwaukee | LDM 50 | range=50
+laser-meter | Milwaukee | LDM 100 | range=100
+laser-meter | Stanley | TLM 40 | 
+laser-meter | Stanley | TLM 330 | range=100
+laser-meter | Instrumax | Sniper 50 | range=50
+laser-meter | RGK | D60 | range=60
+laser-meter | RGK | D120 | range=120
+laser-meter | Fluke | 414D | range=50
+laser-meter | Fluke | 419D | range=80
+laser-meter | Fluke | 424D | range=100
+laser-meter | Laserliner | LaserRange-Master i3 | 
+wall-scanner | Bosch | GMS 100 M | depth=100
+wall-scanner | Bosch | PMD 7 | depth=70
+wall-scanner | Bosch | PMD 10 | depth=100
+wall-scanner | Hilti | PS 1000 | depth=400
+wall-scanner | Hilti | PS 300 | 
+wall-scanner | Hilti | PS 200 | 
+wall-scanner | ADA | Wall Scanner 120 | depth=120
+wall-scanner | ADA | Wall Scanner 80 | depth=80
+wall-scanner | Laserliner | MultiFinder Plus | 
+wall-scanner | Stanley | S300 | depth=38
+wall-scanner | Stanley | S160 | 
+wall-scanner | Zircon | MultiScanner i520 | depth=38
+wall-scanner | Zircon | MultiScanner i700 | depth=76
+wall-scanner | Proceq | Profometer PM-8 | 
+wall-scanner | Proceq | GP8800 | 
+thermal-camera | Flir | E5 Pro | res=160×120
+thermal-camera | Flir | E6 Pro | res=240×180
+thermal-camera | Flir | E8 Pro | res=320×240
+thermal-camera | Flir | E76 | res=320×240
+thermal-camera | Flir | E86 | res=464×348
+thermal-camera | Flir | TG165-X | res=80×60
+thermal-camera | Testo | 868s | res=160×120
+thermal-camera | Testo | 871s | res=240×180
+thermal-camera | Testo | 872s | res=320×240
+thermal-camera | Fluke | TiS20+ | res=120×90
+thermal-camera | Fluke | TiS55+ | res=256×192
+thermal-camera | Fluke | TiS60+ | res=320×240
+thermal-camera | Fluke | Ti300+ | res=320×240
+thermal-camera | Fluke | Ti401 PRO | res=640×480
+thermal-camera | Fluke | PTi120 | res=120×90
+thermal-camera | Hikmicro | B10 | 
+thermal-camera | Hikmicro | B20 | res=256×192
+thermal-camera | Hikmicro | E1L | res=160×120
+thermal-camera | Hikmicro | E20Plus | 
+thermal-camera | Hikmicro | Pocket2 | res=256×192
+thermal-camera | Hikmicro | Eco | res=160×120
+thermal-camera | Hikmicro | M30 | res=384×288
+thermal-camera | Hikmicro | G40 | res=384×288
+thermal-camera | Hikmicro | SP40 | 
+thermal-camera | Hikmicro | Mini2 | res=256×192
+thermal-camera | UNI-T | UTi260B | res=256×192
+thermal-camera | UNI-T | UTi120S | res=120×90
+thermal-camera | UNI-T | UTi165K | 
+thermal-camera | Milwaukee | M12 TI | res=160×120
+thermal-camera | Seek Thermal | Compact Pro | res=320×240
+thermal-camera | Seek Thermal | Reveal Pro | res=320×240
+thermal-camera | Guide | PC210 | res=256×192
+thermal-camera | Guide | PS400 | res=384×288
+moisture-meter | Bosch | PTD 1 | 
+moisture-meter | Bosch | UniversalHumid | 
+moisture-meter | Laserliner | MoistureMaster Compact Plus | 
+moisture-meter | Trotec | BM22 | 
+moisture-meter | Flir | MR160 | 
+measuring-wheel | Condtrol | Wheel Pro | 
+measuring-wheel | Stanley | 1-77-174 | 
+measuring-wheel | RGK | Q32 | 
+measuring-wheel | RGK | Q40 | 
+
+# Автосервис
+car-polisher | Makita | PV7000C | src=Сеть 220 В; power=900; ptype=Роторная; disc=180
+car-polisher | Makita | DPV300 | src=Аккумулятор; volt=18; ptype=Роторная
+car-polisher | Makita | PV001G | src=Аккумулятор; volt=40; ptype=Роторная; disc=180
+car-polisher | DeWalt | DCM848 | src=Аккумулятор; volt=18; ptype=Эксцентриковая; disc=125
+car-polisher | Metabo | PE 15-20 RT | src=Сеть 220 В; power=1500; ptype=Роторная; disc=200
+car-polisher | Metabo | PE 15-25 | src=Сеть 220 В; power=1500; ptype=Роторная; disc=200
+car-polisher | Metabo | PE 12-175 | src=Сеть 220 В; power=1200; ptype=Роторная; disc=175
+car-polisher | Metabo | PE 15-30 | src=Сеть 220 В; power=1500; ptype=Роторная; disc=200
+car-polisher | Milwaukee | M18 FROP15 | src=Аккумулятор; volt=18; ptype=Эксцентриковая; disc=150
+car-polisher | Milwaukee | M18 FROP21 | src=Аккумулятор; volt=18; ptype=Эксцентриковая; disc=150
+car-polisher | Milwaukee | M12 BPS | src=Аккумулятор; volt=12; ptype=Роторная
+car-polisher | Flex | PXE 80 10.8-EC | src=Аккумулятор; volt=10.8; ptype=Эксцентриковая; disc=80
+car-polisher | Rupes | LHR15 Mark III | src=Сеть 220 В; power=500; ptype=Эксцентриковая; disc=150
+car-polisher | Rupes | LHR21 Mark III | src=Сеть 220 В; power=500; ptype=Эксцентриковая; disc=150
+car-polisher | Rupes | LHR12E Duetto | src=Сеть 220 В; power=400; ptype=Эксцентриковая; disc=125
+car-polisher | Rupes | LHR75E Mini | src=Сеть 220 В; power=400; ptype=Эксцентриковая; disc=75
+car-polisher | Rupes | LH19E | src=Сеть 220 В; power=1200; ptype=Роторная; disc=180
+car-polisher | Mirka | PS 1437 | src=Сеть 220 В; power=1400; ptype=Роторная; disc=180
+car-polisher | Mirka | PROS 650CV | src=Сеть 220 В; ptype=Эксцентриковая; disc=150
+car-polisher | Festool | Shinex RAP 150-14 FE | src=Сеть 220 В; power=1200; ptype=Роторная; disc=150
+car-polisher | Festool | Shinex RAP 80.02 E | src=Сеть 220 В; power=400; ptype=Роторная; disc=80
+car-polisher | Festool | RAP 150-21 FE | src=Сеть 220 В; power=1200; ptype=Роторная; disc=150
+car-polisher | Hikoki | SP18VA | src=Сеть 220 В; power=1260; ptype=Роторная; disc=180
+car-polisher | Einhell | CE-CP 18/180 Li | src=Аккумулятор; volt=18; ptype=Роторная; disc=180
+paint-gauge | Etari | ET-11P | mtype=Fe/NFe
+paint-gauge | Etari | ET-600 | mtype=Fe/NFe
+paint-gauge | CEM | DT-156 | mtype=Fe/NFe
+paint-gauge | Elcometer | 311 | mtype=Fe/NFe
+paint-gauge | Elcometer | 456 | mtype=Fe/NFe
+paint-gauge | Defelsko | PosiTector 6000 | mtype=Fe/NFe
+paint-gauge | Defelsko | PosiTest DFT | mtype=Fe/NFe
+jump-starter | Aurora | Atom 24 | vt=12/24 В
+jump-starter | Fubag | Drive 400 | vt=12 В; peak=400
+jump-starter | Fubag | Drive 450 | vt=12 В; peak=450
+jump-starter | Fubag | Drive 600 | vt=12 В; peak=600
+jump-starter | Berkut | JSL-9000 | vt=12 В
+jump-starter | Berkut | JSL-18000 | vt=12 В
+jump-starter | Berkut | JSL-20000 | vt=12 В
+jump-starter | Carku | Pro-10 | vt=12 В
+jump-starter | Carku | Pro-30 | vt=12 В
+jump-starter | Carku | E-Power-43 | vt=12 В
+jump-starter | Noco | GB40 | vt=12 В; peak=1000
+jump-starter | Noco | GB50 | vt=12 В; peak=1500
+jump-starter | Noco | GB70 | vt=12 В; peak=2000
+jump-starter | Noco | GB150 | vt=12 В; peak=4000
+jump-starter | Noco | GB500 | vt=12/24 В; peak=20000
+jump-starter | Telwin | Drive 13000 | vt=12/24 В
+jump-starter | Telwin | Dynamic 420 Start | vt=12/24 В
+jump-starter | Telwin | Leader 400 Start | vt=12/24 В
+battery-charger | Fubag | Micro 80/12 | vt=12 В
+battery-charger | Fubag | Micro 160/12 | vt=12 В
+battery-charger | Fubag | Force 220 | vt=12/24 В
+battery-charger | Fubag | Force 320 | vt=12/24 В
+battery-charger | Noco | Genius 1 | vt=6/12 В; amp=1
+battery-charger | Noco | Genius 2 | vt=6/12 В; amp=2
+battery-charger | Noco | Genius 5 | vt=6/12 В; amp=5
+battery-charger | Noco | Genius 10 | vt=6/12 В; amp=10
+battery-charger | Ctek | MXS 5.0 | vt=12 В; amp=5
+battery-charger | Ctek | MXS 10 | vt=12 В; amp=10
+battery-charger | Ctek | MXS 25 | vt=12 В; amp=25
+battery-charger | Ctek | CT5 Time to Go | vt=12 В
+battery-charger | Bosch | C3 | vt=6/12 В; amp=3.8
+battery-charger | Bosch | C7 | vt=12/24 В; amp=7
+battery-charger | Орион | Вымпел-55 | vt=12 В; amp=15
+battery-charger | Орион | Вымпел-57 | vt=12/24 В; amp=15
+battery-charger | Орион | Вымпел-27 | vt=12 В; amp=7
+battery-charger | Орион | PW 325 | vt=12 В
+battery-charger | Telwin | T-Charge 12 | vt=12 В
+battery-charger | Telwin | T-Charge 18 | vt=12/24 В
+battery-charger | Telwin | Nevada 15 | vt=12/24 В
+battery-charger | Telwin | Alpine 20 Boost | vt=12/24 В
+battery-charger | Patriot | BCI-10M | vt=12 В
+battery-charger | Hyundai | HY 400 | vt=12 В
+battery-charger | Hyundai | HY 410 | vt=12 В
+battery-charger | Deca | Matic 119 | vt=12 В
+
+# Прочее
+pneumatic-hammer | Atlas Copco | TEX 05 | 
+pneumatic-hammer | Atlas Copco | TEX 12 PS | 
+pneumatic-hammer | Atlas Copco | TEX P60 | 
+pneumatic-hammer | Atlas Copco | TEX P90 | 
+mobile-compressor | Atlas Copco | XAS 88 | src=Дизель
+mobile-compressor | Atlas Copco | XAS 186 | src=Дизель
+mobile-compressor | Atlas Copco | XAS 58-7 | src=Дизель
+mobile-compressor | Airman | PDS 100S | src=Дизель
+mobile-compressor | Kaeser | M 50 | src=Дизель
+mobile-compressor | Kaeser | M 59 | src=Дизель
+mobile-compressor | Kaeser | M 82 | src=Дизель
+mobile-compressor | Kaeser | M 114 | src=Дизель
+mobile-compressor | Doosan | 7/41 | src=Дизель
+mobile-compressor | Doosan | 7/53 | src=Дизель
+mobile-compressor | Doosan | 7/71 | src=Дизель
+mobile-compressor | Doosan | 10/105 | src=Дизель
+mobile-compressor | ЗИФ | ПВ-5 | src=Дизель
+mobile-compressor | ЗИФ | ПВ-10 | src=Дизель
+mobile-compressor | ЗИФ | ЗИФ-55 | src=Дизель
+mobile-compressor | Compair | C 30 | src=Дизель
+mobile-compressor | Compair | C 50 | src=Дизель
+mobile-compressor | Compair | C 76 | src=Дизель
+screw-compressor | Remeza | ВК5Е-8-500 | 
+screw-compressor | Remeza | ВК10Е-8-500 | 
+screw-compressor | Remeza | ВК15Е-8-500 | 
+screw-compressor | Atlas Copco | GX 4 | 
+screw-compressor | Atlas Copco | G 11 | 
+screw-compressor | Abac | Spinn 5.5 | 
+screw-compressor | Abac | Spinn 7.5 | 
+screw-compressor | Abac | Spinn 11 | 
+screw-compressor | Abac | Formula 11 | 
+screw-compressor | Kaeser | SX 4 | 
+screw-compressor | Kaeser | SX 8 | 
+screw-compressor | Kaeser | SM 10 | 
+adsorption-dryer | Trotec | TTR 500 | 
+adsorption-dryer | Munters | MG50 | 
+adsorption-dryer | Munters | ML180 | 
+welding-generator | Fubag | WS 230 DC ES | src=Бензин; amp=230
+welding-generator | Champion | DW180E | src=Дизель; amp=180
+welding-generator | Europower | EP 200 X | src=Бензин; amp=200
+welding-generator | Lincoln Electric | Vantage 300 | src=Дизель; amp=300
+welding-generator | Lincoln Electric | Ranger 225 | src=Бензин; amp=225
+welding-generator | Mosa | TS 200 BS/CF | src=Бензин; amp=200
+gas-cutter | Donmet | Р3П-32 | gas=Пропан
+gas-cutter | Donmet | Р3П-01 | gas=Пропан
+gas-cutter | Donmet | 149 | gas=Пропан
+gas-cutter | Redius | Р3П-32-Р | gas=Пропан
+gas-cutter | Krass | Р3П-300 | gas=Пропан
+gas-cutter | Krass | Р3А-300 | gas=Ацетилен
+gas-cutter | Harris | 62-5F | gas=Пропан или ацетилен
+gas-cutter | Victor | ST2600FC | gas=Пропан или ацетилен
+gas-cutter | ESAB | X11 | gas=Пропан или ацетилен
+gas-cutter | ESAB | X21 | gas=Пропан или ацетилен

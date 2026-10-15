@@ -1,0 +1,883 @@
+# Справочник моделей, часть 4 (10.87, 15.10.2026): пополнение — актуальные линейки электроинструмента.
+# Аккумуляторные платформы последних лет (Makita XGT 40 В и LXT 18 В, Bosch Professional 18V, DeWalt XR и FlexVolt,
+# Milwaukee M18 FUEL / M12, Metabo LTX, HiKOKI, Hilti Nuron 22 В), сетевые модели, которые сейчас продаются и сдаются
+# в прокат, и марки, популярные в России (Интерскол, Зубр, Вихрь, Калибр, Ресанта, Patriot, Elitech, Einhell, Ryobi,
+# AEG, Black+Decker, Worx, Greenworks).
+# Строка: вид | бренд | модель | характеристики «ключ=значение; …» | (необязательно) своё слово для названия
+# Характеристики — только те, в которых уверены (питание и напряжение — по линейке; мощность — по паспорту модели).
+# Модели, уже записанные в частях 1–3, сюда не попадают: tools/models-gen.py считает точный повтор (вид, бренд, модель) ошибкой.
+# Одна модель — только в одном виде.
+
+# Перфораторы SDS-plus
+rotary-sds-plus | Makita | HR1840 | src=Сеть 220 В; power=470
+rotary-sds-plus | Makita | HR1841F | src=Сеть 220 В; power=470
+rotary-sds-plus | Makita | HR2230 | src=Сеть 220 В; power=710
+rotary-sds-plus | Makita | HR2475 | src=Сеть 220 В; power=780
+rotary-sds-plus | Makita | HR2631F | src=Сеть 220 В; power=800
+rotary-sds-plus | Makita | HR2641 | src=Сеть 220 В; power=800
+rotary-sds-plus | Makita | HR2651 | src=Сеть 220 В; power=800
+rotary-sds-plus | Makita | HR2652 | src=Сеть 220 В; power=800
+rotary-sds-plus | Makita | HR2663 | src=Сеть 220 В; power=800
+rotary-sds-plus | Makita | HR2811FT | src=Сеть 220 В; power=800
+rotary-sds-plus | Makita | DHR182 | src=Аккумулятор; volt=18
+rotary-sds-plus | Makita | DHR241 | src=Аккумулятор; volt=18
+rotary-sds-plus | Makita | DHR264 | src=Аккумулятор; volt=36
+rotary-sds-plus | Makita | DHR280 | src=Аккумулятор; volt=36
+rotary-sds-plus | Makita | DHR282 | src=Аккумулятор; volt=36
+rotary-sds-plus | Makita | DHR283 | src=Аккумулятор; volt=36
+rotary-sds-plus | Makita | HR001G | src=Аккумулятор; volt=40
+rotary-sds-plus | Makita | HR002G | src=Аккумулятор; volt=40
+rotary-sds-plus | Makita | HR003G | src=Аккумулятор; volt=40
+rotary-sds-plus | Makita | HR004G | src=Аккумулятор; volt=40
+rotary-sds-plus | Makita | HR007G | src=Аккумулятор; volt=40
+rotary-sds-plus | Makita | HR166D | src=Аккумулятор; volt=12
+rotary-sds-plus | Bosch | GBH 2-21 | src=Сеть 220 В; power=720; energy=2
+rotary-sds-plus | Bosch | GBH 2-24 DFR | src=Сеть 220 В; power=790
+rotary-sds-plus | Bosch | GBH 2-26 F | src=Сеть 220 В; power=830; energy=2.7
+rotary-sds-plus | Bosch | GBH 2-28 | src=Сеть 220 В; power=880; energy=3.2
+rotary-sds-plus | Bosch | GBH 2-28 DFV | src=Сеть 220 В; power=850; energy=3.2
+rotary-sds-plus | Bosch | GBH 3-28 DRE | src=Сеть 220 В; power=800; energy=3.1
+rotary-sds-plus | Bosch | GBH 18V-20 | src=Аккумулятор; volt=18
+rotary-sds-plus | Bosch | GBH 18V-22 | src=Аккумулятор; volt=18
+rotary-sds-plus | Bosch | GBH 18V-24 C | src=Аккумулятор; volt=18
+rotary-sds-plus | Bosch | GBH 18V-26 F | src=Аккумулятор; volt=18
+rotary-sds-plus | Bosch | GBH 18V-28 C | src=Аккумулятор; volt=18
+rotary-sds-plus | Bosch | GBH 18V-28 DC | src=Аккумулятор; volt=18
+rotary-sds-plus | Bosch | GBH 18V-34 CF | src=Аккумулятор; volt=18
+rotary-sds-plus | Bosch | GBH 36 VF-LI Plus | src=Аккумулятор; volt=36
+rotary-sds-plus | Bosch | PBH 3000 FRE | src=Сеть 220 В; power=750
+rotary-sds-plus | Bosch | UniversalHammer 18V | src=Аккумулятор; volt=18
+rotary-sds-plus | DeWalt | D25033K | src=Сеть 220 В; power=710
+rotary-sds-plus | DeWalt | D25143K | src=Сеть 220 В; power=900
+rotary-sds-plus | DeWalt | DCH172 | src=Аккумулятор; volt=18
+rotary-sds-plus | DeWalt | DCH253 | src=Аккумулятор; volt=18
+rotary-sds-plus | DeWalt | DCH263 | src=Аккумулятор; volt=18
+rotary-sds-plus | DeWalt | DCH323 | src=Аккумулятор
+rotary-sds-plus | DeWalt | DCH333 | src=Аккумулятор
+rotary-sds-plus | Milwaukee | M18 BLHX | src=Аккумулятор; volt=18
+rotary-sds-plus | Milwaukee | M18 ONEFHX | src=Аккумулятор; volt=18
+rotary-sds-plus | Milwaukee | M18 FH | src=Аккумулятор; volt=18
+rotary-sds-plus | Milwaukee | M18 CHPX | src=Аккумулятор; volt=18
+rotary-sds-plus | Milwaukee | M12 CH | src=Аккумулятор; volt=12
+rotary-sds-plus | Milwaukee | PH 27 X | src=Сеть 220 В
+rotary-sds-plus | Milwaukee | PH 28 X | src=Сеть 220 В
+rotary-sds-plus | Milwaukee | PH 30 POWER X | src=Сеть 220 В
+rotary-sds-plus | Milwaukee | PLH 28 XE | src=Сеть 220 В
+rotary-sds-plus | Milwaukee | PLH 32 XE | src=Сеть 220 В
+rotary-sds-plus | Metabo | KHE 2444 | src=Сеть 220 В; power=800
+rotary-sds-plus | Metabo | KHE 2644 | src=Сеть 220 В; power=800
+rotary-sds-plus | Metabo | UHEV 2860-2 Quick | src=Сеть 220 В; power=1100
+rotary-sds-plus | Metabo | KHA 18 LTX BL 24 Quick | src=Аккумулятор; volt=18
+rotary-sds-plus | Metabo | KHA 36-18 LTX 32 | src=Аккумулятор; volt=36
+rotary-sds-plus | Metabo | PowerMaxx BH 12 BL 16 | src=Аккумулятор; volt=12
+rotary-sds-plus | Hikoki | DH26PX | src=Сеть 220 В; power=830
+rotary-sds-plus | Hikoki | DH18DBL | src=Аккумулятор; volt=18
+rotary-sds-plus | Hikoki | DH18DPA | src=Аккумулятор; volt=18
+rotary-sds-plus | Hikoki | DH36DPA | src=Аккумулятор; volt=36
+rotary-sds-plus | Hilti | TE 2-A22 | src=Аккумулятор; volt=22
+rotary-sds-plus | Hilti | TE 6-A22 | src=Аккумулятор; volt=22
+rotary-sds-plus | Hilti | TE 30-A36 | src=Аккумулятор; volt=36
+rotary-sds-plus | Hilti | TE 4-22 | src=Аккумулятор; volt=22
+rotary-sds-plus | Hilti | TE 6-22 | src=Аккумулятор; volt=22
+rotary-sds-plus | Hilti | TE 30-22 | src=Аккумулятор; volt=22
+rotary-sds-plus | Интерскол | П-26/800ЭР-2 | src=Сеть 220 В; power=800
+rotary-sds-plus | Вихрь | П-800К-М | src=Сеть 220 В; power=800
+rotary-sds-plus | Вихрь | П-1200К-М | src=Сеть 220 В; power=1200
+rotary-sds-plus | AEG | BBH 18 | src=Аккумулятор; volt=18
+rotary-sds-plus | Einhell | TE-RH 26 4F | src=Сеть 220 В
+rotary-sds-plus | Einhell | TE-HD 18 Li | src=Аккумулятор; volt=18
+
+# Перфораторы SDS-max
+rotary-sds-max | Makita | HR4001C | src=Сеть 220 В; power=1100
+rotary-sds-max | Makita | HR5001C | src=Сеть 220 В; power=1500
+rotary-sds-max | Makita | HR5201C | src=Сеть 220 В; power=1500
+rotary-sds-max | Makita | HR005G | src=Аккумулятор; volt=40
+rotary-sds-max | Makita | HR006G | src=Аккумулятор; volt=40
+rotary-sds-max | Bosch | GBH 18V-40 C | src=Аккумулятор; volt=18
+rotary-sds-max | Bosch | GBH 18V-45 C | src=Аккумулятор; volt=18
+rotary-sds-max | Milwaukee | K 540 S | src=Сеть 220 В; power=1100
+rotary-sds-max | Metabo | KHEV 5-40 BL | src=Сеть 220 В; power=1150
+rotary-sds-max | Metabo | KHEV 8-45 BL | src=Сеть 220 В; power=1500
+rotary-sds-max | Metabo | KHEV 11-52 BL | src=Сеть 220 В; power=1500
+rotary-sds-max | Hikoki | DH40MEY | src=Сеть 220 В; power=1150
+rotary-sds-max | Hilti | TE 60-22 | src=Аккумулятор; volt=22
+rotary-sds-max | Интерскол | П-40/1100ЭВ | src=Сеть 220 В; power=1100
+
+# Отбойные молотки и бетоноломы
+breaker | Makita | HM0860C | src=Сеть 220 В; power=1100; chuck=SDS-max
+breaker | Makita | HM001G | src=Аккумулятор; chuck=SDS-max
+breaker | Makita | HM002G | src=Аккумулятор; chuck=SDS-max
+breaker | Bosch | GSH 18V-5 C | src=Аккумулятор; chuck=SDS-max
+breaker | DeWalt | D25872K | src=Сеть 220 В; power=1600; chuck=SDS-max
+breaker | DeWalt | DCH832 | src=Аккумулятор; chuck=SDS-max
+breaker | Milwaukee | M18 FHM | src=Аккумулятор; chuck=SDS-max
+breaker | Hikoki | H41MB | src=Сеть 220 В; power=930; chuck=SDS-max
+breaker | Hilti | TE 500 | src=Сеть 220 В; chuck=SDS-max
+demolition-hammer | Makita | HM1511 | src=Сеть 220 В; power=1850; chuck=HEX 30
+demolition-hammer | DeWalt | D25980 | src=Сеть 220 В; power=2100; chuck=HEX 28
+demolition-hammer | Milwaukee | MXF DH2528H | src=Аккумулятор; chuck=HEX 28
+
+# Дрели
+drill | Makita | DP2010 | src=Сеть 220 В; power=370; chuck=Ключевой
+drill | Makita | DP4010 | src=Сеть 220 В; power=720; chuck=Ключевой
+drill | Makita | DP4001 | src=Сеть 220 В; power=750; chuck=Ключевой
+drill | Makita | HP2051 | src=Сеть 220 В; power=720; chuck=Ключевой
+drill | Makita | HP2051F | src=Сеть 220 В; power=720; chuck=Ключевой
+drill | Makita | HP1641 | src=Сеть 220 В; power=680; chuck=Быстрозажимной
+drill | Bosch | GBM 13 RE | src=Сеть 220 В; power=600; chuck=Быстрозажимной
+drill | Bosch | GBM 1600 RE | src=Сеть 220 В; power=850; chuck=Ключевой
+drill | Bosch | GSB 21-2 RE | src=Сеть 220 В; power=1100; chuck=Ключевой
+drill | Bosch | GSB 24-2 | src=Сеть 220 В; power=1100; chuck=Ключевой
+drill | Bosch | PSB 500 RE | src=Сеть 220 В; power=500; chuck=Быстрозажимной
+drill | Bosch | UniversalImpact 700 | src=Сеть 220 В; power=700; chuck=Быстрозажимной
+drill | Bosch | UniversalImpact 800 | src=Сеть 220 В; power=800; chuck=Быстрозажимной
+drill | DeWalt | DWD524KS | src=Сеть 220 В; power=1100; chuck=Ключевой
+drill | DeWalt | DWD112S | src=Сеть 220 В; power=701; chuck=Быстрозажимной
+drill | Metabo | SBE 750 | src=Сеть 220 В; power=750; chuck=Быстрозажимной
+drill | Metabo | SBE 780-2 | src=Сеть 220 В; power=780; chuck=Быстрозажимной
+drill | Metabo | SBEV 1000-2 | src=Сеть 220 В; power=1010; chuck=Быстрозажимной
+drill | Metabo | SBEV 1300-2 | src=Сеть 220 В; power=1300; chuck=Быстрозажимной
+drill | Metabo | BE 650 | src=Сеть 220 В; power=650; chuck=Быстрозажимной
+drill | Metabo | BE 1100 | src=Сеть 220 В; power=1100; chuck=Ключевой
+drill | Milwaukee | PD2E 24 R | src=Сеть 220 В; power=1020; chuck=Ключевой
+drill | Milwaukee | PD 705 | src=Сеть 220 В; power=705; chuck=Быстрозажимной
+drill | Milwaukee | B2E 16 RLD | src=Сеть 220 В; power=900; chuck=Ключевой
+drill | Вихрь | ДУ-800 | src=Сеть 220 В; power=800
+drill | Вихрь | ДУ-1100 | src=Сеть 220 В; power=1100
+drill | Black+Decker | BEH710 | src=Сеть 220 В; power=710
+drill | Black+Decker | KR705 | src=Сеть 220 В; power=710
+drill | AEG | SB2E 1100 RV | src=Сеть 220 В; power=1100
+
+# Шуруповёрты и аккумуляторные дрели-шуруповёрты
+screwdriver | Makita | DDF083 | src=Аккумулятор; volt=18
+screwdriver | Makita | DDF489 | src=Аккумулятор; volt=18; torque=73
+screwdriver | Makita | DDF486 | src=Аккумулятор; volt=18; torque=130
+screwdriver | Makita | DDF487 | src=Аккумулятор; volt=18; torque=40
+screwdriver | Makita | DHP487 | src=Аккумулятор; volt=18; torque=40
+screwdriver | Makita | DHP489 | src=Аккумулятор; volt=18; torque=73
+screwdriver | Makita | DHP484 | src=Аккумулятор; volt=18; torque=54
+screwdriver | Makita | DHP483 | src=Аккумулятор; volt=18; torque=40
+screwdriver | Makita | DF001G | src=Аккумулятор; volt=40; torque=140
+screwdriver | Makita | DF002G | src=Аккумулятор; volt=40
+screwdriver | Makita | HP001G | src=Аккумулятор; volt=40; torque=140
+screwdriver | Makita | HP002G | src=Аккумулятор; volt=40
+screwdriver | Makita | DF332D | src=Аккумулятор; volt=12; torque=35
+screwdriver | Makita | HP332D | src=Аккумулятор; volt=12; torque=35
+screwdriver | Makita | DF033D | src=Аккумулятор; volt=12
+screwdriver | Makita | HP457D | src=Аккумулятор; volt=18; torque=42
+screwdriver | Makita | HP488D | src=Аккумулятор; volt=18; torque=42
+screwdriver | Bosch | GSR 12V-30 | src=Аккумулятор; volt=12; torque=30
+screwdriver | Bosch | GSB 12V-15 | src=Аккумулятор; volt=12; torque=30
+screwdriver | Bosch | GSB 12V-30 | src=Аккумулятор; volt=12; torque=30
+screwdriver | Bosch | GSR 18V-21 | src=Аккумулятор; volt=18; torque=55
+screwdriver | Bosch | GSR 18V-28 | src=Аккумулятор; volt=18; torque=63
+screwdriver | Bosch | GSR 18V-45 | src=Аккумулятор; volt=18; torque=45
+screwdriver | Bosch | GSR 18V-110 C | src=Аккумулятор; volt=18; torque=110
+screwdriver | Bosch | GSR 18V-150 C | src=Аккумулятор; volt=18
+screwdriver | Bosch | GSB 18V-21 | src=Аккумулятор; volt=18; torque=55
+screwdriver | Bosch | GSB 18V-28 | src=Аккумулятор; volt=18; torque=63
+screwdriver | Bosch | GSB 18V-45 | src=Аккумулятор; volt=18; torque=45
+screwdriver | Bosch | GSB 18V-60 C | src=Аккумулятор; volt=18; torque=60
+screwdriver | Bosch | GSB 18V-90 C | src=Аккумулятор; volt=18; torque=64
+screwdriver | Bosch | GSB 18V-110 C | src=Аккумулятор; volt=18; torque=110
+screwdriver | Bosch | PSR 1440 LI-2 | src=Аккумулятор; volt=14.4
+screwdriver | Bosch | UniversalDrill 18V | src=Аккумулятор; volt=18
+screwdriver | Bosch | UniversalImpact 18V | src=Аккумулятор; volt=18
+screwdriver | Bosch | AdvancedDrill 18 | src=Аккумулятор; volt=18
+screwdriver | DeWalt | DCD706 | src=Аккумулятор; volt=12
+screwdriver | DeWalt | DCD776 | src=Аккумулятор; volt=18
+screwdriver | DeWalt | DCD795 | src=Аккумулятор; volt=18
+screwdriver | DeWalt | DCD100 | src=Аккумулятор; volt=18
+screwdriver | DeWalt | DCD130 | src=Аккумулятор
+screwdriver | Milwaukee | M12 BPD | src=Аккумулятор; volt=12
+screwdriver | Milwaukee | M12 FPD | src=Аккумулятор; volt=12
+screwdriver | Milwaukee | M12 FDD2 | src=Аккумулятор; volt=12
+screwdriver | Milwaukee | M12 FPD2 | src=Аккумулятор; volt=12
+screwdriver | Milwaukee | M18 BLDD2 | src=Аккумулятор; volt=18
+screwdriver | Milwaukee | M18 BLPD2 | src=Аккумулятор; volt=18
+screwdriver | Milwaukee | M18 CBLDD | src=Аккумулятор; volt=18
+screwdriver | Milwaukee | M18 CBLPD | src=Аккумулятор; volt=18
+screwdriver | Milwaukee | M18 FDD3 | src=Аккумулятор; volt=18
+screwdriver | Milwaukee | M18 ONEPD2 | src=Аккумулятор; volt=18
+screwdriver | Milwaukee | M18 ONEPD3 | src=Аккумулятор; volt=18
+screwdriver | Metabo | PowerMaxx BS 12 BL | src=Аккумулятор; volt=12
+screwdriver | Metabo | PowerMaxx SB 12 | src=Аккумулятор; volt=12
+screwdriver | Metabo | BS 18 L | src=Аккумулятор; volt=18
+screwdriver | Metabo | BS 18 L BL | src=Аккумулятор; volt=18
+screwdriver | Metabo | BS 18 LT BL | src=Аккумулятор; volt=18
+screwdriver | Metabo | BS 18 LTX BL I | src=Аккумулятор; volt=18
+screwdriver | Metabo | SB 18 | src=Аккумулятор; volt=18
+screwdriver | Metabo | SB 18 L | src=Аккумулятор; volt=18
+screwdriver | Metabo | SB 18 LTX BL I | src=Аккумулятор; volt=18
+screwdriver | Metabo | SB 18 LTX-3 BL Q I | src=Аккумулятор; volt=18
+screwdriver | Hikoki | DS12DA | src=Аккумулятор; volt=12
+screwdriver | Hikoki | DS18DD | src=Аккумулятор; volt=18
+screwdriver | Hikoki | DV18DD | src=Аккумулятор; volt=18
+screwdriver | Hikoki | DS18DBL2 | src=Аккумулятор; volt=18
+screwdriver | Hikoki | DV18DBL2 | src=Аккумулятор; volt=18
+screwdriver | Hikoki | DS36DA | src=Аккумулятор; volt=36
+screwdriver | Hikoki | DV36DA | src=Аккумулятор; volt=36
+screwdriver | Hilti | SF 6-A22 | src=Аккумулятор; volt=22
+screwdriver | Hilti | SF 4-22 | src=Аккумулятор; volt=22
+screwdriver | Hilti | SF 6-22 | src=Аккумулятор; volt=22
+screwdriver | Hilti | SF 8M-22 | src=Аккумулятор; volt=22
+screwdriver | Hilti | SF 10W-22 | src=Аккумулятор; volt=22
+screwdriver | Интерскол | ДА-14,4ЭР | src=Аккумулятор; volt=14.4
+screwdriver | Вихрь | ДА-12Л-2К | src=Аккумулятор; volt=12
+screwdriver | Вихрь | ДА-18Л-2К | src=Аккумулятор; volt=18
+screwdriver | Ryobi | R18DD7 | src=Аккумулятор; volt=18
+screwdriver | Ryobi | R18PD7 | src=Аккумулятор; volt=18
+screwdriver | Ryobi | RCD18 | src=Аккумулятор; volt=18
+screwdriver | AEG | BS 18C2 | src=Аккумулятор; volt=18
+screwdriver | AEG | BSB 18C2 | src=Аккумулятор; volt=18
+screwdriver | AEG | BS 12C2 | src=Аккумулятор; volt=12
+screwdriver | Einhell | TE-CD 18/40 Li | src=Аккумулятор; volt=18
+screwdriver | Einhell | TE-CD 18/48 Li-i | src=Аккумулятор; volt=18
+screwdriver | Einhell | TE-CD 18/2 Li | src=Аккумулятор; volt=18
+screwdriver | Einhell | TE-CD 12/1 Li | src=Аккумулятор; volt=12
+screwdriver | Black+Decker | BDCDD12 | src=Аккумулятор; volt=12
+screwdriver | Black+Decker | BDCDD186 | src=Аккумулятор; volt=18
+screwdriver | Black+Decker | BDCHD18 | src=Аккумулятор; volt=18
+screwdriver | Black+Decker | BL186 | src=Аккумулятор; volt=18
+screwdriver | Black+Decker | BL188 | src=Аккумулятор; volt=18
+screwdriver | Worx | WX101 | src=Аккумулятор; volt=20
+screwdriver | Worx | WX108 | src=Аккумулятор; volt=20
+screwdriver | Worx | WX183 | src=Аккумулятор; volt=20
+screwdriver | Worx | WX352 | src=Аккумулятор; volt=20
+screwdriver | Greenworks | GD24DD60 | src=Аккумулятор; volt=24
+screwdriver | Greenworks | GD24DD35 | src=Аккумулятор; volt=24
+screwdriver | Greenworks | G24CD | src=Аккумулятор; volt=24
+
+# Гайковёрты и винтовёрты
+impact-wrench | Makita | DTD173 | src=Аккумулятор; volt=18; torque=180; chuck=HEX 1/4"
+impact-wrench | Makita | DTD154 | src=Аккумулятор; volt=18; torque=175; chuck=HEX 1/4"
+impact-wrench | Makita | DTD155 | src=Аккумулятор; volt=18; torque=140; chuck=HEX 1/4"
+impact-wrench | Makita | DTD157 | src=Аккумулятор; volt=18; torque=140; chuck=HEX 1/4"
+impact-wrench | Makita | TD001G | src=Аккумулятор; volt=40; torque=220; chuck=HEX 1/4"
+impact-wrench | Makita | TD002G | src=Аккумулятор; volt=40; chuck=HEX 1/4"
+impact-wrench | Makita | TD111D | src=Аккумулятор; volt=12; torque=135; chuck=HEX 1/4"
+impact-wrench | Makita | TW001G | src=Аккумулятор; volt=40; chuck=3/4"
+impact-wrench | Makita | TW004G | src=Аккумулятор; volt=40; chuck=1/2"
+impact-wrench | Makita | TW005G | src=Аккумулятор; volt=40; chuck=1/2"
+impact-wrench | Makita | TW007G | src=Аккумулятор; volt=40; chuck=1/2"
+impact-wrench | Makita | TW008G | src=Аккумулятор; volt=40; chuck=1/2"
+impact-wrench | Makita | DTW701 | src=Аккумулятор; volt=18; torque=700; chuck=1/2"
+impact-wrench | Makita | DTW800 | src=Аккумулятор; volt=18; chuck=1/2"
+impact-wrench | Makita | DTW1004 | src=Аккумулятор; volt=18; chuck=1/2"
+impact-wrench | Makita | DTW251 | src=Аккумулятор; volt=18; torque=230; chuck=1/2"
+impact-wrench | Makita | DTW302 | src=Аккумулятор; volt=18
+impact-wrench | Makita | 6905H | src=Сеть 220 В; torque=588; chuck=3/4"
+impact-wrench | Makita | TW141D | src=Аккумулятор; volt=12
+impact-wrench | Bosch | GDR 18V-210 C | src=Аккумулятор; volt=18; torque=210; chuck=HEX 1/4"
+impact-wrench | Bosch | GDX 18V-180 | src=Аккумулятор; volt=18; torque=180
+impact-wrench | Bosch | GDX 18V-210 C | src=Аккумулятор; volt=18; torque=210
+impact-wrench | Bosch | GDS 18V-450 HC | src=Аккумулятор; volt=18; torque=450; chuck=1/2"
+impact-wrench | Bosch | GDS 250-LI | src=Аккумулятор; volt=18; torque=250; chuck=1/2"
+impact-wrench | DeWalt | DCF840 | src=Аккумулятор; volt=18; torque=192; chuck=HEX 1/4"
+impact-wrench | DeWalt | DCF860 | src=Аккумулятор; volt=18; chuck=HEX 1/4"
+impact-wrench | DeWalt | DCF801 | src=Аккумулятор; volt=12; chuck=HEX 1/4"
+impact-wrench | DeWalt | DCF891 | src=Аккумулятор; volt=18; chuck=1/2"
+impact-wrench | DeWalt | DCF900 | src=Аккумулятор; volt=18; chuck=1/2"
+impact-wrench | DeWalt | DCF922 | src=Аккумулятор; volt=18; chuck=1/2"
+impact-wrench | Milwaukee | M12 BID | src=Аккумулятор; volt=12; chuck=HEX 1/4"
+impact-wrench | Milwaukee | M12 FID2 | src=Аккумулятор; volt=12; chuck=HEX 1/4"
+impact-wrench | Milwaukee | M12 FCIWF12G3 | src=Аккумулятор; volt=12; chuck=1/2"
+impact-wrench | Milwaukee | M18 BID | src=Аккумулятор; volt=18; chuck=HEX 1/4"
+impact-wrench | Milwaukee | M18 BLID2 | src=Аккумулятор; volt=18; chuck=HEX 1/4"
+impact-wrench | Milwaukee | M18 CBLID | src=Аккумулятор; volt=18; chuck=HEX 1/4"
+impact-wrench | Milwaukee | M18 FID3 | src=Аккумулятор; volt=18; chuck=HEX 1/4"
+impact-wrench | Milwaukee | M18 FQID | src=Аккумулятор; volt=18; chuck=HEX 1/4"
+impact-wrench | Milwaukee | M18 BLIW12 | src=Аккумулятор; volt=18; chuck=1/2"
+impact-wrench | Milwaukee | M18 FIW2F12 | src=Аккумулятор; volt=18; chuck=1/2"
+impact-wrench | Milwaukee | M18 FMTIW2F12 | src=Аккумулятор; volt=18; chuck=1/2"
+impact-wrench | Milwaukee | M18 FHIW2F12 | src=Аккумулятор; volt=18; chuck=1/2"
+impact-wrench | Milwaukee | M18 ONEFHIWF12 | src=Аккумулятор; volt=18; chuck=1/2"
+impact-wrench | Milwaukee | M18 ONEFHIWF34 | src=Аккумулятор; volt=18; chuck=3/4"
+impact-wrench | Milwaukee | M18 ONEFHIWF1 | src=Аккумулятор; volt=18; chuck=1"
+impact-wrench | Metabo | SSW 18 LTX 600 | src=Аккумулятор; volt=18; torque=600; chuck=1/2"
+impact-wrench | Metabo | SSW 18 LTX 800 BL | src=Аккумулятор; volt=18; torque=800; chuck=1/2"
+impact-wrench | Metabo | SSW 650 | src=Сеть 220 В; torque=600; chuck=1/2"
+impact-wrench | Hikoki | WH18DC | src=Аккумулятор; volt=18; chuck=HEX 1/4"
+impact-wrench | Hikoki | WH36DC | src=Аккумулятор; volt=36; chuck=HEX 1/4"
+impact-wrench | Hilti | SID 4-22 | src=Аккумулятор; volt=22; chuck=HEX 1/4"
+impact-wrench | Ryobi | R18ID3 | src=Аккумулятор; volt=18; chuck=HEX 1/4"
+impact-wrench | AEG | BSS 18C | src=Аккумулятор; volt=18; chuck=HEX 1/4"
+impact-wrench | AEG | BSS 18C12Z | src=Аккумулятор; volt=18; chuck=1/2"
+
+# Магнитные дрели
+magnetic-drill | Makita | HB350 | power=1050
+magnetic-drill | Bosch | GBM 50-2 | power=1200
+magnetic-drill | Milwaukee | MDE 42 | power=1200
+
+# УШМ 125 мм
+grinder-125 | Makita | GA5090X01 | src=Сеть 220 В; power=1900; disc=125
+grinder-125 | Makita | GA5050R | src=Сеть 220 В; power=1300; disc=125
+grinder-125 | Makita | GA5092X01 | src=Сеть 220 В; power=1900; disc=125
+grinder-125 | Makita | 9565CR | src=Сеть 220 В; power=1400; disc=125
+grinder-125 | Makita | 9565HZ | src=Сеть 220 В; power=1100; disc=125
+grinder-125 | Makita | GA5060 | src=Сеть 220 В; power=1400; disc=125
+grinder-125 | Makita | GA5041C | src=Сеть 220 В; power=1100; disc=125
+grinder-125 | Makita | DGA508 | src=Аккумулятор; volt=18; disc=125
+grinder-125 | Makita | DGA512 | src=Аккумулятор; volt=18; disc=125
+grinder-125 | Makita | DGA517 | src=Аккумулятор; volt=18; disc=125
+grinder-125 | Makita | DGA519 | src=Аккумулятор; volt=18; disc=125
+grinder-125 | Makita | DGA520 | src=Аккумулятор; volt=18; disc=125
+grinder-125 | Makita | DGA521 | src=Аккумулятор; volt=18; disc=125
+grinder-125 | Makita | GA005G | src=Аккумулятор; volt=40; disc=125
+grinder-125 | Makita | GA023G | src=Аккумулятор; volt=40; disc=125
+grinder-125 | Makita | GA029G | src=Аккумулятор; volt=40; disc=125
+grinder-125 | Makita | GA050G | src=Аккумулятор; volt=40; disc=125
+grinder-125 | Bosch | GWS 7-125 | src=Сеть 220 В; power=720; disc=125
+grinder-125 | Bosch | GWS 13-125 CIE | src=Сеть 220 В; power=1300; disc=125
+grinder-125 | Bosch | GWS 15-125 CIH | src=Сеть 220 В; power=1500; disc=125
+grinder-125 | Bosch | GWS 19-125 CIE | src=Сеть 220 В; power=1900; disc=125
+grinder-125 | Bosch | GWS 18V-7 | src=Аккумулятор; volt=18; disc=125
+grinder-125 | Bosch | GWS 18V-8 | src=Аккумулятор; volt=18; disc=125
+grinder-125 | Bosch | GWS 18V-10 SC | src=Аккумулятор; volt=18; disc=125
+grinder-125 | Bosch | GWS 18-125 V-LI | src=Аккумулятор; volt=18; disc=125
+grinder-125 | Bosch | GWX 18V-10 | src=Аккумулятор; volt=18; disc=125
+grinder-125 | Bosch | GWX 13-125 S | src=Сеть 220 В; power=1300; disc=125
+grinder-125 | Bosch | PWS 700-125 | src=Сеть 220 В; power=700; disc=125
+grinder-125 | Bosch | UniversalGrind 18V-75 | src=Аккумулятор; volt=18; disc=125
+grinder-125 | DeWalt | DWE4015 | src=Сеть 220 В; power=730; disc=125
+grinder-125 | DeWalt | DWE4057 | src=Сеть 220 В; power=800; disc=125
+grinder-125 | DeWalt | DWE4117 | src=Сеть 220 В; power=950; disc=125
+grinder-125 | DeWalt | DWE4233 | src=Сеть 220 В; power=1400; disc=125
+grinder-125 | DeWalt | DWE4237 | src=Сеть 220 В; power=1400; disc=125
+grinder-125 | DeWalt | DWE4347 | src=Сеть 220 В; power=1700; disc=125
+grinder-125 | DeWalt | DCG409 | src=Аккумулятор; volt=18; disc=125
+grinder-125 | DeWalt | DCG412 | src=Аккумулятор; volt=18; disc=125
+grinder-125 | DeWalt | DCG418 | src=Аккумулятор; disc=125
+grinder-125 | Milwaukee | AG 800-125 E | src=Сеть 220 В; power=800; disc=125
+grinder-125 | Milwaukee | AGV 13-125 XC | src=Сеть 220 В; power=1250; disc=125
+grinder-125 | Milwaukee | AGV 15-125 XC | src=Сеть 220 В; power=1550; disc=125
+grinder-125 | Milwaukee | AGV 17-125 XE | src=Сеть 220 В; power=1750; disc=125
+grinder-125 | Milwaukee | M18 FSAG125XB | src=Аккумулятор; volt=18; disc=125
+grinder-125 | Milwaukee | M18 BLSAG125X | src=Аккумулятор; volt=18; disc=125
+grinder-125 | Milwaukee | M18 ONEFSAG125XB | src=Аккумулятор; volt=18; disc=125
+grinder-125 | Milwaukee | M18 FHSAG125XB | src=Аккумулятор; volt=18; disc=125
+grinder-125 | Metabo | W 9-125 | src=Сеть 220 В; power=900; disc=125
+grinder-125 | Metabo | WE 15-125 Quick | src=Сеть 220 В; power=1550; disc=125
+grinder-125 | Metabo | WEA 17-125 Quick | src=Сеть 220 В; power=1700; disc=125
+grinder-125 | Metabo | WB 18 LTX BL 125 Quick | src=Аккумулятор; volt=18; disc=125
+grinder-125 | Metabo | W 18 L 9-125 | src=Аккумулятор; volt=18; disc=125
+grinder-125 | Metabo | W 18 LT BL 11-125 | src=Аккумулятор; volt=18; disc=125
+grinder-125 | Hikoki | G13SE3 | src=Сеть 220 В; power=1200; disc=125
+grinder-125 | Hikoki | G13BYEQ | src=Сеть 220 В; power=1900; disc=125
+grinder-125 | Hikoki | G18DBAL | src=Аккумулятор; volt=18; disc=125
+grinder-125 | Hikoki | G18DBVL | src=Аккумулятор; volt=18; disc=125
+grinder-125 | Hikoki | G3613DA | src=Аккумулятор; volt=36; disc=125
+grinder-125 | Hilti | AG 125-A36 | src=Аккумулятор; volt=36; disc=125
+grinder-125 | Hilti | AG 4S-22 | src=Аккумулятор; volt=22; disc=125
+grinder-125 | Hilti | AG 125-19SE | src=Сеть 220 В; power=1900; disc=125
+grinder-125 | Интерскол | УШМ-125/1400ЭМ | src=Сеть 220 В; power=1400; disc=125
+grinder-125 | Вихрь | УШМ-125/900 | src=Сеть 220 В; power=900; disc=125
+grinder-125 | Вихрь | УШМ-125/1100Э | src=Сеть 220 В; power=1100; disc=125
+grinder-125 | Ресанта | УШМ-125/900 | src=Сеть 220 В; power=900; disc=125
+grinder-125 | Ресанта | УШМ-125/1100Э | src=Сеть 220 В; power=1100; disc=125
+grinder-125 | AEG | BEWS 18-125BL | src=Аккумулятор; volt=18; disc=125
+grinder-125 | Einhell | TE-AG 125/750 | src=Сеть 220 В; power=750; disc=125
+grinder-125 | Einhell | TE-AG 18/115 Li | src=Аккумулятор; volt=18; disc=115
+grinder-125 | Black+Decker | G720 | src=Сеть 220 В; power=750; disc=115
+grinder-125 | Black+Decker | KG1202 | src=Сеть 220 В; power=1200; disc=125
+
+# УШМ 150–180 мм и 230 мм
+grinder-180 | Bosch | GWS 15-150 CIH | src=Сеть 220 В; power=1500; disc=150
+grinder-180 | Bosch | GWS 17-150 CI | src=Сеть 220 В; power=1700; disc=150
+grinder-180 | Bosch | GWS 22-180 LVI | src=Сеть 220 В; power=2200; disc=180
+grinder-180 | Bosch | GWS 18V-180 PC | src=Аккумулятор; volt=18; disc=180
+grinder-180 | Makita | GA7060 | src=Сеть 220 В; power=2200; disc=180
+grinder-180 | Makita | GA7061R | src=Сеть 220 В; power=2200; disc=180
+grinder-180 | Makita | GA6021C | src=Сеть 220 В; power=1450; disc=150
+grinder-180 | Makita | GA035G | src=Аккумулятор; volt=40; disc=180
+grinder-180 | DeWalt | DCG440 | src=Аккумулятор; disc=180
+grinder-180 | Metabo | WEV 15-150 Quick | src=Сеть 220 В; power=1550; disc=150
+grinder-230 | Bosch | GWS 2000-230 | src=Сеть 220 В; power=2000; disc=230
+grinder-230 | Bosch | GWS 2200-230 | src=Сеть 220 В; power=2200; disc=230
+grinder-230 | Bosch | GWS 22-230 JH | src=Сеть 220 В; power=2200; disc=230
+grinder-230 | Bosch | GWS 22-230 LVI | src=Сеть 220 В; power=2200; disc=230
+grinder-230 | Bosch | GWS 24-230 JVX | src=Сеть 220 В; power=2400; disc=230
+grinder-230 | Bosch | GWS 24-230 LVI | src=Сеть 220 В; power=2400; disc=230
+grinder-230 | Makita | GA9061R | src=Сеть 220 В; power=2200; disc=230
+grinder-230 | Makita | GA9071X1 | src=Сеть 220 В; power=2800; disc=230
+grinder-230 | Makita | GA9080 | src=Сеть 220 В; power=2700; disc=230
+grinder-230 | Makita | 9069F | src=Сеть 220 В; power=2000; disc=230
+grinder-230 | Makita | GA9030RF01 | src=Сеть 220 В; power=2400; disc=230
+grinder-230 | Makita | GA037G | src=Аккумулятор; volt=40; disc=230
+grinder-230 | DeWalt | DWE493 | src=Сеть 220 В; power=2200; disc=230
+grinder-230 | DeWalt | DWE494 | src=Сеть 220 В; power=2200; disc=230
+grinder-230 | DeWalt | DCG460 | src=Аккумулятор; disc=230
+grinder-230 | Milwaukee | AGV 22-230 E | src=Сеть 220 В; power=2200; disc=230
+grinder-230 | Milwaukee | AGVK 24-230 EKX | src=Сеть 220 В; power=2400; disc=230
+grinder-230 | Milwaukee | M18 FLAG230XPDB | src=Аккумулятор; volt=18; disc=230
+grinder-230 | Metabo | W 2200-230 | src=Сеть 220 В; power=2200; disc=230
+grinder-230 | Metabo | W 22-230 MVT | src=Сеть 220 В; power=2200; disc=230
+grinder-230 | Metabo | W 24-230 MVT | src=Сеть 220 В; power=2400; disc=230
+grinder-230 | Metabo | WE 26-230 MVT Quick | src=Сеть 220 В; power=2600; disc=230
+grinder-230 | Metabo | WPB 36 LTX BL 230 | src=Аккумулятор; volt=36; disc=230
+grinder-230 | Hikoki | G23STA | src=Сеть 220 В; power=2200; disc=230
+grinder-230 | Hikoki | G3623DA | src=Аккумулятор; volt=36; disc=230
+grinder-230 | Hilti | AG 230-24D | src=Сеть 220 В; power=2400; disc=230
+grinder-230 | AEG | WS 22-230 DMS | src=Сеть 220 В; power=2200; disc=230
+
+# Дисковые пилы
+circular-saw | Makita | HS7600 | src=Сеть 220 В; power=1200; disc=185
+circular-saw | Makita | HS7100 | src=Сеть 220 В; power=1400; disc=190
+circular-saw | Makita | 5008MGJ | src=Сеть 220 В; power=1800; disc=210
+circular-saw | Makita | 5103R | src=Сеть 220 В; power=2100; disc=270
+circular-saw | Makita | 5705R | src=Сеть 220 В; power=1200; disc=190
+circular-saw | Makita | DHS630 | src=Аккумулятор; volt=18; disc=165
+circular-saw | Makita | DHS661 | src=Аккумулятор; volt=18; disc=165
+circular-saw | Makita | DHS782 | src=Аккумулятор; volt=36; disc=190
+circular-saw | Makita | DHS783 | src=Аккумулятор; volt=36; disc=190
+circular-saw | Makita | DCS551 | src=Аккумулятор; volt=18; disc=136
+circular-saw | Makita | HS003G | src=Аккумулятор; volt=40; disc=190
+circular-saw | Makita | HS004G | src=Аккумулятор; volt=40; disc=190
+circular-saw | Makita | HS009G | src=Аккумулятор; volt=40; disc=235
+circular-saw | Makita | HS301D | src=Аккумулятор; volt=12; disc=85
+circular-saw | Bosch | GKS 65 | src=Сеть 220 В; power=1600; disc=190
+circular-saw | Bosch | GKS 85 | src=Сеть 220 В; power=2200; disc=235
+circular-saw | Bosch | GKS 140 | src=Сеть 220 В; power=1400; disc=184
+circular-saw | Bosch | GKS 600 | src=Сеть 220 В; power=1200; disc=165
+circular-saw | Bosch | GKS 12V-26 | src=Аккумулятор; volt=12; disc=85
+circular-saw | Bosch | GKS 18V-57 G | src=Аккумулятор; volt=18; disc=165
+circular-saw | Bosch | GKS 18V-57-2 | src=Аккумулятор; volt=18; disc=165
+circular-saw | Bosch | GKS 18V-68 GC | src=Аккумулятор; volt=18; disc=190
+circular-saw | Bosch | PKS 40 | src=Сеть 220 В; power=850; disc=130
+circular-saw | Bosch | PKS 55 A | src=Сеть 220 В; power=1200; disc=160
+circular-saw | Bosch | AdvancedCirc 18 | src=Аккумулятор; volt=18; disc=165
+circular-saw | Bosch | UniversalCirc 12 | src=Аккумулятор; volt=12; disc=85
+circular-saw | DeWalt | DWE550 | src=Сеть 220 В; power=1200; disc=165
+circular-saw | DeWalt | DWE5615 | src=Сеть 220 В; power=1500; disc=190
+circular-saw | DeWalt | DWE576 | src=Сеть 220 В; power=1600; disc=190
+circular-saw | DeWalt | DCS565 | src=Аккумулятор; volt=18; disc=165
+circular-saw | DeWalt | DCS573 | src=Аккумулятор; volt=18; disc=190
+circular-saw | DeWalt | DCS579 | src=Аккумулятор; disc=190
+circular-saw | DeWalt | DCS512 | src=Аккумулятор; volt=12; disc=140
+circular-saw | Milwaukee | CS 85 CBE | src=Сеть 220 В; power=2200; disc=235
+circular-saw | Milwaukee | M12 CCS44 | src=Аккумулятор; volt=12; disc=140
+circular-saw | Milwaukee | M18 BLCS66 | src=Аккумулятор; volt=18; disc=190
+circular-saw | Milwaukee | M18 FCSG66 | src=Аккумулятор; volt=18; disc=190
+circular-saw | Milwaukee | M18 FCSRH66 | src=Аккумулятор; volt=18; disc=190
+circular-saw | Metabo | KS 55 | src=Сеть 220 В; power=1200; disc=160
+circular-saw | Metabo | KS 18 LTX 66 BL | src=Аккумулятор; volt=18; disc=165
+circular-saw | Metabo | MKS 18 LTX 58 | src=Аккумулятор; volt=18; disc=165
+circular-saw | Hikoki | C6SS | src=Сеть 220 В; power=1050; disc=165
+circular-saw | Hikoki | C7SB3 | src=Сеть 220 В; power=1710; disc=185
+circular-saw | Hikoki | C7U3 | src=Сеть 220 В; power=1600; disc=185
+circular-saw | Hikoki | C18DBAL | src=Аккумулятор; volt=18; disc=165
+circular-saw | Hikoki | C3606DA | src=Аккумулятор; volt=36; disc=165
+circular-saw | Вихрь | ДП-185/1600 | src=Сеть 220 В; power=1600; disc=185
+circular-saw | Вихрь | ДП-210/1900 | src=Сеть 220 В; power=1900; disc=210
+circular-saw | Ryobi | R18CS7 | src=Аккумулятор; volt=18; disc=184
+circular-saw | Ryobi | RCS1400 | src=Сеть 220 В; power=1400; disc=190
+circular-saw | Ryobi | RCS1600 | src=Сеть 220 В; power=1600; disc=190
+circular-saw | AEG | KS 55-2 | src=Сеть 220 В; power=1200; disc=160
+circular-saw | AEG | KS 66-2 | src=Сеть 220 В; power=1600; disc=190
+circular-saw | AEG | BKS 18 | src=Аккумулятор; volt=18; disc=165
+circular-saw | Einhell | TE-CS 165 | src=Сеть 220 В; power=1200; disc=165
+circular-saw | Einhell | TE-CS 190/1 | src=Сеть 220 В; power=1500; disc=190
+circular-saw | Einhell | TE-CS 18/165-1 Li | src=Аккумулятор; volt=18; disc=165
+circular-saw | Einhell | TE-CS 18/190 Li BL | src=Аккумулятор; volt=18; disc=190
+circular-saw | Black+Decker | CS1004 | src=Сеть 220 В; power=1400; disc=190
+circular-saw | Black+Decker | CS1250L | src=Сеть 220 В; power=1250; disc=190
+circular-saw | Worx | WX429 | src=Сеть 220 В; disc=120
+circular-saw | Worx | WX530 | src=Аккумулятор; volt=20; disc=165
+
+# Погружные (врезные) пилы
+plunge-saw | Festool | TS 55 F | src=Сеть 220 В; power=1200; disc=160
+plunge-saw | Festool | TS 60 KEBQ | src=Сеть 220 В; power=1500; disc=168
+plunge-saw | Milwaukee | M18 FPS55 | src=Аккумулятор; volt=18; disc=165
+plunge-saw | Hikoki | C3606DPA | src=Аккумулятор; volt=36; disc=165
+
+# Лобзики
+jigsaw | Makita | DJV181 | src=Аккумулятор; volt=18
+jigsaw | Makita | DJV184 | src=Аккумулятор; volt=18
+jigsaw | Makita | DJV185 | src=Аккумулятор; volt=18
+jigsaw | Makita | JV001G | src=Аккумулятор; volt=40
+jigsaw | Makita | JV002G | src=Аккумулятор; volt=40
+jigsaw | Makita | JV103D | src=Аккумулятор; volt=12
+jigsaw | Bosch | GST 160 CE | src=Сеть 220 В; power=800
+jigsaw | Bosch | GST 12V-70 | src=Аккумулятор; volt=12
+jigsaw | Bosch | GST 18V-125 S | src=Аккумулятор; volt=18
+jigsaw | Bosch | GST 18V-155 BC | src=Аккумулятор; volt=18
+jigsaw | Bosch | GST 18V-155 SC | src=Аккумулятор; volt=18
+jigsaw | Bosch | GST 18 V-LI B | src=Аккумулятор; volt=18
+jigsaw | Bosch | PST 800 PEL | src=Сеть 220 В; power=530
+jigsaw | Bosch | PST 1000 PEL | src=Сеть 220 В; power=650
+jigsaw | Bosch | UniversalSaw 18V-100 | src=Аккумулятор; volt=18
+jigsaw | Bosch | EasySaw 18V-70 | src=Аккумулятор; volt=18
+jigsaw | Milwaukee | M12 FJS | src=Аккумулятор; volt=12
+jigsaw | Milwaukee | M18 BJS | src=Аккумулятор; volt=18
+jigsaw | Milwaukee | M18 FBJS | src=Аккумулятор; volt=18
+jigsaw | Metabo | STE 140 Plus | src=Сеть 220 В; power=750
+jigsaw | Metabo | STA 18 LTX | src=Аккумулятор; volt=18
+jigsaw | Metabo | STAB 18 LTX 100 | src=Аккумулятор; volt=18
+jigsaw | Metabo | STA 18 LTX 140 | src=Аккумулятор; volt=18
+jigsaw | Hikoki | CJ18DA | src=Аккумулятор; volt=18
+jigsaw | Hikoki | CJ36DA | src=Аккумулятор; volt=36
+jigsaw | Festool | Carvex PS 420 EBQ | src=Сеть 220 В; power=550
+jigsaw | Festool | Trion PS 300 EQ | src=Сеть 220 В; power=720
+jigsaw | Festool | Trion PSB 300 EQ | src=Сеть 220 В; power=720
+jigsaw | Festool | PSC 420 EB | src=Аккумулятор; volt=18
+jigsaw | Festool | PSBC 420 EB | src=Аккумулятор; volt=18
+jigsaw | Интерскол | МП-65/500Э | src=Сеть 220 В; power=500
+jigsaw | Вихрь | ЛЭ-65 | src=Сеть 220 В; power=500
+jigsaw | Вихрь | ЛЭ-100 | src=Сеть 220 В; power=750
+jigsaw | Ryobi | R18JS7 | src=Аккумулятор; volt=18
+jigsaw | Ryobi | RJS750 | src=Сеть 220 В; power=500
+jigsaw | Ryobi | RJS1050 | src=Сеть 220 В; power=680
+jigsaw | AEG | BST 18X | src=Аккумулятор; volt=18
+jigsaw | Einhell | TC-JS 80/1 | src=Сеть 220 В; power=600
+jigsaw | Einhell | TE-JS 100 | src=Сеть 220 В; power=750
+jigsaw | Einhell | TE-JS 18 Li | src=Аккумулятор; volt=18
+jigsaw | Black+Decker | KS501 | src=Сеть 220 В; power=400
+jigsaw | Black+Decker | KS701PE | src=Сеть 220 В; power=520
+jigsaw | Black+Decker | KS901PEK | src=Сеть 220 В; power=620
+jigsaw | Black+Decker | BDCJS18 | src=Аккумулятор; volt=18
+jigsaw | Worx | WX478 | src=Сеть 220 В; power=650
+jigsaw | Worx | WX543 | src=Аккумулятор; volt=20
+
+# Сабельные пилы
+reciprocating-saw | Makita | JR3051T | src=Сеть 220 В; power=1200
+reciprocating-saw | Makita | JR1000FT | src=Сеть 220 В; power=500
+reciprocating-saw | Makita | DJR189 | src=Аккумулятор; volt=18
+reciprocating-saw | Makita | DJR185 | src=Аккумулятор; volt=18
+reciprocating-saw | Makita | JR001G | src=Аккумулятор; volt=40
+reciprocating-saw | Makita | JR002G | src=Аккумулятор; volt=40
+reciprocating-saw | Bosch | GSA 18V-28 | src=Аккумулятор; volt=18
+reciprocating-saw | DeWalt | DWE357K | src=Сеть 220 В; power=1050
+reciprocating-saw | DeWalt | DCS369 | src=Аккумулятор; volt=18
+reciprocating-saw | DeWalt | DCS389 | src=Аккумулятор
+reciprocating-saw | Milwaukee | SSPE 1300 SX | src=Сеть 220 В; power=1300
+reciprocating-saw | Milwaukee | M18 FSX | src=Аккумулятор; volt=18
+reciprocating-saw | Milwaukee | M18 ONEFSZ | src=Аккумулятор; volt=18
+reciprocating-saw | Milwaukee | M18 FHZ | src=Аккумулятор; volt=18
+reciprocating-saw | Milwaukee | M18 BLSX | src=Аккумулятор; volt=18
+reciprocating-saw | Metabo | SSE 18 LTX Compact | src=Аккумулятор; volt=18
+reciprocating-saw | Metabo | SSE 18 LTX BL Compact | src=Аккумулятор; volt=18
+reciprocating-saw | Metabo | SSEP 18 LTX BL MVT | src=Аккумулятор; volt=18
+reciprocating-saw | Hikoki | CR13VBY | src=Сеть 220 В; power=1150
+reciprocating-saw | Hikoki | CR18DA | src=Аккумулятор; volt=18
+reciprocating-saw | Hikoki | CR36DA | src=Аккумулятор; volt=36
+reciprocating-saw | Hilti | SR 6-A22 | src=Аккумулятор; volt=22
+reciprocating-saw | Hilti | SR 6-22 | src=Аккумулятор; volt=22
+reciprocating-saw | Hilti | SR 30-22 | src=Аккумулятор; volt=22
+reciprocating-saw | Интерскол | НП-120/1010ЭМ | src=Сеть 220 В; power=1010
+reciprocating-saw | Ryobi | R18RS | src=Аккумулятор; volt=18
+reciprocating-saw | Ryobi | R18RS7 | src=Аккумулятор; volt=18
+reciprocating-saw | Ryobi | RRS1200 | src=Сеть 220 В; power=1200
+reciprocating-saw | AEG | BUS 18 | src=Аккумулятор; volt=18
+reciprocating-saw | Einhell | TE-AP 750 E | src=Сеть 220 В; power=750
+reciprocating-saw | Einhell | TE-AP 18 Li | src=Аккумулятор; volt=18
+reciprocating-saw | Black+Decker | RS890K | src=Сеть 220 В; power=500
+reciprocating-saw | Black+Decker | BDCR18 | src=Аккумулятор; volt=18
+reciprocating-saw | Worx | WX500 | src=Аккумулятор; volt=20
+
+# Торцовочные пилы
+miter-saw | Makita | LS0816F | src=Сеть 220 В; power=1200; disc=216
+miter-saw | Makita | LS004G | src=Аккумулятор; volt=40; disc=216
+miter-saw | Makita | LS003G | src=Аккумулятор; volt=40; disc=305
+miter-saw | Makita | LS002G | src=Аккумулятор; volt=40; disc=216
+miter-saw | Makita | DLS111 | src=Аккумулятор; volt=36; disc=260
+miter-saw | Makita | DLS211 | src=Аккумулятор; volt=36; disc=305
+miter-saw | Makita | DLS713 | src=Аккумулятор; volt=18; disc=190
+miter-saw | Bosch | GCM 10 MX | src=Сеть 220 В; power=1700; disc=254
+miter-saw | Bosch | GCM 216 | src=Сеть 220 В; power=1300; disc=216
+miter-saw | Bosch | GCM 350-254 | src=Сеть 220 В; power=1800; disc=254
+miter-saw | Bosch | GCM 18V-216 D | src=Аккумулятор; volt=18; disc=216
+miter-saw | Bosch | GCM 18V-254 D | src=Аккумулятор; volt=18; disc=254
+miter-saw | Bosch | GCM 18V-305 GDC | src=Аккумулятор; volt=18; disc=305
+miter-saw | Bosch | PCM 7 S | src=Сеть 220 В; power=1100; disc=190
+miter-saw | Bosch | UniversalChop 18V | src=Аккумулятор; volt=18; disc=216
+miter-saw | DeWalt | DWS771 | src=Сеть 220 В; power=1800; disc=216
+miter-saw | DeWalt | DWS778 | src=Сеть 220 В; power=1850; disc=250
+miter-saw | DeWalt | DWS779 | src=Сеть 220 В; power=1675; disc=305
+miter-saw | DeWalt | DCS727 | src=Аккумулятор; disc=250
+miter-saw | DeWalt | DCS777 | src=Аккумулятор; disc=216
+miter-saw | DeWalt | DCS781 | src=Аккумулятор; disc=305
+miter-saw | Metabo | KGSV 72 Xact | src=Сеть 220 В; power=1800; disc=216
+miter-saw | Metabo | KS 216 M Lasercut | src=Сеть 220 В; power=1350; disc=216
+miter-saw | Hikoki | C10FCH2 | src=Сеть 220 В; power=1520; disc=255
+miter-saw | Hikoki | C8FSHG | src=Сеть 220 В; power=1050; disc=216
+miter-saw | Hikoki | C3606DRA | src=Аккумулятор; volt=36; disc=165
+miter-saw | Hikoki | C3610DRA | src=Аккумулятор; volt=36; disc=254
+miter-saw | Milwaukee | M18 SMS216 | src=Аккумулятор; volt=18; disc=216
+miter-saw | Festool | KSC 60 EB | src=Аккумулятор; volt=36; disc=216
+miter-saw | Интерскол | ПТК-250/1500 | src=Сеть 220 В; power=1500; disc=250
+miter-saw | Ryobi | EMS216L | src=Сеть 220 В; power=1500; disc=216
+miter-saw | Ryobi | EMS254L | src=Сеть 220 В; power=2000; disc=254
+miter-saw | Ryobi | EMS305RG | src=Сеть 220 В; power=2200; disc=305
+miter-saw | Ryobi | R18MS216 | src=Аккумулятор; volt=18; disc=216
+miter-saw | Einhell | TC-MS 2112 | src=Сеть 220 В; power=1400; disc=210
+miter-saw | Einhell | TE-SM 2131 Dual | src=Сеть 220 В; power=1800; disc=210
+miter-saw | Einhell | TE-SM 36/210 Li | src=Аккумулятор; volt=36; disc=210
+miter-saw | Black+Decker | BES700 | src=Сеть 220 В; power=1400; disc=210
+miter-saw | Black+Decker | BES710 | src=Сеть 220 В; power=1500; disc=210
+
+# Пилы по металлу (отрезные)
+metal-cutoff-saw | Makita | LW001G | disc=355
+metal-cutoff-saw | Bosch | GCO 220 | power=2200; disc=355
+metal-cutoff-saw | DeWalt | D28715 | power=2200; disc=355
+metal-cutoff-saw | Metabo | CS 18 LTX BL 305 | disc=305
+metal-cutoff-saw | Hikoki | CD14F | power=2000; disc=355
+metal-cutoff-saw | Milwaukee | M18 FCOS230 | disc=230
+metal-cutoff-saw | Einhell | TC-MC 355 | power=2300; disc=355
+
+# Эксцентриковые и вибрационные шлифмашины
+orbital-sander | Makita | DBO381 | src=Аккумулятор; volt=18; disc=150
+orbital-sander | Bosch | GEX 125 AC | src=Сеть 220 В; power=340; disc=125
+orbital-sander | Bosch | GEX 150 AC | src=Сеть 220 В; power=340; disc=150
+orbital-sander | Bosch | GEX 34-150 | src=Сеть 220 В; power=340; disc=150
+orbital-sander | Bosch | GEX 12V-125 | src=Аккумулятор; volt=12; disc=125
+orbital-sander | Bosch | EasySander 12 | src=Аккумулятор; volt=12
+orbital-sander | Metabo | SXE 150-2.5 BL | src=Сеть 220 В; power=350; disc=150
+orbital-sander | Metabo | SXE 425 TurboTec | src=Сеть 220 В; power=320; disc=125
+orbital-sander | Metabo | SXA 18 LTX 150 BL | src=Аккумулятор; volt=18; disc=150
+orbital-sander | Metabo | FSX 200 Intec | src=Сеть 220 В; power=240; disc=125
+orbital-sander | Mirka | DEROS 680CV | src=Сеть 220 В; power=350; disc=150
+orbital-sander | Интерскол | ЭШМ-150/600ЭМ | src=Сеть 220 В; power=600; disc=150
+orbital-sander | Ryobi | ROS300 | src=Сеть 220 В; power=300; disc=125
+orbital-sander | Ryobi | R18ROS | src=Аккумулятор; volt=18; disc=125
+orbital-sander | Einhell | TC-RS 38 E | src=Сеть 220 В; power=380; disc=125
+orbital-sander | Einhell | TE-RS 40 E | src=Сеть 220 В; power=400; disc=125
+orbital-sander | Black+Decker | KA191EK | src=Сеть 220 В; power=480; disc=125
+orbital-sander | Black+Decker | KA199 | src=Сеть 220 В; power=240; disc=125
+finishing-sander | Bosch | GSS 18V-10 | 
+finishing-sander | Bosch | GSS 18V-13 | 
+finishing-sander | Bosch | PSM 160 A | power=160
+finishing-sander | DeWalt | DCW200 | 
+finishing-sander | Metabo | SRE 3185 | power=210
+finishing-sander | Metabo | SR 2185 | power=200
+finishing-sander | Festool | RTSC 400 | 
+finishing-sander | Festool | DTSC 400 | 
+finishing-sander | Black+Decker | KA300 | power=135
+finishing-sander | Black+Decker | KA320EKA | power=240
+finishing-sander | Einhell | TC-OS 1520 | power=150
+
+# Ленточные шлифмашины
+belt-sander | Makita | DBS180 | 
+belt-sander | Hikoki | SB10S2 | power=1020
+belt-sander | Black+Decker | KA88 | power=720
+belt-sander | Einhell | TC-BS 8038 | power=800
+belt-sander | Ryobi | EBS800 | power=800
+
+# Рубанки
+electric-planer | Makita | KP312 | src=Сеть 220 В; power=1450; width=312
+electric-planer | Makita | KP001G | src=Аккумулятор; volt=40; width=82
+electric-planer | Bosch | GHO 12V-20 | src=Аккумулятор; volt=12; width=56
+electric-planer | Bosch | GHO 185-LI | src=Аккумулятор; volt=18; width=82
+electric-planer | Bosch | PHO 1500 | src=Сеть 220 В; power=550; width=82
+electric-planer | Hikoki | P20ST | src=Сеть 220 В; power=580; width=82
+electric-planer | Hikoki | P18DSL | src=Аккумулятор; volt=18; width=82
+electric-planer | Festool | EHL 65 EQ | src=Сеть 220 В; power=720; width=65
+electric-planer | Ryobi | EPN7582NHG | src=Сеть 220 В; power=750; width=82
+electric-planer | Ryobi | R18PL | src=Аккумулятор; volt=18; width=82
+electric-planer | Einhell | TC-PL 750 | src=Сеть 220 В; power=750; width=82
+electric-planer | Black+Decker | KW712 | src=Сеть 220 В; power=650; width=82
+electric-planer | Black+Decker | KW750K | src=Сеть 220 В; power=750; width=82
+
+# Фрезеры
+router | Makita | RP1110C | src=Сеть 220 В; power=1100
+router | Makita | RT001G | src=Аккумулятор; volt=40
+router | Bosch | GOF 1250 LCE | src=Сеть 220 В; power=1250
+router | Bosch | GOF 18V-28 | src=Аккумулятор; volt=18
+router | DeWalt | D26200 | src=Сеть 220 В; power=900
+router | DeWalt | DW621 | src=Сеть 220 В; power=1100
+router | DeWalt | DW622K | src=Сеть 220 В; power=1400
+router | DeWalt | DWE627KT | src=Сеть 220 В; power=2300
+router | Metabo | FM 18 LTX 90 | src=Аккумулятор; volt=18
+router | Hikoki | M12VE | src=Сеть 220 В; power=2000
+router | Hikoki | M3612DA | src=Аккумулятор; volt=36
+router | Milwaukee | M18 FTR | src=Аккумулятор; volt=18
+router | Milwaukee | M18 FR12 | src=Аккумулятор; volt=18
+router | Ryobi | RRT1600 | src=Сеть 220 В; power=1600
+router | Ryobi | R18TR | src=Аккумулятор; volt=18
+router | Einhell | TE-RO 1255 E | src=Сеть 220 В; power=1200
+router | Black+Decker | KW900E | src=Сеть 220 В; power=1200
+
+# Реноваторы (многофункциональные)
+multitool | Makita | DTM50 | src=Аккумулятор; volt=18
+multitool | Makita | TM001G | src=Аккумулятор; volt=40
+multitool | Makita | TM30D | src=Аккумулятор; volt=12
+multitool | Bosch | GOP 18V-34 | src=Аккумулятор; volt=18
+multitool | Bosch | UniversalMulti 12 | src=Аккумулятор; volt=12
+multitool | Milwaukee | M18 BMT | src=Аккумулятор; volt=18
+multitool | Metabo | MT 18 LTX BL QSL | src=Аккумулятор; volt=18
+multitool | Metabo | PowerMaxx MT 12 | src=Аккумулятор; volt=12
+multitool | Fein | MultiMaster MM 500 Plus | src=Сеть 220 В; power=350
+multitool | Fein | MultiMaster MM 700 Max | src=Сеть 220 В; power=450
+multitool | Fein | MultiMaster AMM 500 Plus | src=Аккумулятор; volt=18
+multitool | Fein | MultiMaster AMM 700 Max | src=Аккумулятор; volt=18
+multitool | Festool | Vecturo OS 400 EQ | src=Сеть 220 В; power=400
+multitool | Festool | OSC 18 | src=Аккумулятор; volt=18
+multitool | Hikoki | CV18DBL | src=Аккумулятор; volt=18
+multitool | Ryobi | RMT300 | src=Сеть 220 В; power=300
+multitool | Ryobi | R18MT | src=Аккумулятор; volt=18
+multitool | Einhell | TE-MG 300 EQ | src=Сеть 220 В; power=300
+multitool | Einhell | TE-MG 18 Li | src=Аккумулятор; volt=18
+multitool | Black+Decker | MT300KA | src=Сеть 220 В; power=300
+multitool | Worx | WX682 | src=Сеть 220 В; power=250
+multitool | Worx | WX693 | src=Аккумулятор; volt=20
+
+# Строительные фены
+heat-gun | Makita | HG6531CK | power=2000
+heat-gun | Makita | DHG180 | 
+heat-gun | Bosch | UniversalHeat 600 | power=1800
+heat-gun | Bosch | EasyHeat 500 | power=1600
+heat-gun | Metabo | HGS 22-630 PC | power=2200
+heat-gun | Metabo | HG 18 LTX 500 | 
+heat-gun | Steinel | HL 1820 E | power=1800
+heat-gun | Steinel | HG 2120 E | power=2200
+heat-gun | Steinel | HG 2420 E | power=2300
+heat-gun | Steinel | HG 2520 E | power=2300
+heat-gun | Вихрь | ТП-2000 | power=2000
+heat-gun | Ресанта | Т-2000 | power=2000
+heat-gun | Einhell | TH-HA 2000/1 | power=2000
+heat-gun | Black+Decker | KX1650 | power=1750
+heat-gun | Black+Decker | KX2200K | power=2000
+heat-gun | Ryobi | EHG2000 | power=2000
+heat-gun | Ryobi | R18HG | 
+
+# Строительные миксеры
+mixer-drill | Makita | UT1401 | power=1300
+mixer-drill | Makita | UT001G | 
+mixer-drill | Bosch | GRW 18V-120 | 
+mixer-drill | DeWalt | DCD240 | 
+mixer-drill | Festool | MX 1000 E EF | power=1020
+mixer-drill | Eibenstock | EHR 20/2.3 S | power=1800
+mixer-drill | Eibenstock | EHR 23/2.4 R | power=1800
+mixer-drill | Hikoki | UM16VST | power=1600
+mixer-drill | Hikoki | UM22VST | power=1500
+mixer-drill | Einhell | TE-MX 1600-2 CE | power=1600
+
+# Ножницы по металлу
+metal-shears | Bosch | GSC 75-16 | src=Сеть 220 В; power=750
+metal-shears | Bosch | GNA 75-16 | src=Сеть 220 В; power=750
+metal-shears | Bosch | GSC 18V-16 E | src=Аккумулятор; volt=18
+metal-shears | Bosch | GNA 18V-16 E | src=Аккумулятор; volt=18
+metal-shears | Metabo | Ku 6872 | src=Сеть 220 В; power=550
+metal-shears | Milwaukee | M18 FNB16 | src=Аккумулятор; volt=18
+metal-shears | Hikoki | CN16SA | src=Сеть 220 В; power=400
+metal-shears | Интерскол | НВ-2,5/600 | src=Сеть 220 В; power=600
+
+# Гвоздезабивные пистолеты и степлеры
+nailer | Makita | DFR550 | src=Аккумулятор; volt=18
+nailer | Makita | DFR750 | src=Аккумулятор; volt=18
+nailer | Makita | GN900SE | 
+nailer | Makita | AN924 | src=Сжатый воздух
+nailer | Bosch | GNH 18V-64 M | src=Аккумулятор; volt=18
+nailer | DeWalt | DCN693 | src=Аккумулятор; volt=18
+nailer | DeWalt | DCN650 | src=Аккумулятор; volt=18
+nailer | DeWalt | DCN930 | src=Аккумулятор; volt=18
+nailer | Milwaukee | M18 FN18GS | src=Аккумулятор; volt=18
+nailer | Milwaukee | M18 FN16GA | src=Аккумулятор; volt=18
+nailer | Milwaukee | M18 FN15GA | src=Аккумулятор; volt=18
+nailer | Milwaukee | M18 FFNS | src=Аккумулятор; volt=18
+nailer | Milwaukee | M18 CN15GA | src=Аккумулятор; volt=18
+nailer | Hikoki | NT1865DBSL | src=Аккумулятор; volt=18
+nailer | Hikoki | NR1890DBCL | src=Аккумулятор; volt=18
+nailer | Hikoki | NR3665DA | src=Аккумулятор; volt=36
+nailer | Hikoki | NV65AH2 | src=Сжатый воздух
+nailer | Fubag | SN4050 | src=Сжатый воздух
+nailer | Fubag | F50 | src=Сжатый воздух
+gas-nailer | Paslode | IM360Ci | 
+gas-nailer | Paslode | IM65A | 
+gas-nailer | Paslode | IM90i | 
+gas-nailer | Spit | Pulsa 1000 | 
+gas-nailer | Hilti | BX 3 | 
+gas-nailer | Hilti | BX 3-22 | 
+gas-nailer | Toua | GSN65 | 
+powder-nailer | Hilti | DX 9-ENP | 
+powder-nailer | Spit | P200 | 
+powder-nailer | Toua | SDT-A301 | 
+powder-nailer | Toua | DPT37 | 
+stapler | Bosch | HT 14 | src=Ручной
+stapler | Rapid | R54E | src=Сеть 220 В
+stapler | Rapid | R553 | src=Сеть 220 В
+stapler | Rapid | BTX553 | src=Аккумулятор
+stapler | Ryobi | R18ST50 | src=Аккумулятор
+
+# Заклёпочники
+riveter | Makita | DRV151 | src=Аккумулятор
+riveter | Milwaukee | M18 ONEFPRT | src=Аккумулятор
+riveter | Gesipa | TAURUS 1 | src=Сжатый воздух
+riveter | Gesipa | TAURUS 2 | src=Сжатый воздух
+riveter | Gesipa | FireFox 1 | src=Ручной
+riveter | Rapid | RP70 | src=Ручной
+riveter | Fubag | RN4810 | src=Сжатый воздух
+
+# Строительные пылесосы
+construction-vacuum | Makita | VC3011L | src=Сеть 220 В; power=1000; tank=30
+construction-vacuum | Makita | VC3012M | src=Сеть 220 В; power=1200; tank=30
+construction-vacuum | Makita | VC3210L | src=Сеть 220 В; power=1050; tank=32
+construction-vacuum | Makita | DVC150L | src=Аккумулятор; volt=18; tank=7.5
+construction-vacuum | Makita | DVC157L | src=Аккумулятор; volt=18
+construction-vacuum | Makita | DVC860L | src=Аккумулятор; volt=36; tank=8
+construction-vacuum | Makita | DVC867L | src=Аккумулятор; volt=36; tank=8
+construction-vacuum | Makita | VC001GL | src=Аккумулятор; volt=40; tank=15
+construction-vacuum | Makita | VC003GL | src=Аккумулятор; volt=40
+construction-vacuum | Makita | VC004GL | src=Аккумулятор; volt=40
+construction-vacuum | Bosch | GAS 12-25 PL | src=Сеть 220 В; power=1250; tank=25
+construction-vacuum | Bosch | GAS 15 PS | src=Сеть 220 В; power=1100; tank=15
+construction-vacuum | Bosch | GAS 35 L AFC | src=Сеть 220 В; power=1200; tank=35
+construction-vacuum | Bosch | GAS 400 A | src=Сеть 220 В; power=1200; tank=20
+construction-vacuum | Bosch | GAS 18V-1 | src=Аккумулятор; volt=18
+construction-vacuum | Bosch | GAS 12V | src=Аккумулятор; volt=12
+construction-vacuum | Bosch | EasyVac 3 | src=Сеть 220 В
+construction-vacuum | DeWalt | DWV900L | src=Сеть 220 В; power=1250; tank=26
+construction-vacuum | DeWalt | DWV902L | src=Сеть 220 В; power=1400; tank=38
+construction-vacuum | DeWalt | DWV905M | src=Сеть 220 В; power=1400; tank=38
+construction-vacuum | DeWalt | DCV582 | src=Аккумулятор; volt=18
+construction-vacuum | Milwaukee | AS 300 ELCP | src=Сеть 220 В; power=1500; tank=30
+construction-vacuum | Milwaukee | M18 FPOVCL | src=Аккумулятор; volt=18
+construction-vacuum | Milwaukee | M18 F2VC23L | src=Аккумулятор; volt=36; tank=23
+construction-vacuum | Metabo | ASA 30 M PC | src=Сеть 220 В; power=1200; tank=30
+construction-vacuum | Metabo | ASR 25 L SC | src=Сеть 220 В; power=1400; tank=25
+construction-vacuum | Metabo | ASR 50 M SC | src=Сеть 220 В; power=1400; tank=50
+construction-vacuum | Metabo | AS 36-18 L 20 PC-CC | src=Аккумулятор; volt=36; tank=20
+construction-vacuum | Festool | CTL 48 E | src=Сеть 220 В; power=1200; tank=48
+construction-vacuum | Festool | CTL MIDI I | src=Сеть 220 В; power=1200; tank=15
+construction-vacuum | Festool | CTL MINI I | src=Сеть 220 В; power=1200; tank=10
+construction-vacuum | Festool | CTM 26 E AC | src=Сеть 220 В; power=1200; tank=26
+construction-vacuum | Festool | CTM 36 E AC | src=Сеть 220 В; power=1200; tank=36
+construction-vacuum | Festool | CTM 48 E AC | src=Сеть 220 В; power=1200; tank=48
+construction-vacuum | Festool | CTM MIDI I | src=Сеть 220 В; power=1200; tank=15
+construction-vacuum | Festool | CTLC MINI I | src=Аккумулятор; volt=36
+construction-vacuum | Festool | CTLC MIDI I | src=Аккумулятор; volt=36
+construction-vacuum | Karcher | WD 1 | src=Сеть 220 В; tank=15
+construction-vacuum | Karcher | WD 2 Plus | src=Сеть 220 В; power=1000; tank=12
+construction-vacuum | Karcher | WD 3 P | src=Сеть 220 В; power=1000; tank=17
+construction-vacuum | Karcher | WD 4 P | src=Сеть 220 В; power=1000; tank=20
+construction-vacuum | Karcher | WD 6 P Premium | src=Сеть 220 В; power=1300; tank=30
+construction-vacuum | Karcher | WD 1 Compact Battery | src=Аккумулятор; volt=18
+construction-vacuum | Karcher | WD 3 Battery | src=Аккумулятор; volt=36; tank=17
+construction-vacuum | Karcher | NT 22/1 Ap | src=Сеть 220 В; power=1300; tank=22
+construction-vacuum | Karcher | NT 22/1 Ap Te L | src=Сеть 220 В; power=1300; tank=22
+construction-vacuum | Karcher | NT 30/1 Ap L | src=Сеть 220 В; power=1380; tank=30
+construction-vacuum | Karcher | NT 30/1 Tact Te L | src=Сеть 220 В; power=1380; tank=30
+construction-vacuum | Karcher | NT 40/1 Ap L | src=Сеть 220 В; power=1380; tank=40
+construction-vacuum | Karcher | NT 50/1 Tact Te L | src=Сеть 220 В; power=1380; tank=50
+construction-vacuum | Karcher | NT 70/3 | src=Сеть 220 В; power=3450; tank=70
+construction-vacuum | Karcher | NT 75/2 Ap Me Tc | src=Сеть 220 В; power=2760; tank=75
+construction-vacuum | Karcher | NT 22/1 Ap Bp L | src=Аккумулятор; volt=36; tank=22
+construction-vacuum | Nilfisk | AERO 21-01 PC | src=Сеть 220 В; power=1250; tank=20
+construction-vacuum | Nilfisk | ATTIX 44-2L IC | src=Сеть 220 В; power=1500; tank=40
+construction-vacuum | Nilfisk | ATTIX 50-21 PC | src=Сеть 220 В; power=1200; tank=50
+construction-vacuum | Nilfisk | ATTIX 751-61 | src=Сеть 220 В; power=2400; tank=70
+construction-vacuum | Nilfisk | Multi II 22 | src=Сеть 220 В; power=1200; tank=22
+construction-vacuum | Nilfisk | Multi II 30 T | src=Сеть 220 В; power=1400; tank=30
+construction-vacuum | Starmix | iPulse L-1635 Basic | src=Сеть 220 В; power=1600; tank=35
+construction-vacuum | Starmix | iPulse M-1635 Safe Plus | src=Сеть 220 В; power=1600; tank=35
+construction-vacuum | Starmix | ISC L-1625 Top | src=Сеть 220 В; power=1600; tank=25
+construction-vacuum | Starmix | NSG uClean ADL-1420 EHP | src=Сеть 220 В; power=1400; tank=20
+construction-vacuum | Hikoki | RP350YDL | src=Сеть 220 В; power=1200; tank=35
+construction-vacuum | Hikoki | RP350YDM | src=Сеть 220 В; power=1200; tank=35
+construction-vacuum | Hikoki | RP3608DA | src=Аккумулятор; volt=36; tank=8
+construction-vacuum | Ryobi | R18PV | src=Аккумулятор; volt=18
+construction-vacuum | Ryobi | RVC-1530IPT | src=Сеть 220 В; power=1500; tank=30
+construction-vacuum | AEG | AP 300 ELCP | src=Сеть 220 В; power=1500; tank=30
+construction-vacuum | Einhell | TE-VC 2230 SA | src=Сеть 220 В; power=1150; tank=30
+construction-vacuum | Einhell | TE-VC 2340 SA | src=Сеть 220 В; power=1500; tank=40
+construction-vacuum | Einhell | TE-VC 18/20 Li | src=Аккумулятор; volt=18; tank=20
+construction-vacuum | Black+Decker | WDBD10 | src=Сеть 220 В; power=1200; tank=10

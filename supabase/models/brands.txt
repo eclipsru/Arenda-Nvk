@@ -117,3 +117,85 @@ Ulma | ульма
 Vermeer | вермеер
 Weber MT | вебер; вебер мт; weber
 Weka | века
+Black+Decker | black decker; black and decker; black&decker; блэк декер; блэк энд декер; блэк энд деккер; блек декер
+Greenworks | гринворкс; гринворк
+Starmix | стармикс
+Worx | воркс; ворх
+RGK | ргк
+Hikmicro | хикмикро; хайкмикро; хикмайкро
+Fluke | флюк; флюке
+TOR | тор
+Tractel | трактел; трактель
+ESAB | эсаб; esab
+Telwin | телвин; телвинн
+Thomas | томас
+Stabila | стабила
+Spectra Precision | спектра; спектра пресижн; spectra
+Ritmo | ритмо
+Laserliner | лазерлайнер
+Koshin | кошин
+Hypertherm | гипертерм; хайпертерм
+Electrolux | электролюкс
+Al-ko | алко; ал-ко; alko
+Von Arx | фон аркс; вон аркс
+UNI-T | юни-т; юнит; uni t
+Spartan | спартан
+Sokkia | соккия; сокия
+Sata | сата
+Rehau | рехау
+Nikon | никон
+Layher | лайер; лайхер
+Jungheinrich | юнгхайнрих; юнгхейнрих
+Huepar | хьюпар; хупар
+Hailo | хайло
+Daishin | дайшин; дайсин
+Carku | карку
+Berkut | беркут
+Энергия | energy; энергия
+Новая высота | новая высота; nv
+ИЭК | iek; иек
+Zircon | зиркон
+Zarges | заргес
+Zanussi | занусси
+Warn | варн
+Uponor | упонор
+Unipump | унипамп; юнипамп
+Seek Thermal | сик термал; seek
+Proceq | прокек
+Noirot | нуаро; нуарот
+Noco | ноко
+Lavor | лавор
+Instrumax | инструмакс
+Guide | гайд
+Geomax | геомакс
+Geobox | геобокс
+Etari | етари; этари
+Elcometer | элкометр; элкометер
+Defelsko | дефелско
+Wöhler | вёлер; велер; wohler
+Timberk | тимберк
+Generac | дженерак; генерак
+Edma | эдма
+Edco | эдко
+Devilbiss | девилбисс; девилбис
+Comeup | комеап; камап
+CEM | цем; сем
+Мобил К | mobil k; мобил к; мобил-к; мобилк
+Сплитстоун | splitstone; сплит стоун
+Ctek | цтек; ситек; стек
+Орион | orion; орион вымпел
+Deca | дека
+Kaeser | кайзер; каезер
+Doosan | дусан; доосан
+ЗИФ | zif; зиф
+Compair | компейр; компэйр; компаир
+Abac | абак
+Munters | мунтерс
+Europower | европауэр; евро пауэр
+Lincoln Electric | линкольн; линкольн электрик; lincoln
+Mosa | моза; моса
+Donmet | донмет
+Redius | редиус
+Krass | красс
+Harris | харрис
+Victor | виктор
