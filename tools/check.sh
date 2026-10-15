@@ -188,6 +188,25 @@ else
   skip "стенд слов автоподбора: нет pgserver (PG_PY=<python с pgserver> bash tools/check.sh)"
 fi
 
+head_ "4.5.5. Справочник моделей: данные и SQL"
+# 10.82: supabase/models/*.txt проверяются (виды, поля, варианты, числа, бренды, повторы), и SQL в репозитории
+# совпадает с данными (собран tools/models-gen.py). Затем стенд на PostgreSQL: права, объявления, повтор, откат.
+if command -v python3 >/dev/null 2>&1; then
+  if python3 tools/models-gen.py --check >/tmp/iva-test-models-gen.log 2>&1; then ok "справочник моделей: $(tail -1 /tmp/iva-test-models-gen.log | sed 's/^✔ //')"
+  else bad "справочник моделей"; head -12 /tmp/iva-test-models-gen.log | sed 's/^/      /'; fi
+else
+  skip "справочник моделей: python3 не найден"
+fi
+if "$PG_PY" -c "import pgserver" >/dev/null 2>&1; then
+  if "$PG_PY" tools/models-stand.py >/tmp/iva-test-models-stand.log 2>&1; then
+    ok "справочник моделей: $(grep -c '✔' /tmp/iva-test-models-stand.log) проверок SQL на PostgreSQL"
+  else
+    bad "стенд справочника моделей"; grep -E '✘|ИТОГ|Error|ERROR' /tmp/iva-test-models-stand.log | head -8 | sed 's/^/      /'
+  fi
+else
+  skip "стенд справочника моделей: нет pgserver (PG_PY=<python с pgserver> bash tools/check.sh)"
+fi
+
 head_ "4.6. Скачивание приложения у всех: файл выпущенной версии на месте"
 # Выпущенная версия живёт строкой в базе (app_releases) и ссылается на файл в корне сайта.
 # Если файл убрать, у всех пользователей ломается «Скачать APK». Код 2 = проверить не удалось (нет сети).

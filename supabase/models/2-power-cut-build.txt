@@ -1,0 +1,759 @@
+# Справочник моделей, часть 2: шлифовка, фрезеры, фены, миксеры, крепёж; резка и бурение; строительное оборудование.
+# Строка: вид | бренд | модель | характеристики | (необязательно) своё слово для названия
+
+# Эксцентриковые шлифмашины
+orbital-sander | Makita | BO5031 | src=Сеть 220 В; power=300; disc=125
+orbital-sander | Makita | BO5041 | src=Сеть 220 В; power=300; disc=125
+orbital-sander | Makita | BO5030 | src=Сеть 220 В; power=300; disc=125
+orbital-sander | Makita | BO6030 | src=Сеть 220 В; power=310; disc=150
+orbital-sander | Makita | BO6040 | src=Сеть 220 В; power=750; disc=150
+orbital-sander | Makita | BO6050J | src=Сеть 220 В; power=750; disc=150
+orbital-sander | Makita | DBO180 | src=Аккумулятор; volt=18; disc=125
+orbital-sander | Makita | DBO480 | src=Аккумулятор; volt=18
+orbital-sander | Bosch | GEX 125-1 AE | src=Сеть 220 В; power=250; disc=125
+orbital-sander | Bosch | GEX 125-150 AVE | src=Сеть 220 В; power=400
+orbital-sander | Bosch | GEX 40-150 | src=Сеть 220 В; power=400; disc=150
+orbital-sander | Bosch | GEX 34-125 | src=Сеть 220 В; power=340; disc=125
+orbital-sander | Bosch | PEX 220 A | src=Сеть 220 В; power=220; disc=125
+orbital-sander | Bosch | PEX 300 AE | src=Сеть 220 В; power=270; disc=125
+orbital-sander | Bosch | PEX 400 AE | src=Сеть 220 В; power=350; disc=125
+orbital-sander | Bosch | GEX 18V-125 | src=Аккумулятор; volt=18; disc=125
+orbital-sander | Festool | ETS 125 REQ | src=Сеть 220 В; power=200; disc=125
+orbital-sander | Festool | ETS 150/3 EQ | src=Сеть 220 В; power=310; disc=150
+orbital-sander | Festool | ETS 150/5 EQ | src=Сеть 220 В; power=310; disc=150
+orbital-sander | Festool | ETS EC 150/3 EQ | src=Сеть 220 В; power=400; disc=150
+orbital-sander | Festool | ETS EC 150/5 EQ | src=Сеть 220 В; power=400; disc=150
+orbital-sander | Festool | ETS EC 125/3 EQ | src=Сеть 220 В; power=400; disc=125
+orbital-sander | Festool | Rotex RO 150 FEQ | src=Сеть 220 В; power=720; disc=150
+orbital-sander | Festool | Rotex RO 125 FEQ | src=Сеть 220 В; power=500; disc=125
+orbital-sander | Festool | Rotex RO 90 DX FEQ | src=Сеть 220 В; power=400; disc=90
+orbital-sander | Festool | ETSC 125 | src=Аккумулятор; volt=18; disc=125
+orbital-sander | Mirka | Deros 5650CV | src=Сеть 220 В; power=350; disc=150
+orbital-sander | Mirka | Deros 650CV | src=Сеть 220 В; power=350; disc=150
+orbital-sander | Mirka | Deros 325CV | src=Сеть 220 В; power=350; disc=77
+orbital-sander | Mirka | Ceros 650CV | src=Сеть 220 В; disc=150
+orbital-sander | DeWalt | DWE6423 | src=Сеть 220 В; power=280; disc=125
+orbital-sander | DeWalt | DWE6433 | src=Сеть 220 В; power=530; disc=150
+orbital-sander | DeWalt | DCW210 | src=Аккумулятор; volt=18; disc=125
+orbital-sander | Metabo | SXE 3125 | src=Сеть 220 В; power=310; disc=125
+orbital-sander | Metabo | SXE 3150 | src=Сеть 220 В; power=310; disc=150
+orbital-sander | Metabo | SXE 450 TurboTec | src=Сеть 220 В; power=350; disc=150
+orbital-sander | Metabo | SXE 150-5.0 BL | src=Сеть 220 В; power=350; disc=150
+orbital-sander | Metabo | SXA 18 LTX 125 BL | src=Аккумулятор; volt=18; disc=125
+orbital-sander | Milwaukee | M18 BOS125 | src=Аккумулятор; volt=18; disc=125
+orbital-sander | Milwaukee | ROS 125 E | src=Сеть 220 В; power=300; disc=125
+orbital-sander | Hikoki | SV13YB | src=Сеть 220 В; power=230; disc=125
+orbital-sander | Интерскол | ЭШМ-125/270Э | src=Сеть 220 В; power=270; disc=125
+
+# Ленточные шлифмашины
+belt-sander | Makita | 9404 | power=1010; width=100
+belt-sander | Makita | 9403 | power=1200; width=100
+belt-sander | Makita | 9910 | power=650; width=76
+belt-sander | Makita | 9911 | power=650; width=76
+belt-sander | Makita | 9920 | power=1010; width=76
+belt-sander | Makita | 9031 | power=550; width=30
+belt-sander | Bosch | GBS 75 AE | power=750; width=75
+belt-sander | Bosch | GBS 100 AE | power=1200; width=100
+belt-sander | Bosch | PBS 75 AE | power=750; width=75
+belt-sander | Bosch | PBS 75 A | power=710; width=75
+belt-sander | Metabo | BAE 75 | power=1010; width=75
+belt-sander | Metabo | BE 75 X 533 |
+belt-sander | DeWalt | DWP352VS | power=1010; width=75
+belt-sander | Hikoki | SB8V2 | power=1020; width=76
+belt-sander | Интерскол | ЛШМ-76/900 | power=900; width=76
+belt-sander | Интерскол | ЛШМ-100/1200Э | power=1200; width=100
+
+# Вибрационные шлифмашины
+finishing-sander | Makita | BO3711 | power=190
+finishing-sander | Makita | BO3710 | power=190
+finishing-sander | Makita | BO4555 | power=200
+finishing-sander | Makita | BO4565 | power=200
+finishing-sander | Makita | BO4557 | power=180
+finishing-sander | Makita | BO4900V | power=330
+finishing-sander | Makita | 9046 | power=600
+finishing-sander | Makita | BO4510 | power=170
+finishing-sander | Bosch | GSS 230 AVE | power=300
+finishing-sander | Bosch | GSS 280 AVE | power=350
+finishing-sander | Bosch | GSS 140-1 A | power=180
+finishing-sander | Bosch | GSS 160-1 A Multi | power=180
+finishing-sander | Bosch | PSS 200 AC | power=200
+finishing-sander | Bosch | PSS 250 AE | power=250
+finishing-sander | Bosch | PSM 100 A | power=100
+finishing-sander | Bosch | PSM 200 AES | power=200
+finishing-sander | Festool | RTS 400 REQ | power=250
+finishing-sander | Festool | DTS 400 REQ | power=250
+finishing-sander | Festool | LS 130 EQ | power=260
+finishing-sander | Metabo | SRE 4350 TurboTec | power=350
+finishing-sander | Metabo | SRE 4351 TurboTec | power=350
+finishing-sander | Metabo | FSR 200 Intec | power=200
+finishing-sander | DeWalt | DWE6411 | power=230
+finishing-sander | DeWalt | D26441 | power=300
+finishing-sander | Интерскол | ПШМ-115/300Э | power=300
+
+# Рубанки
+electric-planer | Makita | KP0800 | src=Сеть 220 В; power=620; width=82
+electric-planer | Makita | KP0810 | src=Сеть 220 В; power=850; width=82
+electric-planer | Makita | KP0810C | src=Сеть 220 В; power=1050; width=82
+electric-planer | Makita | 1911B | src=Сеть 220 В; power=840; width=110
+electric-planer | Makita | KP312S | src=Сеть 220 В; power=1050; width=312
+electric-planer | Makita | 1806B | src=Сеть 220 В; power=1200; width=170
+electric-planer | Makita | DKP180 | src=Аккумулятор; volt=18; width=82
+electric-planer | Makita | DKP181 | src=Аккумулятор; volt=18; width=82
+electric-planer | Bosch | GHO 6500 | src=Сеть 220 В; power=650; width=82
+electric-planer | Bosch | GHO 26-82 D | src=Сеть 220 В; power=710; width=82
+electric-planer | Bosch | GHO 40-82 C | src=Сеть 220 В; power=850; width=82
+electric-planer | Bosch | PHO 2000 | src=Сеть 220 В; power=680; width=82
+electric-planer | Bosch | PHO 3100 | src=Сеть 220 В; power=750; width=82
+electric-planer | Bosch | GHO 18V-26 | src=Аккумулятор; volt=18; width=82
+electric-planer | DeWalt | D26500K | src=Сеть 220 В; power=1050; width=82
+electric-planer | DeWalt | DW680 | src=Сеть 220 В; power=600; width=82
+electric-planer | DeWalt | DCP580 | src=Аккумулятор; volt=18; width=82
+electric-planer | Metabo | HO 26-82 | src=Сеть 220 В; power=620; width=82
+electric-planer | Metabo | Ho 0882 | src=Сеть 220 В; power=800; width=82
+electric-planer | Metabo | HO 18 LTX 20-82 | src=Аккумулятор; volt=18; width=82
+electric-planer | Festool | HL 850 EB | src=Сеть 220 В; power=850; width=82
+electric-planer | Hikoki | P20SF | src=Сеть 220 В; power=620; width=82
+electric-planer | Интерскол | Р-82/710 | src=Сеть 220 В; power=710; width=82
+electric-planer | Интерскол | Р-110/1100М | src=Сеть 220 В; power=1100; width=110
+
+# Фрезеры
+router | Makita | RP0900 | src=Сеть 220 В; power=900; chuck=6 и 8 мм
+router | Makita | RP0910 | src=Сеть 220 В; power=900; chuck=6 и 8 мм
+router | Makita | RP1800 | src=Сеть 220 В; power=1850; chuck=8 и 12 мм
+router | Makita | RP1801 | src=Сеть 220 В; power=1650; chuck=8 и 12 мм
+router | Makita | RP2300FC | src=Сеть 220 В; power=2300; chuck=8 и 12 мм
+router | Makita | RP2301FC | src=Сеть 220 В; power=2100; chuck=8 и 12 мм
+router | Makita | RT0700C | src=Сеть 220 В; power=710; chuck=6 и 8 мм
+router | Makita | RT0702C | src=Сеть 220 В; power=710; chuck=6 и 8 мм
+router | Makita | 3709 | src=Сеть 220 В; power=530; chuck=6 мм
+router | Makita | 3710 | src=Сеть 220 В; power=530; chuck=6 мм
+router | Makita | 3612C | src=Сеть 220 В; power=1850; chuck=12 мм
+router | Makita | DRT50 | src=Аккумулятор; volt=18; chuck=6 и 8 мм
+router | Makita | DRT52 | src=Аккумулятор; volt=18
+router | Makita | DRP450 | src=Аккумулятор; volt=36
+router | Bosch | GOF 1250 CE | src=Сеть 220 В; power=1250
+router | Bosch | GOF 1600 CE | src=Сеть 220 В; power=1600
+router | Bosch | GOF 130 | src=Сеть 220 В; power=1300
+router | Bosch | GOF 2000 CE | src=Сеть 220 В; power=2000
+router | Bosch | POF 1200 AE | src=Сеть 220 В; power=1200; chuck=6 и 8 мм
+router | Bosch | POF 1400 ACE | src=Сеть 220 В; power=1400; chuck=6 и 8 мм
+router | Bosch | GKF 600 | src=Сеть 220 В; power=600; chuck=6 и 8 мм
+router | Bosch | GKF 550 | src=Сеть 220 В; power=550
+router | Bosch | GKF 12V-8 | src=Аккумулятор; volt=12
+router | Bosch | GKF 18V-8 | src=Аккумулятор; volt=18
+router | Festool | OF 1010 EBQ | src=Сеть 220 В; power=1010; chuck=8 мм
+router | Festool | OF 1010 REBQ | src=Сеть 220 В; power=1010; chuck=8 мм
+router | Festool | OF 1400 EBQ | src=Сеть 220 В; power=1400; chuck=8 и 12 мм
+router | Festool | OF 2200 EB | src=Сеть 220 В; power=2200; chuck=8 и 12 мм
+router | Festool | MFK 700 EQ | src=Сеть 220 В; power=720; chuck=6 и 8 мм
+router | Festool | OFK 700 EQ | src=Сеть 220 В; power=720
+router | DeWalt | DW625E | src=Сеть 220 В; power=2000
+router | DeWalt | DWE625 | src=Сеть 220 В; power=2300
+router | DeWalt | D26203 | src=Сеть 220 В; power=900
+router | DeWalt | D26204K | src=Сеть 220 В; power=900
+router | DeWalt | DCW600 | src=Аккумулятор; volt=18
+router | DeWalt | DCW604 | src=Аккумулятор; volt=18
+router | Metabo | OFE 1229 Signal | src=Сеть 220 В; power=1200
+router | Metabo | OFE 738 | src=Сеть 220 В; power=710
+router | Metabo | Of E 1229 | src=Сеть 220 В; power=1200
+router | Hikoki | M12V2 | src=Сеть 220 В; power=2000
+router | Hikoki | M12SA2 | src=Сеть 220 В; power=1600
+router | Hikoki | M8V2 | src=Сеть 220 В; power=1150
+router | Milwaukee | M18 FTR8 | src=Аккумулятор; volt=18
+router | Интерскол | ФМ-32/1900Э | src=Сеть 220 В; power=1900
+router | Интерскол | ФМ-55/1000Э | src=Сеть 220 В; power=1000
+router | Интерскол | ФМК-22/600Э | src=Сеть 220 В; power=600
+
+# Строительные фены
+heat-gun | Makita | HG5030K | power=1600
+heat-gun | Makita | HG551V | power=1800; temp=550
+heat-gun | Makita | HG651CK | power=2000; temp=650
+heat-gun | Makita | HG6031VK | power=1800; temp=600
+heat-gun | Makita | HG6530VK | power=2000; temp=650
+heat-gun | Makita | HG5012K | power=1600
+heat-gun | Makita | DHG181 | temp=550
+heat-gun | Bosch | GHG 20-63 | power=2000; temp=630
+heat-gun | Bosch | GHG 23-66 | power=2300; temp=650
+heat-gun | Bosch | GHG 20-60 | power=2000; temp=600
+heat-gun | Bosch | GHG 16-50 | power=1600; temp=500
+heat-gun | Bosch | PHG 500-2 | power=1600; temp=500
+heat-gun | Bosch | PHG 600-3 | power=1800; temp=600
+heat-gun | Bosch | PHG 630 DCE | power=2000; temp=630
+heat-gun | Bosch | GHG 18V-50 | temp=500
+heat-gun | Steinel | HL 1920 E | power=2000; temp=600
+heat-gun | Steinel | HL 2020 E | power=2200; temp=630
+heat-gun | Steinel | HG 2320 E | power=2300; temp=650
+heat-gun | Steinel | HL 1620 S | power=1600; temp=600
+heat-gun | Metabo | H 16-500 | power=1600; temp=500
+heat-gun | Metabo | HE 20-600 | power=2000; temp=600
+heat-gun | Metabo | HE 23-650 Control | power=2300; temp=650
+heat-gun | Metabo | HGE 23-650 LCD | power=2300; temp=650
+heat-gun | DeWalt | D26411 | power=1800; temp=600
+heat-gun | DeWalt | D26414 | power=2000; temp=650
+heat-gun | DeWalt | DCE530 | temp=530
+heat-gun | Milwaukee | HG 2000 E | power=2000
+heat-gun | Milwaukee | M18 BHG | temp=470
+heat-gun | Интерскол | ФЭ-2000Э | power=2000
+
+# Строительные миксеры
+mixer-drill | Makita | UT1305 | power=850; chuck=M14
+mixer-drill | Makita | UT1200 | power=960; chuck=M14
+mixer-drill | Makita | UT1400 | power=1300; chuck=M14
+mixer-drill | Makita | UT1600 | power=1800; chuck=M14
+mixer-drill | Makita | UT2204 | power=850; chuck=M14
+mixer-drill | Makita | DUT130 | chuck=M14
+mixer-drill | Bosch | GRW 12 E | power=1200; chuck=M14
+mixer-drill | Bosch | GRW 18-2 E | power=1800; chuck=M14
+mixer-drill | Bosch | GRW 11 E | power=1100
+mixer-drill | Bosch | PRR 250 ES |
+mixer-drill | Metabo | RWE 1100 | power=1100; chuck=M14
+mixer-drill | Metabo | RWE 1020 | power=1020; chuck=M14
+mixer-drill | Metabo | RWEV 1200 | power=1200; chuck=M14
+mixer-drill | Metabo | RWEV 1600-2 | power=1600; chuck=M14
+mixer-drill | Metabo | RW 18 LTX 120 | chuck=M14
+mixer-drill | Collomix | Xo 1 |
+mixer-drill | Collomix | Xo 4 |
+mixer-drill | Collomix | Xo 55 duo |
+mixer-drill | Collomix | Xo 6 |
+mixer-drill | Collomix | Xo 10 NC |
+mixer-drill | Festool | MX 1200 E EF | power=1200
+mixer-drill | Festool | MX 1600/2 E EF | power=1600
+mixer-drill | DeWalt | DWD241 | power=1800
+mixer-drill | Milwaukee | M18 FPM | chuck=M14
+mixer-drill | Интерскол | КРН-1600 | power=1600
+mixer-drill | Интерскол | Д-16/1050Р | power=1050
+
+# Реноваторы (МФИ)
+multitool | Makita | TM3010C | src=Сеть 220 В; power=320
+multitool | Makita | TM3000C | src=Сеть 220 В; power=320
+multitool | Makita | TM3010CX | src=Сеть 220 В; power=320
+multitool | Makita | DTM51 | src=Аккумулятор; volt=18
+multitool | Makita | DTM52 | src=Аккумулятор; volt=18
+multitool | Makita | TM30DWYE | src=Аккумулятор; volt=12
+multitool | Bosch | GOP 30-28 | src=Сеть 220 В; power=300
+multitool | Bosch | GOP 40-30 | src=Сеть 220 В; power=400
+multitool | Bosch | GOP 55-36 | src=Сеть 220 В; power=550
+multitool | Bosch | PMF 220 CE | src=Сеть 220 В; power=220
+multitool | Bosch | PMF 350 CES | src=Сеть 220 В; power=350
+multitool | Bosch | GOP 18V-28 | src=Аккумулятор; volt=18
+multitool | Bosch | GOP 12V-28 | src=Аккумулятор; volt=12
+multitool | Fein | MultiMaster FMM 350 QSL | src=Сеть 220 В; power=350
+multitool | Fein | SuperCut FSC 500 QSL | src=Сеть 220 В; power=450
+multitool | Festool | Vecturo OS 400 | src=Сеть 220 В; power=400
+multitool | DeWalt | DWE315 | src=Сеть 220 В; power=300
+multitool | DeWalt | DCS355 | src=Аккумулятор; volt=18
+multitool | DeWalt | DCS356 | src=Аккумулятор; volt=18
+multitool | Metabo | MT 400 Quick | src=Сеть 220 В; power=400
+multitool | Metabo | MT 18 LTX | src=Аккумулятор; volt=18
+multitool | Milwaukee | M18 FMT | src=Аккумулятор; volt=18
+multitool | Milwaukee | M12 FMT | src=Аккумулятор; volt=12
+multitool | Hikoki | CV350V | src=Сеть 220 В; power=350
+multitool | Интерскол | МФИ-300 | src=Сеть 220 В; power=300
+multitool | Ryobi | RMT18 | src=Аккумулятор; volt=18
+
+# Ножницы по металлу
+metal-shears | Makita | JS1602 | src=Сеть 220 В; power=380; cut=1.6
+metal-shears | Makita | JS1000 | src=Сеть 220 В; power=380; cut=1
+metal-shears | Makita | JS1601 | src=Сеть 220 В; power=380; cut=1.6
+metal-shears | Makita | JS3201 | src=Сеть 220 В; power=710; cut=3.2
+metal-shears | Makita | JN1601 | src=Сеть 220 В; power=550; cut=1.6
+metal-shears | Makita | JN3201 | src=Сеть 220 В; power=710; cut=3.2
+metal-shears | Makita | DJS161 | src=Аккумулятор; volt=18; cut=1.6
+metal-shears | Makita | DJN161 | src=Аккумулятор; volt=18; cut=1.6
+metal-shears | Makita | DJS200 | src=Аккумулятор; volt=18
+metal-shears | Bosch | GSC 160 | src=Сеть 220 В; power=500; cut=1.6
+metal-shears | Bosch | GSC 2,8 | src=Сеть 220 В; power=500; cut=2.8
+metal-shears | Bosch | GNA 16 | src=Сеть 220 В; power=750; cut=1.6
+metal-shears | Bosch | GNA 2,0 | src=Сеть 220 В; power=500; cut=2
+metal-shears | Bosch | GNA 3,5 | src=Сеть 220 В; power=620; cut=3.5
+metal-shears | Bosch | GSC 18V-16 | src=Аккумулятор; volt=18; cut=1.6
+metal-shears | Bosch | GSC 12V-13 | src=Аккумулятор; volt=12; cut=1.3
+metal-shears | DeWalt | DW890 | src=Сеть 220 В; cut=1.6
+metal-shears | DeWalt | DCS491 | src=Аккумулятор; volt=18
+metal-shears | DeWalt | DCS496 | src=Аккумулятор; volt=18
+metal-shears | Metabo | SCV 18 LTX BL 1.6 | src=Аккумулятор; volt=18; cut=1.6
+metal-shears | Metabo | Kn 6875 | src=Сеть 220 В; cut=1.6
+metal-shears | Trumpf | TruTool C 160 | src=Сеть 220 В; cut=1.6
+metal-shears | Trumpf | TruTool N 160 E | src=Сеть 220 В; cut=1.6
+metal-shears | Milwaukee | M18 BMS12 | src=Аккумулятор; volt=18; cut=1.2
+metal-shears | Milwaukee | M18 BMS20 | src=Аккумулятор; volt=18; cut=2
+metal-shears | Интерскол | НЛ-1,6/500 | src=Сеть 220 В; power=500; cut=1.6
+
+# Пороховые и газовые пистолеты
+powder-nailer | Hilti | DX 460 |
+powder-nailer | Hilti | DX 460-MX |
+powder-nailer | Hilti | DX 351 |
+powder-nailer | Hilti | DX 5 |
+powder-nailer | Hilti | DX 2 |
+powder-nailer | Hilti | DX 76 |
+powder-nailer | Spit | P 560 |
+powder-nailer | Spit | P 230 |
+powder-nailer | Spit | P 370 |
+gas-nailer | Hilti | GX 120 |
+gas-nailer | Hilti | GX 120-ME |
+gas-nailer | Hilti | GX 3 |
+gas-nailer | Hilti | GX 3-ME |
+gas-nailer | Spit | Pulsa 700 P |
+gas-nailer | Spit | Pulsa 800 P |
+gas-nailer | Spit | Pulsa 800 E |
+gas-nailer | Toua | GSN50E |
+gas-nailer | Toua | GFN3490 |
+
+# Гвоздезабивные пистолеты (нейлеры)
+nailer | Makita | DBN500 | src=Аккумулятор; volt=18; nail=50
+nailer | Makita | DBN600 | src=Аккумулятор; volt=18
+nailer | Makita | DPT353 | src=Аккумулятор; volt=18
+nailer | Makita | DFN350 | src=Аккумулятор; volt=18
+nailer | Makita | AN902 | src=Сжатый воздух; nail=90
+nailer | Makita | AF505N | src=Сжатый воздух; nail=50
+nailer | Makita | AF506 | src=Сжатый воздух; nail=50
+nailer | Bosch | GSK 18V-LI | src=Аккумулятор; volt=18
+nailer | Bosch | GNH 18V-64 | src=Аккумулятор; volt=18; nail=64
+nailer | Bosch | GSK 64 | src=Сжатый воздух; nail=64
+nailer | Bosch | GSK 50 | src=Сжатый воздух; nail=50
+nailer | DeWalt | DCN660 | src=Аккумулятор; volt=18
+nailer | DeWalt | DCN680 | src=Аккумулятор; volt=18; nail=54
+nailer | DeWalt | DCN692 | src=Аккумулятор; volt=18; nail=90
+nailer | DeWalt | DCN890 | src=Аккумулятор; volt=18
+nailer | DeWalt | DCN45RN | src=Аккумулятор; volt=18
+nailer | DeWalt | DPN1850 | src=Сжатый воздух; nail=50
+nailer | Milwaukee | M18 FFN | src=Аккумулятор; volt=18; nail=90
+nailer | Milwaukee | M18 CN16GA | src=Аккумулятор; volt=18
+nailer | Milwaukee | M18 CN18GS | src=Аккумулятор; volt=18
+nailer | Hikoki | NR90AES1 | src=Сжатый воздух; nail=90
+nailer | Hikoki | NR1890DC | src=Аккумулятор; volt=18; nail=90
+nailer | Hikoki | NT1850DE | src=Аккумулятор; volt=18; nail=55
+nailer | Hikoki | NV45AB2 | src=Сжатый воздух; nail=45
+nailer | Hikoki | NV83A5 | src=Сжатый воздух; nail=83
+nailer | Fubag | N90 | src=Сжатый воздух; nail=90
+nailer | Fubag | N64 | src=Сжатый воздух; nail=64
+nailer | Fubag | N50 | src=Сжатый воздух; nail=50
+nailer | Paslode | IM350+ | src=Газ; nail=90
+nailer | Paslode | IM250 II | src=Газ; nail=64
+nailer | Metabo | NFR 18 LTX 90 BL | src=Аккумулятор; volt=18; nail=90
+nailer | Ryobi | R18N18G | src=Аккумулятор; volt=18
+nailer | Ryobi | R18N16G | src=Аккумулятор; volt=18
+
+# Степлеры
+stapler | Stanley | 6-TR250 | src=Ручной
+stapler | Stanley | 6-TR150HL | src=Ручной
+stapler | Stanley | 6-TR350 | src=Ручной
+stapler | Stanley | 0-TRE650 | src=Сеть 220 В
+stapler | Novus | J-19 | src=Ручной
+stapler | Novus | J-21 | src=Ручной
+stapler | Novus | J-29 | src=Ручной
+stapler | Rapid | R53 | src=Ручной
+stapler | Rapid | R34 | src=Ручной
+stapler | Bosch | PTK 3,6 LI | src=Аккумулятор
+stapler | Bosch | PTK 14 E | src=Сеть 220 В
+stapler | Bosch | PTK 14 EDT | src=Сеть 220 В
+stapler | Bosch | HMT 53 | src=Ручной
+stapler | Makita | ST113D | src=Аккумулятор
+stapler | Makita | DST221 | src=Аккумулятор
+stapler | Makita | AT1022AZ | src=Сжатый воздух
+stapler | Makita | AT638A | src=Сжатый воздух
+stapler | DeWalt | DCN681 | src=Аккумулятор
+stapler | DeWalt | DCN701 | src=Аккумулятор
+stapler | Milwaukee | M12 BST | src=Аккумулятор
+
+# Заклёпочники
+riveter | Makita | DRV150 | src=Аккумулятор
+riveter | Makita | DRV250 | src=Аккумулятор
+riveter | Milwaukee | M18 FPRT | src=Аккумулятор
+riveter | Milwaukee | M12 BPRT | src=Аккумулятор
+riveter | DeWalt | DCF403 | src=Аккумулятор
+riveter | DeWalt | DCF414 | src=Аккумулятор
+riveter | Bosch | GRG 18V-16 C | src=Аккумулятор
+riveter | Metabo | NP 18 LTX BL 5.0 | src=Аккумулятор
+riveter | Stanley | MR100 | src=Ручной
+riveter | Stanley | MR77 | src=Ручной
+riveter | Gesipa | Accubird | src=Аккумулятор
+riveter | Gesipa | PowerBird | src=Аккумулятор
+riveter | Gesipa | FireBird | src=Ручной
+riveter | Gesipa | NTX | src=Ручной
+
+# Установки алмазного бурения
+core-drill-hand | Makita | DBM131 | power=1700; dia=132
+core-drill-hand | Makita | DBM080 | power=1300; dia=80
+core-drill-hand | Bosch | GDB 180 WE | power=2000; dia=180
+core-drill-hand | Bosch | GDB 2500 WE | power=2500
+core-drill-hand | Bosch | GDB 1600 WE | power=1600
+core-drill-hand | Hilti | DD 110-W |
+core-drill-hand | Hilti | DD 120 |
+core-drill-hand | Hilti | DD 150-U |
+core-drill-hand | Hilti | DD 30-W |
+core-drill-hand | Hilti | DD 160 |
+core-drill-hand | Weka | DK 1603 |
+core-drill-hand | Eibenstock | ETN 162 |
+core-drill-stand | Makita | DBM230 | power=2500; dia=255
+core-drill-stand | Bosch | GDB 350 WE | power=3200; dia=350
+core-drill-stand | Bosch | GCR 350 |
+core-drill-stand | Hilti | DD 200 |
+core-drill-stand | Hilti | DD 250 |
+core-drill-stand | Hilti | DD 350 |
+core-drill-stand | Hilti | DD 500 |
+core-drill-stand | Hilti | DD 150-U |
+core-drill-stand | Weka | DK 32 |
+core-drill-stand | Weka | DK 22 |
+core-drill-stand | Eibenstock | END 1550 P |
+core-drill-stand | Husqvarna | DM 280 |
+core-drill-stand | Husqvarna | DM 340 |
+core-drill-stand | Husqvarna | DM 400 |
+core-drill-stand | Husqvarna | DM 650 |
+
+# Штроборезы
+wall-chaser | Makita | SG1250 | power=1400; disc=125
+wall-chaser | Makita | SG150 | power=1800; disc=150
+wall-chaser | Makita | SG181 | power=1400; disc=180
+wall-chaser | Bosch | GNF 35 CA | power=1400; disc=150; depth=35
+wall-chaser | Bosch | GNF 65 A | power=2400; disc=230; depth=65
+wall-chaser | Bosch | GNF 20 CA | power=900; disc=115; depth=20
+wall-chaser | Hilti | DCH 150-SL |
+wall-chaser | Hilti | DCH 230 |
+wall-chaser | Hilti | DCH 300 |
+wall-chaser | Metabo | MFE 30 | power=1400; disc=125; depth=30
+wall-chaser | Metabo | MFE 40 | power=1900; disc=125; depth=40
+wall-chaser | Metabo | MFE 65 | power=2400; disc=230; depth=65
+wall-chaser | Milwaukee | WCE 30 | power=1500; disc=125; depth=30
+wall-chaser | Milwaukee | WCS 45 | power=1900; disc=150; depth=45
+wall-chaser | Eibenstock | EMF 150.1 | disc=150
+wall-chaser | Интерскол | ПД-125/1400Э | power=1400; disc=125
+
+# Плиткорезы ручные
+tile-cutter-manual | Rubi | TX-700-N |
+tile-cutter-manual | Rubi | TX-900-N |
+tile-cutter-manual | Rubi | TX-1250 |
+tile-cutter-manual | Rubi | TZ-850 |
+tile-cutter-manual | Rubi | TZ-1020 |
+tile-cutter-manual | Rubi | TS-60 Plus |
+tile-cutter-manual | Rubi | TS-66 |
+tile-cutter-manual | Rubi | Slim Cutter |
+tile-cutter-manual | Montolit | Masterpiuma 63P3 | length=63
+tile-cutter-manual | Montolit | Masterpiuma 93P3 | length=93
+tile-cutter-manual | Montolit | Masterpiuma 125P3 | length=125
+tile-cutter-manual | Montolit | Masterpiuma 155P3 | length=155
+tile-cutter-manual | Sigma | 3B4 |
+tile-cutter-manual | Sigma | 3C4 |
+tile-cutter-manual | Sigma | 3D4 |
+tile-cutter-manual | Battipav | Super Pro 900 |
+
+# Плиткорезы электрические
+tile-cutter-electric | Rubi | DU-200 EVO |
+tile-cutter-electric | Rubi | DU-200 L |
+tile-cutter-electric | Rubi | DC-250-1200 |
+tile-cutter-electric | Rubi | DC-250-850 |
+tile-cutter-electric | Rubi | DS-250-N 1000 |
+tile-cutter-electric | Rubi | ND-180 |
+tile-cutter-electric | Rubi | ND-200 |
+tile-cutter-electric | Rubi | DT-250 EVO |
+tile-cutter-electric | Norton | Clipper TT 250 E |
+tile-cutter-electric | Norton | Clipper CM 41 |
+tile-cutter-electric | Makita | 4100NH | power=860; disc=110
+tile-cutter-electric | Makita | 4100KB | disc=125
+tile-cutter-electric | Makita | CC301DZ | disc=85
+tile-cutter-electric | Einhell | TC-TC 800 | power=800
+tile-cutter-electric | Einhell | TE-TC 620 U | power=620
+
+# Камнерезные станки
+stone-saw | Norton | Clipper CM 501 |
+stone-saw | Norton | Clipper CM 42 |
+stone-saw | Norton | Clipper CM 351 |
+stone-saw | Husqvarna | TS 230 F |
+stone-saw | Husqvarna | TS 300 E |
+stone-saw | Husqvarna | TS 400 F |
+stone-saw | Husqvarna | TS 66 R |
+stone-saw | Husqvarna | TS 73 R |
+stone-saw | Rubi | DX-350-N 1300 |
+stone-saw | Rubi | DX-250 |
+stone-saw | Imer | Combicut 350 |
+stone-saw | Imer | Masonry 350 |
+stone-saw | Cedima | CTS-57 G |
+
+# Бензорезы
+power-cutter | Stihl | TS 410 | src=Бензин; cc=66.7; disc=300; depth=100
+power-cutter | Stihl | TS 420 | src=Бензин; cc=66.7; disc=350; depth=125
+power-cutter | Stihl | TS 500i | src=Бензин; cc=72.2; disc=350; depth=125
+power-cutter | Stihl | TS 700 | src=Бензин; cc=98.5; disc=350; depth=125
+power-cutter | Stihl | TS 800 | src=Бензин; cc=98.5; disc=400; depth=145
+power-cutter | Stihl | TSA 230 | src=Аккумулятор; volt=36; disc=230
+power-cutter | Stihl | TSA 300 | src=Аккумулятор; volt=36; disc=300
+power-cutter | Husqvarna | K 760 | src=Бензин; cc=74; disc=350; depth=125
+power-cutter | Husqvarna | K 770 | src=Бензин; cc=74; disc=350; depth=125
+power-cutter | Husqvarna | K 970 | src=Бензин; cc=94; disc=350
+power-cutter | Husqvarna | K 1270 | src=Бензин; cc=119
+power-cutter | Husqvarna | K 760 Cut-n-Break | src=Бензин; cc=74
+power-cutter | Husqvarna | K 970 Chain | src=Бензин; cc=94
+power-cutter | Husqvarna | K 535i | src=Аккумулятор; volt=36; disc=230
+power-cutter | Husqvarna | K 1 PACE | src=Аккумулятор; disc=350
+power-cutter | Husqvarna | K 4000 | src=Сеть 220 В; disc=350
+power-cutter | Makita | EK7651H | src=Бензин; cc=75.6; disc=355
+power-cutter | Makita | EK7301 | src=Бензин; cc=72.6; disc=355
+power-cutter | Makita | EK6101 | src=Бензин; cc=61; disc=350
+power-cutter | Makita | EK8100 | src=Бензин; cc=81; disc=405
+power-cutter | Makita | CE001G | src=Аккумулятор; volt=80; disc=355
+power-cutter | Makita | DCE090 | src=Аккумулятор; volt=36; disc=230
+power-cutter | Hilti | DSH 700-X | src=Бензин
+power-cutter | Hilti | DSH 900-X | src=Бензин
+power-cutter | Hilti | DSH 600-X | src=Бензин
+power-cutter | Hilti | DSH 600-22 | src=Аккумулятор
+power-cutter | Partner | K950 | src=Бензин
+power-cutter | Partner | K650 | src=Бензин
+power-cutter | Wacker Neuson | BTS 635 | src=Бензин
+power-cutter | Wacker Neuson | BTS 1035 | src=Бензин
+
+# Швонарезчики
+floor-saw | Husqvarna | FS 400 LV | src=Бензин
+floor-saw | Husqvarna | FS 413 | src=Бензин
+floor-saw | Husqvarna | FS 524 | src=Бензин
+floor-saw | Husqvarna | FS 5000 D | src=Дизель
+floor-saw | Husqvarna | FS 309 | src=Бензин
+floor-saw | Norton | Clipper CS 451 | src=Бензин
+floor-saw | Norton | Clipper C13 | src=Бензин
+floor-saw | Norton | Clipper C51 | src=Бензин
+floor-saw | Wacker Neuson | BFS 1345 | src=Бензин
+floor-saw | Wacker Neuson | BFS 1350 | src=Бензин
+floor-saw | Cedima | CF-12.1 | src=Бензин
+
+# Стенорезы и канатные пилы
+wall-saw | Hilti | DST 10-CA |
+wall-saw | Hilti | DST 20-CA |
+wall-saw | Hilti | DST 10-E |
+wall-saw | Husqvarna | WS 220 |
+wall-saw | Husqvarna | WS 325 |
+wall-saw | Husqvarna | WS 440 HF |
+wall-saw | Husqvarna | WS 482 HF |
+wall-saw | Tyrolit | WSE1217 |
+wall-saw | Tyrolit | WSE711 |
+wire-saw | Husqvarna | CS 2512 |
+wire-saw | Husqvarna | CS 10 |
+
+# Бетономешалки
+concrete-mixer | Вихрь | БМ-160 | drum=160
+concrete-mixer | Вихрь | БМ-180 | drum=180
+concrete-mixer | Вихрь | БМ-200 | drum=200
+concrete-mixer | Altrad | MC 210 |
+concrete-mixer | Altrad | MC 180 |
+concrete-mixer | Altrad | B 180 |
+concrete-mixer | Lescha | SM 145 S |
+concrete-mixer | Lescha | SM 165 S |
+concrete-mixer | Lescha | SM 185 S |
+concrete-mixer | Lescha | Euromix 185 |
+concrete-mixer | Belle | Minimix 150 | drum=150
+concrete-mixer | Belle | Premier 100 XT |
+concrete-mixer | Imer | Syntesi 140 |
+concrete-mixer | Champion | CM 160 | drum=160
+concrete-mixer | Champion | CM 200 | drum=200
+
+# Растворосмесители
+mortar-mixer | Imer | Mortarmix 360 |
+mortar-mixer | Imer | Mix 120 Plus |
+
+# Глубинные вибраторы
+poker-vibrator | Wacker Neuson | IREN 38 | dia=38
+poker-vibrator | Wacker Neuson | IREN 45 | dia=45
+poker-vibrator | Wacker Neuson | IREN 57 | dia=57
+poker-vibrator | Wacker Neuson | IREN 65 | dia=65
+poker-vibrator | Wacker Neuson | IRSE 38 | dia=38
+poker-vibrator | Wacker Neuson | IRSE 45 | dia=45
+poker-vibrator | Wacker Neuson | IRSE 57 | dia=57
+poker-vibrator | Wacker Neuson | M2000 |
+poker-vibrator | Wacker Neuson | M3000 |
+poker-vibrator | Красный Маяк | ИВ-116А |
+poker-vibrator | Красный Маяк | ИВ-117А |
+poker-vibrator | Красный Маяк | ИВ-75 |
+poker-vibrator | Красный Маяк | ЭПК-1300 |
+poker-vibrator | Masalta | MVE-1501 |
+poker-vibrator | Masalta | MVE-2501 |
+poker-vibrator | Enar | Dingo |
+poker-vibrator | Enar | Tdx 38 | dia=38
+poker-vibrator | Enar | Tdx 48 | dia=48
+poker-vibrator | Enar | Avmu |
+poker-vibrator | Champion | ECV 550 |
+
+# Виброрейки
+screed-vibrator | Enar | Tribe | src=Бензин
+screed-vibrator | Wacker Neuson | P 35A | src=Бензин
+screed-vibrator | Husqvarna | BV 30 | src=Бензин
+screed-vibrator | Husqvarna | BV 20 | src=Бензин
+screed-vibrator | Belle | Easy Screed Pro | src=Бензин
+
+# Площадочные вибраторы
+surface-vibrator | Красный Маяк | ИВ-98 |
+surface-vibrator | Красный Маяк | ИВ-99 |
+surface-vibrator | Красный Маяк | ИВ-107 |
+surface-vibrator | Красный Маяк | ИВ-91 |
+surface-vibrator | Wacker Neuson | AR 36 |
+surface-vibrator | Wacker Neuson | AR 53 |
+
+# Виброплиты
+plate-compactor | Wacker Neuson | VP 1135 | src=Бензин; force=11; width=35; rev=Нет
+plate-compactor | Wacker Neuson | VP 1340 A | src=Бензин; force=13; width=40; rev=Нет
+plate-compactor | Wacker Neuson | VP 1550 A | src=Бензин; force=15; width=50; rev=Нет
+plate-compactor | Wacker Neuson | VP 2050 A | src=Бензин; force=20; width=50; rev=Нет
+plate-compactor | Wacker Neuson | WP 1540 A | src=Бензин; force=15; width=40; rev=Нет
+plate-compactor | Wacker Neuson | WP 1550 A | src=Бензин; force=15; width=50; rev=Нет
+plate-compactor | Wacker Neuson | WP 2050 A | src=Бензин; force=20; width=50; rev=Нет
+plate-compactor | Wacker Neuson | BPU 2540 A | src=Бензин; force=25; width=40; rev=Есть
+plate-compactor | Wacker Neuson | BPU 2550 A | src=Бензин; force=25; width=50; rev=Есть
+plate-compactor | Wacker Neuson | BPU 3050 A | src=Бензин; force=30; width=50; rev=Есть
+plate-compactor | Wacker Neuson | BPU 3750 A | src=Бензин; force=37; width=50; rev=Есть
+plate-compactor | Wacker Neuson | DPU 2540 H | src=Дизель; force=25; width=40; rev=Есть
+plate-compactor | Wacker Neuson | DPU 2550 H | src=Дизель; force=25; width=50; rev=Есть
+plate-compactor | Wacker Neuson | DPU 3050 H | src=Дизель; force=30; width=50; rev=Есть
+plate-compactor | Wacker Neuson | DPU 3760 H | src=Дизель; force=37; width=60; rev=Есть
+plate-compactor | Wacker Neuson | DPU 4545 H | src=Дизель; force=45; width=45; rev=Есть
+plate-compactor | Wacker Neuson | DPU 5545 H | src=Дизель; force=55; width=45; rev=Есть
+plate-compactor | Wacker Neuson | DPU 6555 H | src=Дизель; force=65; width=55; rev=Есть
+plate-compactor | Wacker Neuson | DPU 80 | src=Дизель; rev=Есть
+plate-compactor | Wacker Neuson | DPU 100 | src=Дизель; rev=Есть
+plate-compactor | Wacker Neuson | AP 1840 e | src=Аккумулятор; rev=Нет
+plate-compactor | Masalta | MS60-4 | src=Бензин; rev=Нет
+plate-compactor | Masalta | MS90-4 | src=Бензин; rev=Нет
+plate-compactor | Masalta | MS125-4 | src=Бензин; rev=Нет
+plate-compactor | Bomag | BP 12/40 | src=Бензин; rev=Нет
+plate-compactor | Bomag | BP 18/45 | src=Бензин; rev=Нет
+plate-compactor | Bomag | BP 25/50 | src=Бензин; rev=Нет
+plate-compactor | Bomag | BPR 25/40 | src=Бензин; rev=Есть
+plate-compactor | Bomag | BPR 35/42 D | src=Дизель; rev=Есть
+plate-compactor | Bomag | BPR 45/55 D | src=Дизель; rev=Есть
+plate-compactor | Bomag | BPR 60/65 D | src=Дизель; rev=Есть
+plate-compactor | Ammann | APF 12/33 | src=Бензин; rev=Нет
+plate-compactor | Ammann | APF 15/40 | src=Бензин; rev=Нет
+plate-compactor | Ammann | APF 20/50 | src=Бензин; rev=Нет
+plate-compactor | Ammann | APR 2220 | src=Бензин; rev=Есть
+plate-compactor | Ammann | APR 3020 | src=Бензин; rev=Есть
+plate-compactor | Ammann | APR 4920 | src=Дизель; rev=Есть
+plate-compactor | Ammann | APR 5920 | src=Дизель; rev=Есть
+plate-compactor | Weber MT | CF 2 | src=Бензин; rev=Нет
+plate-compactor | Weber MT | CR 2 | src=Бензин; rev=Есть
+plate-compactor | Weber MT | CR 6 | src=Дизель; rev=Есть
+plate-compactor | Dynapac | LF 75 | src=Бензин; rev=Нет
+plate-compactor | Dynapac | LG 200 | src=Дизель; rev=Есть
+plate-compactor | Dynapac | LG 300 | src=Дизель; rev=Есть
+plate-compactor | Champion | PC9045F | src=Бензин; rev=Нет
+plate-compactor | Champion | PC1645RH | src=Бензин; rev=Есть
+
+# Вибротрамбовки
+rammer | Wacker Neuson | BS 50-4 | src=Бензин
+rammer | Wacker Neuson | BS 60-4 | src=Бензин
+rammer | Wacker Neuson | BS 50-2i | src=Бензин
+rammer | Wacker Neuson | BS 60-2i | src=Бензин
+rammer | Wacker Neuson | BS 70-2i | src=Бензин
+rammer | Wacker Neuson | BS 65-V | src=Бензин
+rammer | Wacker Neuson | BS 50-4As | src=Бензин
+rammer | Wacker Neuson | AS 50e | src=Аккумулятор
+rammer | Wacker Neuson | AS 60e | src=Аккумулятор
+rammer | Bomag | BT 60/4 | src=Бензин
+rammer | Bomag | BT 65 | src=Бензин
+rammer | Bomag | BT 80 D | src=Дизель
+rammer | Ammann | ACR 60 | src=Бензин
+rammer | Ammann | ACR 68 | src=Бензин
+rammer | Ammann | ACR 70 D | src=Дизель
+rammer | Masalta | MR68H | src=Бензин
+rammer | Masalta | MR75H | src=Бензин
+rammer | Weber MT | SRV 590 | src=Бензин
+rammer | Weber MT | SRV 660 | src=Бензин
+rammer | Dynapac | LT 6005 | src=Бензин
+rammer | Dynapac | LT 5005 | src=Бензин
+rammer | Mikasa | MT-55 | src=Бензин
+rammer | Mikasa | MT-65H | src=Бензин
+rammer | Mikasa | MTX-70 | src=Бензин
+
+# Виброкатки
+roller | Wacker Neuson | RD 12 A | src=Дизель
+roller | Wacker Neuson | RD 12-90 | src=Дизель
+roller | Wacker Neuson | RD 16-90 | src=Дизель
+roller | Wacker Neuson | RD 7 | src=Бензин
+roller | Wacker Neuson | RT 82-SC | src=Дизель
+roller | Bomag | BW 65 H | src=Дизель
+roller | Bomag | BW 75 H | src=Дизель
+roller | Bomag | BW 90 AD-5 | src=Дизель
+roller | Bomag | BW 80 AD-5 | src=Дизель
+roller | Bomag | BW 120 AD-5 | src=Дизель
+roller | Ammann | ARW 65 | src=Дизель
+roller | Ammann | ARX 12 | src=Дизель
+roller | Ammann | ARX 16 | src=Дизель
+roller | Dynapac | LP 6500 | src=Дизель
+roller | Dynapac | CC1200 | src=Дизель
+
+# Затирочные машины
+power-trowel | Wacker Neuson | CT 36-5A | src=Бензин
+power-trowel | Wacker Neuson | CT 36-9 | src=Бензин
+power-trowel | Wacker Neuson | CT 24-4A | src=Бензин
+power-trowel | Wacker Neuson | CRT 48-35 | src=Бензин
+power-trowel | Красный Маяк | СО-170 | src=Сеть 380 В
+power-trowel | Красный Маяк | СО-335 | src=Сеть 380 В
+
+# Арматура: резка, гибка, вязка
+rebar-cutter | Makita | DSC163 | dia=16
+rebar-cutter | Makita | DSC251 | dia=25
+rebar-cutter | Hikoki | VB16Y | dia=16
+rebar-cutter | Hikoki | VB3616DA | dia=16
+rebar-tier | Makita | DTR180 | volt=18
+rebar-tier | Max | RB398S |
+rebar-tier | Max | RB218 |
+rebar-tier | Max | RB441T |
+rebar-tier | Max | RB611T |
+rebar-tier | Max | RB401T |
+rebar-tier | Max | RB518 |
+rebar-tier | Milwaukee | M18 BRTG |
+
+# Опалубка и стойки
+wall-formwork | Peri | Trio | material=Сталь
+wall-formwork | Peri | Maximo | material=Сталь
+wall-formwork | Peri | Duo | material=Пластик
+wall-formwork | Peri | Handset Alpha | material=Алюминий
+wall-formwork | Doka | Frami Xlife | material=Сталь
+wall-formwork | Doka | Framax Xlife | material=Сталь
+wall-formwork | Doka | Alu-Framax Xlife | material=Алюминий
+wall-formwork | Meva | Mammut 350 | material=Сталь
+wall-formwork | Meva | StarTec XT | material=Сталь
+wall-formwork | Meva | AluStar | material=Алюминий
+wall-formwork | Geotub | Panel | material=Пластик
+wall-formwork | Ulma | Orma | material=Сталь
+wall-formwork | Ulma | Comain | material=Алюминий
+slab-formwork | Peri | Skydeck | material=Алюминий
+slab-formwork | Peri | Multiflex | material=Фанера
+slab-formwork | Peri | Gridflex | material=Алюминий
+slab-formwork | Doka | Dokaflex | material=Фанера
+slab-formwork | Doka | Dokadek 30 | material=Алюминий
+slab-formwork | Meva | MevaDec | material=Алюминий
+slab-formwork | Ulma | EnkoFlex | material=Фанера
+slab-formwork | Ulma | CC-4 | material=Алюминий
+props | Peri | PEP Ergo |
+props | Peri | Multiprop |
+props | Doka | Eurex 20 top |
+props | Doka | Eurex 30 top |
+props | Doka | Eurex 60 550 |
+props | Meva | MEP |
+
+# Мотобуры
+earth-auger | Stihl | BT 131 | src=Бензин; cc=36.3
+earth-auger | Stihl | BT 121 | src=Бензин; cc=30.8
+earth-auger | Stihl | BT 360 | src=Бензин
+earth-auger | Stihl | BT 45 | src=Бензин; cc=27.2
+earth-auger | Stihl | BT 230 | src=Бензин
+earth-auger | Champion | AG252 | src=Бензин; cc=51.7
+earth-auger | Champion | AG243 | src=Бензин; cc=42.7
+earth-auger | Huter | GGD-52 | src=Бензин
+earth-auger | Patriot | PT AE70D | src=Бензин
+earth-auger | Makita | DDG460 | src=Аккумулятор; volt=36
+earth-auger | Makita | DG001G | src=Аккумулятор; volt=40
+earth-auger | Echo | EA-410 | src=Бензин
+earth-auger | Fubag | FPB 52 | src=Бензин
+earth-auger | Fubag | FPB 71 | src=Бензин
+earth-auger | ADA | Ground Drill-5 | src=Бензин
+
+# Траншеекопатели
+trencher | Ditch Witch | RT24 | src=Бензин
+trencher | Ditch Witch | C12 | src=Бензин
+trencher | Ditch Witch | C16X | src=Бензин
+trencher | Ditch Witch | RT45 | src=Дизель
+trencher | Vermeer | RTX130 | src=Бензин
+trencher | Vermeer | RTX250 | src=Дизель
+trencher | Vermeer | RTX450 | src=Дизель
+trencher | Barreto | 1324D | src=Бензин
+trencher | Barreto | 1824TK | src=Бензин
+trencher | Toro | TRX-16 | src=Бензин
+trencher | Toro | TRX-26 | src=Бензин
+trencher | Camon | TC14 | src=Бензин
