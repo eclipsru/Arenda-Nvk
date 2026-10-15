@@ -1,4 +1,4 @@
-// Ива 10.82–10.83 — справочник моделей, этапы 2–3 (решение владельца 15.10.2026, журнал — решение №31).
+// Ива 10.82–10.84 — справочник моделей, этапы 2–4 (решение владельца 15.10.2026, журнал — решение №31).
 //
 // Справочник — таблицы iva_models / iva_brands / iva_spec_fields (миграции supabase/migrations/20261017_models*.sql).
 // У объявления — tools.model_id (выбранная модель) и tools.specs (характеристики, объект «ключ поля → значение»).
@@ -482,6 +482,10 @@ final class IvaModelPatch {
                     if (ms.isEmpty() || fl.isEmpty()) return;
                     Map<String, String[]> w = IvaKindPatch.words;
                     Index ix = index(ms, br, w);
+                    try {                                                            // 10.84: комплектация; нет таблицы — без неё
+                        String[] rk = IvaClientPatch.apiCall(a, KIT_PATH, "GET", null, false);
+                        if (ok(rk)) kitMap = parseKit(rk[1]);
+                    } catch (Throwable ignore) {}
                     brandMap = br; modelList = ms;
                     fields = fl; wordsUsed = w; idx = ix;
                     loadedAt = System.currentTimeMillis();
@@ -601,12 +605,13 @@ final class IvaModelPatch {
             form.addView(specs, form.indexOfChild(block) + 1, new LinearLayout.LayoutParams(-1, -2)); }
         paintBlock(a, (LinearLayout) block, kind);
         paintSpecs(a, (LinearLayout) specs, kind, false);
+        paintExtras(a, form, specs, kind);                                       // 10.84: комплектация, цена, описание
     }
 
     static void hideAll(View any) {
         View root = any.getRootView();
         if (root == null) return;
-        for (String t : new String[]{NAME_SUG, BLOCK, SPECS}) {
+        for (String t : new String[]{NAME_SUG, BLOCK, SPECS, KIT, HELP}) {
             View v = root.findViewWithTag(t);
             if (v != null) v.setVisibility(View.GONE);
         }
@@ -764,6 +769,10 @@ final class IvaModelPatch {
         box.addView(f, lpTop(a, 8));
         LinearLayout d = drop(a, BLOCK + ":drop");
         box.addView(d, lpTop(a, 4));
+        TextView pv = small(a, "");                                               // 10.84: «Предложить модель»
+        pv.setTag(PROP);
+        pv.setVisibility(View.GONE);
+        box.addView(pv, lpTop(a, 6));
         return box;
     }
 
@@ -784,11 +793,13 @@ final class IvaModelPatch {
         TextView nv = nameView(a);
         for (Model m : hits) d.addView(item(a, m, modelText(m), nv), new LinearLayout.LayoutParams(-1, -2));
         d.setVisibility(hits.isEmpty() ? View.GONE : View.VISIBLE);
+        View bl = f.getParent() instanceof LinearLayout ? (View) f.getParent() : null;
+        if (bl instanceof LinearLayout) paintProp(a, (LinearLayout) bl, kind);
     }
 
     static void paintBlock(final Activity a, LinearLayout block, String kind) {
         List<String> bs = kind.isEmpty() ? new ArrayList<String>() : brands(idx, kind);
-        block.setVisibility(bs.isEmpty() ? View.GONE : View.VISIBLE);
+        block.setVisibility(kind.isEmpty() ? View.GONE : View.VISIBLE);          // 10.84: и без брендов — чтобы предложить модель
         if (!bs.contains(brandSel)) brandSel = "";
         View cv = block.findViewWithTag(BLOCK + ":chips");
         if (cv instanceof LinearLayout) {
@@ -822,6 +833,7 @@ final class IvaModelPatch {
             if (chosen == null) shown = "";
         }
         if (bs.isEmpty()) { View d = block.findViewWithTag(BLOCK + ":drop"); if (d != null) d.setVisibility(View.GONE); }
+        paintProp(a, block, kind);
     }
 
     static void setQuiet(TextView v, String text) {
@@ -926,7 +938,10 @@ final class IvaModelPatch {
     static String saveExtra(Activity a, String kind, String name) {
         if (!ready() || kind == null || kind.isEmpty()) return "";
         long id = chosen != null && chosen.kind.equals(kind) && stillFits(name, chosen) ? chosen.id : 0;
-        return extraBody(id, specsClean(specVals, fieldsFor(fields, kind)));
+        String ex = extraBody(id, specsClean(specVals, fieldsFor(fields, kind)));
+        List<String> kit = kitClean(kitSel, kitMap.get(kind));                   // 10.84: комплектация — всегда последней (dropKit)
+        if (kit != null) ex += (ex.isEmpty() ? "" : ",") + "\"kit\":" + kitJson(kit);
+        return ex;
     }
 
     static volatile long savedAt = 0;
@@ -948,6 +963,7 @@ final class IvaModelPatch {
         chosen = null; brandSel = ""; shown = "";
         specVals = new LinkedHashMap<String, String>(); specAuto = new LinkedHashMap<String, String>();
         specsKind = null;
+        kitSel = new ArrayList<String>(); kitKind = null; lastDescr = "";        // 10.84
         try {
             TextView nv = nameView(a);
             View root = nv == null ? null : nv.getRootView();
@@ -1055,6 +1071,12 @@ final class IvaModelPatch {
         String kt = kind.isEmpty() ? "" : IvaKindPatch.titleOf(IvaKindPatch.list(), kind);
         if (kt != null && !kt.isEmpty()) rows.add(new String[]{"Вид", kt});
         rows.addAll(specRows(sp, fieldsFor(fields, kind)));
+        List<String> kit = j.has("kit") && !j.isNull("kit") ? parseStrList(j.optString("kit", "")) : new ArrayList<String>();   // 10.84
+        if (!kit.isEmpty()) {
+            StringBuilder kb = new StringBuilder();
+            for (String k : kit) kb.append(kb.length() > 0 ? ", " : "").append(k);
+            rows.add(new String[]{KIT_LABEL, kb.toString()});
+        }
         return rows;
     }
 
@@ -1115,5 +1137,466 @@ final class IvaModelPatch {
                 block.addView(d, new LinearLayout.LayoutParams(-1, Math.max(1, IvaPatch.dp(a, 1) / 2)));
             }
         }
+    }
+
+    // ════════════════════════════════ 10.84: этап 4 — предложить модель, цена, описание, комплектация ════════════════
+    //  * «Модель» не нашлась — под полем «Нет в списке? Предложить «Makita HR9999»». Касание — запись в
+    //    iva_model_proposals (SQL 20261018_models_stage4.sql); в справочник модель попадает после одобрения главным админом.
+    //  * «Комплектация» — пункты вида (iva_kit_items) кнопками; отмеченное пишется в tools.kit вместе с видом.
+    //  * Подсказка цены по активным объявлениям из каталога в памяти (той же модели от 2, иначе вида от 3) — только текст
+    //    и «Подставить» в пустые поля; «Сгенерировать описание» — в пустое описание (или своё прошлое), ручное не трогаем.
+    //  Те же правила на сайте — assets/models.js / model-form.js; оба проверяются на tests/model-stage4-cases.txt.
+
+    static final Pattern WS = Pattern.compile("[\\s\\u00a0]+");
+
+    static String squash(String v) { return WS.matcher(s(v)).replaceAll(" ").trim(); }
+    static String low(String v) { return s(v).toLowerCase(Locale.ROOT); }
+
+    /** Бренд и модель из текста поля «Модель» (как ivaProposalParts). null — предложить нечего. */
+    static String[] proposalParts(String text, String brandSel, Map<String, String[]> brands) {
+        String t = squash(text), lt = low(t), best = null;
+        int bl = 0;
+        if (t.isEmpty()) return null;
+        if (brands != null) for (Map.Entry<String, String[]> b : brands.entrySet()) {
+            if (b.getKey() == null || b.getKey().isEmpty()) continue;
+            List<String> cands = new ArrayList<String>();
+            cands.add(b.getKey());
+            if (b.getValue() != null) Collections.addAll(cands, b.getValue());
+            for (String c0 : cands) {
+                String c = low(squash(c0));
+                if (!c.isEmpty() && c.length() > bl && (lt.equals(c) || lt.startsWith(c + " "))) { best = b.getKey(); bl = c.length(); }
+            }
+        }
+        String brand, model, sel = squash(brandSel);
+        if (!sel.isEmpty()) {
+            brand = sel;
+            model = best != null && low(best).equals(low(sel)) ? t.substring(bl) : t;
+        } else if (best != null) {
+            brand = best; model = t.substring(bl);
+        } else {
+            int sp = t.indexOf(' ');
+            if (sp < 0) return null;
+            brand = t.substring(0, sp); model = t.substring(sp + 1);
+        }
+        model = squash(model);
+        if (brand.isEmpty() || model.isEmpty() || brand.length() > 40 || model.length() > 60) return null;
+        return new String[]{brand, model};
+    }
+
+    /** Название предложения: название объявления, если в нём есть код модели, иначе «Вид Бренд Модель» (до 120). */
+    static String proposalTitle(String name, String[] parts, String kindTitle) {
+        if (parts == null) return "";
+        String code = join(toks(parts[1])), n = squash(name), out;
+        if (!n.isEmpty() && !code.isEmpty() && join(toks(n)).contains(code)) out = n;
+        else out = squash((kindTitle == null || kindTitle.isEmpty() ? "" : kindTitle + " ") + parts[0] + " " + parts[1]);
+        return out.length() > 120 ? out.substring(0, 120) : out;
+    }
+
+    /** Модель уже есть у вида: текст слитно = модель слитно или бренд + модель слитно. */
+    static Model exact(Index ix, String kind, String text) {
+        String tj = join(toks(text));
+        if (tj.isEmpty() || ix == null) return null;
+        for (Entry e : ix.list) {
+            String c = join(e.codeToks);
+            if (e.m.kind.equals(kind) && !c.isEmpty() && (c.equals(tj) || (join(toks(e.m.brand)) + c).equals(tj))) return e.m;
+        }
+        return null;
+    }
+
+    /** Ошибка сервера → понятный текст (как ivaProposalErr). */
+    static String propErr(String msg) {
+        String m = s(msg), l = low(m);
+        if (l.contains("already in directory")) return "Такая модель уже есть в справочнике — выберите её в подсказках.";
+        if (l.contains("duplicate key") || l.contains("23505") || l.contains("pending_uq")) return "Эту модель уже предложили — она ждёт проверки.";
+        if (l.contains("too many pending")) return "Слишком много предложений ждут проверки — дождитесь решения по ним.";
+        if (l.contains("row-level security") || l.contains("42501") || l.contains("permission denied")) return "Предлагать модели могут только администраторы проката.";
+        if (l.contains("iva_model_proposals") || l.contains("pgrst205") || l.contains("does not exist") || l.contains("schema cache")) return "Предложения заработают после обновления базы.";
+        return "Не удалось отправить: " + (m.isEmpty() ? "нет связи" : m) + ".";
+    }
+
+    /** Тело записи предложения. */
+    static String proposalBody(String kind, String[] parts, String title, String specsJson) {
+        return "{\"kind\":" + jsonStr(kind) + ",\"brand\":" + jsonStr(parts[0]) + ",\"model\":" + jsonStr(parts[1])
+            + ",\"title\":" + jsonStr(title) + ",\"specs\":" + (specsJson == null ? "{}" : specsJson) + "}";
+    }
+
+    static final class PRow {
+        final double price, deposit;
+        final long modelId;
+        final String kind;
+        PRow(double price, double deposit, long modelId, String kind) { this.price = price; this.deposit = deposit; this.modelId = modelId; this.kind = s(kind); }
+    }
+
+    static final class Hint {
+        int n;
+        boolean byModel;
+        long[] price, deposit;                       // [от, до, середина]; deposit — null, если залог указан меньше чем у двух
+    }
+
+    static long round50(double v) { return v >= 100 ? Math.round(v / 50) * 50 : Math.round(v); }
+
+    static long[] spread(List<Double> a) {
+        int n = a.size();
+        if (n == 0) return null;
+        Collections.sort(a);
+        double lo = n >= 5 ? a.get((n - 1) / 4) : a.get(0), hi = n >= 5 ? a.get((int) Math.ceil(3.0 * (n - 1) / 4)) : a.get(n - 1);
+        double mid = n % 2 == 1 ? a.get((n - 1) / 2) : (a.get(n / 2 - 1) + a.get(n / 2)) / 2;
+        return new long[]{round50(lo), round50(hi), round50(mid)};
+    }
+
+    static boolean pos(double v) { return !Double.isNaN(v) && !Double.isInfinite(v) && v > 0; }
+
+    /** Подсказка цены (как ivaPriceHint): той же модели от 2 объявлений, иначе того же вида от 3. */
+    static Hint priceHint(List<PRow> rows, long modelId, String kind) {
+        List<PRow> pick = new ArrayList<PRow>();
+        boolean byModel = false, any = false;
+        if (rows == null) return null;
+        if (modelId > 0) {
+            for (PRow r : rows) if (r != null && pos(r.price) && r.modelId == modelId) pick.add(r);
+            if (pick.size() >= 2) { byModel = true; any = true; }
+        }
+        if (!any && kind != null && !kind.isEmpty()) {
+            pick.clear();
+            for (PRow r : rows) if (r != null && pos(r.price) && kind.equals(r.kind)) pick.add(r);
+            if (pick.size() >= 3) any = true;
+        }
+        if (!any) return null;
+        List<Double> p = new ArrayList<Double>(), d = new ArrayList<Double>();
+        for (PRow r : pick) { p.add(r.price); if (pos(r.deposit)) d.add(r.deposit); }
+        Hint h = new Hint();
+        h.n = pick.size(); h.byModel = byModel; h.price = spread(p); h.deposit = d.size() >= 2 ? spread(d) : null;
+        return h;
+    }
+
+    static String groups(long v) {
+        String t = String.valueOf(v);
+        StringBuilder b = new StringBuilder();
+        for (int i = 0; i < t.length(); i++) {
+            if (i > 0 && (t.length() - i) % 3 == 0) b.append('\u00a0');
+            b.append(t.charAt(i));
+        }
+        return b.toString();
+    }
+
+    static String rangeT(long[] r) { return r[0] == r[1] ? groups(r[0]) + "\u00a0₽" : groups(r[0]) + "–" + groups(r[1]) + "\u00a0₽"; }
+
+    /** «Обычно сдают за 700–1 000 ₽ в сутки, залог 3 000–5 000 ₽ (12 объявлений этой модели)». */
+    static String hintText(Hint h) {
+        if (h == null || h.price == null) return "";
+        int n = h.n;
+        String w = n % 10 == 1 && n % 100 != 11 ? "объявление" : n % 10 >= 2 && n % 10 <= 4 && (n % 100 < 12 || n % 100 > 14) ? "объявления" : "объявлений";
+        return "Обычно сдают за " + rangeT(h.price) + " в сутки" + (h.deposit != null ? ", залог " + rangeT(h.deposit) : "")
+            + " (" + n + " " + w + (h.byModel ? " этой модели" : " этого вида") + ")";
+    }
+
+    /** «Сгенерировать описание» (как ivaDescribe). Нет названия — "". */
+    static String describe(String name, List<String[]> rows, List<String> kit) {
+        String n = squash(name).replaceAll("[.!\\s]+$", "");
+        if (n.isEmpty()) return "";
+        StringBuilder b = new StringBuilder(n).append(" в аренду.");
+        if (rows != null && !rows.isEmpty()) {
+            b.append("\n\nХарактеристики:");
+            for (String[] r : rows) b.append("\n— ").append(r[0]).append(": ").append(r[1]);
+        }
+        List<String> ks = new ArrayList<String>();
+        if (kit != null) for (String k0 : kit) {
+            String k = squash(k0);
+            if (k.isEmpty()) continue;
+            ks.add(k.length() > 1 && Character.isLowerCase(k.charAt(1)) ? k.substring(0, 1).toLowerCase(Locale.ROOT) + k.substring(1) : k);
+        }
+        if (!ks.isEmpty()) {
+            b.append("\n\nВ комплекте: ");
+            for (int i = 0; i < ks.size(); i++) b.append(i > 0 ? ", " : "").append(ks.get(i));
+            b.append('.');
+        }
+        return b.toString();
+    }
+
+    /** Комплектация к сохранению: только пункты вида, в их порядке, без повторов; пусто — null. */
+    static List<String> kitClean(List<String> sel, String[] items) {
+        List<String> out = new ArrayList<String>();
+        if (sel != null && items != null) for (String it : items) if (sel.contains(it) && !out.contains(it)) out.add(it);
+        return out.isEmpty() ? null : out;
+    }
+
+    static String kitJson(List<String> kit) {
+        if (kit == null) return null;
+        StringBuilder b = new StringBuilder("[");
+        for (int i = 0; i < kit.size(); i++) b.append(i > 0 ? "," : "").append(jsonStr(kit.get(i)));
+        return b.append(']').toString();
+    }
+
+    /** Характеристики формы для описания: как specsClean, но строками (число — с точкой). */
+    static LinkedHashMap<String, String> cleanMap(Map<String, String> values, List<Field> flds) {
+        LinkedHashMap<String, String> out = new LinkedHashMap<String, String>();
+        if (flds == null) return out;
+        for (Field f : flds) {
+            String raw = g(values, f.key).trim();
+            if (raw.isEmpty()) continue;
+            if ("num".equals(f.type)) {
+                String t = raw.replace(',', '.');
+                if (!NUM.matcher(t).matches()) continue;
+                out.put(f.key, numText(t));
+            } else if ("choice".equals(f.type)) {
+                if (java.util.Arrays.asList(f.options).contains(raw)) out.put(f.key, raw);
+            } else out.put(f.key, raw);
+        }
+        return out;
+    }
+
+    /** Список строк из JSON-массива (tools.kit у объявления: у Android optString массива — его JSON). */
+    static List<String> parseStrList(String json) {
+        List<String> out = new ArrayList<String>();
+        String t = s(json).trim();
+        if (!t.startsWith("[")) return out;
+        int[] p = {1};
+        boolean closed = false;
+        try {
+            while (p[0] < t.length()) {
+                skipWs(t, p);
+                if (p[0] >= t.length()) break;
+                if (t.charAt(p[0]) == ']') { closed = true; break; }
+                if (t.charAt(p[0]) == ',') { p[0]++; continue; }
+                if (t.charAt(p[0]) != '"') return new ArrayList<String>();
+                String v = readStr(t, p).trim();
+                if (!v.isEmpty()) out.add(v);
+            }
+        } catch (Throwable e) { return new ArrayList<String>(); }
+        return closed ? out : new ArrayList<String>();
+    }
+
+    /** Поля записи без комплектации (kit всегда последним) — для базы без столбца kit. */
+    static String dropKit(String extra) {
+        if (extra == null) return "";
+        int i = extra.indexOf("\"kit\":");
+        if (i < 0) return extra;
+        String t = extra.substring(0, i);
+        return t.endsWith(",") ? t.substring(0, t.length() - 1) : t;
+    }
+
+    // ───── 10.84: интерфейс этапа 4 (форма «Добавить») ─────
+
+    static final String KIT_PATH = "/rest/v1/iva_kit_items?select=kind,items", PROPOSALS_PATH = "/rest/v1/iva_model_proposals";
+    static final String KIT = "iva_model_kit", HELP = "iva_model_help", PROP = BLOCK + ":prop";
+    static final String KIT_LABEL = "Комплектация", KIT_HINT = "Отметьте, что отдаёте вместе с инструментом", DESCR_BTN = "Сгенерировать описание";
+    static volatile Map<String, String[]> kitMap = new HashMap<String, String[]>();
+    static List<String> kitSel = new ArrayList<String>();
+    static String kitKind = null, lastDescr = "";
+    static final Map<String, String> propState = new HashMap<String, String>();
+
+    static Map<String, String[]> parseKit(String text) throws Exception {
+        JSONArray arr = new JSONArray(text.trim());
+        Map<String, String[]> out = new HashMap<String, String[]>();
+        for (int i = 0; i < arr.length(); i++) {
+            JSONObject o = arr.optJSONObject(i);
+            if (o == null) continue;
+            String k = IvaKindPatch.clean(o.optString("kind", ""));
+            String[] it = strArr(o.optJSONArray("items"));
+            if (!k.isEmpty() && it.length > 0) out.put(k, it);
+        }
+        return out;
+    }
+
+    static String fieldText(Activity a, String name) {
+        Object o = IvaClientPatch.get(a, name);
+        return o instanceof TextView ? String.valueOf(((TextView) o).getText()) : null;
+    }
+
+    static void paintExtras(Activity a, LinearLayout form, View after, String kind) {
+        View kit = form.findViewWithTag(KIT), help = form.findViewWithTag(HELP);
+        if (kit == null) { kit = new LinearLayout(a); ((LinearLayout) kit).setOrientation(LinearLayout.VERTICAL); kit.setTag(KIT);
+            form.addView(kit, form.indexOfChild(after) + 1, new LinearLayout.LayoutParams(-1, -2)); }
+        if (help == null) { help = buildHelp(a); form.addView(help, form.indexOfChild(kit) + 1, new LinearLayout.LayoutParams(-1, -2)); }
+        paintKit(a, (LinearLayout) kit, kind, false);
+        paintHelp(a, (LinearLayout) help, kind);
+    }
+
+    /** «Комплектация»: пункты вида кнопками (несколько сразу). Пунктов нет — блока нет. */
+    static void paintKit(final Activity a, LinearLayout box, String kind, boolean force) {
+        String[] items = kind.isEmpty() ? null : kitMap.get(kind);
+        box.setVisibility(items == null || items.length == 0 ? View.GONE : View.VISIBLE);
+        if (!force && kind.equals(kitKind)) return;
+        kitKind = kind;
+        box.removeAllViews();
+        if (items == null || items.length == 0) return;
+        List<String> keep = kitClean(kitSel, items);
+        kitSel = keep == null ? new ArrayList<String>() : keep;
+        box.addView(label(a, KIT_LABEL), lpTop(a, 14));
+        box.addView(small(a, KIT_HINT), lpTop(a, 4));
+        HorizontalScrollView hs = new HorizontalScrollView(a);
+        hs.setHorizontalScrollBarEnabled(false);
+        hs.setOverScrollMode(View.OVER_SCROLL_NEVER);
+        LinearLayout row = new LinearLayout(a);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        hs.addView(row, new HorizontalScrollView.LayoutParams(-2, -2));
+        paintKitRow(a, row, items);
+        box.addView(hs, lpTop(a, 6));
+    }
+
+    static void paintKitRow(final Activity a, final LinearLayout row, final String[] items) {
+        row.removeAllViews();
+        for (final String it : items) {
+            TextView c = IvaSearchPatch.chip(a, it, kitSel.contains(it), false);
+            c.setOnClickListener(new View.OnClickListener() {
+                @Override public void onClick(View v) {
+                    try {
+                        if (kitSel.contains(it)) kitSel.remove(it); else kitSel.add(it);
+                        List<String> k = kitClean(kitSel, items);
+                        kitSel = k == null ? new ArrayList<String>() : k;
+                        paintKitRow(a, row, items);
+                    } catch (Throwable ignore) {}
+                }
+            });
+            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-2, -2);
+            lp.rightMargin = IvaPatch.dp(a, 8);
+            row.addView(c, lp);
+        }
+    }
+
+    static View buildHelp(final Activity a) {
+        LinearLayout box = new LinearLayout(a);
+        box.setTag(HELP);
+        box.setOrientation(LinearLayout.VERTICAL);
+        TextView price = small(a, "");
+        price.setTag(HELP + ":price");
+        price.setVisibility(View.GONE);
+        box.addView(price, lpTop(a, 12));
+        TextView gen = IvaSearchPatch.chip(a, DESCR_BTN, false, false);
+        gen.setTag(HELP + ":gen");
+        gen.setOnClickListener(new View.OnClickListener() {
+            @Override public void onClick(View v) { try { generate(a); } catch (Throwable ignore) {} }
+        });
+        LinearLayout.LayoutParams gl = new LinearLayout.LayoutParams(-2, -2);
+        gl.topMargin = IvaPatch.dp(a, 12);
+        box.addView(gen, gl);
+        TextView note = small(a, "");
+        note.setTag(HELP + ":note");
+        note.setVisibility(View.GONE);
+        box.addView(note, lpTop(a, 6));
+        return box;
+    }
+
+    /** Активные объявления из каталога в памяти (штатный select=*). */
+    static List<PRow> catalogRows(Activity a) {
+        List<PRow> out = new ArrayList<PRow>();
+        Object l = IvaSearchPatch.fullTools instanceof ArrayList ? IvaSearchPatch.fullTools : IvaClientPatch.get(a, "tools");
+        if (!(l instanceof ArrayList)) return out;
+        for (Object o : (ArrayList) l) {
+            if (!(o instanceof JSONObject)) continue;
+            JSONObject j = (JSONObject) o;
+            out.add(new PRow(j.optDouble("price", Double.NaN), j.optDouble("deposit", Double.NaN),
+                j.isNull("model_id") ? 0 : j.optLong("model_id", 0), j.isNull("kind") ? "" : j.optString("kind", "")));
+        }
+        return out;
+    }
+
+    static void paintHelp(final Activity a, LinearLayout box, String kind) {
+        box.setVisibility(View.VISIBLE);
+        View pv = box.findViewWithTag(HELP + ":price");
+        if (!(pv instanceof TextView)) return;
+        TextView price = (TextView) pv;
+        final Hint h = kind.isEmpty() ? null : priceHint(catalogRows(a), chosen != null && chosen.kind.equals(kind) ? chosen.id : 0, kind);
+        if (h == null) { price.setVisibility(View.GONE); return; }
+        String txt = hintText(h);
+        String cur = fieldText(a, "atPrice");
+        boolean canFill = cur != null && cur.trim().isEmpty();
+        String act = canFill ? " · Подставить " + groups(h.price[2]) + "\u00a0₽" : "";
+        android.text.SpannableString sp = new android.text.SpannableString(txt + act);
+        if (canFill) sp.setSpan(new android.text.style.ForegroundColorSpan(IvaPatch.color(a, "orange", 0xffff8f1f)),
+            txt.length() + 3, sp.length(), android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+        price.setText(sp);
+        price.setVisibility(View.VISIBLE);
+        price.setOnClickListener(!canFill ? null : new View.OnClickListener() {
+            @Override public void onClick(View v) {
+                try {
+                    Object pf = IvaClientPatch.get(a, "atPrice"), df = IvaClientPatch.get(a, "atDep");
+                    if (pf instanceof TextView && String.valueOf(((TextView) pf).getText()).trim().isEmpty()) {
+                        ((TextView) pf).setText(String.valueOf(h.price[2]));
+                        IvaNotifyPatch.flash((View) pf);
+                    }
+                    if (h.deposit != null && df instanceof TextView && String.valueOf(((TextView) df).getText()).trim().isEmpty())
+                        ((TextView) df).setText(String.valueOf(h.deposit[2]));
+                    refresh(a);
+                } catch (Throwable ignore) {}
+            }
+        });
+    }
+
+    /** «Сгенерировать описание»: в пустое описание или вместо своего прошлого текста; написанное руками не трогаем. */
+    static void generate(Activity a) {
+        TextView nv = nameView(a);
+        Object df = IvaClientPatch.get(a, "atDescr");
+        View root = nv == null ? null : nv.getRootView();
+        View nt = root == null ? null : root.findViewWithTag(HELP + ":note");
+        if (nv == null || !(df instanceof TextView)) return;
+        String kind = kindNow();
+        List<Field> fl = fieldsFor(fields, kind);
+        String[] items = kind.isEmpty() ? null : kitMap.get(kind);
+        String text = describe(String.valueOf(nv.getText()), specRows(cleanMap(specVals, fl), fl), items == null ? null : kitClean(kitSel, items));
+        String note = "";
+        if (text.isEmpty()) note = "Сначала напишите название.";
+        else {
+            TextView d = (TextView) df;
+            String cur = String.valueOf(d.getText());
+            if (cur.trim().isEmpty() || cur.equals(lastDescr)) {
+                d.setText(text);
+                lastDescr = text;
+                IvaNotifyPatch.flash(d);
+            } else note = "Описание уже написано — сотрите его, чтобы сгенерировать заново.";
+        }
+        if (nt instanceof TextView) { ((TextView) nt).setText(note); nt.setVisibility(note.isEmpty() ? View.GONE : View.VISIBLE); }
+    }
+
+    /** Строка «Предложить модель» под полем «Модель». */
+    static void paintProp(final Activity a, LinearLayout block, final String kind) {
+        View pv = block.findViewWithTag(PROP), fv = block.findViewWithTag(BLOCK + ":field");
+        if (!(pv instanceof TextView) || !(fv instanceof TextView)) return;
+        TextView p = (TextView) pv;
+        String q = String.valueOf(((TextView) fv).getText());
+        final String[] parts = kind.isEmpty() || chosen != null || exact(idx, kind, q) != null ? null : proposalParts(q, brandSel, brandMap);
+        if (parts == null) { p.setVisibility(View.GONE); p.setOnClickListener(null); return; }
+        final String key = kind + "|" + low(parts[0]) + "|" + low(parts[1]), nm = parts[0] + " " + parts[1];
+        String st = propState.get(key);
+        p.setVisibility(View.VISIBLE);
+        if ("ok".equals(st) || "sending".equals(st)) {
+            p.setText("ok".equals(st) ? "«" + nm + "» отправлена главному админу на проверку. Объявление можно разместить уже сейчас."
+                : "Отправляем «" + nm + "»…");
+            p.setOnClickListener(null);
+            return;
+        }
+        String pre = st != null ? st + " " : "Нет в списке? ", act = "Предложить «" + nm + "»", post = st != null ? "" : " — главный админ проверит и добавит в справочник.";
+        android.text.SpannableString sp = new android.text.SpannableString(pre + act + post);
+        sp.setSpan(new android.text.style.ForegroundColorSpan(IvaPatch.color(a, "orange", 0xffff8f1f)), pre.length(), pre.length() + act.length(),
+            android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+        p.setText(sp);
+        p.setOnClickListener(new View.OnClickListener() {
+            @Override public void onClick(View v) { try { sendProposal(a, kind, parts, key); } catch (Throwable ignore) {} }
+        });
+    }
+
+    static void sendProposal(final Activity a, String kind, String[] parts, final String key) {
+        TextView nv = nameView(a);
+        String title = proposalTitle(nv == null ? "" : String.valueOf(nv.getText()), parts, IvaKindPatch.titleOf(IvaKindPatch.list(), kind));
+        final String body = proposalBody(kind, parts, title, specsClean(specVals, fieldsFor(fields, kind)));
+        propState.put(key, "sending");
+        refresh(a);
+        new Thread(new Runnable() {
+            @Override public void run() {
+                String st;
+                try {
+                    String[] r = IvaClientPatch.apiCall(a, PROPOSALS_PATH, "POST", body, true);
+                    if (r != null && r[0] != null && r[0].startsWith("2")) st = "ok";
+                    else {
+                        String raw = r == null || r.length < 2 || r[1] == null ? "" : r[1].trim(), m = raw;
+                        try { if (raw.startsWith("{")) { String mm = g(parseFlat(raw), "message"); if (!mm.isEmpty()) m = mm; } } catch (Throwable ignore) {}
+                        st = propErr(m);
+                    }
+                } catch (Throwable e) { st = propErr(""); }
+                final String fs = st;
+                a.runOnUiThread(new Runnable() {
+                    @Override public void run() { propState.put(key, fs); try { refresh(a); } catch (Throwable ignore) {} }
+                });
+            }
+        }).start();
     }
 }

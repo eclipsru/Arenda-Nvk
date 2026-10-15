@@ -328,8 +328,8 @@ textarea.inp{resize:vertical;min-height:70px}
 <script src="assets/geo.js?v=20260923-photon"></script>
 <script src="assets/email-guard.js?v=20260926-email"></script>
 <script src="assets/kind-guess.js?v=20261016-kind"></script>
-<script src="assets/models.js?v=20261017-models"></script>
-<script src="assets/model-form.js?v=20261017-models"></script>
+<script src="assets/models.js?v=20261018-stage4"></script>
+<script src="assets/model-form.js?v=20261018-stage4"></script>
 </head>
 <body>
 <div class="app" id="app">
@@ -1217,11 +1217,13 @@ function toolForm(id){
   +'<span class="lbl">Подкатегория</span><select class="inp" id="fSub"></select>'
   +'<span class="lbl hide" id="fKindL">Вид инструмента</span><select class="inp hide" id="fKind"></select>'
   +'<div id="fModelBox" class="hide"><span class="lbl">Модель (необязательно)</span><div class="chips" id="fBrands" style="padding:8px 0 2px"></div>'
-  +'<input class="inp" id="fModel" autocomplete="off" maxlength="90" placeholder="Модель"><div class="msug" id="fMSug"></div></div>'
+  +'<input class="inp" id="fModel" autocomplete="off" maxlength="90" placeholder="Модель"><div class="msug" id="fMSug"></div><div id="fProp"></div></div>'
   +'<div id="fSpecs" class="hide"></div>'
-  +'<span class="lbl">Цена в сутки, ₽ *</span><input class="inp" id="fPrice" type="number" inputmode="numeric" value="'+(t&&t.price!=null?t.price:'')+'">'
+  +'<div id="fKitBox" class="hide"><span class="lbl">Комплектация — отметьте, что отдаёте</span><div class="chips" id="fKit" style="padding:8px 0 2px"></div></div>'
+  +'<span class="lbl">Цена в сутки, ₽ *</span><input class="inp" id="fPrice" type="number" inputmode="numeric" value="'+(t&&t.price!=null?t.price:'')+'"><div class="hint hide" id="fPHint"></div>'
   +'<span class="lbl">Залог, ₽ (по умолчанию 5 × цена)</span><input class="inp" id="fDep" type="number" inputmode="numeric" value="'+(t&&t.deposit!=null?t.deposit:'')+'">'
   +'<span class="lbl">Описание</span><textarea class="inp" id="fDescr">'+esc(t?t.descr||'':'')+'</textarea>'
+  +(t?'':'<div class="hint hide" id="fGenBox"><button type="button" id="fGen" style="color:var(--or);font-weight:600;background:none;border:0;padding:0;font:inherit;cursor:pointer">Сгенерировать описание</button><span id="fGenNote"></span></div>')
   +'<span class="lbl">Условия аренды</span><textarea class="inp" id="fTerms">'+esc(t?t.terms||'':'')+'</textarea>'
   +'<div class="kv"><span>Доставка этим инструментом</span><span class="sw'+(t&&t.delivery?' on':'')+'" id="fDel"><i></i></span></div>'
   +'<span class="lbl">Стоимость доставки, ₽ (0 — считать 40 ₽/км)</span><input class="inp" id="fDP" type="number" inputmode="numeric" value="'+(t&&t.delivery_price!=null?t.delivery_price:0)+'">'
@@ -1251,6 +1253,7 @@ function toolForm(id){
   $('fKind').onchange=function(){kindSel=this.value;paintModel()};
   /* 10.82: справочник моделей (assets/models.js) — только новый инструмент; не загрузился — формы как раньше */
   var MD=null,mdl={id:null,specs:{},auto:{},brand:''},specsKind=null;
+  var kitSel=[],kitKind=null,descrAuto='',PROP={},PH=null;   /* 10.84: комплектация, наше описание, «Предложить модель», подсказка цены */
   function kindNow(){return $('fKind').classList.contains('hide')?'':$('fKind').value}
   function mText(m){return m?m.brand+' '+m.model:''}
   function mById(id){return MD&&id?MD.byId[id]||null:null}
@@ -1260,7 +1263,7 @@ function toolForm(id){
     var k=kindNow(),bs=k?ivaModelBrands(MD.index,k):[],fl=ivaFieldsFor(MD,k);
     var hadModel=mdl.id;modelKeep();
     if(mdl.brand&&bs.indexOf(mdl.brand)<0)mdl.brand='';
-    $('fModelBox').classList.toggle('hide',!bs.length);
+    $('fModelBox').classList.toggle('hide',!k);   /* 10.84: и без брендов — чтобы предложить модель */
     $('fBrands').innerHTML=bs.map(function(b){return '<button type="button" class="chip'+(b===mdl.brand?' on':'')+'" data-mbrand="'+esc(b)+'">'+esc(b)+'</button>'}).join('');
     var m=mById(mdl.id);
     if(m)$('fModel').value=mText(m);else if(hadModel)$('fModel').value='';
@@ -1271,7 +1274,58 @@ function toolForm(id){
       $('fSpecs').innerHTML=fl.length?'<span class="lbl">Характеристики (необязательно)</span>'+ivaSpecsHTML(fl,mdl.specs,function(x){return '<span class="lbl">'+esc(x)+'</span>'}):'';
     }
     $('fSpecs').classList.toggle('hide',!fl.length);
+    paintKit();paintProp();paintPHint();
+    $('fGenBox')&&$('fGenBox').classList.remove('hide');
   }
+  /* 10.84: комплектация вида кнопками; выбор хранится, пока вид тот же */
+  function paintKit(){
+    var k=kindNow(),items=(MD&&MD.kit&&MD.kit[k])||[];
+    if(k!==kitKind){kitKind=k;kitSel=ivaKitClean(kitSel,items)||[]}
+    $('fKitBox').classList.toggle('hide',!items.length);
+    $('fKit').innerHTML=ivaKitHTML(items,kitSel,'chip');
+  }
+  $('fKit').onclick=function(e){var b=e.target.closest('[data-kit]');if(!b)return;var v=b.getAttribute('data-kit'),i=kitSel.indexOf(v);if(i>=0)kitSel.splice(i,1);else kitSel.push(v);paintKit()};
+  /* 10.84: «Предложить модель» — текст «Модели» не из подсказок и такой модели у вида нет */
+  function propParts(){var k=kindNow(),q=$('fModel').value;if(!MD||t||!k||mById(mdl.id)||ivaModelExact(MD.index,k,q))return null;return ivaProposalParts(q,mdl.brand,MD.brands)}
+  function propKey(p){return kindNow()+'|'+p.brand.toLowerCase()+'|'+p.model.toLowerCase()}
+  function paintProp(){var p=propParts();$('fProp').innerHTML=p?ivaPropHTML(p,PROP[propKey(p)]||''):''}
+  $('fProp').onclick=function(e){
+    if(!e.target.closest('[data-mprop]'))return;
+    var p=propParts();if(!p)return;var key=propKey(p);if(PROP[key]==='sending'||PROP[key]==='ok')return;
+    var k=kindNow(),kd=(S.kinds||[]).filter(function(x){return x.key===k})[0];
+    var row={kind:k,brand:p.brand,model:p.model,title:ivaProposalTitle($('fName').value,p,kd?kd.title:''),specs:ivaSpecsClean(Object.assign({},mdl.specs,ivaSpecsRead($('fSpecs'))),ivaFieldsFor(MD,k))||{}};
+    PROP[key]='sending';paintProp();
+    ivaProposalSend(api,row).then(function(err){PROP[key]=err||'ok';if($('fProp'))paintProp()});
+  };
+  /* 10.84: подсказка цены и залога по активным объявлениям той же модели или вида; «Подставить» — только в пустые поля */
+  function paintPHint(){
+    var k=kindNow(),el=$('fPHint');
+    if(!k||t||!el){if(el)el.classList.add('hide');return}
+    ivaPriceRows(api,k).then(function(rows){
+      if(!$('fPHint')||kindNow()!==k)return;
+      PH=ivaPriceHint(rows,mdl.id,k);
+      if(!PH){el.classList.add('hide');return}
+      var canP=!$('fPrice').value.trim();
+      el.innerHTML=esc(ivaPriceHintText(PH))+(canP?' · <button type="button" id="fPAuto" style="color:var(--or);font-weight:600;background:none;border:0;padding:0;font:inherit;cursor:pointer">Подставить</button>':'');
+      el.classList.remove('hide');
+    });
+  }
+  $('fPHint').onclick=function(e){
+    if(e.target.id!=='fPAuto'||!PH)return;
+    if(!$('fPrice').value.trim()){$('fPrice').value=PH.price[2];$('fPrice').oninput&&$('fPrice').oninput.call($('fPrice'))}
+    if(PH.deposit&&!depTouched){$('fDep').value=PH.deposit[2];depTouched=true}
+    paintPHint();
+  };
+  /* 10.84: «Сгенерировать описание» — в пустое описание или вместо нашего прошлого; написанное руками не трогаем */
+  if($('fGen'))$('fGen').onclick=function(){
+    var k=kindNow(),fl=k?ivaFieldsFor(MD,k):[];
+    var rows=fl.length?ivaSpecRows(ivaSpecsClean(Object.assign({},mdl.specs,ivaSpecsRead($('fSpecs'))),fl)||{},fl):[];
+    var txt=ivaDescribe($('fName').value,rows,k&&MD.kit?ivaKitClean(kitSel,MD.kit[k]):null),d=$('fDescr'),note='';
+    if(!txt)note='Сначала напишите название.';
+    else if(!d.value.trim()||d.value===descrAuto){d.value=txt;descrAuto=txt}
+    else note='Описание уже написано — сотрите его, чтобы сгенерировать заново.';
+    $('fGenNote').textContent=note?' '+note:'';
+  };
   function chooseModel(m){
     var kd=(S.kinds||[]).filter(function(x){return x.key===m.kind})[0];
     $('fName').value=m.title;
@@ -1290,7 +1344,7 @@ function toolForm(id){
   $('fBrands').onclick=function(e){var b=e.target.closest('[data-mbrand]');if(!b)return;var v=b.getAttribute('data-mbrand');mdl.brand=mdl.brand===v?'':v;paintModel();$('fModel').focus()};
   $('fSpecs').oninput=function(e){var el=e.target.closest('[data-spec]');if(el)mdl.specs[el.getAttribute('data-spec')]=el.value};
   $('fSpecs').onchange=$('fSpecs').oninput;
-  $('fModel').addEventListener('input',function(){var m=mById(mdl.id);if(m&&this.value.trim()!==mText(m))mdl.id=null});
+  $('fModel').addEventListener('input',function(){var m=mById(mdl.id);if(m&&this.value.trim()!==mText(m))mdl.id=null;if(MD)paintProp()});
   if(!t&&typeof ivaModelsLoad==='function')loadKinds().then(function(ks){return ivaModelsLoad(api,ks)}).then(function(md){
     if(!md||!$('fName'))return;
     MD=md;
@@ -1338,13 +1392,18 @@ function toolForm(id){
     if(MD&&!t&&body.kind){   /* 10.82: модель и характеристики — справочник загружен, вид выбран */
       modelKeep();if(mdl.id)body.model_id=mdl.id;
       var sp=ivaSpecsClean(Object.assign(mdl.specs,ivaSpecsRead($('fSpecs'))),ivaFieldsFor(MD,body.kind));if(sp)body.specs=sp;
+      var kt=MD.kit?ivaKitClean(kitSel,MD.kit[body.kind]):null;if(kt)body.kit=kt;   /* 10.84 */
     }
     var btn=$('fSave');btn.textContent='Сохраняем…';btn.disabled=true;
     try{
       if(t)await api('/rest/v1/tools?id=eq.'+t.id,'PATCH',body);
       else{body.owner_email=S.me;
         try{await api('/rest/v1/tools','POST',body)}
-        catch(e1){if(!body.model_id&&!body.specs)throw e1;delete body.model_id;delete body.specs;await api('/rest/v1/tools','POST',body)}   /* 10.82: модель не приняли — инструмент важнее */
+        catch(e1){   /* 10.84: нет столбца kit — без комплектации; 10.82: модель не приняли — инструмент важнее */
+          if(!body.model_id&&!body.specs&&!body.kit)throw e1;
+          var e2=e1;if(body.kit){delete body.kit;try{await api('/rest/v1/tools','POST',body);e2=null}catch(x){e2=x}}
+          if(e2){if(!body.model_id&&!body.specs)throw e2;delete body.model_id;delete body.specs;await api('/rest/v1/tools','POST',body)}
+        }
       }
       closeLayer();toast('Сохранено');cdel('base');loadBase();
       if(S.screen==='cab')cabTools();

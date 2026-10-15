@@ -730,6 +730,9 @@ final class IvaKindPatch {
                     if (target.isEmpty()) return;
                     String full = IvaModelPatch.mergeBody(body, extra);
                     String[] p = IvaClientPatch.apiCall(a, patchPath(target), "PATCH", full, true);
+                    String noKit = IvaModelPatch.mergeBody(body, IvaModelPatch.dropKit(extra));
+                    if (!noKit.equals(full) && (p == null || p[0] == null || !p[0].startsWith("2")))   // 10.84: нет столбца kit — модель и характеристики
+                        p = IvaClientPatch.apiCall(a, patchPath(target), "PATCH", noKit, true);
                     if (!full.equals(body) && (p == null || p[0] == null || !p[0].startsWith("2")))   // модель не приняли — хотя бы вид
                         p = IvaClientPatch.apiCall(a, patchPath(target), "PATCH", body, true);
                     if (p != null && p[0] != null && p[0].startsWith("2")) {

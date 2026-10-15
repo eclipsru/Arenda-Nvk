@@ -10,47 +10,8 @@ const path = require('path');
 const ROOT = path.join(__dirname, '..');
 const MIG = path.join(ROOT, 'supabase/migrations');
 const BASE = process.env.SITE_BASE_URL || 'http://127.0.0.1:8000';
-const un = s => s.replace(/''/g, "'");
 
-function kindsFromSql() {
-  const tree = fs.readFileSync(path.join(MIG, '20261015_category_tree.sql'), 'utf8');
-  const words = fs.readFileSync(path.join(MIG, '20261016_kind_words.sql'), 'utf8');
-  const i0 = tree.indexOf('insert into public.iva_kinds');
-  const block = tree.slice(i0, tree.indexOf('on conflict (key)', i0));
-  const out = [];
-  const re = /\('([a-z0-9-]+)',\s*'([a-z0-9-]+)',\s*'([a-z0-9-]+)',\s*'([^']+)',\s*(\d+)\)/g;
-  let m;
-  while ((m = re.exec(block))) out.push({ key: m[1], cat: m[2], sub: m[3], title: m[4], sort: +m[5], words: [] });
-  const by = Object.fromEntries(out.map(k => [k.key, k]));
-  const wre = /^\s*\('([a-z0-9-]+)', array\[(.*)\]::text\[\]\)/gm;
-  while ((m = wre.exec(words))) by[m[1]].words = m[2].split(',').map(s => s.trim().replace(/^'|'$/g, ''));
-  return out;
-}
-
-function dirFromSql() {
-  const models = [];
-  let id = 1;
-  const files = fs.readdirSync(MIG).filter(f => /^20261017_models_data_\d+\.sql$/.test(f))
-    .sort((a, b) => +a.match(/_(\d+)\.sql$/)[1] - +b.match(/_(\d+)\.sql$/)[1]);
-  for (const f of files) {
-    const s = fs.readFileSync(path.join(MIG, f), 'utf8');
-    const re = /^ {2}\('((?:[^']|'')*)', '((?:[^']|'')*)', '((?:[^']|'')*)', '((?:[^']|'')*)', '((?:[^']|'')*)'\)/gm;
-    let m;
-    while ((m = re.exec(s))) models.push({ id: id++, kind: m[1], brand: un(m[2]), model: un(m[3]), title: un(m[4]), specs: JSON.parse(un(m[5])) });
-  }
-  const sch = fs.readFileSync(path.join(MIG, '20261017_models.sql'), 'utf8');
-  const bsec = sch.split('3. Бренды')[1].split('4. Характеристики')[0];
-  const brands = [];
-  const bre = /^ {2}\('((?:[^']|'')*)', (?:array\[(.*)\]::text\[\]|'\{\}'::text\[\])\)/gm;
-  let m;
-  while ((m = bre.exec(bsec))) brands.push({ name: un(m[1]), aliases: m[2] ? m[2].split(', ').map(x => un(x.replace(/^'|'$/g, ''))) : [] });
-  const fsec = sch.split('create temp table _f')[1];
-  const fields = [];
-  const fre = /^ {2}\('([a-z0-9-]+)', '([a-z0-9]+)', '((?:[^']|'')*)', '((?:[^']|'')*)', '(num|choice|text)', (?:array\[(.*)\]::text\[\]|'\{\}'::text\[\]), (\d+)\)/gm;
-  while ((m = fre.exec(fsec))) fields.push({ kind: m[1], key: m[2], title: un(m[3]), unit: un(m[4]), type: m[5],
-    options: m[6] ? m[6].split(/', '/).map(x => un(x.replace(/^'|'$/g, ''))) : [], sort: +m[7] });
-  return { models, brands, fields };
-}
+const { kindsFromSql, dirFromSql } = require('./model-fixtures.cjs');   /* 10.84: общий разбор миграций */
 
 const KINDS = kindsFromSql();
 const DIR = dirFromSql();
@@ -100,7 +61,7 @@ async function openNew(page, email) {
     localStorage.setItem('iva_auth', JSON.stringify({ tok: 'fake-jwt-token', ref: 'fake-refresh-token', exp: 9999999999999 }));
     localStorage.setItem('iva_tok', JSON.stringify({ tok: 'fake-jwt-token', rtok: 'fake-refresh-token', me: em, uname: 'Иван' }));
     localStorage.removeItem('iva_draft_ad');
-    localStorage.removeItem('iva_models_v1');
+    localStorage.removeItem('iva_models_v2');
   }, email);
   await page.goto(BASE + '/new.html');
   await page.waitForSelector('#iWhat');
@@ -149,7 +110,8 @@ async function runNew(mode) {
   }
 
   // 1. Подсказки моделей под «Что сдаёте»
-  await page.waitForFunction(() => document.getElementById('mSugWhat'), null, { timeout: 8000 });
+  // справочник загружен — подсказки подключены к полю (сам блок #mSugWhat есть в разметке сразу)
+  await page.waitForFunction(() => document.getElementById('mSugWhat') && document.getElementById('iWhat').dataset.msug === '1', null, { timeout: 15000 });
   await page.locator('#iWhat').fill('makita hr2470');
   await page.waitForSelector('#mSugWhat.on', { timeout: 4000 });
   const sug = await page.locator('#mSugWhat button').allTextContents();
@@ -218,7 +180,7 @@ async function runNew(mode) {
   if (mode === 'full') {
     posted.length = 0;
     await openNew(page, email);
-    await page.waitForFunction(() => document.getElementById('mSugWhat'), null, { timeout: 8000 });
+    await page.waitForFunction(() => document.getElementById('mSugWhat') && document.getElementById('iWhat').dataset.msug === '1', null, { timeout: 15000 });
     await page.locator('#iWhat').fill('makita hr2470');
     await page.waitForSelector('#mSugWhat.on', { timeout: 4000 });
     await page.locator('#mSugWhat button').first().click();
@@ -269,7 +231,7 @@ async function runCabinet(mode) {
   const errors = [];
   page.on('pageerror', e => errors.push(e.message));
   await page.goto(BASE + '/offer.html');
-  await page.evaluate(() => { localStorage.setItem('iva_auth', JSON.stringify({ tok: 'fake-jwt-token', ref: 'fake-refresh-token', exp: 9999999999999 })); localStorage.removeItem('iva_models_v1'); });
+  await page.evaluate(() => { localStorage.setItem('iva_auth', JSON.stringify({ tok: 'fake-jwt-token', ref: 'fake-refresh-token', exp: 9999999999999 })); localStorage.removeItem('iva_models_v2'); });
   await page.goto(BASE + '/cabinet.html');
   await page.waitForFunction(() => typeof toolForm === 'function' && S.me && S.cats && S.cats.length, null, { timeout: 15000 });
   await page.evaluate(() => toolForm());
@@ -331,10 +293,12 @@ async function runTool(mode) {
     const r = route.request(), u = new URL(r.url()), sel = u.searchParams.get('select') || '';
     let data = [];
     if (u.pathname.endsWith('/tools')) {
-      if (sel === 'kind,specs' || sel === 'kind') {
+      if (sel === 'kind,specs,kit' || sel === 'kind,specs' || sel === 'kind') {
         calls.push(sel);
-        if (mode === 'nocol' && sel === 'kind,specs') return route.fulfill({ status: 400, json: { code: '42703', message: 'column tools.specs does not exist' } });
-        data = mode === 'none' ? [{ kind: null }] : [Object.assign({ kind: 'rotary-sds-plus' }, sel === 'kind' ? {} : { specs: { src: 'Сеть 220 В', power: 780, energy: 2.4, zzz: 1 } })];
+        /* 10.84: сначала с комплектацией; nocol — нет ни kit, ни specs (база до 10.82) */
+        if (mode === 'nocol' && sel !== 'kind') return route.fulfill({ status: 400, json: { code: '42703', message: 'column tools.' + (sel.endsWith('kit') ? 'kit' : 'specs') + ' does not exist' } });
+        data = mode === 'none' ? [{ kind: null }] : [Object.assign({ kind: 'rotary-sds-plus' }, sel === 'kind' ? {} : { specs: { src: 'Сеть 220 В', power: 780, energy: 2.4, zzz: 1 } },
+          sel === 'kind,specs,kit' ? { kit: ['Кейс', 'Бур SDS-plus'] } : {})];
       } else data = [{ id: TID, name: 'Перфоратор Makita HR2470', cat: 'power', sub: 'hammers', descr: 'Проверка', price: 900, deposit: 3000,
         imgs: [], img: '', delivery: false, delivery_price: 0, terms: '', pickup_city: 'Новочеркасск', pickup_address: '', owner_email: 'owner@example.invalid',
         status: 'active', active: true, rating: 0, reviews_count: 0, created_at: '2026-10-10T10:00:00Z' }];
@@ -357,7 +321,7 @@ async function runTool(mode) {
     const rows = await page.$$eval('dl.specs .spec', els => els.map(e => e.querySelector('dt').textContent + '=' + e.querySelector('dd').textContent));
     const i = rows.findIndex(x => x.startsWith('Состояние='));
     const want = mode === 'full'
-      ? ['Вид=Перфоратор SDS-plus', 'Питание=Сеть 220 В', 'Мощность=780\u00a0Вт', 'Энергия удара=2,4\u00a0Дж']
+      ? ['Вид=Перфоратор SDS-plus', 'Питание=Сеть 220 В', 'Мощность=780\u00a0Вт', 'Энергия удара=2,4\u00a0Дж', 'Комплектация=Кейс, Бур SDS-plus']
       : ['Вид=Перфоратор SDS-plus'];
     assert.deepEqual(rows.slice(i + 1, i + 1 + want.length), want, 'карточка ' + mode + ': вид и характеристики после «Состояния»: ' + rows.join(' | '));
     assert.equal(await page.locator('[data-tspec]').count(), want.length, 'карточка ' + mode + ': добавлены только эти строки');

@@ -167,11 +167,19 @@ ok(M.ivaFieldsFor({ fields: allF.slice().reverse() }, 'rotary-sds-plus').map(f =
   };
   const ts = await M.ivaToolSpecs(tFake, 'abc-1');
   ok(ts && ts.rows.map(x => x[0] + '=' + x[1]).join('|') === 'Вид=Перфоратор SDS-plus|Питание=Сеть 220 В|Мощность=780' + NB + 'Вт|Энергия удара=2,4' + NB + 'Дж'
-     && tCalls[0] === '/rest/v1/tools?id=eq.abc-1&select=kind,specs' && /iva_spec_fields\?.*&kind=eq\.rotary-sds-plus$/.test(tCalls[2] || ''),
+     && tCalls[0] === '/rest/v1/tools?id=eq.abc-1&select=kind,specs,kit' && /iva_spec_fields\?.*&kind=eq\.rotary-sds-plus$/.test(tCalls[2] || ''),
      'карточка сайта: вид и характеристики объявления', JSON.stringify(ts));
   const ts2 = await M.ivaToolSpecs(async p => { if (p.includes('kind,specs')) throw new Error('нет столбца'); if (p.startsWith('/rest/v1/tools')) return [{ kind: 'chainsaw' }];
     if (p.startsWith('/rest/v1/iva_kinds')) return [{ title: 'Цепная пила' }]; throw new Error('лишний запрос ' + p); }, 'x');
   ok(ts2 && ts2.rows.length === 1 && ts2.rows[0][1] === 'Цепная пила', 'карточка сайта: нет столбца specs — только вид', JSON.stringify(ts2));
+  // 10.84: комплектация — последней строкой; нет столбца kit — запрос без него, карточка как в 10.83
+  const ts3 = await M.ivaToolSpecs(async p => { if (p.startsWith('/rest/v1/tools')) return [{ kind: 'chainsaw', specs: {}, kit: ['Шина', ' ', 7, 'Цепь'] }];
+    if (p.startsWith('/rest/v1/iva_kinds')) return [{ title: 'Цепная пила' }]; return []; }, 'x');
+  ok(ts3 && ts3.rows.map(x => x[0] + '=' + x[1]).join('|') === 'Вид=Цепная пила|Комплектация=Шина, Цепь', 'карточка сайта: комплектация последней строкой', JSON.stringify(ts3));
+  const k4 = [];
+  const ts4 = await M.ivaToolSpecs(async p => { k4.push(p); if (p.includes(',kit')) throw new Error('нет столбца kit');
+    if (p.startsWith('/rest/v1/tools')) return [{ kind: 'chainsaw', specs: {} }]; if (p.startsWith('/rest/v1/iva_kinds')) return [{ title: 'Цепная пила' }]; return []; }, 'x');
+  ok(ts4 && ts4.rows.length === 1 && k4[1] === '/rest/v1/tools?id=eq.x&select=kind,specs', 'карточка сайта: нет столбца kit — запрос без него', JSON.stringify(k4));
   ok(await M.ivaToolSpecs(async () => [{ kind: null }], 'x') === null && await M.ivaToolSpecs(async () => { throw new Error('x'); }, 'x') === null
      && await M.ivaToolSpecs(async () => [], 'x') === null && await M.ivaToolSpecs(async () => [], '') === null, 'карточка сайта: без вида или при ошибке — null (как раньше)');
   console.log('✔ model-search: ' + pass + ' проверок, ' + nc + ' общих случаев, ' + D.models.length + ' моделей');

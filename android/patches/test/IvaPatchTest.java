@@ -1602,6 +1602,99 @@ public class IvaPatchTest {
                 chF1.resetAll();
                 eq("характеристики 10.83: фильтр — копия независима, другой вид снимает характеристики, «Сбросить» очищает",
                     chA + "|" + chB + "|" + chF1.specCount() + "," + chF1.specs.size() + "," + chF1.extraActive(), "1,true,Бензин,Аккумулятор|0|0,0,false");
+                // 10.84: этап 4 — общие случаи tests/model-stage4-cases.txt (их же проверяет tests/model-stage4.cjs на сайте)
+                java.util.LinkedHashMap<String, String[]> s4Br = new java.util.LinkedHashMap<String, String[]>();
+                IvaModelPatch.Index s4Ix = null;
+                int s4Ok = 0, s4Tot = 0;
+                java.util.Map<String, Integer> s4Cnt = new java.util.TreeMap<String, Integer>();
+                StringBuilder s4Bad = new StringBuilder();
+                for (String s4L : new String(java.nio.file.Files.readAllBytes(java.nio.file.Paths.get("tests/model-stage4-cases.txt")), "UTF-8").split("\n")) {
+                    if (s4L.isEmpty() || s4L.startsWith("#")) continue;
+                    String[] s4F = s4L.split("\t", -1);
+                    String s4Got = null, s4Exp = null;
+                    if ("brands".equals(s4F[0])) {
+                        for (String s4X : s4F[1].split(";")) { String[] s4P = s4X.split("=", -1); s4Br.put(s4P[0], s4P.length > 1 && !s4P[1].isEmpty() ? s4P[1].split(",") : new String[0]); }
+                        continue;
+                    } else if ("models".equals(s4F[0])) {
+                        java.util.List<IvaModelPatch.Model> s4Ms = new java.util.ArrayList<IvaModelPatch.Model>();
+                        int s4I = 1;
+                        for (String s4X : s4F[1].split(";")) { String[] s4P = s4X.split(":"); s4Ms.add(new IvaModelPatch.Model(s4I++, s4P[0], s4P[1], s4P[2], s4P[2], null)); }
+                        s4Ix = IvaModelPatch.index(s4Ms, s4Br, null);
+                        continue;
+                    } else if ("parts".equals(s4F[0])) {
+                        String[] s4R = IvaModelPatch.proposalParts(s4F[1], s4F[2], s4Br);
+                        s4Got = s4R == null ? "—" : s4R[0] + "|" + s4R[1]; s4Exp = s4F[3];
+                    } else if ("hint".equals(s4F[0])) {
+                        java.util.List<IvaModelPatch.PRow> s4Rows = new java.util.ArrayList<IvaModelPatch.PRow>();
+                        for (String s4T : s4F[3].split(" ")) {
+                            int s4N = 1, s4X = s4T.indexOf('×');
+                            if (s4X >= 0) { s4N = Integer.parseInt(s4T.substring(s4X + 1)); s4T = s4T.substring(0, s4X); }
+                            String[] s4P = s4T.split(":", -1);
+                            for (int s4J = 0; s4J < s4N; s4J++) s4Rows.add(new IvaModelPatch.PRow(s4P[0].isEmpty() ? Double.NaN : Double.parseDouble(s4P[0]),
+                                s4P[1].isEmpty() ? Double.NaN : Double.parseDouble(s4P[1]), "-".equals(s4P[2]) ? 0 : Long.parseLong(s4P[2]), s4P[3]));
+                        }
+                        IvaModelPatch.Hint s4H = IvaModelPatch.priceHint(s4Rows, s4F[1].isEmpty() ? 0 : Long.parseLong(s4F[1]), s4F[2]);
+                        s4Got = s4H == null ? "—" : IvaModelPatch.hintText(s4H).replace('\u00a0', ' ') + " #" + s4H.price[2] + "/" + (s4H.deposit == null ? "-" : String.valueOf(s4H.deposit[2]));
+                        s4Exp = s4F[4];
+                    } else if ("describe".equals(s4F[0])) {
+                        java.util.List<String[]> s4Rows = new java.util.ArrayList<String[]>();
+                        if (!s4F[2].isEmpty()) for (String s4X : s4F[2].split(";")) s4Rows.add(s4X.split("=", 2));
+                        java.util.List<String> s4K = s4F[3].isEmpty() ? new java.util.ArrayList<String>() : java.util.Arrays.asList(s4F[3].split(";"));
+                        s4Got = IvaModelPatch.describe(s4F[1], s4Rows, s4K);
+                        if (s4Got.isEmpty()) s4Got = "—";
+                        s4Exp = s4F[4].replace("\\n", "\n");
+                    } else if ("kit".equals(s4F[0])) {
+                        java.util.List<String> s4R = IvaModelPatch.kitClean(s4F[1].isEmpty() ? new java.util.ArrayList<String>() : java.util.Arrays.asList(s4F[1].split(";")),
+                            s4F[2].isEmpty() ? new String[0] : s4F[2].split(";"));
+                        StringBuilder s4B = new StringBuilder();
+                        if (s4R != null) for (String s4X : s4R) s4B.append(s4B.length() > 0 ? ";" : "").append(s4X);
+                        s4Got = s4R == null ? "—" : s4B.toString(); s4Exp = s4F[3];
+                    } else if ("title".equals(s4F[0])) {
+                        s4Got = IvaModelPatch.proposalTitle(s4F[1], s4F[2].split("\\|"), s4F[3]); s4Exp = s4F[4];
+                    } else if ("exact".equals(s4F[0])) {
+                        IvaModelPatch.Model s4M = IvaModelPatch.exact(s4Ix, s4F[1], s4F[2]);
+                        s4Got = s4M == null ? "—" : s4M.brand + "|" + s4M.model; s4Exp = s4F[3];
+                    } else if ("err".equals(s4F[0])) {
+                        s4Got = IvaModelPatch.propErr(s4F[1]); s4Exp = s4F[2];
+                    } else continue;
+                    s4Tot++;
+                    s4Cnt.put(s4F[0], (s4Cnt.containsKey(s4F[0]) ? s4Cnt.get(s4F[0]) : 0) + 1);
+                    if (s4Exp.equals(s4Got)) s4Ok++;
+                    else if (s4Bad.length() < 600) s4Bad.append(s4F[0]).append(" «").append(s4F[1]).append("» → ").append(s4Got).append("; ");
+                }
+                eq("этап 4 10.84: общие случаи tests/model-stage4-cases.txt (" + s4Tot + ") — как на сайте", s4Ok == s4Tot && s4Tot >= 60 ? "все" : s4Bad.toString(), "все");
+                eq("этап 4 10.84: все виды случаев", s4Cnt.keySet().toString(), "[describe, err, exact, hint, kit, parts, title]");
+                eq("этап 4 10.84: тело предложения — JSON, характеристики объектом",
+                    IvaModelPatch.proposalBody("drill", new String[]{"Bosch", "GBH \"9\""}, "Дрель", null) + "|" + IvaModelPatch.proposalBody("drill", new String[]{"B", "M"}, "T", "{\"p\":1}"),
+                    "{\"kind\":\"drill\",\"brand\":\"Bosch\",\"model\":\"GBH \\\"9\\\"\",\"title\":\"Дрель\",\"specs\":{}}|{\"kind\":\"drill\",\"brand\":\"B\",\"model\":\"M\",\"title\":\"T\",\"specs\":{\"p\":1}}");
+                java.util.List<String> s4Kit = java.util.Arrays.asList("Кейс", "Бур \"SDS\"");
+                String s4Ex = IvaModelPatch.extraBody(12, "{\"a\":1}") + ",\"kit\":" + IvaModelPatch.kitJson(s4Kit);
+                eq("этап 4 10.84: запись — комплектация последней; без столбца kit — модель и характеристики; без модели — только kit",
+                    IvaModelPatch.mergeBody("{\"kind\":\"drill\"}", s4Ex) + "|" + IvaModelPatch.mergeBody("{\"kind\":\"drill\"}", IvaModelPatch.dropKit(s4Ex)) + "|"
+                        + IvaModelPatch.dropKit("\"kit\":[\"Кейс\"]") + "|" + IvaModelPatch.dropKit("\"model_id\":3") + "|" + IvaModelPatch.kitJson(null),
+                    "{\"kind\":\"drill\",\"model_id\":12,\"specs\":{\"a\":1},\"kit\":[\"Кейс\",\"Бур \\\"SDS\\\"\"]}|{\"kind\":\"drill\",\"model_id\":12,\"specs\":{\"a\":1}}||\"model_id\":3|null");
+                eq("этап 4 10.84: tools.kit карточки — строки массива, мусор — пусто",
+                    IvaModelPatch.parseStrList("[\"Кейс\", \" \", \"Бур \\\"SDS\\\"\"]") + "|" + IvaModelPatch.parseStrList("[]") + "|" + IvaModelPatch.parseStrList("null")
+                        + "|" + IvaModelPatch.parseStrList("[1,2]") + "|" + IvaModelPatch.parseStrList("[\"a\""),
+                    "[Кейс, Бур \"SDS\"]|[]|[]|[]|[]");
+                java.util.Map<String, String> s4V = new java.util.HashMap<String, String>();
+                s4V.put("power", "780,0"); s4V.put("src", "Сеть 220 В"); s4V.put("energy", "abc"); s4V.put("bogus", "1");
+                java.util.List<IvaModelPatch.Field> s4Fl = IvaModelPatch.fieldsFor(mdFl, "rotary-sds-plus");
+                eq("этап 4 10.84: описание из формы — характеристики очищены (число с запятой, мусор и чужое не берём)",
+                    IvaModelPatch.describe("Перфоратор", IvaModelPatch.specRows(IvaModelPatch.cleanMap(s4V, s4Fl), s4Fl), null).replace('\u00a0', ' '),
+                    "Перфоратор в аренду.\n\nХарактеристики:\n— Питание: Сеть 220 В\n— Мощность: 780 Вт");
+                // настоящая комплектация: у каждого вида с пунктами описание собирается
+                int s4KOk = 0, s4KAll = 0;
+                for (String s4L : new String(java.nio.file.Files.readAllBytes(java.nio.file.Paths.get("supabase/models/kit.txt")), "UTF-8").split("\n")) {
+                    java.util.regex.Matcher s4M = java.util.regex.Pattern.compile("^([a-z0-9-]+):\\s*(.*)$").matcher(s4L.trim());
+                    if (!s4M.matches()) continue;
+                    s4KAll++;
+                    String[] s4It = s4M.group(2).isEmpty() ? new String[0] : s4M.group(2).split("\\s*;\\s*");
+                    java.util.List<String> s4C = IvaModelPatch.kitClean(java.util.Arrays.asList(s4It), s4It);
+                    String s4D = IvaModelPatch.describe("Инструмент", null, s4C);
+                    if (s4It.length == 0 ? s4C == null && s4D.equals("Инструмент в аренду.") : s4D.endsWith(".") && s4D.split(", ").length == s4It.length) s4KOk++;
+                }
+                eq("этап 4 10.84: комплектация 159 видов из supabase/models/kit.txt", s4KOk + "/" + s4KAll, "159/159");
             } catch (Throwable mdE) { eq("модели 10.82: настоящий справочник", "исключение " + mdE, ""); }
         }
         if (fail > 0) { System.out.println("ошибок: " + fail); System.exit(1); }

@@ -1,4 +1,4 @@
-/* Справочник моделей (этап 2, 10.82; характеристики в карточке — этап 3, 10.83): подсказки моделей в форме добавления и характеристики.
+/* Справочник моделей (этап 2, 10.82; характеристики в карточке — этап 3, 10.83; предложения, цена, описание, комплектация — этап 4, 10.84): подсказки моделей в форме добавления и характеристики.
    Данные — iva_models / iva_brands / iva_spec_fields (supabase/migrations/20261017_models*.sql).
    Тот же алгоритм — в приложении (IvaModelPatch); оба проверяются на tests/model-search-cases.txt.
 
@@ -264,7 +264,8 @@
     if (!id) return Promise.resolve(null);
     var q = '/rest/v1/tools?id=eq.' + encodeURIComponent(id) + '&select=';
     var tool = null;
-    return new Promise(function (r) { r(api(q + 'kind,specs')); })
+    return new Promise(function (r) { r(api(q + 'kind,specs,kit')); })
+      .catch(function () { return api(q + 'kind,specs'); })
       .catch(function () { return api(q + 'kind'); })
       .then(function (rows) {
         tool = Array.isArray(rows) && rows[0] || null;
@@ -280,13 +281,152 @@
           if (kt) rows.push(['Вид', kt]);
           var fl = (Array.isArray(res[1]) ? res[1] : []).filter(function (x) { return x && x.key; })
             .map(function (x) { return { kind: tool.kind, key: x.key, title: x.title || x.key, unit: x.unit || '', type: x.type, sort: x.sort || 0 }; });
-          return { kind: tool.kind, rows: rows.concat(ivaSpecRows(specs, ivaFieldsFor({ fields: fl }, tool.kind))) };
+          rows = rows.concat(ivaSpecRows(specs, ivaFieldsFor({ fields: fl }, tool.kind)));
+          var kit = Array.isArray(tool.kit) ? tool.kit.filter(function (v) { return typeof v === 'string' && v.trim(); }) : [];
+          if (kit.length) rows.push(['Комплектация', kit.join(', ')]);
+          return { kind: tool.kind, rows: rows };
         });
       })
       .catch(function () { return null; });
   }
 
-  var MD_KEY = 'iva_models_v1', MD_TTL = 30 * 60 * 1000, MD_PAGE = 1000;
+  /* ── 10.84, этап 4 (те же правила — IvaModelPatch.proposalParts / priceHint / describe / kitClean) ── */
+
+  function low(s) { return str(s).toLowerCase(); }
+  function squash(s) { return str(s).replace(/\s+/g, ' ').trim(); }
+
+  /* «Предложить модель»: из текста поля «Модель» — бренд и модель. brandSel — выбранный бренд (чип) или ''.
+     Бренд из справочника (имя или другое написание, самое длинное совпадение в начале) — как в справочнике;
+     иначе первое слово. Нет модели после бренда или слишком длинно (бренд > 40, модель > 60) — null. */
+  function ivaProposalParts(text, brandSel, brands) {
+    var t = squash(text), lt = low(t), best = null, bl = 0, i, j;
+    if (!t) return null;
+    for (i = 0; brands && i < brands.length; i++) {
+      var b = brands[i];
+      if (!b || !b.name) continue;
+      var cands = [b.name].concat(b.aliases || []);
+      for (j = 0; j < cands.length; j++) {
+        var c = low(squash(cands[j]));
+        if (c && c.length > bl && (lt === c || lt.indexOf(c + ' ') === 0)) { best = b.name; bl = c.length; }
+      }
+    }
+    var brand, model;
+    var sel = squash(brandSel);
+    if (sel) {
+      brand = sel;
+      model = best && low(best) === low(sel) ? t.slice(bl) : t;
+    } else if (best) {
+      brand = best; model = t.slice(bl);
+    } else {
+      var sp = t.indexOf(' ');
+      if (sp < 0) return null;
+      brand = t.slice(0, sp); model = t.slice(sp + 1);
+    }
+    model = squash(model);
+    if (!brand || !model || brand.length > 40 || model.length > 60) return null;
+    return { brand: brand, model: model };
+  }
+
+  /* Название предложенной модели: название объявления, если в нём есть код модели (слитно), иначе «Вид Бренд Модель». */
+  function ivaProposalTitle(name, parts, kindTitle) {
+    if (!parts) return '';
+    var code = tokens(parts.model).join(''), n = squash(name);
+    if (n && code && tokens(n).join('').indexOf(code) >= 0) return n.slice(0, 120);
+    return squash((kindTitle ? kindTitle + ' ' : '') + parts.brand + ' ' + parts.model).slice(0, 120);
+  }
+
+  /* Модель уже есть в справочнике у этого вида: текст слитно = модель слитно или бренд + модель слитно. */
+  function ivaModelExact(index, kind, text) {
+    var tj = tokens(text).join('');
+    if (!tj || !index) return null;
+    for (var i = 0; i < index.length; i++) {
+      var e = index[i], c = e.codeToks.join('');
+      if (e.m.kind === kind && c && (c === tj || tokens(e.m.brand).join('') + c === tj)) return e.m;
+    }
+    return null;
+  }
+
+  function round50(v) { return v >= 100 ? Math.round(v / 50) * 50 : Math.round(v); }
+  function numsOf(rows, key) {
+    var out = [];
+    for (var i = 0; i < rows.length; i++) {
+      var v = Number(rows[i][key]);
+      if (isFinite(v) && v > 0) out.push(v);
+    }
+    return out.sort(function (a, b) { return a - b; });
+  }
+  function spread(a) {
+    var n = a.length;
+    if (!n) return null;
+    var lo = n >= 5 ? a[Math.floor((n - 1) / 4)] : a[0], hi = n >= 5 ? a[Math.ceil(3 * (n - 1) / 4)] : a[n - 1];
+    var mid = n % 2 ? a[(n - 1) / 2] : (a[n / 2 - 1] + a[n / 2]) / 2;
+    return [round50(lo), round50(hi), round50(mid)];
+  }
+
+  /* Подсказка цены и залога по активным объявлениям rows [{price, deposit, model_id, kind}]: той же модели, если
+     их от 2, иначе того же вида, если от 3. Цены от 5 объявлений — от четверти до трёх четвертей (без крайних),
+     меньше — от самой низкой до самой высокой; округление до 50 ₽. Залог — если указан хотя бы у двух.
+     Возвращает {n, basis: 'model'|'kind', price: [от, до, середина], deposit: [от, до, середина]|null} или null. */
+  function ivaPriceHint(rows, modelId, kind) {
+    var pick = [], basis = '', i;
+    rows = rows || [];
+    if (modelId != null && modelId !== '') {
+      for (i = 0; i < rows.length; i++) if (rows[i] && Number(rows[i].price) > 0 && str(rows[i].model_id) === str(modelId)) pick.push(rows[i]);
+      if (pick.length >= 2) basis = 'model';
+    }
+    if (!basis && kind) {
+      pick = [];
+      for (i = 0; i < rows.length; i++) if (rows[i] && Number(rows[i].price) > 0 && rows[i].kind === kind) pick.push(rows[i]);
+      if (pick.length >= 3) basis = 'kind';
+    }
+    if (!basis) return null;
+    var d = numsOf(pick, 'deposit');
+    return { n: pick.length, basis: basis, price: spread(numsOf(pick, 'price')), deposit: d.length >= 2 ? spread(d) : null };
+  }
+
+  function rubN(v) { return String(v).replace(/\B(?=(\d{3})+(?!\d))/g, '\u00a0') + '\u00a0₽'; }
+  function rangeT(r) { return r[0] === r[1] ? rubN(r[0]) : String(r[0]).replace(/\B(?=(\d{3})+(?!\d))/g, '\u00a0') + '–' + rubN(r[1]); }
+
+  /* Текст подсказки: «Обычно сдают за 700–1 000 ₽ в сутки, залог 3 000–5 000 ₽ (12 объявлений этой модели)». */
+  function ivaPriceHintText(hint) {
+    if (!hint || !hint.price) return '';
+    var n = hint.n, w = n % 10 === 1 && n % 100 !== 11 ? 'объявление' : n % 10 >= 2 && n % 10 <= 4 && (n % 100 < 12 || n % 100 > 14) ? 'объявления' : 'объявлений';
+    return 'Обычно сдают за ' + rangeT(hint.price) + ' в сутки' + (hint.deposit ? ', залог ' + rangeT(hint.deposit) : '') +
+      ' (' + n + ' ' + w + (hint.basis === 'model' ? ' этой модели' : ' этого вида') + ')';
+  }
+
+  /* «Сгенерировать описание»: название, характеристики строками («— Мощность: 780 Вт»), комплектация одной строкой.
+     rows — как ivaSpecRows, kit — отмеченные пункты. Нет названия — ''. */
+  function ivaDescribe(name, rows, kit) {
+    var n = squash(name).replace(/[.!\s]+$/, '');
+    if (!n) return '';
+    var out = n + ' в аренду.';
+    if (rows && rows.length) {
+      out += '\n\nХарактеристики:';
+      for (var i = 0; i < rows.length; i++) out += '\n— ' + rows[i][0] + ': ' + rows[i][1];
+    }
+    if (kit && kit.length) {
+      var ks = [];
+      for (var j = 0; j < kit.length; j++) {
+        var k = squash(kit[j]);
+        if (!k) continue;
+        ks.push(k.length > 1 && k.charAt(1) === k.charAt(1).toLowerCase() && k.charAt(1) !== k.charAt(1).toUpperCase()
+          ? k.charAt(0).toLowerCase() + k.slice(1) : k);
+      }
+      if (ks.length) out += '\n\nВ комплекте: ' + ks.join(', ') + '.';
+    }
+    return out;
+  }
+
+  /* Комплектация к сохранению: только пункты вида, в порядке вида, без повторов; пусто — null. */
+  function ivaKitClean(sel, items) {
+    var out = [];
+    sel = sel || [];
+    for (var i = 0; items && i < items.length; i++) if (sel.indexOf(items[i]) >= 0 && out.indexOf(items[i]) < 0) out.push(items[i]);
+    return out.length ? out : null;
+  }
+
+  var MD_KEY = 'iva_models_v2', MD_TTL = 30 * 60 * 1000, MD_PAGE = 1000;
   var mdMem = null;
 
   /* Справочник с сервера: бренды, поля, модели страницами по 1000 (больше PostgREST не отдаёт). Копия — на 30 минут
@@ -296,7 +436,7 @@
     function build(raw) {
       var byId = {};
       for (var i = 0; i < raw.models.length; i++) byId[raw.models[i].id] = raw.models[i];
-      return { at: raw.at, models: raw.models, fields: raw.fields, byId: byId, index: ivaModelIndex(raw.models, raw.brands, kinds || []) };
+      return { at: raw.at, models: raw.models, fields: raw.fields, brands: raw.brands, kit: raw.kit || {}, byId: byId, index: ivaModelIndex(raw.models, raw.brands, kinds || []) };
     }
     var now = Date.now();
     if (mdMem && now - mdMem.at < MD_TTL) return Promise.resolve(build(mdMem));
@@ -304,7 +444,7 @@
       var c = typeof localStorage !== 'undefined' && JSON.parse(localStorage.getItem(MD_KEY) || 'null');
       if (c && c.at && now - c.at < MD_TTL && c.models && c.models.length) { mdMem = c; return Promise.resolve(build(c)); }
     } catch (e) {}
-    var raw = { at: now, models: [], brands: [], fields: [] };
+    var raw = { at: now, models: [], brands: [], fields: [], kit: {} };
     function page(off) {
       return Promise.resolve(api('/rest/v1/iva_models?select=id,kind,brand,model,title,specs&active=eq.true&order=id.asc&limit=' + MD_PAGE + '&offset=' + off))
         .then(function (rows) {
@@ -330,6 +470,15 @@
         return page(0);
       })
       .then(function () {
+        /* 10.84: комплектация по видам; нет таблицы (SQL этапа 4 не применён) — пусто, остальное работает */
+        return Promise.resolve(api('/rest/v1/iva_kit_items?select=kind,items')).catch(function () { return []; });
+      })
+      .then(function (kr) {
+        (Array.isArray(kr) ? kr : []).forEach(function (x) {
+          if (x && x.kind && Array.isArray(x.items) && x.items.length) raw.kit[x.kind] = x.items.filter(function (v) { return typeof v === 'string' && v; });
+        });
+      })
+      .then(function () {
         if (!raw.models.length || !raw.fields.length) return null;
         mdMem = raw;
         try { if (typeof localStorage !== 'undefined') localStorage.setItem(MD_KEY, JSON.stringify(raw)); } catch (e) {}
@@ -342,7 +491,9 @@
     ivaModelIndex: ivaModelIndex, ivaModelSearch: ivaModelSearch, ivaModelBrands: ivaModelBrands,
     ivaSpecsFill: ivaSpecsFill, ivaModelStillFits: ivaModelStillFits, ivaSpecsClean: ivaSpecsClean,
     ivaFieldsFor: ivaFieldsFor, ivaModelsLoad: ivaModelsLoad,
-    ivaSpecRows: ivaSpecRows, ivaSpecsMatch: ivaSpecsMatch, ivaToolSpecs: ivaToolSpecs
+    ivaSpecRows: ivaSpecRows, ivaSpecsMatch: ivaSpecsMatch, ivaToolSpecs: ivaToolSpecs,
+    ivaProposalParts: ivaProposalParts, ivaPriceHint: ivaPriceHint, ivaPriceHintText: ivaPriceHintText,
+    ivaDescribe: ivaDescribe, ivaKitClean: ivaKitClean, ivaProposalTitle: ivaProposalTitle, ivaModelExact: ivaModelExact
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else for (var k in api) root[k] = api[k];

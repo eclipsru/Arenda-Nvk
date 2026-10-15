@@ -65,7 +65,7 @@ head_ "3. Релиз приложения (app-update.json ↔ APK ↔ этал�
 if node tools/check-release.js; then ok "релиз приложения согласован"; else bad "см. замечания выше"; fi
 
 head_ "4. Статические тесты (без браузера)"
-for t in syntax-and-release chat-auto-send-guard email-guard cities-sync directory-import city-pages city-priority py-compat empty-states p4-personal-data p6-commission diag-owner-readonly p5-bot-no-contacts p5-max-no-contacts p5-order-email deploy-functions-guard iva-push reset-password keystore-check-guard apk-build-guard app-test-channel publish-rights-guard qr-codes client-profile-page kind-guess model-search; do
+for t in syntax-and-release chat-auto-send-guard email-guard cities-sync directory-import city-pages city-priority py-compat empty-states p4-personal-data p6-commission diag-owner-readonly p5-bot-no-contacts p5-max-no-contacts p5-order-email deploy-functions-guard iva-push reset-password keystore-check-guard apk-build-guard app-test-channel publish-rights-guard qr-codes client-profile-page kind-guess model-search model-stage4; do
   if node "tests/$t.cjs" >"/tmp/iva-test-$t.log" 2>&1; then ok "tests/$t.cjs"
   else bad "tests/$t.cjs"; tail -6 "/tmp/iva-test-$t.log" | sed 's/^/      /'; fi
 done
@@ -207,6 +207,24 @@ else
   skip "стенд справочника моделей: нет pgserver (PG_PY=<python с pgserver> bash tools/check.sh)"
 fi
 
+# 10.84: этап 4 — комплектация (supabase/models/kit.txt совпадает с SQL, собран tools/kit-gen.py), предложения моделей
+# с одобрением главного админа; стенд на PostgreSQL: права, триггер, одобрение, отказ, повтор, откат.
+if command -v python3 >/dev/null 2>&1; then
+  if python3 tools/kit-gen.py --check >/tmp/iva-test-kit-gen.log 2>&1; then ok "$(tail -1 /tmp/iva-test-kit-gen.log | sed 's/^✔ //')"
+  else bad "комплектация"; head -12 /tmp/iva-test-kit-gen.log | sed 's/^/      /'; fi
+else
+  skip "комплектация: python3 не найден"
+fi
+if "$PG_PY" -c "import pgserver" >/dev/null 2>&1; then
+  if "$PG_PY" tools/models-stage4-stand.py >/tmp/iva-test-models-s4.log 2>&1; then
+    ok "предложения моделей и комплектация: $(grep -c '✔' /tmp/iva-test-models-s4.log) проверок SQL на PostgreSQL"
+  else
+    bad "стенд этапа 4 справочника"; grep -E '✘|ИТОГ|Error|ERROR' /tmp/iva-test-models-s4.log | head -8 | sed 's/^/      /'
+  fi
+else
+  skip "стенд этапа 4 справочника: нет pgserver (PG_PY=<python с pgserver> bash tools/check.sh)"
+fi
+
 head_ "4.6. Скачивание приложения у всех: файл выпущенной версии на месте"
 # Выпущенная версия живёт строкой в базе (app_releases) и ссылается на файл в корне сайта.
 # Если файл убрать, у всех пользователей ломается «Скачать APK». Код 2 = проверить не удалось (нет сети).
@@ -239,7 +257,7 @@ else
   done
   if [ "$READY" = "1" ]; then
     ok "локальный сервер поднят: http://127.0.0.1:$PORT"
-    for t in photon rental-profile new-tool-prefill order-and-fee order-consent-browser reviews-system app-banner chief-and-apk empty-states-browser kind-guess-browser model-form-browser; do
+    for t in photon rental-profile new-tool-prefill order-and-fee order-consent-browser reviews-system app-banner chief-and-apk empty-states-browser kind-guess-browser model-form-browser model-stage4-browser; do
       if SITE_BASE_URL="http://127.0.0.1:$PORT" node "tests/$t.cjs" >"/tmp/iva-test-$t.log" 2>&1; then ok "tests/$t.cjs"
       else bad "tests/$t.cjs"; tail -6 "/tmp/iva-test-$t.log" | sed 's/^/      /'; fi
     done
