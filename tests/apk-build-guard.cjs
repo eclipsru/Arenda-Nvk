@@ -799,6 +799,8 @@ try {
       && !fp.includes('ownTerms') && !fp.includes('"Наличные или перевод"') && fp.includes('TERMS_PICK = "Выбрать из частых условий"')
       && (fp.match(/static final String\[\] TERMS_BASE = \{[^}]*\}/) || [''])[0].split('",').length >= 10,
       'форма 10.89: частые условия — выпадающим списком под «Условиями аренды», без своих строк и «Наличные или перевод»');
+    assert.ok(!/паспорт/i.test((fp.match(/static final String\[\] TERMS_\w+ = \{[^}]*\}/g) || []).join(' ')) && /eq\("форма 10\.90: в частых условиях нет ни одной подсказки про паспорт"/.test(tp),
+      'форма 10.90: в частых условиях нет подсказок про паспорт (просьба владельца)');
     assert.ok(fp.includes('static final boolean SHOW_SAMPLE = false;') && fp.includes('hideTop(form);') && fp.includes('TITLE_NATIVE = "Добавить инструмент", SUBTITLE_NATIVE = "Публикуется сразу"'),
       'форма 10.89: сверху нет заголовка, подзаголовка и «по образцу» (черновик остаётся)');
     // 10.89: фото — 5 окошек, большой просмотр, камера / галерея; результат — в свой Fragment, onActivityResult не трогаем

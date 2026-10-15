@@ -1879,11 +1879,17 @@ public class IvaPatchTest {
                 + "|" + fpOptN.contains("Наличные или перевод") + "|" + fpOptN.contains("Паспорт РФ и договор"),
             "[Топливо — за счёт арендатора, Вернуть с полным баком]|" + (IvaFormPatch.TERMS_BASE.length + 2)
                 + "|Аккумуляторы выдаём заряженными|" + IvaFormPatch.TERMS_BASE.length + "|false|false|false");
-        java.util.List<String> fpLeft = IvaFormPatch.termLeft("", "Свой текст\n• паспорт при получении.\nВернуть чистым");
+        java.util.List<String> fpLeft = IvaFormPatch.termLeft("", "Свой текст\n• оплата при получении.\nВернуть чистым");
         eq("форма 10.89: выбранное пропадает из списка (и с маркером, и другим регистром), убрали из поля — вернулось",
-            fpLeft.contains("Паспорт при получении") + "," + fpLeft.contains("Вернуть чистым") + "," + fpLeft.size() + ","
+            fpLeft.contains("Оплата при получении") + "," + fpLeft.contains("Вернуть чистым") + "," + fpLeft.size() + ","
                 + IvaFormPatch.termLeft("", "").size() + "," + IvaFormPatch.termLeft("", IvaFormPatch.termToggle("Вернуть чистым", "Вернуть чистым")).contains("Вернуть чистым"),
             "false,false," + (IvaFormPatch.TERMS_BASE.length - 2) + "," + IvaFormPatch.TERMS_BASE.length + ",true");
+        boolean fpPass = false;
+        for (String fpSrc : new String[]{"", "Бензин", "Аккумулятор", "Сеть 220 В"})
+            for (String fpO : IvaFormPatch.termOptions(fpSrc)) fpPass |= fpO.toLowerCase(java.util.Locale.ROOT).contains("паспорт");
+        eq("форма 10.90: в частых условиях нет ни одной подсказки про паспорт",
+            fpPass + "," + IvaFormPatch.termOptions("").contains("Паспорт при получении") + "," + IvaFormPatch.termOptions("").contains("Оформляем договор аренды"),
+            "false,false,true");
         eq("форма 10.89: скрываем штатные «Добавить инструмент» и «Публикуется сразу…», остальное — нет",
             IvaFormPatch.nativeTop("Добавить инструмент") + "," + IvaFormPatch.nativeTop("Публикуется сразу — от вашего имени. Клиенты увидят его в поиске.")
                 + "," + IvaFormPatch.nativeTop("Что сдаёте") + "," + IvaFormPatch.nativeTop(null) + "," + IvaFormPatch.SHOW_SAMPLE,
