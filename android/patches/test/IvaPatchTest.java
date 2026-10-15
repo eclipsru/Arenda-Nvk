@@ -3,6 +3,17 @@ package ru.prokatnvsk.app;
 
 public class IvaPatchTest {
     static int fail = 0;
+
+    /** 10.93: строки «ключ=значение|…» → как IvaChiefPatch.arr (значение после «=» может быть пустым). */
+    static java.util.List<java.util.Map<String, String>> ch93rows(String... rows) {
+        java.util.List<java.util.Map<String, String>> out = new java.util.ArrayList<java.util.Map<String, String>>();
+        for (String r : rows) {
+            java.util.Map<String, String> m = new java.util.LinkedHashMap<String, String>();
+            for (String kv : r.split("\\|")) { int e = kv.indexOf('='); m.put(kv.substring(0, e), kv.substring(e + 1)); }
+            out.add(m);
+        }
+        return out;
+    }
     static void eq(String what, Object got, Object exp) {
         if (!String.valueOf(got).equals(String.valueOf(exp))) { fail++; System.out.println("✘ " + what + ": «" + got + "» ≠ «" + exp + "»"); }
         else System.out.println("✔ " + what);
@@ -2056,6 +2067,65 @@ public class IvaPatchTest {
                 "нецензурное слово, написанное латиницей (транслитом)|звёздочки вместо букв — похоже на замаскированный мат");
             eq("цензура 10.92: текст из файла случаев — \\n и \\u", IvaCensorPatch.unescape("а\\nб\\u200bв"), "а\nб\u200bв");
         }
+        try {   // 10.93: кабинет создателя — «Управление», «Мои отзывы», без «Ваш доход с админов»
+            StringBuilder ch93 = new StringBuilder();
+            for (String[] ch93m : IvaChiefPatch.MENU) ch93.append(ch93m[0]).append('|');
+            eq("кабинет 10.93: пункты «Управления» — по порядку владельца", ch93.toString(),
+                "Сводка|Комиссия|Фильтры|Модерация|Кандидаты|Реклама Ива|Платный контент|");
+            eq("кабинет 10.93: в кабинете — «Управление» и «Мои отзывы»", IvaChiefPatch.T_MANAGE + "|" + IvaChiefPatch.T_REVIEWS, "Управление|Мои отзывы");
+            eq("кабинет 10.93: карточка «Ваш доход с админов» узнаётся по заголовку (и только она)",
+                IvaChiefPatch.isIncomeTitle("ВАШ ДОХОД С АДМИНОВ") + "," + IvaChiefPatch.isIncomeTitle(" Ваш доход с админов ") + ","
+                    + IvaChiefPatch.isIncomeTitle("ПАНЕЛЬ ВЛАДЕЛЬЦА") + "," + IvaChiefPatch.isIncomeTitle("Заявки на оплату") + "," + IvaChiefPatch.isIncomeTitle(null),
+                "true,true,false,false,false");
+            eq("кабинет 10.93: рубли — с пробелами, минус", IvaChiefPatch.rub(0) + "|" + IvaChiefPatch.rub(1234567.4) + "|" + IvaChiefPatch.rub(-950),
+                "0 ₽|1\u00a0234\u00a0567 ₽|−950 ₽");
+            long ch93Now = new java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ssX", java.util.Locale.ROOT).parse("2026-10-15T12:00:00Z").getTime();
+            java.util.List<java.util.Map<String, String>> ch93T = ch93rows("active=true|t_status=free", "active=true|t_status=booked", "active=true|t_status=rented", "active=false|t_status=free", "active=", "t_status=rented");
+            eq("кабинет 10.93: сводка — объявления [в каталоге, свободно, забронировано, в аренде, снято]",
+                java.util.Arrays.toString(IvaChiefPatch.toolCounts(ch93T)), "[5, 2, 1, 2, 1]");
+            java.util.List<java.util.Map<String, String>> ch93P = ch93rows("status=new|created_at=2026-10-15T08:00:00+00:00|owner_email=a@x.ru|fee=50|rent_sum=1000",
+                "status=rented|created_at=2026-10-12T08:00:00+00:00|owner_email=A@x.ru|fee=25,5|rent_sum=500",
+                "status=closed|created_at=2026-09-20T08:00:00+00:00|owner_email=b@x.ru|fee=100|rent_sum=2000",
+                "status=closed|created_at=2026-01-01T08:00:00+00:00|owner_email=eclips.ru@mail.ru|fee=0|rent_sum=9000",
+                "status=closed|created_at=null|owner_email=|fee=7");
+            eq("кабинет 10.93: сводка — заявки [всего, новые, в аренде, закрытые, сегодня, 7 дней, 30 дней]",
+                java.util.Arrays.toString(IvaChiefPatch.orderCounts(ch93P, ch93Now)), "[5, 1, 1, 3, 1, 2, 3]");
+            java.util.List<java.util.Map<String, String>> ch93F = ch93rows("admin_email=a@x.ru|amount=60|status=confirmed", "admin_email=b@x.ru|amount=30|status=pending",
+                "admin_email=C@x.ru|amount=10|status=confirmed", "admin_email=b@x.ru|amount=99|status=rejected");
+            IvaChiefPatch.Money ch93M = IvaChiefPatch.money(ch93P, ch93F);
+            eq("кабинет 10.93: комиссия — как сайт: начислено, получено, долг, ждут; свои заявки создателя не в счёт",
+                ch93M.fee + "|" + ch93M.paid + "|" + ch93M.owed() + "|" + ch93M.pendingN + "/" + ch93M.pending + "|" + ch93M.rent,
+                "175.5|70.0|105.5|1/30.0|3500.0");
+            StringBuilder ch93D = new StringBuilder();
+            for (String ch93k : IvaChiefPatch.byDebt(ch93M)) ch93D.append(ch93k).append(' ').append(ch93M.byAdmin.get(ch93k)[0] - ch93M.byAdmin.get(ch93k)[1]).append(';');
+            eq("кабинет 10.93: комиссия по админам — по убыванию долга, переплата в конце (почта без регистра)", ch93D.toString(),
+                "b@x.ru 100.0;a@x.ru 15.5;c@x.ru -10.0;");
+            eq("кабинет 10.93: отзывы [всего, скрыто, сумма оценок, опубликовано]",
+                java.util.Arrays.toString(IvaChiefPatch.reviewCounts(ch93rows("rating=5|status=published", "rating=4|status=published", "rating=1|status=hidden", "rating=9|status=published"))),
+                "[4, 1, 14, 3]");
+            java.util.List<java.util.Map<String, String>> ch93C = ch93rows("active=true|sub=drills|kind=perf|model_id=m1|imgs=u", "active=true|sub=|kind=|model_id=|imgs=|img=x",
+                "active=true|sub=g|kind=|imgs=|img=null", "active=false|sub=g|kind=k|model_id=m|imgs=u");
+            eq("кабинет 10.93: фильтры — заполненность [в каталоге, подкатегория, вид, модель, фото]",
+                java.util.Arrays.toString(IvaChiefPatch.coverage(ch93C)) + " " + java.util.Arrays.toString(IvaChiefPatch.coverage(ch93rows("sub=a"))),
+                "[3, 2, 1, 1, 2] [1, 1, -1, -1, 0]");
+            eq("кабинет 10.93: доля — «N из M · %», нет столбца — «нет в базе»",
+                IvaChiefPatch.share(1, 3) + "|" + IvaChiefPatch.share(-1, 3) + "|" + IvaChiefPatch.share(0, 0), "1 из 3 · 33%|нет в базе|0");
+            eq("кабинет 10.93: кандидаты — по статусам", java.util.Arrays.toString(IvaChiefPatch.candCounts(ch93rows("status=pending", "status=pending", "status=approved", "status=changes_requested", "status=x"))), "[2, 1, 1, 0]");
+            eq("кабинет 10.93: кандидаты — подписи", IvaChiefPatch.bizLabel("self_employed") + "|" + IvaChiefPatch.bizLabel("sole_trader") + "|" + IvaChiefPatch.bizLabel("company")
+                + "|" + IvaChiefPatch.candStatus("pending") + "|" + IvaChiefPatch.candStatus("changes_requested") + "|" + IvaChiefPatch.candStatus("approved") + "|" + IvaChiefPatch.candStatus("rejected"),
+                "Самозанятый|ИП|Компания|Ждёт решения|Нужны правки|Одобрена|Отклонена");
+            eq("кабинет 10.93: кандидаты — без контактов; запросы — только нужные столбцы, без select=*",
+                !IvaChiefPatch.Q_CAND.matches(".*(phone|email|website|comment).*") && !(IvaChiefPatch.Q_TOOLS + IvaChiefPatch.Q_PARTS + IvaChiefPatch.Q_REVIEWS + IvaChiefPatch.Q_ADMINS
+                    + IvaChiefPatch.Q_FEES + IvaChiefPatch.Q_COVER + IvaChiefPatch.Q_MOD + IvaChiefPatch.Q_CAND + IvaChiefPatch.qAboutMine("x") + IvaChiefPatch.qByMe("x")).contains("select=*") ? "да" : "нет", "да");
+            eq("кабинет 10.93: «Мои отзывы» — о моих инструментах и написанные мной",
+                IvaChiefPatch.qAboutMine("me@x.ru") + "\n" + IvaChiefPatch.qByMe("me@x.ru"),
+                "/rest/v1/reviews?select=id,tool_id,author_id,author_name,rating,text,status,created_at,updated_at,tools!inner(name,owner_email)&tools.owner_email=eq.me%40x.ru&order=created_at.desc&limit=200\n"
+                    + "/rest/v1/reviews?select=id,tool_id,author_id,author_name,rating,text,status,created_at,updated_at,tools(name)&author_email=eq.me%40x.ru&order=created_at.desc&limit=200");
+            eq("кабинет 10.93: название инструмента в отзыве", IvaChiefPatch.toolName(ch93rows("tools.name=Перфоратор").get(0)) + "|"
+                + IvaChiefPatch.toolName(ch93rows("id=1").get(0)), "Перфоратор|Инструмент");
+            eq("кабинет 10.93: дни назад", IvaChiefPatch.daysAgo("2026-10-15T00:00:01Z", ch93Now) + "," + IvaChiefPatch.daysAgo("2026-10-08T12:00:00", ch93Now) + ","
+                + IvaChiefPatch.daysAgo("кривое", ch93Now) + "," + IvaChiefPatch.daysAgo(null, ch93Now), "0,7,-1,-1");
+        } catch (Exception ch93E) { eq("кабинет 10.93: тесты", String.valueOf(ch93E), ""); }
         if (fail > 0) { System.out.println("ошибок: " + fail); System.exit(1); }
         System.out.println("все проверки IvaPatch пройдены");
     }
