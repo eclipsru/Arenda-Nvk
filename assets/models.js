@@ -227,9 +227,72 @@
     return n ? out : null;
   }
 
+  /* Поля вида по порядку: sort, затем ключ (как IvaModelPatch.fieldsFor). md — результат ivaModelsLoad. */
+  function ivaFieldsFor(md, kind) {
+    var all = md && md.fields ? md.fields : [], out = [];
+    for (var i = 0; i < all.length; i++) if (kind && all[i].kind === kind) out.push(all[i]);
+    return out.sort(function (a, b) {
+      if ((a.sort || 0) !== (b.sort || 0)) return (a.sort || 0) - (b.sort || 0);
+      return a.key < b.key ? -1 : a.key > b.key ? 1 : 0;
+    });
+  }
+
+  var MD_KEY = 'iva_models_v1', MD_TTL = 30 * 60 * 1000, MD_PAGE = 1000;
+  var mdMem = null;
+
+  /* Справочник с сервера: бренды, поля, модели страницами по 1000 (больше PostgREST не отдаёт). Копия — на 30 минут
+     (в памяти и в localStorage). Не загрузился (SQL не применён, нет сети) — null: формы работают как раньше.
+     api(path) — функция страницы (sb.js / cabinet.html), kinds — [{key, words}] для основ видов. */
+  function ivaModelsLoad(api, kinds) {
+    function build(raw) {
+      var byId = {};
+      for (var i = 0; i < raw.models.length; i++) byId[raw.models[i].id] = raw.models[i];
+      return { at: raw.at, models: raw.models, fields: raw.fields, byId: byId, index: ivaModelIndex(raw.models, raw.brands, kinds || []) };
+    }
+    var now = Date.now();
+    if (mdMem && now - mdMem.at < MD_TTL) return Promise.resolve(build(mdMem));
+    try {
+      var c = typeof localStorage !== 'undefined' && JSON.parse(localStorage.getItem(MD_KEY) || 'null');
+      if (c && c.at && now - c.at < MD_TTL && c.models && c.models.length) { mdMem = c; return Promise.resolve(build(c)); }
+    } catch (e) {}
+    var raw = { at: now, models: [], brands: [], fields: [] };
+    function page(off) {
+      return Promise.resolve(api('/rest/v1/iva_models?select=id,kind,brand,model,title,specs&active=eq.true&order=id.asc&limit=' + MD_PAGE + '&offset=' + off))
+        .then(function (rows) {
+          rows = Array.isArray(rows) ? rows : [];
+          for (var i = 0; i < rows.length; i++) {
+            var r = rows[i];
+            if (r && r.id && r.brand && r.model) raw.models.push({ id: r.id, kind: r.kind || '', brand: r.brand, model: r.model, title: r.title || '',
+              specs: r.specs && typeof r.specs === 'object' && !Array.isArray(r.specs) ? r.specs : {} });
+          }
+          return rows.length < MD_PAGE || off >= 19 * MD_PAGE ? null : page(off + MD_PAGE);
+        });
+    }
+    return Promise.resolve(api('/rest/v1/iva_brands?select=name,aliases&order=name.asc'))
+      .then(function (b) {
+        raw.brands = (Array.isArray(b) ? b : []).filter(function (x) { return x && x.name; })
+          .map(function (x) { return { name: x.name, aliases: Array.isArray(x.aliases) ? x.aliases : [] }; });
+        return api('/rest/v1/iva_spec_fields?select=kind,key,title,unit,type,options,sort&order=kind.asc,sort.asc');
+      })
+      .then(function (f) {
+        raw.fields = (Array.isArray(f) ? f : []).filter(function (x) { return x && x.kind && x.key && /^(num|choice|text)$/.test(x.type); })
+          .map(function (x) { return { kind: x.kind, key: x.key, title: x.title || x.key, unit: x.unit || '', type: x.type,
+            options: Array.isArray(x.options) ? x.options : [], sort: x.sort || 0 }; });
+        return page(0);
+      })
+      .then(function () {
+        if (!raw.models.length || !raw.fields.length) return null;
+        mdMem = raw;
+        try { if (typeof localStorage !== 'undefined') localStorage.setItem(MD_KEY, JSON.stringify(raw)); } catch (e) {}
+        return build(raw);
+      })
+      .catch(function () { return null; });
+  }
+
   var api = {
     ivaModelIndex: ivaModelIndex, ivaModelSearch: ivaModelSearch, ivaModelBrands: ivaModelBrands,
-    ivaSpecsFill: ivaSpecsFill, ivaModelStillFits: ivaModelStillFits, ivaSpecsClean: ivaSpecsClean
+    ivaSpecsFill: ivaSpecsFill, ivaModelStillFits: ivaModelStillFits, ivaSpecsClean: ivaSpecsClean,
+    ivaFieldsFor: ivaFieldsFor, ivaModelsLoad: ivaModelsLoad
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else for (var k in api) root[k] = api[k];

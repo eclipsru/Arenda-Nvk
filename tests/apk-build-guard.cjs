@@ -770,6 +770,71 @@ try {
       assert.ok(has(arsc14, str) || has(dex14, str), `APK 10.14: нет «${str}» — правка 10.67 не найдёт штатное поле`);
     assert.ok(/eq\("админ 10\.67: /.test(tp) && /eq\("подкатегория 10\.67: /.test(tp) && /eq\("кабинет 10\.67: /.test(tp), 'IvaPatchTest: проверки 10.67');
   }
+  // 10.82 (этап 2 справочника моделей, решение владельца 15.10.2026, №30): подсказки моделей по названию, поле «Модель»
+  // с брендами, «Характеристики» под видом — в форме «Добавить» приложения и на сайте (new.html, cabinet.html).
+  // Справочник — iva_brands, iva_spec_fields, iva_models (SQL). Нет SQL — всё как в 10.81.
+  {
+    const mp = R('android/patches/IvaModelPatch.java'), kp = R('android/patches/IvaKindPatch.java'), tp = R('android/patches/test/IvaPatchTest.java');
+    const wf = R('.github/workflows/build-apk.yml'), chk = R('tools/check.sh'), ap = R('android/patches/apply.py');
+    const sql = R('supabase/migrations/20261017_models.sql'), md = R('assets/models.js'), mf = R('assets/model-form.js');
+    const nw = R('new.html'), cab = R('cabinet.html'), sb = R('assets/sb.js'), bt = R('tests/model-form-browser.cjs'), jt = R('tests/model-search.cjs');
+    const fnx = (src, name) => { const mm = new RegExp(`static (?:final )?[\\w.<>, \\[\\]]+ ${name}\\(`).exec(src); assert.ok(mm, `нет ${name}`); return src.slice(mm.index, src.indexOf('\n    }\n', mm.index)); };
+    // 1. SQL: три таблицы читают все, правит только руководитель; удаление модели не трогает объявления
+    assert.ok(['iva_brands', 'iva_spec_fields', 'iva_models'].every(t => sql.includes('create table if not exists public.' + t + ' ('))
+      && sql.includes("execute format('grant select on public.%I to anon, authenticated', t);") && sql.includes('using (public.fn_is_chief()) with check (public.fn_is_chief())')
+      && sql.includes('foreign key (model_id) references public.iva_models(id) on delete set null;')
+      && !/\bdrop table\b|\btruncate\b/i.test(sql.split('Откат')[0]),
+      'модели 10.82: SQL — справочник читают все, меняет только руководитель; удаление модели не трогает объявления');
+    assert.ok(chk.includes('tools/models-stand.py') && / model-search; do/.test(chk) && / model-form-browser; do/.test(chk),
+      'модели 10.82: стенд SQL, тест поиска и браузерный тест — в check.sh');
+    // 2. загрузка: одни и те же запросы; страницами по 1000; ошибка — справочника нет (формы как в 10.81)
+    assert.ok(mp.includes('static final String BRANDS_PATH = "/rest/v1/iva_brands?select=name,aliases&order=name.asc";')
+      && md.includes("api('/rest/v1/iva_brands?select=name,aliases&order=name.asc')")
+      && mp.includes('static final String FIELDS_PATH = "/rest/v1/iva_spec_fields?select=kind,key,title,unit,type,options,sort&order=kind.asc,sort.asc";')
+      && md.includes("'/rest/v1/iva_spec_fields?select=kind,key,title,unit,type,options,sort&order=kind.asc,sort.asc'")
+      && fnx(mp, 'modelsPath').includes('"/rest/v1/iva_models?select=id,kind,brand,model,title,specs&active=eq.true&order=id.asc&limit=" + PAGE + "&offset=" + offset')
+      && md.includes("'/rest/v1/iva_models?select=id,kind,brand,model,title,specs&active=eq.true&order=id.asc&limit=' + MD_PAGE + '&offset=' + off"),
+      'модели 10.82: приложение и сайт читают справочник одними и теми же запросами');
+    const el = fnx(mp, 'ensureLoaded');
+    assert.ok(mp.includes('static final int PAGE = 1000;') && el.includes('if (!ok(rb) || !ok(rf)) return;') && el.includes('if (!ok(rm)) return;')
+      && el.includes('if (n < PAGE) break;') && el.includes('if (ms.isEmpty() || fl.isEmpty()) return;') && el.includes('new Thread(')
+      && el.includes('} finally { loading = false; }'),
+      'модели 10.82: приложение — в фоне, страницами по 1000; ошибка — справочника нет');
+    // 3. запись: модель и характеристики дописываются к виду; база не приняла — хотя бы вид (приложение и сайт)
+    const se = fnx(mp, 'saveExtra');
+    assert.ok(se.includes('if (!ready() || kind == null || kind.isEmpty()) return "";') && se.includes('stillFits(name, chosen) ? chosen.id : 0')
+      && kp.includes('try { pendingExtra = IvaModelPatch.saveExtra(a, kind, name); } catch (Throwable e) { pendingExtra = ""; }')
+      && kp.includes('String full = IvaModelPatch.mergeBody(body, extra);')
+      && kp.includes('if (!full.equals(body) && (p == null || p[0] == null || !p[0].startsWith("2")))')
+      && kp.includes('p = IvaClientPatch.apiCall(a, patchPath(target), "PATCH", body, true);'),
+      'модели 10.82: приложение — модель только если подходит к названию; не приняли — повтор без модели');
+    assert.ok(nw.includes('if (!payload.model_id && !payload.specs) throw e1;') && nw.includes('delete payload.model_id; delete payload.specs;')
+      && cab.includes("catch(e1){if(!body.model_id&&!body.specs)throw e1;delete body.model_id;delete body.specs;await api('/rest/v1/tools','POST',body)}")
+      && sb.includes('if (data.model_id) row.model_id = data.model_id;') && sb.includes('if (data.specs) row.specs = data.specs;')
+      && !/TOOL_FIELDS = [^;]*(model_id|specs)/.test(sb),
+      'модели 10.82: сайт — модель и характеристики только если есть; не приняли — повтор без них; общий список полей не меняется');
+    // 4. сайт: только новое объявление; общие модули; кабинет без theme.css
+    assert.ok(nw.includes('function mdOn(){ return !!MD && !EDIT_ID; }') && nw.includes("if (!EDIT_ID && typeof ivaModelsLoad === 'function'){")
+      && cab.includes("if(!t&&typeof ivaModelsLoad==='function')"),
+      'модели 10.82: на сайте справочник только для нового объявления');
+    assert.ok(nw.includes('<script src="assets/models.js?v=20261017-models"></script>') && nw.includes('<script src="assets/model-form.js?v=20261017-models"></script>')
+      && cab.includes('<script src="assets/models.js?v=20261017-models"></script>') && cab.includes('<script src="assets/model-form.js?v=20261017-models"></script>')
+      && mf.includes("if (e.target.closest('[data-msug]')) e.preventDefault();") && !/<link[^>]*theme\.css/.test(cab),
+      'модели 10.82: сайт — общие модули; кабинет без theme.css');
+    // 5. приложение: без новых вставок в smali — только из IvaKindPatch; файл в сборке; личных данных не читаем
+    assert.ok(!/IvaModelPatch|model/i.test(ap) && /IvaKindPatch\.java android\/patches\/IvaModelPatch\.java 2>&1/.test(wf)
+      && kp.includes('if (k == 0) IvaModelPatch.refresh(a);') && kp.includes('try { IvaModelPatch.onTab(a, tab); } catch (Throwable ignore) {}')
+      && !/customer_profiles|passport|phone|surname/.test(mp),
+      'модели 10.82: новых вставок в smali нет; личных данных не читаем');
+    // 6. приложение и сайт проверяются на одних и тех же случаях и настоящем справочнике
+    assert.ok(tp.includes('java.nio.file.Paths.get("tests/model-search-cases.txt")') && jt.includes('model-search-cases.txt')
+      && tp.includes('java.nio.file.Paths.get("supabase/migrations")') && bt.includes('20261017_models.sql') && bt.includes('20261017_models_data_'),
+      'модели 10.82: Java и JS — одни и те же случаи и справочник из SQL');
+    assert.ok((tp.match(/eq\("модели 10\.82: /g) || []).length >= 20, 'IvaPatchTest: проверки 10.82');
+    assert.ok(['supabase/migrations/20261017_models.sql', 'supabase/migrations/20261017_models_data_*.sql', 'tests/model-search-cases.txt']
+      .every(f => wf.includes('\n            ' + f + '\n')), 'модели 10.82: файлы справочника и случаев есть в выборочной выгрузке сборки');
+    assert.ok(/NEW_NAME: '10\.82'/.test(wf) && /NEW_CODE: '156'/.test(wf) && /TEST_NOTES: 'Тестовая сборка 10\.82: /.test(wf), 'версия 10.82 (156)');
+  }
   // 10.81 (этап 1 справочника моделей, решение владельца 15.10.2026, №30): категория, подкатегория и вид подставляются
   // сами по названию — в форме «Добавить» приложения и на сайте (new.html, cabinet.html). Слова — iva_kinds.words (SQL).
   {
@@ -783,7 +848,7 @@ try {
       && sql.includes('and k.words is distinct from v.words;') && sql.includes('--   alter table public.iva_kinds drop column if exists words;')
       && (sql.match(/^\s*\('[a-z0-9-]+', array\[/gm) || []).length === 159 && !/\bdrop table\b|\bdelete from\b|\btruncate\b/i.test(sql.split('Откат')[0]),
       'автоподбор 10.81: SQL — столбец words для 159 видов, повтор безопасен, ничего не удаляет, откат в конце');
-    assert.ok(chk.includes('tools/kind-words-stand.py') && / kind-guess( model-search)?; do/.test(chk) && / kind-guess-browser; do/.test(chk),
+    assert.ok(chk.includes('tools/kind-words-stand.py') && / kind-guess( model-search)?; do/.test(chk) && / kind-guess-browser( model-form-browser)?; do/.test(chk),
       'автоподбор 10.81: стенд SQL, тест алгоритма и браузерный тест — в check.sh');
     // 2. приложение: слова — отдельным запросом (старый запрос видов не меняется: нет столбца — только без автоподбора)
     assert.ok(kp.includes('static final String WORDS_PATH = "/rest/v1/iva_kinds?select=key,words&active=eq.true";') && !/KINDS_PATH = "[^"]*words/.test(kp),
@@ -822,7 +887,7 @@ try {
       && sb.includes("try { rows = await api(base + ',words'); }") && sb.includes('catch(e){ try { rows = await api(base); } catch(e2){ return []; } }')
       && !/TOOL_FIELDS = [^;]*kind/.test(sb),
       'автоподбор 10.81: сайт — общий модуль; вид в запросе только при справочнике видов; общий список полей объявления не меняется');
-    assert.ok(nw.includes("(canAuto() && !EDIT_ID ?") && cab.includes("if(!t)$('fName').oninput="),
+    assert.ok((nw.includes("(canAuto() && !EDIT_ID ?") || nw.includes("((canAuto() || mdOn()) && !EDIT_ID ?")) && cab.includes("if(!t)$('fName').oninput="),
       'автоподбор 10.81: на сайте автоподбор только для нового объявления');
     // 6. приложение и сайт проверяются на одних и тех же случаях и настоящем словаре
     assert.ok(tp.includes('java.nio.file.Paths.get("tests/kind-guess-cases.txt")') && jt.includes("'tests/kind-guess-cases.txt'")
@@ -831,7 +896,6 @@ try {
     assert.ok((tp.match(/eq\("автоподбор 10\.81: /g) || []).length >= 15, 'IvaPatchTest: проверки 10.81');
     assert.ok(['supabase/migrations/20261015_category_tree.sql', 'supabase/migrations/20261016_kind_words.sql', 'tests/kind-guess-cases.txt']
       .every(f => wf.includes('\n            ' + f + '\n')), 'автоподбор 10.81: файлы словаря и случаев есть в выборочной выгрузке сборки (иначе IvaPatchTest их не найдёт)');
-    assert.ok(/NEW_NAME: '10\.81'/.test(wf) && /NEW_CODE: '155'/.test(wf) && /TEST_NOTES: 'Тестовая сборка 10\.81: /.test(wf), 'версия 10.81 (155)');
   }
   // 10.80 (просьба владельца 15.10.2026): обновление без окон. Серое окно «Всё готово!» убрано; «Показать окно установки»
   // ничего не делало — в манифесте не было REQUEST_INSTALL_PACKAGES (системный установщик молча отменял установку).

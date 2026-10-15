@@ -124,4 +124,30 @@ ok(M.ivaSpecsClean({ src: 'Бензин' }, F) === null && M.ivaSpecsClean({}, F
 const T = D.fields['pp-welder'];
 ok(JSON.stringify(M.ivaSpecsClean({ pipe: '  20–63 ' }, T)) === '{"pipe":"20–63"}', 'строка — без пробелов по краям');
 
-console.log('✔ model-search: ' + pass + ' проверок, ' + nc + ' общих случаев, ' + D.models.length + ' моделей');
+// поля вида по порядку; загрузка справочника страницами по 1000, ошибки → null
+const allF = Object.keys(D.fields).reduce((acc, k) => acc.concat(D.fields[k].map((f, i) => Object.assign({ kind: k, sort: i + 1 }, f))), []);
+ok(M.ivaFieldsFor({ fields: allF.slice().reverse() }, 'rotary-sds-plus').map(f => f.key).join() === D.fields['rotary-sds-plus'].map(f => f.key).join()
+   && M.ivaFieldsFor({ fields: allF }, '').length === 0 && M.ivaFieldsFor(null, 'drill').length === 0, 'поля вида — по порядку sort');
+(async () => {
+  const calls = [];
+  const fake = async p => {
+    calls.push(p);
+    if (p.startsWith('/rest/v1/iva_brands')) return D.brands;
+    if (p.startsWith('/rest/v1/iva_spec_fields')) return allF;
+    const off = +p.match(/offset=(\d+)/)[1];
+    return D.models.slice(off, off + 1000);
+  };
+  const md = await M.ivaModelsLoad(fake, D.kinds);
+  const mp = calls.filter(c => c.startsWith('/rest/v1/iva_models'));
+  ok(md && md.models.length === D.models.length && mp.length === Math.ceil((D.models.length + 1) / 1000) && mp.every(c => /active=eq\.true&order=id\.asc&limit=1000&offset=\d+$/.test(c)),
+     'загрузка: модели страницами по 1000, только активные', mp.length + ' страниц');
+  ok(md && md.byId[D.models[5].id] === md.models[5] && M.ivaModelSearch('makita hr2470', md.index)[0].title === 'Перфоратор Makita HR2470', 'загрузка: индекс и модели по id');
+  const md2 = await M.ivaModelsLoad(async () => { throw new Error('нет сети'); }, D.kinds);
+  ok(md2 && md2.models.length === D.models.length, 'загрузка: копия на 30 минут — без повторных запросов');
+  ok(calls.filter(c => c.startsWith('/rest/v1/iva_models')).length === mp.length, 'загрузка: копия не запрашивает сервер снова');
+  delete require.cache[require.resolve(path.join(ROOT, 'assets/models.js'))];
+  const M2 = require(path.join(ROOT, 'assets/models.js'));
+  ok(await M2.ivaModelsLoad(async () => { throw new Error('нет таблицы'); }, D.kinds) === null, 'загрузка: нет таблиц — null (форма как раньше)');
+  ok(await M2.ivaModelsLoad(async p => p.includes('iva_models') ? [] : [], D.kinds) === null, 'загрузка: пустой справочник — null');
+  console.log('✔ model-search: ' + pass + ' проверок, ' + nc + ' общих случаев, ' + D.models.length + ' моделей');
+})().catch(e => { console.error('✘ ' + e.stack); process.exitCode = 1; });

@@ -83,6 +83,21 @@ select.inp{cursor:pointer;appearance:none;
   background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%239AA1B0' stroke-width='2'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
   background-repeat:no-repeat;background-position:right 10px center;background-size:16px;padding-right:34px}
 
+/* ---------- 10.82: подсказки моделей и бренды (справочник моделей) ---------- */
+.msug{display:none;margin-top:6px;background:var(--card);border:1px solid var(--line);border-radius:var(--r-s);overflow:hidden}
+.msug.on{display:block}
+.msug button{display:block;width:100%;text-align:left;background:none;border:0;border-bottom:1px solid var(--line);
+  color:var(--tx);font-size:14.5px;padding:11px 13px;cursor:pointer}
+.msug button:last-child{border-bottom:0}
+.msug button:hover{background:var(--or-soft);color:var(--or)}
+.mbrands{display:flex;gap:8px;overflow-x:auto;scrollbar-width:none;padding-bottom:2px}
+.mbrands::-webkit-scrollbar{display:none}
+.mbrands button{flex:0 0 auto;background:var(--field);border:1px solid var(--line);border-radius:20px;color:var(--gr);
+  font-size:13.5px;padding:8px 14px;cursor:pointer}
+.mbrands button.on{border-color:var(--or);background:var(--or-soft);color:var(--or);font-weight:600}
+.mspec{margin-top:10px}
+.mspec .mspec-l{display:block;font-size:12.5px;color:var(--gr);margin-bottom:5px}
+
 /* ---------- Шапка ---------- */
 .head{
   position:sticky;top:0;z-index:40;background:rgba(16,18,23,.96);

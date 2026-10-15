@@ -372,6 +372,8 @@ async function createTool(data){
     active:         (data.status || 'active') === 'active'
   };
   if (data.kind) row.kind = data.kind;   /* 10.81: вид — только если выбран (без вида столбец не нужен) */
+  if (data.model_id) row.model_id = data.model_id;   /* 10.82: модель из справочника — только если выбрана */
+  if (data.specs) row.specs = data.specs;            /* 10.82: характеристики — только если заполнены */
   const r = await api('/rest/v1/tools', 'POST', row, { Prefer: 'return=representation' });
   return (r && r[0]) || null;
 }

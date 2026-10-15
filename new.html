@@ -7,7 +7,7 @@
 <meta name="robots" content="noindex, nofollow">
 <meta name="theme-color" content="#101217">
 <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
-<link rel="stylesheet" href="assets/theme.css?v=20261005-rel">
+<link rel="stylesheet" href="assets/theme.css?v=20261017-models">
 <style>
 /* ---------- Шаги ---------- */
 .steps{display:flex;gap:6px;margin:18px 0 22px;flex-wrap:wrap}
@@ -96,8 +96,10 @@ textarea.inp{resize:vertical;min-height:110px;font-family:inherit;line-height:1.
 
 <script src="assets/data.js"></script>
 <script src="assets/geo.js?v=20260923-photon"></script>
-<script src="assets/sb.js?v=20261016-kind"></script>
+<script src="assets/sb.js?v=20261017-models"></script>
 <script src="assets/kind-guess.js?v=20261016-kind"></script>
+<script src="assets/models.js?v=20261017-models"></script>
+<script src="assets/model-form.js?v=20261017-models"></script>
 <script src="assets/app-release.js?v=20261009-rel"></script>
 <script src="assets/app.js?v=20261009-rel"></script>
 <script>
@@ -113,12 +115,14 @@ textarea.inp{resize:vertical;min-height:110px;font-family:inherit;line-height:1.
   let KINDS_DB = [];                       /* 10.81: виды (iva_kinds) со словами автоподбора; пусто — SQL не применён */
   let AUTO = { cat:'', sub:'', kind:'' };  /* что подставил автоподбор в прошлый раз — ручной выбор не трогаем */
   let autoTimer = 0;
+  let MD = null;                           /* 10.82: справочник моделей (assets/models.js); null — нет (SQL не применён) */
   let step = 1;
   const TOTAL = 5;
 
   /* Состояние формы */
   let F = {
     cat:'', sub:'', kind:'', imgs:[], name:'', descr:'', cond:'good',
+    model_id:null, specs:{}, specsAuto:{}, mbrand:'',
     price:'', deposit:'', terms:'', delivery:false, delivery_price:40, address:'', city:'', pickup_lat:null, pickup_lng:null
   };
 
@@ -182,17 +186,88 @@ textarea.inp{resize:vertical;min-height:110px;font-family:inherit;line-height:1.
     F.cat = p.cat; F.sub = p.sub; F.kind = p.kind;
     AUTO = { cat:p.cat, sub:p.sub, kind:p.kind };
     saveDraft();
-    const area = $('catArea');
-    if (area){ area.innerHTML = catHTML(); bad('fCat', false); }
+    if ($('catArea')){ paintCat(); bad('fCat', false); }
     livePreview();
+  }
+
+  /* 10.82: модель из справочника — только новое объявление и только когда справочник загрузился */
+  function mdOn(){ return !!MD && !EDIT_ID; }
+  function modelById(id){ return MD && id ? MD.byId[id] || null : null; }
+  function modelText(m){ return m ? m.brand + ' ' + m.model : ''; }
+  /* модель снимается, если вид другой или название уже не про неё; характеристики остаются */
+  function modelKeep(){
+    const m = modelById(F.model_id);
+    if (F.model_id && (!m || m.kind !== F.kind || !ivaModelStillFits(F.name, m))) F.model_id = null;
+  }
+  function chooseModel(m){
+    const k = KINDS_DB.find(function(x){ return x.key === m.kind; });
+    F.name = m.title;
+    if (k && CATS_DB.some(function(c){ return c.key === k.cat; })){
+      const subOk = SUBS_DB.some(function(x){ return x.cat === k.cat && x.key === k.sub; });
+      F.cat = k.cat; F.sub = subOk ? k.sub : ''; F.kind = subOk ? k.key : '';
+      AUTO = { cat:F.cat, sub:F.sub, kind:F.kind };   /* как автоподбор: новое название может сменить, ручной выбор — нет */
+    }
+    F.model_id = F.kind === m.kind ? m.id : null;
+    const r = ivaSpecsFill(F.specs, F.specsAuto, m.specs);
+    F.specs = r.values; F.specsAuto = r.auto;
+    saveDraft(); render();
+  }
+  function modelHTML(){
+    if (!mdOn() || !F.kind) return '';
+    modelKeep();
+    const brands = ivaModelBrands(MD.index, F.kind), fields = ivaFieldsFor(MD, F.kind);
+    if (F.mbrand && brands.indexOf(F.mbrand) < 0) F.mbrand = '';
+    const ex = brands.length ? ivaModelSearch('', MD.index, { kind:F.kind, limit:1 })[0] : null;
+    return (brands.length ?
+        '<div class="fld" id="fModel" style="margin:14px 0 0"><label>Модель ' +
+          '<span class="muted" style="font-weight:400">— необязательно, характеристики заполнятся сами</span></label>' +
+          '<div class="mbrands">' + brands.map(function(b){
+            return '<button type="button" data-mbrand="' + esc(b) + '"' + (F.mbrand === b ? ' class="on"' : '') + '>' + esc(b) + '</button>';
+          }).join('') + '</div>' +
+          '<input class="inp" id="iModel" style="margin-top:9px" autocomplete="off" maxlength="90" placeholder="' +
+            esc(ex ? 'Например: ' + modelText(ex) : 'Модель') + '" value="' + esc(modelText(modelById(F.model_id))) + '">' +
+          '<div class="msug" id="mSugModel"></div>' +
+        '</div>' : '') +
+      (fields.length ?
+        '<div class="fld" id="fSpecs" style="margin:14px 0 0"><label>Характеристики ' +
+          '<span class="muted" style="font-weight:400">— необязательно, можно поправить</span></label>' +
+          ivaSpecsHTML(fields, F.specs, function(t){ return '<span class="mspec-l">' + esc(t) + '</span>'; }) +
+        '</div>' : '');
+  }
+  function paintCat(){
+    const area = $('catArea');
+    if (!area) return;
+    area.innerHTML = catHTML();
+    bindModel();
+  }
+  function bindModel(){
+    const wh = $('iWhat'), ws = $('mSugWhat');
+    if (wh && ws && mdOn() && !wh.dataset.msug){
+      wh.dataset.msug = '1';
+      ivaSugAttach(wh, ws, function(q){ return ivaModelSearch(q, MD.index, { limit:6 }); },
+        function(m){ return m.title; }, chooseModel);
+    }
+    const im = $('iModel'), ms = $('mSugModel');
+    if (im && ms){
+      ivaSugAttach(im, ms, function(q){
+        const m = modelById(F.model_id);
+        if (m && q.trim() === modelText(m)) return [];
+        return ivaModelSearch(q, MD.index, { kind:F.kind, brand:F.mbrand, limit:20 });
+      }, modelText, chooseModel);
+      im.addEventListener('input', function(){
+        const m = modelById(F.model_id);
+        if (m && this.value.trim() !== modelText(m)){ F.model_id = null; saveDraft(); }
+      });
+    }
   }
 
   function body1(){
     return '<div class="box">' +
-      (canAuto() && !EDIT_ID ?
+      ((canAuto() || mdOn()) && !EDIT_ID ?
         '<div class="fld" id="fWhat">' +
           '<label>Что сдаёте <span class="muted" style="font-weight:400">— категория подберётся сама</span></label>' +
-          '<input class="inp" id="iWhat" maxlength="90" placeholder="Например: Перфоратор Makita HR2470" value="' + esc(F.name) + '">' +
+          '<input class="inp" id="iWhat" maxlength="90" autocomplete="off" placeholder="Например: Перфоратор Makita HR2470" value="' + esc(F.name) + '">' +
+          '<div class="msug" id="mSugWhat"></div>' +
           '<div class="hint">Это же название будет у объявления — его можно поправить на шаге «Описание».</div>' +
         '</div>' : '') +
       '<div id="catArea">' + catHTML() + '</div>' +
@@ -235,7 +310,8 @@ textarea.inp{resize:vertical;min-height:110px;font-family:inherit;line-height:1.
               return '<button type="button" data-kind="' + esc(k.key) + '"' +
                      (F.kind === k.key ? ' class="on"' : '') + '>' + esc(k.title) + '</button>';
             }).join('') +
-          '</div></div>' : '');
+          '</div></div>' : '') +
+      modelHTML();
   }
 
   function body2(){
@@ -352,6 +428,7 @@ textarea.inp{resize:vertical;min-height:110px;font-family:inherit;line-height:1.
       '<div class="box" style="margin-top:14px">' +
         '<div class="sum-row"><span>Категория</span><b>' + esc(catTitleDB(F.cat) || '—') + '</b></div>' +
         (F.kind && kindTitle(F.kind) ? '<div class="sum-row"><span>Вид</span><b>' + esc(kindTitle(F.kind)) + '</b></div>' : '') +
+        (mdOn() && modelById(F.model_id) ? '<div class="sum-row"><span>Модель</span><b>' + esc(modelText(modelById(F.model_id))) + '</b></div>' : '') +
         '<div class="sum-row"><span>Фото</span><b>' + (F.imgs.length || '—') + '</b></div>' +
         '<div class="sum-row"><span>Цена</span><b>' + (F.price ? rub(F.price) + '/сут' : '—') + '</b></div>' +
         '<div class="sum-row"><span>Залог</span><b>' + (F.price || F.deposit ? rub(dep) : '—') + '</b></div>' +
@@ -413,6 +490,14 @@ textarea.inp{resize:vertical;min-height:110px;font-family:inherit;line-height:1.
       const kd = e.target.closest('[data-kind]');
       if (kd){ F.kind = kd.getAttribute('data-kind'); saveDraft(); render(); return; }
 
+      const mb = e.target.closest('[data-mbrand]');
+      if (mb){
+        const b = mb.getAttribute('data-mbrand');
+        F.mbrand = F.mbrand === b ? '' : b; saveDraft(); paintCat();
+        const im = $('iModel'); if (im) im.focus();
+        return;
+      }
+
       const cd = e.target.closest('[data-cond]');
       if (cd){ F.cond = cd.getAttribute('data-cond'); saveDraft(); render(); return; }
 
@@ -434,8 +519,20 @@ textarea.inp{resize:vertical;min-height:110px;font-family:inherit;line-height:1.
     if (wh) wh.addEventListener('input', function(){
       F.name = this.value; saveDraft();
       clearTimeout(autoTimer);
-      autoTimer = setTimeout(function(){ try { autoKind(); } catch(e){} }, 300);
+      autoTimer = setTimeout(function(){
+        try { autoKind(); } catch(e){}
+        /* 10.82: название уже не про выбранную модель — модель снимается (поле «Модель» пустеет) */
+        const was = F.model_id; modelKeep();
+        if (was && !F.model_id){ saveDraft(); paintCat(); }
+      }, 300);
     });
+    /* 10.82: характеристики — правки руками (их подстановка модели не перезапишет) */
+    root.oninput = function(e){
+      const sp = e.target.closest && e.target.closest('[data-spec]');
+      if (sp){ F.specs[sp.getAttribute('data-spec')] = sp.value; saveDraft(); }
+    };
+    root.onchange = root.oninput;
+    bindModel();
 
     /* Поля шага 3 */
     const nm = $('iName');
@@ -624,6 +721,13 @@ textarea.inp{resize:vertical;min-height:110px;font-family:inherit;line-height:1.
       kindKeep();
       if (F.kind || EDIT_ID) payload.kind = F.kind || null;
     }
+    /* 10.82: модель и характеристики — новое объявление, справочник загружен, вид выбран */
+    if (mdOn() && payload.kind){
+      modelKeep();
+      if (F.model_id) payload.model_id = F.model_id;
+      const sp = ivaSpecsClean(F.specs, ivaFieldsFor(MD, payload.kind));
+      if (sp) payload.specs = sp;
+    }
 
     if (EDIT_ID){
       try {
@@ -650,7 +754,14 @@ textarea.inp{resize:vertical;min-height:110px;font-family:inherit;line-height:1.
     payload.status = verdict.status;
 
     try {
-      const t = await createTool(payload);
+      let t;
+      try { t = await createTool(payload); }
+      catch(e1){
+        /* 10.82: база не приняла модель или характеристики — объявление важнее, публикуем без них */
+        if (!payload.model_id && !payload.specs) throw e1;
+        delete payload.model_id; delete payload.specs;
+        t = await createTool(payload);
+      }
       dropDraft();
       const onMod = verdict.status === 'moderation';
       const reasons = verdict.failed.map(function(f){
@@ -701,6 +812,15 @@ textarea.inp{resize:vertical;min-height:110px;font-family:inherit;line-height:1.
       CATS_DB = CATS; SUBS_DB = SUBS;   /* запасной вариант — справочник из data.js */
     }
     try { KINDS_DB = await loadKinds(); } catch(e){ KINDS_DB = []; }
+    /* 10.82: справочник моделей — в фоне (форма не ждёт); пришёл — шаг 1 показывает подсказки, «Модель» и характеристики */
+    if (!EDIT_ID && typeof ivaModelsLoad === 'function'){
+      ivaModelsLoad(api, KINDS_DB).then(function(md){
+        if (!md) return;
+        MD = md;
+        if (step !== 1) return;
+        if (!$('iWhat')) render(); else paintCat();
+      }).catch(function(){});
+    }
 
     if (EDIT_ID){
       try {
