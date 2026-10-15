@@ -1294,6 +1294,45 @@ public class IvaPatchTest {
                 kf.resetAll();
                 eq("фильтр 10.79: вид копируется, включает отбор ленты, «Сбросить» его снимает", r1 + "," + kf.kind.isEmpty() + "," + kf.extraActive(), "drill,true,true,false");
             }
+            {
+                // 10.80: обновление без окон — скачать с процентами на кнопке и сразу установка
+                eq("обновление 10.80: надписи на кнопке по шагам",
+                    IvaNotifyPatch.updText(IvaNotifyPatch.UPD_IDLE, "10.80", -1) + "|" + IvaNotifyPatch.updText(IvaNotifyPatch.UPD_DL, "10.80", 45) + "|"
+                    + IvaNotifyPatch.updText(IvaNotifyPatch.UPD_DL, "10.80", -1) + "|" + IvaNotifyPatch.updText(IvaNotifyPatch.UPD_CHECK, "10.80", 100) + "|"
+                    + IvaNotifyPatch.updText(IvaNotifyPatch.UPD_INSTALL, "10.80", 100) + "|" + IvaNotifyPatch.updText(IvaNotifyPatch.UPD_READY, "10.80", 100) + "|"
+                    + IvaNotifyPatch.updText(IvaNotifyPatch.UPD_IDLE, "", -1),
+                    "Обновить до версии 10.80|Скачиваем версию 10.80 · 45%|Скачиваем версию 10.80…|Проверяем файл…|Открываем установку…|Установить версию 10.80|Обновить до версии");
+                eq("обновление 10.80: «Обновить до версии N» — как у штатной кнопки (openUpdate ищет версию в тексте)",
+                    IvaNotifyPatch.updText(IvaNotifyPatch.UPD_IDLE, "10.80", -1).contains("10.80") + "," + IvaNotifyPatch.updText(IvaNotifyPatch.UPD_DL, "10.80", 3).contains("10.80"), "true,true");
+                eq("обновление 10.80: проценты — по длине файла, без длины -1, не больше 100",
+                    IvaNotifyPatch.updPercent(0, 1000) + "," + IvaNotifyPatch.updPercent(455, 1000) + "," + IvaNotifyPatch.updPercent(1000, 1000) + ","
+                    + IvaNotifyPatch.updPercent(1500, 1000) + "," + IvaNotifyPatch.updPercent(10, -1) + "," + IvaNotifyPatch.updPercent(10, 0) + ","
+                    + IvaNotifyPatch.updPercent(1_337_455L, 1_337_455L), "0,45,100,100,-1,-1,100");
+                eq("обновление 10.80: заливка кнопки — во время загрузки по процентам, иначе полная",
+                    IvaNotifyPatch.updLevel(IvaNotifyPatch.UPD_DL, 0) + "," + IvaNotifyPatch.updLevel(IvaNotifyPatch.UPD_DL, 45) + "," + IvaNotifyPatch.updLevel(IvaNotifyPatch.UPD_DL, -1)
+                    + "," + IvaNotifyPatch.updLevel(IvaNotifyPatch.UPD_DL, 140) + "," + IvaNotifyPatch.updLevel(IvaNotifyPatch.UPD_IDLE, 45) + "," + IvaNotifyPatch.updLevel(IvaNotifyPatch.UPD_READY, 0),
+                    "0,4500,0,10000,10000,10000");
+                eq("обновление 10.80: файл — во внутреннем кэше, по номеру сборки", IvaNotifyPatch.updFileName(154), "iva-update-154.apk");
+                eq("обновление 10.80: удаляем только файлы уже установленных (и старый штатный), чужие файлы не трогаем",
+                    IvaNotifyPatch.staleUpdate("iva-update-153.apk", 154) + "," + IvaNotifyPatch.staleUpdate("iva-update-154.apk", 154) + ","
+                    + IvaNotifyPatch.staleUpdate("iva-update-155.apk", 154) + "," + IvaNotifyPatch.staleUpdate("iva-update-150.apk.part", 154) + ","
+                    + IvaNotifyPatch.staleUpdate("iva-update-155.apk.part", 154) + "," + IvaNotifyPatch.staleUpdate("iva-update.apk", 154) + ","
+                    + IvaNotifyPatch.staleUpdate("photo.jpg", 154) + "," + IvaNotifyPatch.staleUpdate("iva-update-153.apk", 0) + "," + IvaNotifyPatch.staleUpdate(null, 154) + ","
+                    + IvaNotifyPatch.staleUpdate("xiva-update-1.apk", 154), "true,true,false,true,false,true,false,false,false,false");
+                eq("обновление 10.80: ставим только наш пакет и только версию новее установленной",
+                    IvaNotifyPatch.apkFits("ru.prokatnvsk.app", 155, "ru.prokatnvsk.app", 154) + "," + IvaNotifyPatch.apkFits("ru.prokatnvsk.app", 154, "ru.prokatnvsk.app", 154) + ","
+                    + IvaNotifyPatch.apkFits("ru.prokatnvsk.app", 120, "ru.prokatnvsk.app", 154) + "," + IvaNotifyPatch.apkFits("com.evil.app", 999, "ru.prokatnvsk.app", 154) + ","
+                    + IvaNotifyPatch.apkFits(null, 999, "ru.prokatnvsk.app", 154) + "," + IvaNotifyPatch.apkFits("ru.prokatnvsk.app", 155, "ru.prokatnvsk.app", 0),
+                    "true,false,false,false,false,false");
+                eq("обновление 10.80: качаем только APK этого проекта",
+                    IvaNotifyPatch.download("https://evil.example/ProkatInstrumenta-10.80.apk", new java.io.File("/nonexistent/x.apk")) + "|"
+                    + IvaNotifyPatch.download("https://github.com/someone/else/raw/main/ProkatInstrumenta-10.80.apk", new java.io.File("/nonexistent/x.apk")),
+                    "чужая ссылка|чужая ссылка");
+                eq("обновление 10.80: короткий текст ошибки",
+                    IvaNotifyPatch.shortErr(new java.io.IOException("timeout")) + "|" + IvaNotifyPatch.shortErr(new java.net.UnknownHostException()) + "|"
+                    + IvaNotifyPatch.shortErr(new RuntimeException("   ")) + "|" + IvaNotifyPatch.shortErr(null) + "|" + IvaNotifyPatch.shortErr(new RuntimeException(new String(new char[200]).replace('\0', 'x'))).length(),
+                    "timeout|UnknownHostException|RuntimeException|неизвестная ошибка|80");
+            }
         }
         if (fail > 0) { System.out.println("ошибок: " + fail); System.exit(1); }
         System.out.println("все проверки IvaPatch пройдены");

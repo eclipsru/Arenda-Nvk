@@ -770,6 +770,54 @@ try {
       assert.ok(has(arsc14, str) || has(dex14, str), `APK 10.14: нет «${str}» — правка 10.67 не найдёт штатное поле`);
     assert.ok(/eq\("админ 10\.67: /.test(tp) && /eq\("подкатегория 10\.67: /.test(tp) && /eq\("кабинет 10\.67: /.test(tp), 'IvaPatchTest: проверки 10.67');
   }
+  // 10.80 (просьба владельца 15.10.2026): обновление без окон. Серое окно «Всё готово!» убрано; «Показать окно установки»
+  // ничего не делало — в манифесте не было REQUEST_INSTALL_PACKAGES (системный установщик молча отменял установку).
+  {
+    const np = R('android/patches/IvaNotifyPatch.java'), tp = R('android/patches/test/IvaPatchTest.java'), wf = R('.github/workflows/build-apk.yml');
+    const ai = R('android/patches/axml_install.py'), ap = R('android/patches/apply.py');
+    const fnx = (src, name) => { const mm = new RegExp(`static (?:final )?[\\w.<>, \\[\\]]+ ${name}\\(`).exec(src); assert.ok(mm, `нет ${name}`); return src.slice(mm.index, src.indexOf('\n    }\n', mm.index)); };
+    // 1. манифест: разрешение добавляется после push-приёмника и проверяется в готовом APK
+    assert.ok(ai.includes('INSTALL = "android.permission.REQUEST_INSTALL_PACKAGES"') && ai.includes('print("разрешение на установку обновления уже есть в манифесте")')
+      && ai.includes('body = body[:app_start] + perm + body[app_start:]'),
+      'обновление 10.80: axml_install.py — одно разрешение перед <application>, повторный запуск ничего не меняет');
+    assert.ok(wf.indexOf('python3 android/patches/axml_push.py "$W/AndroidManifest.xml"') < wf.indexOf('python3 android/patches/axml_install.py "$W/AndroidManifest.xml"')
+      && wf.includes(`grep -q "uses-permission: name='android.permission.REQUEST_INSTALL_PACKAGES'" || bad "в манифесте нет разрешения на установку обновления"`),
+      'обновление 10.80: разрешение — в сборке и в проверке готового APK');
+    assert.ok(!/SelfUpdate|install/i.test(ap), 'обновление 10.80: новых вставок в smali нет');
+    // 2. кнопка своя, вид как у штатной; штатные окна (ProgressDialog, «Всё готово!») не вызываются
+    const ub = fnx(np, 'updateButton');
+    assert.ok(ub.includes('b.setTag(UPDATE_BTN_TAG);') && ub.includes('b.setTextColor(0xFFFFFFFF);') && ub.includes('b.setTextSize(15);') && ub.includes('float r = dp(a, 12);')
+      && ub.includes('new ClipDrawable(fill, Gravity.LEFT, ClipDrawable.HORIZONTAL)') && np.includes('UPD_ORANGE = 0xFFFF8F1F')
+      && !/ProgressDialog|AlertDialog|showReadyDialog|onButtonTap|showButtonOnUi"/.test(np),
+      'обновление 10.80: кнопка как штатная (оранжевая, 15sp, радиус 12dp), прогресс — заливкой на кнопке; без серых окон');
+    const apr = fnx(np, 'applyRelease');
+    assert.ok(apr.includes('if (old != null && (!want || relShown != code || old != updBtn.get())) { box.removeView(old); old = null; }')
+      && apr.includes('boolean want = updateWanted(code, installedCode(a), apk);'),
+      'обновление 10.80: кнопка только при релизе новее установленного; штатная (если успела появиться) заменяется своей');
+    // 3. нажатие: скачать (если нет годного файла) → проверить → сразу установка; повторное нажатие во время работы — ничего
+    const tap = fnx(np, 'updateTap');
+    assert.ok(tap.includes('if (updState != UPD_IDLE && updState != UPD_READY) return;') && /if \(!apkReady\(app, f\)\) \{\n\s+err = download\(apk, f\);/.test(tap) && tap.includes('install(app, f);')
+      && tap.includes('new File(app.getCacheDir(), updFileName(code))'),
+      'обновление 10.80: нажали — скачиваем во внутренний кэш и сразу ставим; двойное нажатие не запускает вторую загрузку');
+    const ar = fnx(np, 'apkReady'), fits = fnx(np, 'apkFits');
+    assert.ok(ar.includes('getPackageArchiveInfo(f.getPath(), 0)') && ar.includes('apkFits(pi.packageName, pi.versionCode, c.getPackageName(), installedCode(c))')
+      && fits.includes('pkg.equals(wantPkg) && installed > 0 && ver > installed'),
+      'обновление 10.80: ставим только APK нашего приложения и только новее установленного');
+    const dl = fnx(np, 'download');
+    assert.ok(dl.includes('if (releaseApk(url).isEmpty() && !url.startsWith(APK_BASE)) return "чужая ссылка";') && dl.includes('if (code != 200) return "сервер ответил " + code;')
+      && dl.includes('if (done > UPD_MAX_BYTES) return "слишком большой файл";') && dl.includes('if (total > 0 && done != total) return "файл скачался не полностью";')
+      && dl.includes('if (!part.renameTo(f)) return "не удалось сохранить файл";') && dl.includes('if (part.exists()) part.delete();'),
+      'обновление 10.80: качаем только APK проекта, во временный файл, недокачанный не ставим');
+    const ins = fnx(np, 'install');
+    assert.ok(ins.includes('su.getDeclaredMethod("commitInstall", Context.class, File.class);\n            m.setAccessible(true);\n            m.invoke(null, app, f);') && ins.includes('canRequestPackageInstalls()')
+      && ins.includes('if (updState == UPD_INSTALL) { updState = UPD_READY;') && has(dex14, 'commitInstall') && has(dex14, 'Lru/prokatnvsk/app/SelfUpdate$StatusReceiver;'),
+      'обновление 10.80: установка — штатный commitInstall (ответ — штатный StatusReceiver); окно закрыли — «Установить версию N»');
+    assert.ok(fnx(np, 'releaseCheck').includes('cleanupUpdates(a.getApplicationContext());') && fnx(np, 'staleUpdate').includes('Integer.parseInt(m.group(1)) <= installed'),
+      'обновление 10.80: файлы уже установленных обновлений удаляются');
+    assert.ok(!/customer_profiles|passport|surname|AlarmManager|WorkManager|com\.google\.android\.gms/.test(np), 'обновление 10.80: без личных данных и сервисов Google');
+    assert.ok(/NEW_NAME: '10\.80'/.test(wf) && /NEW_CODE: '154'/.test(wf), 'версия 10.80 (154)');
+    assert.ok((tp.match(/eq\("обновление 10\.80: /g) || []).length >= 9, 'IvaPatchTest: проверки 10.80');
+  }
   // 10.79 (решение владельца 15.10.2026, №28): новое дерево категорий (15 категорий, «Другое» в каждой) — одним SQL; «Вид
   // инструмента» — в форме «Добавить инструмент» и в правке (необязательно) и в фильтре после «Подкатегории»
   {
@@ -845,7 +893,6 @@ try {
     assert.ok(/select \* from public\.iva_tree_plan\(\) order by old_cat, name;/.test(sql) && mv.includes('from public.iva_tree_plan() p') && mv.includes('ЗАПУСКАТЬ ТОЛЬКО ПОСЛЕ «да» владельца'),
       'SQL 10.79: просмотр переноса — в шаге 1, перенос — отдельный файл по тому же плану');
     assert.ok(chk.includes('"$PG_PY" tools/category-tree-stand.py'), 'check.sh: стенд дерева категорий');
-    assert.ok(/NEW_NAME: '10\.79'/.test(wf) && /NEW_CODE: '153'/.test(wf), 'версия 10.79 (153)');
     assert.ok((tp.match(/eq\("(вид|фильтр) 10\.79: /g) || []).length >= 17, 'IvaPatchTest: проверки 10.79');
   }
   // 10.78 (просьба владельца 14.10.2026): таймер «чч.мм.сс» (каждую секунду); раздел настроек «Срок аренды»; в кабинете и у админа
@@ -882,9 +929,9 @@ try {
       && rel.includes('return null;                                              // нет сети / сбой базы — не знаем'),
       'обновление 10.78: выпущенная версия — последняя строка app_releases (без входа, только номер и ссылка); строк нет — app-update.json');
     assert.ok(fnx(np, 'updateWanted').includes('return released > 0 && installed > 0 && released > installed && apk != null && !apk.isEmpty();')
-      && apr.includes('boolean want = updateWanted(code, installedCode(a), apk);') && apr.includes('if (old != null && (!want || relShown != code)) { box.removeView(old); old = null; }')
-      && apr.includes('su.getDeclaredMethod("showButtonOnUi", Activity.class, View.class, String.class, int.class, String.class);')
-      && apr.includes('m.invoke(null, a, anchor, apk, code, name.isEmpty() ? String.valueOf(code) : name);') && apr.includes('if (code <= 0) return;') && !/onButtonTap|downloadApk|commitInstall/.test(np) && has(dex14, 'showButtonOnUi'),
+      && apr.includes('boolean want = updateWanted(code, installedCode(a), apk);') && apr.includes('if (old != null && (!want || relShown != code')
+      && apr.includes('View b = updateButton(a, code, shown, apk);')   // 10.80: кнопка своя (вид как у штатной), см. блок 10.80
+      && apr.includes('if (code <= 0) return;') && !/onButtonTap|downloadApk|showReadyDialog/.test(np) && has(dex14, 'showButtonOnUi'),
       'обновление 10.78: штатная оранжевая кнопка над «О приложении»; релиз не новее установленного — кнопки нет; сами не качаем');
     const ra = fnx(np, 'releaseApk');
     assert.ok(ra.includes('if (u.matches("ProkatInstrumenta-[0-9]+\\\\.[0-9]+\\\\.apk")) return APK_BASE + u;') && ra.includes('!u.contains("..")')

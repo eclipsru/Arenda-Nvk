@@ -21,12 +21,17 @@ import android.app.PendingIntent;
 import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
+import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
 import android.content.res.ColorStateList;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
+import android.graphics.Typeface;
+import android.graphics.drawable.ClipDrawable;
 import android.graphics.drawable.ColorDrawable;
 import android.graphics.drawable.Drawable;
+import android.graphics.drawable.GradientDrawable;
+import android.graphics.drawable.LayerDrawable;
 import android.os.Build;
 import android.os.Handler;
 import android.os.Looper;
@@ -34,6 +39,7 @@ import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.ViewTreeObserver;
+import android.widget.Button;
 import android.widget.CompoundButton;
 import android.widget.FrameLayout;
 import android.widget.ImageView;
@@ -47,8 +53,11 @@ import org.json.JSONArray;
 import org.json.JSONObject;
 
 import java.io.ByteArrayOutputStream;
+import java.io.File;
+import java.io.FileOutputStream;
 import java.io.InputStream;
 import java.lang.ref.WeakReference;
+import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.net.HttpURLConnection;
 import java.net.URL;
@@ -1152,6 +1161,7 @@ public final class IvaNotifyPatch {
         relBusy = true;
         new Thread(new Runnable() {
             @Override public void run() {
+                cleanupUpdates(a.getApplicationContext());   // 10.80: файлы уже установленных обновлений
                 try {
                     JSONObject j = released();
                     if (j != null) {
@@ -1185,14 +1195,266 @@ public final class IvaNotifyPatch {
         if (code <= 0) return;                                            // ещё не знаем — ничего не трогаем
         boolean want = updateWanted(code, installedCode(a), apk);
         View old = box.findViewWithTag(UPDATE_BTN_TAG);
-        if (old != null && (!want || relShown != code)) { box.removeView(old); old = null; }
+        // 10.80: кнопка — своя (штатную SelfUpdate с серыми окнами — убираем, если она успела появиться)
+        if (old != null && (!want || relShown != code || old != updBtn.get())) { box.removeView(old); old = null; }
         if (!want || old != null) return;
+        Object ver = ((View) anchor).getParent();
+        int at = ver instanceof View ? box.indexOfChild((View) ver) : -1;
+        if (at < 0) return;
+        String shown = name.isEmpty() ? String.valueOf(code) : name;
+        View b = updateButton(a, code, shown, apk);
+        if (box instanceof LinearLayout) {
+            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2);
+            lp.topMargin = dp(a, 10);                                     // как у штатной кнопки
+            box.addView(b, at, lp);
+        } else {
+            box.addView(b, at);
+        }
+        updBtn = new WeakReference<View>(b);
+        relShown = code;
+        if (updCode != code && (updState == UPD_IDLE || updState == UPD_READY)) { updState = UPD_IDLE; updPct = -1; }
+        if (updCode == 0 || updState == UPD_IDLE) { updCode = code; updName = shown; }
+        updRender();
+    }
+
+    // ───────────────────────── 10.80: обновление без окон — нажали, скачали, сразу установка ─────────────────────────
+    // Просьба владельца 15.10.2026: серое окно «Всё готово!» не нужно, «Показать окно установки» ничего не делало.
+    // Причина: в манифесте не было REQUEST_INSTALL_PACKAGES — системный установщик молча отменял установку (добавляет
+    // android/patches/axml_install.py). Теперь кнопка своя (вид как у штатной: оранжевая, 15sp, белый жирный текст):
+    // нажали → на кнопке «Скачиваем версию N · 45%» с заливкой слева направо → проверка файла (наш пакет, версия новее
+    // установленной) → сразу системная установка (штатный SelfUpdate.commitInstall; ответ системы — штатный
+    // StatusReceiver, после установки приложение открывается само — штатный ReplacedReceiver). Окна закрыли — на
+    // кнопке «Установить версию N». Файл — во внутренней папке приложения (cache/iva-update-N.apk), в «Загрузках» и
+    // в файловом менеджере его нет; после установки старые файлы удаляются сами.
+    static final String UPD_FILE = "iva-update-", UPD_EXT = ".apk", UPD_PART = ".part";
+    static final long UPD_MIN_BYTES = 200_000L, UPD_MAX_BYTES = 100L * 1024 * 1024;
+    static final long UPD_RETRY_MS = 6000L;                // окно установки закрыли — через 6 с кнопка «Установить версию N»
+    static final int UPD_IDLE = 0, UPD_DL = 1, UPD_CHECK = 2, UPD_INSTALL = 3, UPD_READY = 4;
+    static final int UPD_ORANGE = 0xFFFF8F1F, UPD_TRACK = 0x59FF8F1F;   // фирменный оранжевый; дорожка — он же, прозрачнее
+    static volatile int updState = UPD_IDLE, updPct = -1, updCode;
+    static volatile String updName = "";
+    static volatile WeakReference<View> updBtn = new WeakReference<View>(null);
+
+    /** Текст на кнопке обновления по шагу. */
+    static String updText(int state, String name, int pct) {
+        String n = name == null || name.isEmpty() ? "" : " " + name;
+        switch (state) {
+            case UPD_DL: return "Скачиваем версию" + n + (pct >= 0 ? " · " + pct + "%" : "…");
+            case UPD_CHECK: return "Проверяем файл…";
+            case UPD_INSTALL: return "Открываем установку…";
+            case UPD_READY: return "Установить версию" + n;
+            default: return "Обновить до версии" + n;
+        }
+    }
+
+    /** Проценты загрузки: длина неизвестна — -1; не больше 100. */
+    static int updPercent(long done, long total) {
+        if (total <= 0 || done < 0) return -1;
+        return (int) Math.min(100L, done * 100L / total);
+    }
+
+    /** Заливка кнопки (0…10000): во время загрузки — проценты, иначе полная. */
+    static int updLevel(int state, int pct) { return state == UPD_DL ? Math.max(0, Math.min(100, pct)) * 100 : 10000; }
+
+    /** Имя файла обновления в кэше. */
+    static String updFileName(int code) { return UPD_FILE + code + UPD_EXT; }
+
+    /** Старый файл обновления (уже установлен или старее): iva-update-N.apk[.part] с N ≤ установленного, и iva-update.apk. */
+    static boolean staleUpdate(String file, int installed) {
+        if (file == null) return false;
+        if ("iva-update.apk".equals(file)) return true;
+        java.util.regex.Matcher m = java.util.regex.Pattern.compile("iva-update-([0-9]{1,9})\\.apk(\\.part)?").matcher(file);
+        return m.matches() && installed > 0 && Integer.parseInt(m.group(1)) <= installed;
+    }
+
+    /** Скачанный файл годится: наш пакет и версия новее установленной (подпись сверит сама система). */
+    static boolean apkFits(String pkg, int ver, String wantPkg, int installed) {
+        return pkg != null && wantPkg != null && pkg.equals(wantPkg) && installed > 0 && ver > installed;
+    }
+
+    static View updateButton(final Activity a, final int code, final String name, final String apk) {
+        Button b = new Button(a);
+        b.setTag(UPDATE_BTN_TAG);
+        b.setTextColor(0xFFFFFFFF);
+        b.setTypeface(Typeface.DEFAULT_BOLD);
+        b.setTextSize(15);
+        b.setAllCaps(false);
+        b.setText(updText(UPD_IDLE, name, -1));
+        float r = dp(a, 12);
+        GradientDrawable track = new GradientDrawable();
+        track.setColor(UPD_TRACK);
+        track.setCornerRadius(r);
+        GradientDrawable fill = new GradientDrawable();
+        fill.setColor(UPD_ORANGE);
+        fill.setCornerRadius(r);
+        LayerDrawable bg = new LayerDrawable(new Drawable[]{track, new ClipDrawable(fill, Gravity.LEFT, ClipDrawable.HORIZONTAL)});
+        bg.setLevel(10000);
+        b.setBackground(bg);
+        b.setPadding(dp(a, 14), dp(a, 12), dp(a, 14), dp(a, 12));
+        b.setOnClickListener(new View.OnClickListener() {
+            @Override public void onClick(View v) { try { updateTap(a, code, name, apk); } catch (Throwable ignore) {} }
+        });
+        return b;
+    }
+
+    /** Кнопка по текущему шагу: текст, заливка (во время загрузки — проценты), нажимается только «Обновить»/«Установить». */
+    static void updRender() {
+        View v = updBtn.get();
+        if (!(v instanceof TextView)) return;
+        int st = updState;
+        ((TextView) v).setText(updText(st, updName, updPct));
+        Drawable bg = v.getBackground();
+        if (bg != null) bg.setLevel(updLevel(st, updPct));
+        v.setEnabled(st == UPD_IDLE || st == UPD_READY);
+    }
+
+    static void updPost() {
+        new Handler(Looper.getMainLooper()).post(new Runnable() {
+            @Override public void run() { try { updRender(); } catch (Throwable ignore) {} }
+        });
+    }
+
+    static void updToast(final Context c, final String text) {
+        new Handler(Looper.getMainLooper()).post(new Runnable() {
+            @Override public void run() { try { Toast.makeText(c, text, Toast.LENGTH_LONG).show(); } catch (Throwable ignore) {} }
+        });
+    }
+
+    /** Нажали «Обновить до версии N» / «Установить версию N»: скачать (если ещё нет годного файла) и сразу ставить. */
+    static void updateTap(Activity a, final int code, final String name, final String apk) {
+        if (updState != UPD_IDLE && updState != UPD_READY) return;   // уже качаем / ставим
+        final Context app = a.getApplicationContext();
+        final File f = new File(app.getCacheDir(), updFileName(code));
+        updCode = code;
+        updName = name;
+        updState = UPD_DL;
+        updPct = 0;
+        updRender();
+        new Thread(new Runnable() {
+            @Override public void run() {
+                String err = null;
+                try {
+                    if (!apkReady(app, f)) {
+                        err = download(apk, f);
+                        if (err == null) {
+                            updState = UPD_CHECK;
+                            updPost();
+                            if (!apkReady(app, f)) { f.delete(); err = "файл не подходит"; }
+                        }
+                    }
+                } catch (Throwable e) {
+                    err = shortErr(e);
+                }
+                if (err != null) {
+                    updState = UPD_IDLE;
+                    updPct = -1;
+                    updPost();
+                    updToast(app, "Не удалось скачать обновление (" + err + "). Проверьте интернет и нажмите ещё раз");
+                    return;
+                }
+                install(app, f);
+            }
+        }).start();
+    }
+
+    /** Годный ли скачанный файл: размер в пределах, это APK нашего приложения и он новее установленного. */
+    static boolean apkReady(Context c, File f) {
         try {
-            Class<?> su = Class.forName(a.getPackageName() + ".SelfUpdate");
-            Method m = su.getDeclaredMethod("showButtonOnUi", Activity.class, View.class, String.class, int.class, String.class);
+            if (!f.isFile() || f.length() < UPD_MIN_BYTES || f.length() > UPD_MAX_BYTES) return false;
+            PackageInfo pi = c.getPackageManager().getPackageArchiveInfo(f.getPath(), 0);
+            return pi != null && apkFits(pi.packageName, pi.versionCode, c.getPackageName(), installedCode(c));
+        } catch (Throwable e) {
+            return false;
+        }
+    }
+
+    /** Скачать APK во временный файл и переименовать; прогресс — на кнопке. Ошибка — короткий текст, успех — null. */
+    static String download(String url, File f) {
+        if (releaseApk(url).isEmpty() && !url.startsWith(APK_BASE)) return "чужая ссылка";
+        File part = new File(f.getPath() + UPD_PART);
+        HttpURLConnection c = null;
+        InputStream in = null;
+        FileOutputStream out = null;
+        try {
+            c = (HttpURLConnection) new URL(url).openConnection();
+            c.setConnectTimeout(15000);
+            c.setReadTimeout(30000);
+            c.setInstanceFollowRedirects(true);
+            c.setRequestProperty("Cache-Control", "no-cache");
+            int code = c.getResponseCode();
+            if (code != 200) return "сервер ответил " + code;
+            long total = c.getContentLength();
+            if (total > UPD_MAX_BYTES) return "слишком большой файл";
+            in = c.getInputStream();
+            out = new FileOutputStream(part);
+            byte[] buf = new byte[32768];
+            long done = 0;
+            int n, shown = -2;
+            while ((n = in.read(buf)) >= 0) {
+                out.write(buf, 0, n);
+                done += n;
+                if (done > UPD_MAX_BYTES) return "слишком большой файл";
+                int p = updPercent(done, total);
+                if (p != shown) { shown = p; updPct = p; updPost(); }
+            }
+            out.getFD().sync();
+            out.close();
+            out = null;
+            if (total > 0 && done != total) return "файл скачался не полностью";
+            if (f.exists() && !f.delete()) return "не удалось заменить старый файл";
+            if (!part.renameTo(f)) return "не удалось сохранить файл";
+            return null;
+        } catch (Throwable e) {
+            return shortErr(e);
+        } finally {
+            try { if (out != null) out.close(); } catch (Throwable ignore) {}
+            try { if (in != null) in.close(); } catch (Throwable ignore) {}
+            try { if (c != null) c.disconnect(); } catch (Throwable ignore) {}
+            if (part.exists()) part.delete();
+        }
+    }
+
+    /** Сразу системная установка — штатным SelfUpdate.commitInstall (окно подтверждения откроет штатный StatusReceiver). */
+    static void install(Context app, File f) {
+        updState = UPD_INSTALL;
+        updPost();
+        try {
+            if (Build.VERSION.SDK_INT >= 26 && !app.getPackageManager().canRequestPackageInstalls())
+                updToast(app, "Android спросит разрешение на установку из «Ивы» — включите переключатель и нажмите «Назад»");
+        } catch (Throwable ignore) {}
+        try {
+            Class<?> su = Class.forName(app.getPackageName() + ".SelfUpdate");
+            Method m = su.getDeclaredMethod("commitInstall", Context.class, File.class);
             m.setAccessible(true);
-            m.invoke(null, a, anchor, apk, code, name.isEmpty() ? String.valueOf(code) : name);
-            relShown = code;
+            m.invoke(null, app, f);
+        } catch (Throwable e) {
+            Throwable c = e instanceof InvocationTargetException && e.getCause() != null ? e.getCause() : e;
+            updState = UPD_READY;
+            updPost();
+            updToast(app, "Не удалось начать установку (" + shortErr(c) + "). Нажмите «Установить» ещё раз");
+            return;
+        }
+        new Handler(Looper.getMainLooper()).postDelayed(new Runnable() {
+            @Override public void run() {
+                if (updState == UPD_INSTALL) { updState = UPD_READY; try { updRender(); } catch (Throwable ignore) {} }
+            }
+        }, UPD_RETRY_MS);
+    }
+
+    static String shortErr(Throwable e) {
+        String m = e == null ? null : e.getMessage();
+        if (m == null || m.trim().isEmpty()) m = e == null ? "" : e.getClass().getSimpleName();
+        m = m.trim();
+        return m.isEmpty() ? "неизвестная ошибка" : m.length() > 80 ? m.substring(0, 80) : m;
+    }
+
+    /** Удалить из кэша файлы уже установленных обновлений. */
+    static void cleanupUpdates(Context c) {
+        try {
+            File[] fs = c.getCacheDir().listFiles();
+            if (fs == null) return;
+            int installed = installedCode(c);
+            for (File x : fs) if (staleUpdate(x.getName(), installed)) x.delete();
         } catch (Throwable ignore) {}
     }
 
