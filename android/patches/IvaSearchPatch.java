@@ -443,14 +443,21 @@ public final class IvaSearchPatch {
         long from = -1, to = -1;
         boolean delivery = false;
         int conds = 0;
+        // 10.83: характеристики-выбор вида (ключ поля → значение); действуют, только пока выбран тот же вид (specKind)
+        LinkedHashMap<String, String> specs = new LinkedHashMap<String, String>();
+        String specKind = "";
 
         Filter copy() {
             Filter f = new Filter();
             f.cat = cat; f.sub = sub; f.kind = kind; f.from = from; f.to = to; f.delivery = delivery; f.conds = conds;
+            f.specs = new LinkedHashMap<String, String>(specs); f.specKind = specKind;
             return f;
         }
-        boolean extraActive() { return from >= 0 || to >= 0 || delivery || conds != 0 || !kind.isEmpty(); }
-        void resetAll() { cat = ""; sub = ""; kind = ""; from = -1; to = -1; delivery = false; conds = 0; }
+        /** Сколько характеристик действует (вид сменили или сняли — ни одной). */
+        int specCount() { return kind.isEmpty() || !kind.equals(specKind) ? 0 : specs.size(); }
+        boolean extraActive() { return from >= 0 || to >= 0 || delivery || conds != 0 || !kind.isEmpty() || specCount() > 0; }
+        void resetAll() { cat = ""; sub = ""; kind = ""; from = -1; to = -1; delivery = false; conds = 0; specs.clear(); specKind = ""; }
+        void setSpecsFrom(Filter o) { specs = new LinkedHashMap<String, String>(o.specs); specKind = o.specKind; }
     }
 
     static String selCity = "";                 // выбранный город поиска ("" + chosen — «Все города»)
@@ -826,7 +833,8 @@ public final class IvaSearchPatch {
 
     static boolean extraMatch(JSONObject j, String city, Filter f) {
         return extraMatch(toolCityOf(j), j.optDouble("price", 0), j.optBoolean("delivery", false), condOf(j),
-            city, f.from, f.to, f.delivery, f.conds) && kindMatch(js(j, "kind"), f.kind);
+            city, f.from, f.to, f.delivery, f.conds) && kindMatch(js(j, "kind"), f.kind)
+            && (f.specCount() == 0 || IvaModelPatch.specsMatch(IvaModelPatch.toolSpecs(j), f.specs));   // 10.83
     }
 
     static String str(Object o) { return o instanceof String ? (String) o : ""; }
@@ -849,6 +857,7 @@ public final class IvaSearchPatch {
     /** Город и фильтры → поле tools → штатный renderFeed (он добавит поиск, категорию и подкатегорию). */
     static void applySearch(Activity a) {
         applied.kind = kindFor(a, applied.kind);        // 10.79: категорию сменили — вид из другой подкатегории снимается
+        if (applied.specCount() == 0) { applied.specs.clear(); applied.specKind = ""; }   // 10.83: вид сменили — характеристики снимаются
         ArrayList full = allTools(a);
         String city = cityChosen ? selCity : "";
         if (!anyActive()) {
@@ -1143,7 +1152,7 @@ public final class IvaSearchPatch {
         TextView b = filterButton;
         if (b == null) return;
         Filter f = current(a);
-        int n = activeCount(f.cat, f.sub, f.kind, f.from, f.to, f.delivery, f.conds);
+        int n = activeCount(f.cat, f.sub, f.kind, f.from, f.to, f.delivery, f.conds) + f.specCount();
         b.setText(filterButtonText(n));
         b.setTextColor(n > 0 ? color(a, "orange", 0xffff8f1f) : color(a, "text", 0xfff2f4f8));
         b.setContentDescription(n > 0 ? "Фильтры, выбрано условий: " + n + ". Открыть" : "Открыть фильтры");
@@ -1461,6 +1470,9 @@ public final class IvaSearchPatch {
             if (hasSub) addChip(a, box, subTitle(a, f.cat, f.sub), new ChipAction() { @Override public void remove() { f.sub = ""; f.kind = ""; } }, changed, plain);
             String kt = hasSub ? IvaKindPatch.titleOf(IvaKindPatch.list(), f.kind) : "";
             if (!kt.isEmpty()) addChip(a, box, kt, new ChipAction() { @Override public void remove() { f.kind = ""; } }, changed, plain);
+            if (!kt.isEmpty() && f.specCount() > 0) for (final String sk : new ArrayList<String>(f.specs.keySet()))   // 10.83
+                addChip(a, box, IvaModelPatch.chipText(IvaModelPatch.fields, f.kind, sk, f.specs.get(sk)),
+                    new ChipAction() { @Override public void remove() { f.specs.remove(sk); } }, changed, plain);
         }
         if (f.from >= 0 || f.to >= 0)
             addChip(a, box, priceChip(f.from, f.to), new ChipAction() { @Override public void remove() { f.from = -1; f.to = -1; } }, changed, plain);
@@ -1502,6 +1514,7 @@ public final class IvaSearchPatch {
                     if (!cat0.equals(f.cat) || !sub0.equals(f.sub)) setNativeCat(a, f.cat, f.sub);
                     applied.from = f.from; applied.to = f.to; applied.delivery = f.delivery; applied.conds = f.conds;
                     applied.kind = f.kind;
+                    applied.setSpecsFrom(f);
                     applySearch(a);
                 }
             });
@@ -1786,6 +1799,7 @@ public final class IvaSearchPatch {
 
     // ── Содержимое панели ──
     static Flow catBox, subBox, kindBox, condBox;
+    static LinearLayout specBox;                 // 10.83: характеристики-выбор выбранного вида
     static LinearLayout panelChips;              // 10.48: ряд выбранных условий в шапке шторки
     static HorizontalScrollView panelChipsScroll;
     static TextView subTitleView, kindTitleView, condTitleView, condNote, priceHint, cityLine, showBtn, resetBtn;
@@ -1911,6 +1925,9 @@ public final class IvaSearchPatch {
         body.addView(kindTitleView);
         kindBox = new Flow(a, dp(a, 6));
         body.addView(kindBox, new LinearLayout.LayoutParams(-1, -2));
+        specBox = new LinearLayout(a);                          // 10.83: «Питание», … — плашками, когда выбран вид
+        specBox.setOrientation(LinearLayout.VERTICAL);
+        body.addView(specBox, new LinearLayout.LayoutParams(-1, -2));
 
         body.addView(sectionTitle(a, "Цена за сутки, \u20bd"));
         LinearLayout prices = new LinearLayout(a);
@@ -2176,6 +2193,7 @@ public final class IvaSearchPatch {
             boolean hasKinds = kindBox.getChildCount() > 0;
             kindTitleView.setVisibility(hasKinds ? View.VISIBLE : View.GONE);
             kindBox.setVisibility(hasKinds ? View.VISIBLE : View.GONE);
+            paintSpecFilter(a, city, query);                       // 10.83
 
             // Подсказка цены и числа по доставке/состоянию — по выдаче при остальных условиях
             long min = -1, max = -1;
@@ -2231,6 +2249,44 @@ public final class IvaSearchPatch {
         } catch (Throwable ignore) {}
     }
 
+    /** 10.83: характеристики-выбор выбранного вида. Значения — только те, что есть у подходящих объявлений (при остальных
+     *  условиях, без выбора в этой же характеристике); выбранное видно и при нуле. Повторное нажатие снимает. */
+    static void paintSpecFilter(final Activity a, String city, String query) {
+        if (specBox == null) return;
+        specBox.removeAllViews();
+        if (!draft.kind.equals(draft.specKind)) { draft.specs.clear(); draft.specKind = draft.kind; }
+        if (draft.kind.isEmpty()) { specBox.setVisibility(View.GONE); return; }
+        if (IvaModelPatch.fields == null) IvaModelPatch.ensureFields(a);
+        for (final IvaModelPatch.Field fl : IvaModelPatch.choiceFields(IvaModelPatch.fields, draft.kind)) {
+            Filter other = draft.copy();
+            other.specs.remove(fl.key);
+            LinkedHashMap<String, Integer> cnt = new LinkedHashMap<String, Integer>();
+            for (Object o : allTools(a)) {
+                if (!(o instanceof JSONObject)) continue;
+                JSONObject j = (JSONObject) o;
+                if (!nativeMatch(j, "cat", draft.cat, draft.sub, query) || !extraMatch(j, city, other)) continue;
+                String v = IvaModelPatch.g(IvaModelPatch.toolSpecs(j), fl.key).trim();
+                if (!v.isEmpty()) cnt.put(v, (cnt.containsKey(v) ? cnt.get(v) : 0) + 1);
+            }
+            final String sel = draft.specs.containsKey(fl.key) ? draft.specs.get(fl.key) : "";
+            List<String> vals = facetVisible(java.util.Arrays.asList(fl.options), cnt, sel);
+            if (vals.isEmpty()) continue;
+            specBox.addView(sectionTitle(a, fl.title));
+            Flow box = new Flow(a, dp(a, 6));
+            specBox.addView(box, new LinearLayout.LayoutParams(-1, -2));
+            for (final String v : vals) {
+                Integer n = cnt.get(v);
+                addOption(a, box, v + " \u00b7 " + (n == null ? 0 : n), v.equals(sel), new Runnable() {
+                    @Override public void run() {
+                        if (v.equals(draft.specs.get(fl.key))) draft.specs.remove(fl.key); else draft.specs.put(fl.key, v);
+                        draft.specKind = draft.kind;
+                    }
+                });
+            }
+        }
+        specBox.setVisibility(specBox.getChildCount() > 0 ? View.VISIBLE : View.GONE);
+    }
+
     static void addOption(final Activity a, Flow box, String text, boolean on, final Runnable select) {
         TextView c = chip(a, text, on, false);
         if (on) c.setContentDescription(text + ", выбрано");
@@ -2252,6 +2308,7 @@ public final class IvaSearchPatch {
         if (!cur.cat.equals(d.cat) || !cur.sub.equals(d.sub)) setNativeCat(a, d.cat, d.sub);
         applied.from = d.from; applied.to = d.to; applied.delivery = d.delivery; applied.conds = d.conds;
         applied.kind = d.kind;
+        applied.setSpecsFrom(d);
         applySearch(a);
         closePanel(a, true);
         try {   // к началу ленты, чтобы сразу было видно результат

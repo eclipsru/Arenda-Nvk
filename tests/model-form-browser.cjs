@@ -319,11 +319,64 @@ async function runCabinet(mode) {
   await browser.close();
 }
 
+/* 10.83: карточка tool.html — «Вид» и характеристики после «Состояния».
+   mode: 'full' — kind и specs; 'nocol' — столбца specs нет (только вид); 'none' — у объявления нет вида (как раньше). */
+async function runTool(mode) {
+  const browser = await chromium.launch();
+  const context = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+  const TID = '11111111-2222-3333-4444-555555555555';
+  const calls = [];
+  const F = DIR.fields.filter(f => f.kind === 'rotary-sds-plus');
+  await context.route('https://*.supabase.co/**', async route => {
+    const r = route.request(), u = new URL(r.url()), sel = u.searchParams.get('select') || '';
+    let data = [];
+    if (u.pathname.endsWith('/tools')) {
+      if (sel === 'kind,specs' || sel === 'kind') {
+        calls.push(sel);
+        if (mode === 'nocol' && sel === 'kind,specs') return route.fulfill({ status: 400, json: { code: '42703', message: 'column tools.specs does not exist' } });
+        data = mode === 'none' ? [{ kind: null }] : [Object.assign({ kind: 'rotary-sds-plus' }, sel === 'kind' ? {} : { specs: { src: 'Сеть 220 В', power: 780, energy: 2.4, zzz: 1 } })];
+      } else data = [{ id: TID, name: 'Перфоратор Makita HR2470', cat: 'power', sub: 'hammers', descr: 'Проверка', price: 900, deposit: 3000,
+        imgs: [], img: '', delivery: false, delivery_price: 0, terms: '', pickup_city: 'Новочеркасск', pickup_address: '', owner_email: 'owner@example.invalid',
+        status: 'active', active: true, rating: 0, reviews_count: 0, created_at: '2026-10-10T10:00:00Z' }];
+    } else if (u.pathname.endsWith('/cats')) data = CATS;
+    else if (u.pathname.endsWith('/subcats')) data = SUBS;
+    else if (u.pathname.endsWith('/iva_kinds')) { calls.push('kinds'); data = [{ title: 'Перфоратор SDS-plus' }]; }
+    else if (u.pathname.endsWith('/iva_spec_fields')) { calls.push('fields:' + u.searchParams.get('kind')); data = F; }
+    await route.fulfill({ json: data });
+  });
+  const page = await context.newPage();
+  const errors = [];
+  page.on('pageerror', e => errors.push(e.message));
+  await page.goto(BASE + '/tool.html?id=' + TID);
+  await page.waitForSelector('#specCond', { timeout: 15000 });
+  if (mode === 'none') {
+    await page.waitForTimeout(1500);
+    assert.equal(await page.locator('[data-tspec]').count(), 0, 'карточка без вида — как раньше');
+  } else {
+    await page.waitForSelector('[data-tspec]', { timeout: 8000 });
+    const rows = await page.$$eval('dl.specs .spec', els => els.map(e => e.querySelector('dt').textContent + '=' + e.querySelector('dd').textContent));
+    const i = rows.findIndex(x => x.startsWith('Состояние='));
+    const want = mode === 'full'
+      ? ['Вид=Перфоратор SDS-plus', 'Питание=Сеть 220 В', 'Мощность=780\u00a0Вт', 'Энергия удара=2,4\u00a0Дж']
+      : ['Вид=Перфоратор SDS-plus'];
+    assert.deepEqual(rows.slice(i + 1, i + 1 + want.length), want, 'карточка ' + mode + ': вид и характеристики после «Состояния»: ' + rows.join(' | '));
+    assert.equal(await page.locator('[data-tspec]').count(), want.length, 'карточка ' + mode + ': добавлены только эти строки');
+    assert.ok(rows[0].startsWith('Категория=') && rows.some(x => x.startsWith('Минимальный срок=')), 'карточка ' + mode + ': прежние строки на месте');
+    assert.ok(mode === 'full' ? calls.includes('fields:eq.rotary-sds-plus') : !calls.some(c => c.startsWith('fields')), 'карточка ' + mode + ': подписи — только когда есть характеристики');
+    if (process.env.SHOT && mode === 'full') await page.screenshot({ path: process.env.SHOT + '/tool-1.png', fullPage: true });
+  }
+  assert.equal(errors.length, 0, 'карточка: ошибки страницы: ' + errors.join('; '));
+  await browser.close();
+}
+
 (async () => {
+  await runTool('full');
+  await runTool('nocol');
+  await runTool('none');
   await runNew('full');
   await runNew('nodir');
   await runNew('reject');
   await runCabinet('full');
   await runCabinet('reject');
-  console.log('PASS: справочник моделей на сайте — подсказки, «Модель», характеристики, запись; без справочника и при отказе базы — как раньше; кабинет.');
+  console.log('PASS: справочник моделей на сайте — карточка (вид и характеристики), подсказки, «Модель», характеристики, запись; без справочника и при отказе базы — как раньше; кабинет.');
 })().catch(e => { console.error(e); process.exit(1); });

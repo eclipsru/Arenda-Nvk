@@ -149,5 +149,30 @@ ok(M.ivaFieldsFor({ fields: allF.slice().reverse() }, 'rotary-sds-plus').map(f =
   const M2 = require(path.join(ROOT, 'assets/models.js'));
   ok(await M2.ivaModelsLoad(async () => { throw new Error('нет таблицы'); }, D.kinds) === null, 'загрузка: нет таблиц — null (форма как раньше)');
   ok(await M2.ivaModelsLoad(async p => p.includes('iva_models') ? [] : [], D.kinds) === null, 'загрузка: пустой справочник — null');
+  // 10.83: характеристики в карточке — те же ожидания, что в IvaPatchTest
+  const NB = '\u00a0';
+  const rowsT = M.ivaSpecRows({ weight: '', energy: 2.4, zzz: '1', power: 780, src: 'Сеть 220 В' }, D.fields['rotary-sds-plus']).map(x => x[0] + '=' + x[1]).join('|') + '|';
+  ok(rowsT === 'Питание=Сеть 220 В|Мощность=780' + NB + 'Вт|Энергия удара=2,4' + NB + 'Дж|', 'карточка: строки по порядку полей, число с запятой и единицей', rowsT);
+  ok(M.ivaSpecRows({ power: 1 }, null).length === 0 && M.ivaSpecRows(null, F).length === 0, 'карточка: нет подписей или характеристик — строк нет');
+  ok(M.ivaSpecsMatch({ src: 'Бензин', bar: 40 }, {}) && M.ivaSpecsMatch({ src: 'Бензин' }, null) && M.ivaSpecsMatch({ src: 'Бензин' }, { src: 'Бензин' })
+     && !M.ivaSpecsMatch({}, { src: 'Бензин' }) && !M.ivaSpecsMatch(null, { src: 'Бензин' }) && !M.ivaSpecsMatch({ src: 'Бензин' }, { src: 'Аккумулятор' }),
+     'фильтр: совпадение — все выбранные значения; без значения — не подходит');
+  const tCalls = [];
+  const tFake = async p => {
+    tCalls.push(p);
+    if (p.startsWith('/rest/v1/tools')) return [{ kind: 'rotary-sds-plus', specs: { src: 'Сеть 220 В', power: 780, energy: 2.4 } }];
+    if (p.startsWith('/rest/v1/iva_kinds')) return [{ title: 'Перфоратор SDS-plus' }];
+    if (p.startsWith('/rest/v1/iva_spec_fields')) return F.map((f, i) => Object.assign({ sort: i + 1 }, f)).reverse();
+    return [];
+  };
+  const ts = await M.ivaToolSpecs(tFake, 'abc-1');
+  ok(ts && ts.rows.map(x => x[0] + '=' + x[1]).join('|') === 'Вид=Перфоратор SDS-plus|Питание=Сеть 220 В|Мощность=780' + NB + 'Вт|Энергия удара=2,4' + NB + 'Дж'
+     && tCalls[0] === '/rest/v1/tools?id=eq.abc-1&select=kind,specs' && /iva_spec_fields\?.*&kind=eq\.rotary-sds-plus$/.test(tCalls[2] || ''),
+     'карточка сайта: вид и характеристики объявления', JSON.stringify(ts));
+  const ts2 = await M.ivaToolSpecs(async p => { if (p.includes('kind,specs')) throw new Error('нет столбца'); if (p.startsWith('/rest/v1/tools')) return [{ kind: 'chainsaw' }];
+    if (p.startsWith('/rest/v1/iva_kinds')) return [{ title: 'Цепная пила' }]; throw new Error('лишний запрос ' + p); }, 'x');
+  ok(ts2 && ts2.rows.length === 1 && ts2.rows[0][1] === 'Цепная пила', 'карточка сайта: нет столбца specs — только вид', JSON.stringify(ts2));
+  ok(await M.ivaToolSpecs(async () => [{ kind: null }], 'x') === null && await M.ivaToolSpecs(async () => { throw new Error('x'); }, 'x') === null
+     && await M.ivaToolSpecs(async () => [], 'x') === null && await M.ivaToolSpecs(async () => [], '') === null, 'карточка сайта: без вида или при ошибке — null (как раньше)');
   console.log('✔ model-search: ' + pass + ' проверок, ' + nc + ' общих случаев, ' + D.models.length + ' моделей');
 })().catch(e => { console.error('✘ ' + e.stack); process.exitCode = 1; });

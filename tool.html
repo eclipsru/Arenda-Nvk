@@ -41,6 +41,7 @@
 <script src="assets/data.js"></script>
 <script src="assets/geo.js?v=20260923-photon"></script>
 <script src="assets/sb.js?v=20260924-order-fee"></script>
+<script src="assets/models.js?v=20261018-specs"></script>
 <script src="assets/app-release.js?v=20261009-rel"></script>
 <script src="assets/app.js?v=20261009-rel"></script>
 <script>
@@ -88,7 +89,7 @@
   var specRows = '';
   specRows += '<div class="spec"><dt>Категория</dt><dd>' + esc(catTitle(ad.cat)) +
               (ad.sub ? ' · ' + esc(subTitle(ad.sub)) : '') + '</dd></div>';
-  specRows += '<div class="spec"><dt>Состояние</dt><dd>' + esc(condTitle(ad.cond)) + '</dd></div>';
+  specRows += '<div class="spec" id="specCond"><dt>Состояние</dt><dd>' + esc(condTitle(ad.cond)) + '</dd></div>';
   Object.keys(ad.specs).forEach(function(k){
     specRows += '<div class="spec"><dt>' + esc(k) + '</dt><dd>' + esc(ad.specs[k]) + '</dd></div>';
   });
@@ -236,6 +237,20 @@
         '<a href="catalog.html?cat=' + ad.cat + '">Все в категории →</a></div>' +
       '<div class="grid">' + similar.map(adCard).join('') + '</div>' +
     '</section>' : '');
+
+  /* 10.83: «Вид» и характеристики объявления (tools.kind / tools.specs) — после «Состояния». Нет данных или SQL
+     не применён — блок как раньше. */
+  (async function paintToolSpecs(){
+    try {
+      if (typeof ivaToolSpecs !== 'function') return;
+      const r = await ivaToolSpecs(api, ad.id);
+      const at = $('specCond');
+      if (!r || !r.rows.length || !at || document.querySelector('[data-tspec]')) return;
+      at.insertAdjacentHTML('afterend', r.rows.map(function(x){
+        return '<div class="spec" data-tspec><dt>' + esc(x[0]) + '</dt><dd>' + esc(x[1]) + '</dd></div>';
+      }).join(''));
+    } catch(e){}
+  })();
 
   /* Карточка сама показывает ориентировочный тариф при открытии. Адрес
      клиента не выводится — он используется только локально для расчёта. */

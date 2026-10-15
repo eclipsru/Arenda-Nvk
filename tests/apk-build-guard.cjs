@@ -252,8 +252,8 @@ try {
     assert.ok(js45.includes('chipsScroll.setHorizontalScrollBarEnabled(false);') && js45.includes('chips.setOrientation(LinearLayout.HORIZONTAL);')
       && js45.includes('chips.setTag(CHIPS_TAG);') && !/chip\(a, "Фильтры"/.test(js45),
       'IvaSearchPatch: ряд условий под поиском — один ряд без полосы прокрутки, без кнопки «Фильтры»');
-    // ряд под поиском — оранжевые «пузыри» (как было), не текст
-    assert.ok(/addActiveChips\(a, box, f, new Runnable\(\) \{[\s\S]{0,400}?\n            \}\);/.test(js45.slice(js45.indexOf('static void refreshChips('))),
+    // ряд под поиском — оранжевые «пузыри» (как было), не текст (10.83: окно 400 → 460 — добавлена строка характеристик)
+    assert.ok(/addActiveChips\(a, box, f, new Runnable\(\) \{[\s\S]{0,460}?\n            \}\);/.test(js45.slice(js45.indexOf('static void refreshChips('))),
       'IvaSearchPatch.refreshChips: ряд под поиском — оранжевые «пузыри»');
   }
   // 10.54: чат по инструментам — новый файл компилируется и в сборке, и в проверке; вход только через IvaPatch.onTab
@@ -770,6 +770,48 @@ try {
       assert.ok(has(arsc14, str) || has(dex14, str), `APK 10.14: нет «${str}» — правка 10.67 не найдёт штатное поле`);
     assert.ok(/eq\("админ 10\.67: /.test(tp) && /eq\("подкатегория 10\.67: /.test(tp) && /eq\("кабинет 10\.67: /.test(tp), 'IvaPatchTest: проверки 10.67');
   }
+  // 10.83 (этап 3 справочника моделей, решение владельца 15.10.2026, №30): характеристики в карточке (приложение — над
+  // отзывами, сайт — tool.html после «Состояния») и фильтр по характеристикам-выбору вида в шторке приложения.
+  {
+    const mp = R('android/patches/IvaModelPatch.java'), sp = R('android/patches/IvaSearchPatch.java'), tp = R('android/patches/test/IvaPatchTest.java');
+    const wf = R('.github/workflows/build-apk.yml'), ap = R('android/patches/apply.py'), md = R('assets/models.js'), th = R('tool.html');
+    const bt = R('tests/model-form-browser.cjs'), jt = R('tests/model-search.cjs');
+    const fnx = (src, name) => { const mm = new RegExp(`static (?:final )?[\\w.<>, \\[\\]]+ ${name}\\(`).exec(src); assert.ok(mm, `нет ${name}`); return src.slice(mm.index, src.indexOf('\n    }\n', mm.index)); };
+    // 1. карточка приложения: из onTab("detail") через IvaKindPatch (новых вставок в smali нет), блок перед отзывами
+    const od = fnx(mp, 'onDetail');
+    assert.ok(mp.includes('if ("detail".equals(tab)) { try { onDetail(a); } catch (Throwable ignore) {} }')
+      && od.includes('box.findViewWithTag(IvaReviewPatch.DET_BLOCK_TAG)') && od.includes('box.indexOfChild(rv) : box.getChildCount()')
+      && od.includes('if (rows.isEmpty()) { if (old != null) old.setVisibility(View.GONE); return; }') && od.includes('Boolean.TRUE.equals(IvaClientPatch.get(a, "detIsSrv"))')
+      && !/apiCall/.test(od) && !/IvaModelPatch|model/i.test(ap),
+      'характеристики 10.83: карточка приложения — блок над отзывами, без своих запросов, без вставок в smali');
+    // 2. у клиента — только подписи полей, в фоне, с паузой после ошибки
+    const ef = fnx(mp, 'ensureFields');
+    assert.ok(ef.includes('if (fields != null || fieldsLoading || loading) return;') && ef.includes('if (now - fieldsTriedAt < RETRY_MS) return;')
+      && ef.includes('IvaClientPatch.apiCall(a, FIELDS_PATH, "GET", null, false)') && ef.includes('new Thread(') && !ef.includes('modelsPath'),
+      'характеристики 10.83: клиенту — только подписи полей, без моделей, в фоне');
+    // 3. фильтр: характеристики живут только с тем же видом; совпадение — в общем extraMatch; применяются вместе с остальным
+    assert.ok(sp.includes('int specCount() { return kind.isEmpty() || !kind.equals(specKind) ? 0 : specs.size(); }')
+      && sp.includes('f.specs = new LinkedHashMap<String, String>(specs); f.specKind = specKind;')
+      && sp.includes('&& (f.specCount() == 0 || IvaModelPatch.specsMatch(IvaModelPatch.toolSpecs(j), f.specs));')
+      && (sp.match(/applied\.setSpecsFrom\((f|d)\);/g) || []).length === 2 && sp.includes('activeCount(f.cat, f.sub, f.kind, f.from, f.to, f.delivery, f.conds) + f.specCount();')
+      && sp.includes('conds = 0; specs.clear(); specKind = ""; }'),
+      'характеристики 10.83: фильтр — только с тем же видом, в общем совпадении, считается в «Фильтр · N», сбрасывается');
+    const pf = fnx(sp, 'paintSpecFilter');
+    assert.ok(pf.includes('IvaModelPatch.choiceFields(IvaModelPatch.fields, draft.kind)') && pf.includes('other.specs.remove(fl.key);')
+      && pf.includes('facetVisible(java.util.Arrays.asList(fl.options), cnt, sel)') && sp.includes('paintSpecFilter(a, city, query);'),
+      'характеристики 10.83: в шторке — только поля-выбор вида и только значения, что есть у подходящих объявлений');
+    // 4. сайт: карточка — отдельный запрос с запасным без specs; ошибка — как раньше
+    assert.ok(th.includes('<script src="assets/models.js?v=20261018-specs"></script>') && th.includes('<div class="spec" id="specCond">')
+      && th.includes("at.insertAdjacentHTML('afterend',") && th.includes("const r = await ivaToolSpecs(api, ad.id);")
+      && md.includes(".catch(function () { return api(q + 'kind'); })") && md.includes("var q = '/rest/v1/tools?id=eq.' + encodeURIComponent(id) + '&select=';"),
+      'характеристики 10.83: сайт — вид и характеристики после «Состояния»; нет столбца — только вид; ошибка — как раньше');
+    // 5. одинаковые строки карточки в Java и JS
+    assert.ok(tp.includes('"Питание=Сеть 220 В|Мощность=780" + NB + "Вт|Энергия удара=2,4" + NB + "Дж|"') && jt.includes("'Питание=Сеть 220 В|Мощность=780' + NB + 'Вт|Энергия удара=2,4' + NB + 'Дж|'")
+      && bt.includes("await runTool('full');") && bt.includes("await runTool('nocol');") && bt.includes("await runTool('none');"),
+      'характеристики 10.83: строки карточки одинаковы в приложении и на сайте; браузерный тест карточки');
+    assert.ok((tp.match(/eq\("характеристики 10\.83: /g) || []).length >= 7, 'IvaPatchTest: проверки 10.83');
+    assert.ok(/NEW_NAME: '10\.83'/.test(wf) && /NEW_CODE: '157'/.test(wf) && /TEST_NOTES: 'Тестовая сборка 10\.83: /.test(wf), 'версия 10.83 (157)');
+  }
   // 10.82 (этап 2 справочника моделей, решение владельца 15.10.2026, №30): подсказки моделей по названию, поле «Модель»
   // с брендами, «Характеристики» под видом — в форме «Добавить» приложения и на сайте (new.html, cabinet.html).
   // Справочник — iva_brands, iva_spec_fields, iva_models (SQL). Нет SQL — всё как в 10.81.
@@ -833,7 +875,6 @@ try {
     assert.ok((tp.match(/eq\("модели 10\.82: /g) || []).length >= 20, 'IvaPatchTest: проверки 10.82');
     assert.ok(['supabase/migrations/20261017_models.sql', 'supabase/migrations/20261017_models_data_*.sql', 'tests/model-search-cases.txt']
       .every(f => wf.includes('\n            ' + f + '\n')), 'модели 10.82: файлы справочника и случаев есть в выборочной выгрузке сборки');
-    assert.ok(/NEW_NAME: '10\.82'/.test(wf) && /NEW_CODE: '156'/.test(wf) && /TEST_NOTES: 'Тестовая сборка 10\.82: /.test(wf), 'версия 10.82 (156)');
   }
   // 10.81 (этап 1 справочника моделей, решение владельца 15.10.2026, №30): категория, подкатегория и вид подставляются
   // сами по названию — в форме «Добавить» приложения и на сайте (new.html, cabinet.html). Слова — iva_kinds.words (SQL).
@@ -997,8 +1038,8 @@ try {
       assert.ok(has(arsc14, str) || has(dex14, str), `APK 10.14: нет «${str}» — поле «Вид» не найдёт штатное поле`);
     assert.ok(has(dex14, 'admhub') && has(dex14, 'tooledit'), 'APK 10.14: нет вкладок admhub / tooledit');
     // 6. фильтр: «Вид» после «Подкатегории»; отбор ленты; число в «Фильтр · N»; смена категории/подкатегории снимает вид
-    assert.ok(sp.includes('city, f.from, f.to, f.delivery, f.conds) && kindMatch(js(j, "kind"), f.kind);')
-      && sp.includes('f.cat = cat; f.sub = sub; f.kind = kind;') && sp.includes('|| !kind.isEmpty(); }') && sp.includes('void resetAll() { cat = ""; sub = ""; kind = "";'),
+    assert.ok(sp.includes('city, f.from, f.to, f.delivery, f.conds) && kindMatch(js(j, "kind"), f.kind)')
+      && sp.includes('f.cat = cat; f.sub = sub; f.kind = kind;') && sp.includes('|| !kind.isEmpty()') && sp.includes('void resetAll() { cat = ""; sub = ""; kind = "";'),
       'фильтр 10.79: вид отбирает ленту, копируется, сбрасывается');
     const rp = fnx(sp, 'refreshPanel');
     assert.ok(rp.indexOf('subBox.setVisibility(') < rp.indexOf('kindBox.removeAllViews();') && rp.includes('IvaKindPatch.forSub(IvaKindPatch.list(), draft.cat, draft.sub)')

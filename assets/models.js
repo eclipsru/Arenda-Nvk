@@ -1,4 +1,4 @@
-/* Справочник моделей (этап 2, 10.82): подсказки моделей в форме добавления и характеристики.
+/* Справочник моделей (этап 2, 10.82; характеристики в карточке — этап 3, 10.83): подсказки моделей в форме добавления и характеристики.
    Данные — iva_models / iva_brands / iva_spec_fields (supabase/migrations/20261017_models*.sql).
    Тот же алгоритм — в приложении (IvaModelPatch); оба проверяются на tests/model-search-cases.txt.
 
@@ -237,6 +237,55 @@
     });
   }
 
+  /* 10.83: строки карточки [подпись, значение] по полям вида в их порядке: число — с запятой, единица — через
+     неразрывный пробел; пустое и чужие ключи не показываем (как IvaModelPatch.specRows). */
+  function ivaSpecRows(specs, fields) {
+    var out = [];
+    if (!specs || !fields) return out;
+    for (var i = 0; i < fields.length; i++) {
+      var f = fields[i], v = str(specs[f.key]).trim();
+      if (v === '') continue;
+      var t = f.type === 'num' && /^\d+(\.\d+)?$/.test(v) ? v.replace('.', ',') : v;
+      if (f.unit) t += '\u00a0' + f.unit;
+      out.push([f.title, t]);
+    }
+    return out;
+  }
+
+  /* 10.83: характеристики объявления подходят под выбранные (нет значения — не подходит), как IvaModelPatch.specsMatch. */
+  function ivaSpecsMatch(tool, sel) {
+    for (var k in sel || {}) if (Object.prototype.hasOwnProperty.call(sel, k) && str(sel[k]) !== str((tool || {})[k]).trim()) return false;
+    return true;
+  }
+
+  /* 10.83: «Вид» и характеристики объявления для карточки (tool.html). Нет столбца specs — только вид; нет вида или
+     ошибка — null (карточка как раньше). */
+  function ivaToolSpecs(api, id) {
+    if (!id) return Promise.resolve(null);
+    var q = '/rest/v1/tools?id=eq.' + encodeURIComponent(id) + '&select=';
+    var tool = null;
+    return new Promise(function (r) { r(api(q + 'kind,specs')); })
+      .catch(function () { return api(q + 'kind'); })
+      .then(function (rows) {
+        tool = Array.isArray(rows) && rows[0] || null;
+        if (!tool || !tool.kind) return null;
+        var specs = tool.specs && typeof tool.specs === 'object' && !Array.isArray(tool.specs) ? tool.specs : {};
+        var k = encodeURIComponent(tool.kind);
+        return Promise.all([
+          Promise.resolve(api('/rest/v1/iva_kinds?select=title&key=eq.' + k)).catch(function () { return []; }),
+          Object.keys(specs).length ? Promise.resolve(api('/rest/v1/iva_spec_fields?select=kind,key,title,unit,type,options,sort&kind=eq.' + k))
+            .catch(function () { return []; }) : []
+        ]).then(function (res) {
+          var rows = [], kt = Array.isArray(res[0]) && res[0][0] && res[0][0].title;
+          if (kt) rows.push(['Вид', kt]);
+          var fl = (Array.isArray(res[1]) ? res[1] : []).filter(function (x) { return x && x.key; })
+            .map(function (x) { return { kind: tool.kind, key: x.key, title: x.title || x.key, unit: x.unit || '', type: x.type, sort: x.sort || 0 }; });
+          return { kind: tool.kind, rows: rows.concat(ivaSpecRows(specs, ivaFieldsFor({ fields: fl }, tool.kind))) };
+        });
+      })
+      .catch(function () { return null; });
+  }
+
   var MD_KEY = 'iva_models_v1', MD_TTL = 30 * 60 * 1000, MD_PAGE = 1000;
   var mdMem = null;
 
@@ -292,7 +341,8 @@
   var api = {
     ivaModelIndex: ivaModelIndex, ivaModelSearch: ivaModelSearch, ivaModelBrands: ivaModelBrands,
     ivaSpecsFill: ivaSpecsFill, ivaModelStillFits: ivaModelStillFits, ivaSpecsClean: ivaSpecsClean,
-    ivaFieldsFor: ivaFieldsFor, ivaModelsLoad: ivaModelsLoad
+    ivaFieldsFor: ivaFieldsFor, ivaModelsLoad: ivaModelsLoad,
+    ivaSpecRows: ivaSpecRows, ivaSpecsMatch: ivaSpecsMatch, ivaToolSpecs: ivaToolSpecs
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else for (var k in api) root[k] = api[k];

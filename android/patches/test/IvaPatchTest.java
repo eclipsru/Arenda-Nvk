@@ -1564,6 +1564,44 @@ public class IvaPatchTest {
                 eq("модели 10.82: чужой вариант и пусто → null; строка — без пробелов по краям",
                     IvaModelPatch.specsClean(mdV2, mdRf) + "|" + IvaModelPatch.specsClean(new java.util.HashMap<String, String>(), mdRf) + "|" + IvaModelPatch.specsClean(null, mdRf)
                     + "|" + IvaModelPatch.specsClean(mdV3, IvaModelPatch.fieldsFor(mdFl, "pp-welder")), "null|null|null|{\"pipe\":\"20–63\"}");
+                // 10.83: характеристики в карточке и фильтре — на настоящих полях
+                java.util.Map<String, String> chS = new java.util.LinkedHashMap<String, String>();
+                chS.put("weight", ""); chS.put("energy", "2.4"); chS.put("zzz", "1"); chS.put("power", "780"); chS.put("src", "Сеть 220 В");
+                StringBuilder chR = new StringBuilder();
+                for (String[] chX : IvaModelPatch.specRows(chS, IvaModelPatch.fieldsFor(mdFl, "rotary-sds-plus"))) chR.append(chX[0]).append('=').append(chX[1]).append('|');
+                eq("характеристики 10.83: строки карточки — по порядку полей, число с запятой и единицей, пустое и чужое не показываем",
+                    chR.toString(), "Питание=Сеть 220 В|Мощность=780" + NB + "Вт|Энергия удара=2,4" + NB + "Дж|");
+                eq("характеристики 10.83: нет подписей или характеристик — строк нет",
+                    IvaModelPatch.specRows(chS, null).size() + "," + IvaModelPatch.specRows(null, mdRf).size() + "," + IvaModelPatch.specRows(chS, IvaModelPatch.fieldsFor(mdFl, "")).size(), "0,0,0");
+                StringBuilder chC = new StringBuilder();
+                for (IvaModelPatch.Field chF : IvaModelPatch.choiceFields(mdFl, "chainsaw")) chC.append(chF.key).append(',');
+                eq("характеристики 10.83: в фильтре только поля-выбор вида", chC.toString() + "|" + IvaModelPatch.choiceFields(null, "chainsaw").size(), "src,|0");
+                int chAll = 0, chKinds = 0;
+                java.util.Set<String> chSeen = new java.util.HashSet<String>();
+                for (IvaModelPatch.Field chF : mdFl) if (chSeen.add(chF.kind) && !IvaModelPatch.choiceFields(mdFl, chF.kind).isEmpty()) chKinds++;
+                for (IvaModelPatch.Field chF : mdFl) if ("choice".equals(chF.type)) { chAll++; if (chF.options.length < 2) chKinds = -1000; }
+                eq("характеристики 10.83: у каждого поля-выбора не меньше двух вариантов", chAll > 50 && chKinds > 50, true);
+                java.util.Map<String, String> chT = new java.util.HashMap<String, String>();
+                chT.put("src", "Бензин"); chT.put("bar", "40");
+                java.util.Map<String, String> chSel = new java.util.LinkedHashMap<String, String>();
+                String chM0 = IvaModelPatch.specsMatch(chT, chSel) + "," + IvaModelPatch.specsMatch(chT, null);
+                chSel.put("src", "Бензин");
+                String chM1 = IvaModelPatch.specsMatch(chT, chSel) + "," + IvaModelPatch.specsMatch(new java.util.HashMap<String, String>(), chSel) + "," + IvaModelPatch.specsMatch(null, chSel);
+                chSel.put("src", "Аккумулятор");
+                eq("характеристики 10.83: совпадение — все выбранные значения; без значения — не подходит",
+                    chM0 + "|" + chM1 + "|" + IvaModelPatch.specsMatch(chT, chSel), "true,true|true,false,false|false");
+                eq("характеристики 10.83: плашка условия — «Питание: Бензин»; без подписей — только значение",
+                    IvaModelPatch.chipText(mdFl, "chainsaw", "src", "Бензин") + "|" + IvaModelPatch.chipText(null, "chainsaw", "src", "Бензин"), "Питание: Бензин|Бензин");
+                IvaSearchPatch.Filter chF1 = new IvaSearchPatch.Filter();
+                chF1.cat = "garden"; chF1.sub = "saws"; chF1.kind = "chainsaw"; chF1.specKind = "chainsaw"; chF1.specs.put("src", "Бензин");
+                IvaSearchPatch.Filter chF2 = chF1.copy();
+                chF2.specs.put("src", "Аккумулятор");
+                String chA = chF1.specCount() + "," + chF1.extraActive() + "," + chF1.specs.get("src") + "," + chF2.specs.get("src");
+                chF2.kind = "brushcutter";
+                String chB = chF2.specCount() + "";
+                chF1.resetAll();
+                eq("характеристики 10.83: фильтр — копия независима, другой вид снимает характеристики, «Сбросить» очищает",
+                    chA + "|" + chB + "|" + chF1.specCount() + "," + chF1.specs.size() + "," + chF1.extraActive(), "1,true,Бензин,Аккумулятор|0|0,0,false");
             } catch (Throwable mdE) { eq("модели 10.82: настоящий справочник", "исключение " + mdE, ""); }
         }
         if (fail > 0) { System.out.println("ошибок: " + fail); System.exit(1); }

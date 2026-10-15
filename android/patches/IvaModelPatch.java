@@ -1,4 +1,4 @@
-// Ива 10.82 — справочник моделей, этап 2 (решение владельца 15.10.2026, журнал — решение №31).
+// Ива 10.82–10.83 — справочник моделей, этапы 2–3 (решение владельца 15.10.2026, журнал — решение №31).
 //
 // Справочник — таблицы iva_models / iva_brands / iva_spec_fields (миграции supabase/migrations/20261017_models*.sql).
 // У объявления — tools.model_id (выбранная модель) и tools.specs (характеристики, объект «ключ поля → значение»).
@@ -936,6 +936,7 @@ final class IvaModelPatch {
 
     /** Первая вкладка после «Опубликовать»: кабинет — штатный успех, форма начинается заново; другая — ничего. */
     static void onTab(Activity a, String tab) {
+        if ("detail".equals(tab)) { try { onDetail(a); } catch (Throwable ignore) {} }   // 10.83: характеристики в карточке
         long at = savedAt;
         if (at == 0) return;
         savedAt = 0;
@@ -954,5 +955,165 @@ final class IvaModelPatch {
             if (f instanceof TextView) setQuiet((TextView) f, "");
             refresh(a);
         } catch (Throwable ignore) {}
+    }
+
+    // ════════════════════════════════ 10.83: характеристики в карточке и в фильтре (этап 3) ════════════════════════════
+    //  * Карточка инструмента (страница «detail»): блок «Характеристики» над отзывами — «Вид» и заполненные поля вида
+    //    («Мощность — 780 Вт»). Ничего нет — блока нет. Данные — tools.kind и tools.specs из штатного каталога
+    //    (select=*), подписи — iva_spec_fields (у клиента грузим только их, без моделей).
+    //  * Фильтр (IvaSearchPatch): когда выбран вид — характеристики-выбор плашками («Питание: Аккумулятор»), только
+    //    значения, которые есть у подходящих объявлений. Объявление без этой характеристики при выбранном значении
+    //    не показывается (как «Состояние»).
+
+    /** Строки карточки: [подпись, значение] по полям вида в их порядке. Число — с запятой, единица — через пробел. */
+    static List<String[]> specRows(Map<String, String> specs, List<Field> flds) {
+        List<String[]> out = new ArrayList<String[]>();
+        if (specs == null || flds == null) return out;
+        for (Field f : flds) {
+            String v = g(specs, f.key).trim();
+            if (v.isEmpty()) continue;
+            String t = "num".equals(f.type) && NUM.matcher(v).matches() ? v.replace('.', ',') : v;
+            if (!f.unit.isEmpty()) t += "\u00a0" + f.unit;
+            out.add(new String[]{f.title, t});
+        }
+        return out;
+    }
+
+    /** Поля-выбор вида (для фильтра) — в порядке полей. */
+    static List<Field> choiceFields(List<Field> all, String kind) {
+        List<Field> out = new ArrayList<Field>();
+        for (Field f : fieldsFor(all, kind)) if ("choice".equals(f.type) && f.options.length > 0) out.add(f);
+        return out;
+    }
+
+    /** Характеристики объявления подходят под выбранные: каждое выбранное значение совпадает (нет значения — не подходит). */
+    static boolean specsMatch(Map<String, String> tool, Map<String, String> sel) {
+        if (sel == null) return true;
+        for (Map.Entry<String, String> e : sel.entrySet())
+            if (!s(e.getValue()).equals(g(tool, e.getKey()).trim())) return false;
+        return true;
+    }
+
+    /** Надпись плашки выбранного условия: «Питание: Аккумулятор» (подписи не загрузились — только значение). */
+    static String chipText(List<Field> all, String kind, String key, String value) {
+        for (Field f : fieldsFor(all, kind)) if (f.key.equals(key)) return f.title + ": " + value;
+        return s(value);
+    }
+
+    static final java.util.Map<Object, LinkedHashMap<String, String>> specCache = new java.util.WeakHashMap<Object, LinkedHashMap<String, String>>();
+
+    /** tools.specs объявления из каталога (штатный JSONObject; у Android optString объекта — его JSON). */
+    static LinkedHashMap<String, String> toolSpecs(JSONObject j) {
+        if (j == null) return new LinkedHashMap<String, String>();
+        LinkedHashMap<String, String> m = specCache.get(j);
+        if (m == null) {
+            m = parseFlat(j.has("specs") && !j.isNull("specs") ? j.optString("specs", "") : "");
+            specCache.put(j, m);
+        }
+        return m;
+    }
+
+    static volatile boolean fieldsLoading = false;
+    static volatile long fieldsTriedAt = 0;
+
+    /** Подписи характеристик для клиента (без моделей). Пришли — перерисовать карточку и панель фильтра. */
+    static void ensureFields(final Activity a) {
+        if (fields != null || fieldsLoading || loading) return;
+        long now = System.currentTimeMillis();
+        if (now - fieldsTriedAt < RETRY_MS) return;
+        fieldsLoading = true;
+        fieldsTriedAt = now;
+        new Thread(new Runnable() {
+            @Override public void run() {
+                try {
+                    String[] rf = IvaClientPatch.apiCall(a, FIELDS_PATH, "GET", null, false);
+                    if (!ok(rf)) return;
+                    List<Field> fl = parseFields(rf[1]);
+                    if (fl.isEmpty()) return;
+                    if (fields == null) fields = fl;
+                    a.runOnUiThread(new Runnable() {
+                        @Override public void run() {
+                            try { onDetail(a); } catch (Throwable ignore) {}
+                            try { IvaSearchPatch.refreshPanel(a); } catch (Throwable ignore) {}
+                            try { IvaSearchPatch.refreshChips(a); } catch (Throwable ignore) {}
+                        }
+                    });
+                } catch (Throwable ignore) {
+                } finally { fieldsLoading = false; }
+            }
+        }).start();
+    }
+
+    static final String DET_TAG = "iva_model_det";
+
+    /** Строки блока карточки: «Вид» и характеристики. Подписи ещё не пришли, а характеристики есть — пусто (ждём). */
+    static List<String[]> detRows(JSONObject j) {
+        List<String[]> rows = new ArrayList<String[]>();
+        String kind = j.has("kind") && !j.isNull("kind") ? j.optString("kind", "").trim() : "";
+        LinkedHashMap<String, String> sp = toolSpecs(j);
+        if (fields == null && !sp.isEmpty()) return rows;
+        String kt = kind.isEmpty() ? "" : IvaKindPatch.titleOf(IvaKindPatch.list(), kind);
+        if (kt != null && !kt.isEmpty()) rows.add(new String[]{"Вид", kt});
+        rows.addAll(specRows(sp, fieldsFor(fields, kind)));
+        return rows;
+    }
+
+    /** Страница инструмента: блок «Характеристики» над отзывами (IvaReviewPatch добавляет свой блок в конец). */
+    static void onDetail(final Activity a) {
+        Object it = IvaClientPatch.get(a, "detItem"), nm = IvaClientPatch.get(a, "detName");
+        if (!(nm instanceof View) || !(((View) nm).getParent() instanceof LinearLayout)) return;
+        LinearLayout box = (LinearLayout) ((View) nm).getParent();
+        View old = box.findViewWithTag(DET_TAG);
+        boolean srv = Boolean.TRUE.equals(IvaClientPatch.get(a, "detIsSrv"));
+        List<String[]> rows = it instanceof JSONObject && !srv ? detRows((JSONObject) it) : new ArrayList<String[]>();
+        if (it instanceof JSONObject && !srv && fields == null && !toolSpecs((JSONObject) it).isEmpty()) ensureFields(a);
+        if (rows.isEmpty()) { if (old != null) old.setVisibility(View.GONE); return; }
+        LinearLayout block = old instanceof LinearLayout ? (LinearLayout) old : null;
+        if (block == null) {
+            block = new LinearLayout(a);
+            block.setOrientation(LinearLayout.VERTICAL);
+            block.setTag(DET_TAG);
+            LinearLayout.LayoutParams bl = new LinearLayout.LayoutParams(-1, -2);
+            bl.topMargin = IvaPatch.dp(a, 18);
+            View rv = box.findViewWithTag(IvaReviewPatch.DET_BLOCK_TAG);
+            box.addView(block, rv != null && rv.getParent() == box ? box.indexOfChild(rv) : box.getChildCount(), bl);
+        }
+        block.setVisibility(View.VISIBLE);
+        block.removeAllViews();
+        TextView h = new TextView(a);
+        h.setText(SPECS_LABEL);
+        h.setTextSize(17f);
+        h.setTypeface(null, android.graphics.Typeface.BOLD);
+        h.setTextColor(cText(a));
+        block.addView(h, new LinearLayout.LayoutParams(-1, -2));
+        int line = IvaPatch.color(a, "line", 0xff262b35);
+        for (int i = 0; i < rows.size(); i++) {
+            LinearLayout row = new LinearLayout(a);
+            row.setOrientation(LinearLayout.HORIZONTAL);
+            row.setPadding(0, IvaPatch.dp(a, 9), 0, IvaPatch.dp(a, 9));
+            TextView k = new TextView(a);
+            k.setText(rows.get(i)[0]);
+            k.setTextSize(14f);
+            k.setTextColor(cGray(a));
+            TextView v = new TextView(a);
+            v.setText(rows.get(i)[1]);
+            v.setTextSize(14f);
+            v.setTextColor(cText(a));
+            v.setTypeface(null, android.graphics.Typeface.BOLD);
+            v.setGravity(Gravity.END);
+            LinearLayout.LayoutParams kl = new LinearLayout.LayoutParams(0, -2, 1f);
+            kl.rightMargin = IvaPatch.dp(a, 12);
+            row.addView(k, kl);
+            row.addView(v, new LinearLayout.LayoutParams(0, -2, 1f));
+            row.setContentDescription(rows.get(i)[0] + ": " + rows.get(i)[1]);
+            LinearLayout.LayoutParams rl = new LinearLayout.LayoutParams(-1, -2);
+            if (i == 0) rl.topMargin = IvaPatch.dp(a, 6);
+            block.addView(row, rl);
+            if (i < rows.size() - 1) {
+                View d = new View(a);
+                d.setBackgroundColor(line);
+                block.addView(d, new LinearLayout.LayoutParams(-1, Math.max(1, IvaPatch.dp(a, 1) / 2)));
+            }
+        }
     }
 }
