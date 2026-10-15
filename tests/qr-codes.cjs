@@ -13,7 +13,7 @@ const path = require('node:path');
 const assert = require('node:assert/strict');
 
 const ROOT = path.resolve(__dirname, '..');
-const QR = ['assets/qr-site.png', 'assets/qr-app.png', 'assets/qr-app-apk.png', 'assets/qr-listovka.png'];
+const QR = ['assets/qr-site.png', 'assets/qr-app.png', 'assets/qr-app-apk.png', 'assets/qr-listovka.png', 'assets/qr-app-logo.png'];
 
 // 1. Файлы на месте и валидные PNG
 for (const f of QR) {
@@ -38,9 +38,18 @@ const qrApk = (make.match(/ProkatInstrumenta-[\d.]+\.apk/) || [])[0];
 assert.ok(qrApk, 'tools/make-qr.py: не найден файл APK для кода «сразу скачать»');
 assert.ok(fs.existsSync(path.join(ROOT, qrApk)), `код «сразу скачать» ведёт на ${qrApk}, но такого файла нет в корне`);
 
+// 2б. 16.10.2026: постоянный код с логотипом ведёт на страницу app.html (она сама отдаёт версию,
+// выпущенную для всех), а НЕ на файл конкретной версии — иначе код устареет при следующем релизе.
+assert.ok(make.includes('LOGO_URL = APP_PAGE') && make.includes('APP_PAGE = SITE + "/app.html"') && make.includes('ERROR_CORRECT_H'),
+  'tools/make-qr.py: постоянный код с логотипом должен вести на app.html и иметь коррекцию H');
+assert.ok(fs.existsSync(path.join(ROOT, 'assets', 'logo.png')) && fs.existsSync(path.join(ROOT, 'app.html')),
+  'постоянный код: нет логотипа assets/logo.png или страницы app.html');
+assert.ok(fs.readFileSync(path.join(ROOT, 'app.html'), 'utf8').includes('data-app-dl='),
+  'app.html: пропала кнопка скачивания (data-app-dl) — постоянный QR перестанет вести на скачивание');
+
 // 3. Никаких внешних сервисов для генерации — только локальная библиотека
 for (const bad of ['urlopen', 'requests.get', 'http://', 'api.qrserver', 'quickchart', 'chart.googleapis']) {
   assert.ok(!make.includes(bad), `tools/make-qr.py: найден внешний ресурс «${bad}» — коды должны рисоваться локально`);
 }
 
-console.log(`✔ qr-codes: 4 файла на месте, адреса совпадают с сайтом (${base}), генерация локальная`);
+console.log(`✔ qr-codes: 5 файлов на месте (постоянный с логотипом → app.html), адреса совпадают с сайтом (${base}), генерация локальная`);

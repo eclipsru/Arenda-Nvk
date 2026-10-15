@@ -12,7 +12,11 @@ QR-коды проекта «Ива»: на живой сайт и на скач
   qr-app.png       — страница приложения: кнопка «Скачать Android» сама подставляет
                      текущую версию из базы, поэтому код не устаревает;
   qr-app-apk.png   — сразу скачивает файл подтверждённой версии (10.15);
-  qr-listovka.png  — лист для печати: два кода с подписями.
+  qr-listovka.png  — лист для печати: два кода с подписями;
+  qr-app-logo.png  — ПОСТОЯННЫЙ код на скачивание приложения с цветным логотипом в центре
+                     (16.10.2026, просьба владельца). Ведёт на страницу app.html: она всегда
+                     отдаёт версию, выпущенную для всех (из базы app_releases), поэтому сам код
+                     не меняется никогда — перерисовывать его при новых версиях не нужно.
 
 Запуск:
     python3 tools/make-qr.py             # перерисовать файлы
@@ -26,7 +30,7 @@ import os
 import sys
 
 import qrcode
-from qrcode.constants import ERROR_CORRECT_Q
+from qrcode.constants import ERROR_CORRECT_H, ERROR_CORRECT_Q
 from PIL import Image, ImageDraw, ImageFont
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -42,6 +46,14 @@ TARGETS = [
     ("qr-app-apk.png", "Приложение: сразу скачать 10.15", APK),
 ]
 BOX = 16          # размер «точки» в пикселях — хватает для печати ~7×7 см
+
+# Постоянный код с логотипом: максимальная коррекция ошибок (H — восстанавливает до 30% кода),
+# логотип закрывает ~6% площади, поэтому код читается с запасом.
+LOGO_NAME = "qr-app-logo.png"
+LOGO_URL = APP_PAGE
+LOGO_FILE = os.path.join(OUT, "logo.png")      # цветной логотип приложения (тот же, что iva_logo.png)
+LOGO_BOX = 28                                  # ~1150 px — печать до 10×10 см без размытия
+LOGO_SHARE = 0.24                              # сторона логотипа — доля от стороны самого кода
 BORDER = 4        # обязательное пустое поле вокруг кода
 
 
@@ -50,6 +62,26 @@ def make_image(url):
     qr.add_data(url)
     qr.make(fit=True)
     return qr.make_image(fill_color="#101418", back_color="white").convert("RGB")
+
+
+def make_logo_image(url):
+    """Постоянный код: тёмные точки на белом, в центре — цветной логотип на белой подложке."""
+    qr = qrcode.QRCode(error_correction=ERROR_CORRECT_H, box_size=LOGO_BOX, border=BORDER)
+    qr.add_data(url)
+    qr.make(fit=True)
+    img = qr.make_image(fill_color="#101418", back_color="white").convert("RGB")
+    n = qr.modules_count                                   # сторона кода в точках (без поля)
+    side = int(n * LOGO_BOX * LOGO_SHARE)
+    logo = Image.open(LOGO_FILE).convert("RGBA").resize((side, side), Image.LANCZOS)
+    # белая подложка со скруглением — на целое число точек больше логотипа, по центру сетки
+    pad = LOGO_BOX
+    plate = side + 2 * pad
+    x0 = (img.width - plate) // 2
+    y0 = (img.height - plate) // 2
+    d = ImageDraw.Draw(img)
+    d.rounded_rectangle((x0, y0, x0 + plate - 1, y0 + plate - 1), radius=int(plate * 0.22), fill="white")
+    img.paste(logo, (x0 + pad, y0 + pad), logo)
+    return img
 
 
 def font(size):
@@ -122,7 +154,26 @@ def main():
         write(sheet_path, sheet)
         print(f"✔ assets/qr-listovka.png — лист для печати ({sheet.width}×{sheet.height})")
 
+    logo_path = os.path.join(OUT, LOGO_NAME)
+    logo_img = make_logo_image(LOGO_URL)
+    if check:
+        same = os.path.exists(logo_path) and open(logo_path, "rb").read() == _bytes(logo_img)
+        print(("✔" if same else "✘"), f"assets/{LOGO_NAME}", LOGO_URL, "" if same else "— файл не совпадает, перерисуйте")
+        bad += not same
+    else:
+        write(logo_path, logo_img)
+        print(f"✔ assets/{LOGO_NAME} — постоянный код с логотипом ({logo_img.width}×{logo_img.height}) — {LOGO_URL}")
+
     if verify:
+        try:
+            import zxingcpp                                   # читает и коды с логотипом
+            for size in (logo_img.width, 600, 300, 180):
+                got = [r.text for r in zxingcpp.read_barcodes(logo_img.resize((size, size), Image.LANCZOS))]
+                ok = got == [LOGO_URL]
+                print(("✔" if ok else "✘"), f"читается обратно: assets/{LOGO_NAME} при {size}px -> {got or '(не прочитался)'}")
+                bad += not ok
+        except ImportError:
+            print("• zxing-cpp не установлен — код с логотипом не прочитан (pip install zxing-cpp)")
         try:
             import cv2
         except ImportError:
