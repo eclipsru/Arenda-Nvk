@@ -829,6 +829,8 @@ try {
       && tp.includes('supabase/migrations/20261016_kind_words.sql') && jt.includes('supabase/migrations/20261016_kind_words.sql') && bt.includes('20261016_kind_words.sql'),
       'автоподбор 10.81: Java и JS — одни и те же случаи и словарь из SQL');
     assert.ok((tp.match(/eq\("автоподбор 10\.81: /g) || []).length >= 15, 'IvaPatchTest: проверки 10.81');
+    assert.ok(['supabase/migrations/20261015_category_tree.sql', 'supabase/migrations/20261016_kind_words.sql', 'tests/kind-guess-cases.txt']
+      .every(f => wf.includes('\n            ' + f + '\n')), 'автоподбор 10.81: файлы словаря и случаев есть в выборочной выгрузке сборки (иначе IvaPatchTest их не найдёт)');
     assert.ok(/NEW_NAME: '10\.81'/.test(wf) && /NEW_CODE: '155'/.test(wf) && /TEST_NOTES: 'Тестовая сборка 10\.81: /.test(wf), 'версия 10.81 (155)');
   }
   // 10.80 (просьба владельца 15.10.2026): обновление без окон. Серое окно «Всё готово!» убрано; «Показать окно установки»

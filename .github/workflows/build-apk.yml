@@ -88,6 +88,10 @@ jobs:
             app-keep-apks.txt
             android/patches
             tools/publish-test-apk.py
+            # 10.81: IvaPatchTest проверяет автоподбор на настоящем словаре и общих случаях (как сайт)
+            supabase/migrations/20261015_category_tree.sql
+            supabase/migrations/20261016_kind_words.sql
+            tests/kind-guess-cases.txt
           sparse-checkout-cone-mode: false
 
       - name: Инструменты
