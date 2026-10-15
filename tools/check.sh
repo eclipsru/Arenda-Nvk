@@ -73,7 +73,7 @@ done
 head_ "4.1. Стенд таблицы релизов app_releases (локальный PostgreSQL)"
 PG_PY="${PG_PY:-python3}"
 if "$PG_PY" -c "import pgserver" >/dev/null 2>&1; then
-  if "$PG_PY" tools/app-releases-stand.py >/tmp/iva-test-rel-stand.log 2>&1; then ok "app_releases: подтверждает только eclips.ru@mail.ru (11 случаев на PostgreSQL)"
+  if "$PG_PY" tools/app-releases-stand.py >/tmp/iva-test-rel-stand.log 2>&1; then ok "app_releases: подтверждает eclips.ru@mail.ru, после 20261022 — и eclipsik.ru@mail.ru (20 случаев на PostgreSQL)"
   else bad "стенд app_releases"; tail -8 /tmp/iva-test-rel-stand.log | sed 's/^/      /'; fi
 else
   skip "стенд app_releases: нет pgserver (PG_PY=<python с pgserver> bash tools/check.sh)"

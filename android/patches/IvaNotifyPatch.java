@@ -301,7 +301,11 @@ public final class IvaNotifyPatch {
         return t.isEmpty() ? "Поступила новая заявка на ваш инструмент" : t;
     }
 
-    static boolean updateDue(long last, long now) { return last <= 0 || now - last >= UPDATE_EVERY_MS || now < last; }
+    // 10.94 (просьба владельца 16.10): о выпущенной версии — у всех, как можно скорее: проверка раз в 5 минут
+    // (открыто приложение) и при каждой фоновой проверке Android (закрыто, раз в ~15 минут). Раньше — раз в 6 часов.
+    static final long UPDATE_NOTE_EVERY_MS = 5L * 60 * 1000;
+    static final String UPD_SUB = "Когда для всех вышла новая версия — сразу";
+    static boolean updateDue(long last, long now) { return last <= 0 || now - last >= UPDATE_NOTE_EVERY_MS - 5000 || now < last; }
 
     /** Уведомить об обновлении: на сайте версия новее установленной и о ней ещё не сообщали. */
     static boolean updateNews(int remote, int installed, int notified) { return remote > installed && remote != notified; }
@@ -449,6 +453,7 @@ public final class IvaNotifyPatch {
         try { cabinet(a, tab); } catch (Throwable ignore) {}   // 10.78: «Чат поддержки» и «Обновить до версии …»
         try { IvaCensorPatch.onTab(a, tab); } catch (Throwable ignore) {}   // 10.92: «Цензура» у создателя, слова создателя
         try { IvaChiefPatch.onTab(a, tab); } catch (Throwable ignore) {}    // 10.93: «Управление», «Мои отзывы»; без «Ваш доход с админов»
+        try { IvaTestPatch.onTab(a, tab); } catch (Throwable ignore) {}     // 10.94: жёлтая «Обновить до версии N» у eclips и eclipsik
     }
 
     static Object get(Object o, String f) { return IvaClientPatch.get(o, f); }
@@ -518,6 +523,7 @@ public final class IvaNotifyPatch {
                 } catch (Throwable ignore) {
                 }
                 if (logged && !admin && !email.isEmpty()) try { checkRent(a, email, admin); } catch (Throwable ignore) {}   // 10.76
+                if (logged && !email.isEmpty()) try { IvaTestPatch.check(a, email, admin); } catch (Throwable ignore) {}   // 10.94
                 try { IvaPushPatch.sync(a, email, logged, admin); } catch (Throwable ignore) {   // 10.74: мгновенные (админам)
                 } finally {
                     busy = false;
@@ -690,20 +696,21 @@ public final class IvaNotifyPatch {
 
     static String channelName(String ch) {
         return CH_MSG.equals(ch) ? "Новые сообщения" : CH_ORD.equals(ch) ? "Новые заявки" : CH_UPD.equals(ch) ? "Обновления приложения"
-            : CH_RENT.equals(ch) ? "Окончание аренды" : "Ива";
+            : CH_RENT.equals(ch) ? "Окончание аренды" : IvaTestPatch.CH_TEST.equals(ch) ? "Пробная версия" : "Ива";
     }
 
     static void ensureChannels(Context c) {
         if (Build.VERSION.SDK_INT < 26) return;
         NotificationManager nm = (NotificationManager) c.getSystemService(Context.NOTIFICATION_SERVICE);
         if (nm == null) return;
-        String[] ids = {CH_MSG, CH_ORD, CH_UPD, CH_RENT};
+        String[] ids = {CH_MSG, CH_ORD, CH_UPD, CH_RENT, IvaTestPatch.CH_TEST};
         for (String id : ids) {
             if (nm.getNotificationChannel(id) != null) continue;
             int imp = CH_UPD.equals(id) ? NotificationManager.IMPORTANCE_DEFAULT : NotificationManager.IMPORTANCE_HIGH;
             NotificationChannel ch = new NotificationChannel(id, channelName(id), imp);
             ch.setDescription(CH_MSG.equals(id) ? "Когда вам пишут в чат" : CH_ORD.equals(id) ? "Заявки на ваши инструменты"
-                : CH_RENT.equals(id) ? "Скоро закончится срок аренды" : "Когда вышла новая версия приложения");
+                : CH_RENT.equals(id) ? "Скоро закончится срок аренды" : IvaTestPatch.CH_TEST.equals(id) ? IvaTestPatch.NOTE_SUB
+                : "Когда вышла новая версия приложения");
             nm.createNotificationChannel(ch);
         }
     }
@@ -925,6 +932,7 @@ public final class IvaNotifyPatch {
                     else if ("orders".equals(open)) openOrder(a, target);
                     else if ("update".equals(open)) openUpdate(a, target);
                     else if ("rent".equals(open)) IvaOrderPatch.openById(a, target);     // 10.76: эта заявка
+                    else if ("test".equals(open)) IvaTestPatch.openFromNote(a);          // 10.94: жёлтая кнопка в «Профиле»
                 } catch (Throwable ignore) {}
             }
         });
@@ -1178,16 +1186,26 @@ public final class IvaNotifyPatch {
                 }
                 try {
                     a.runOnUiThread(new Runnable() {
-                        @Override public void run() { try { applyRelease(a); } catch (Throwable ignore) {} }
+                        @Override public void run() {
+                            try { applyRelease(a); } catch (Throwable ignore) {}
+                            try { IvaTestPatch.apply(a); } catch (Throwable ignore) {}   // 10.94: жёлтая ждёт номер выпущенной
+                        }
                     });
                 } catch (Throwable ignore) {}
             }
         }).start();
     }
 
+    /** 10.94: прогресс сейчас на жёлтой кнопке пробной версии. */
+    static boolean testDriving() {
+        View v = updBtn.get();
+        return v != null && IvaTestPatch.TEST_TAG.equals(v.getTag()) && updState != UPD_IDLE;
+    }
+
     /** Кнопка над «О приложении»: нужна — штатная SelfUpdate.showButtonOnUi; не нужна или другая версия — убираем. */
     static void applyRelease(Activity a) {
         if (a.isFinishing()) return;
+        if (testDriving()) return;                                        // 10.94: качается жёлтая — оранжевую не трогаем
         Object anchor = get(a, "profVer");
         if (!(anchor instanceof View)) return;
         ViewGroup box = updateBox((View) anchor);
@@ -1680,7 +1698,10 @@ public final class IvaNotifyPatch {
             final List<Switch> kids = new ArrayList<Switch>();
             kids.add(switchRow(a, card, "Новые сообщения", "Когда вам пишут в чат", K_MSG, cText, cGray, cOrange));
             if (admin) kids.add(switchRow(a, card, "Новые заявки", "Заявки на ваши инструменты", K_ORD, cText, cGray, cOrange));
-            kids.add(switchRow(a, card, "Обновления приложения", "Когда вышла новая версия", K_UPD, cText, cGray, cOrange));
+            kids.add(switchRow(a, card, "Обновления приложения", UPD_SUB, K_UPD, cText, cGray, cOrange));
+            // 10.94: только eclips и eclipsik — новая жёлтая (пробная) версия; можно выключить
+            if (loggedIn(a) && IvaTestPatch.isTester(String.valueOf(get(a, "userEmail"))))
+                kids.add(switchRow(a, card, IvaTestPatch.NOTE_TITLE, IvaTestPatch.NOTE_SUB, IvaTestPatch.K_TEST, cText, cGray, cOrange));
             // 10.76: клиентам — напоминание об окончании аренды и за сколько: 1, 2 или 3 часа (по умолчанию выключено)
             final Switch[] rentSw = new Switch[1];
             final TextView[] rentChips = new TextView[RENT_HOURS.length];
@@ -2301,5 +2322,6 @@ public final class IvaNotifyPatch {
         if (logged) try { checkMessages(c, email, admin, null); } catch (Throwable ignore) {}
         try { checkUpdate(c, admin); } catch (Throwable ignore) {}
         if (logged && !admin) try { checkRent(c, email, admin); } catch (Throwable ignore) {}   // 10.76
+        if (logged) try { IvaTestPatch.check(c, email, admin); } catch (Throwable ignore) {}    // 10.94: пробная версия
     }
 }

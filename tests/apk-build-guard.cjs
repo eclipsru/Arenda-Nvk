@@ -400,7 +400,7 @@ try {
       'уведомления 10.56/10.57: в «Чате» без уведомления только о видимом; на экране блокировки без текста сообщения');
     assert.ok(np.includes('(Build.VERSION.SDK_INT >= 23 ? PendingIntent.FLAG_IMMUTABLE : 0)'), 'уведомления 10.56: PendingIntent без FLAG_IMMUTABLE упадёт на Android 12+');
     assert.ok(np.includes('static final long UPDATE_EVERY_MS = 6L * 60 * 60 * 1000;') && np.includes('static final String UPDATE_URL = "https://eclipsru.github.io/Arenda-Nvk/app-update.json";')
-      && has(dex14, 'https://eclipsru.github.io/Arenda-Nvk/app-update.json'), 'уведомления 10.56: обновления — тот же app-update.json, что у штатной кнопки, не чаще раза в 6 часов');
+      && has(dex14, 'https://eclipsru.github.io/Arenda-Nvk/app-update.json'), 'уведомления 10.56: обновления — тот же app-update.json, что у штатной кнопки (10.94: проверка раз в 5 минут, см. блок 10.94)');
     for (const str of ['pollHandler', 'pollRun', 'lastNewCnt', 'lastUnread', 'navOrdersTxt', 'isAdminEmail', 'curTab', 'accessToken', 'userEmail', 'showTab',
       '/rest/v1/order_parts?select=id&status=eq.new&archived=eq.false&owner_email=eq.', 'app_messages'])
       assert.ok(has(dex14, str), `classes.dex 10.14: нет «${str}» — уведомления 10.56 не найдут штатное поле или метод`);
@@ -855,6 +855,31 @@ try {
       && /eq\("кабинет 10\.93: пункты «Управления» — по порядку владельца"/.test(tp),
       'кабинет 10.93: «Управление» и «Мои отзывы» — только у создателя, только чтение, без контактов; «Ваш доход с админов» спрятан');
     for (const s2 of [wf, ck]) assert.ok(s2.includes('android/patches/IvaChiefPatch.java'), 'IvaChiefPatch.java — в списке javac сборки и проверки');
+    // 10.94: жёлтая «Обновить до версии N» у eclips и eclipsik — та же загрузка, выпуск строкой app_releases; уведомления
+    const tsp = R('android/patches/IvaTestPatch.java'), np94 = R('android/patches/IvaNotifyPatch.java');
+    const fn94 = (src, name) => { const mm = new RegExp(`static (?:final )?[\\w.<>, \\[\\]]+ ${name}\\(`).exec(src); assert.ok(mm, `нет ${name}`); return src.slice(mm.index, src.indexOf('\n    }\n', mm.index)); };
+    assert.ok(np94.includes('try { IvaTestPatch.onTab(a, tab); } catch (Throwable ignore) {}') && np94.includes('else if ("test".equals(open)) IvaTestPatch.openFromNote(a);')
+      && tsp.includes('static final String[] TESTERS = {"eclips.ru@mail.ru", "eclipsik.ru@mail.ru"};') && tsp.includes('static final String TEST_URL = IvaNotifyPatch.APK_BASE + "app-test.json";')
+      && tsp.includes('boolean want = showTest(me(a), code, IvaNotifyPatch.relCode);') && tsp.includes('IvaNotifyPatch.updateTap(a, code, name, IvaNotifyPatch.APK_BASE + file);')
+      && tsp.includes('if (!onSite(IvaNotifyPatch.APK_BASE + file)) err =') && tsp.includes('IvaClientPatch.apiCall(a, RELEASE_POST, "POST", body, true);')
+      && tsp.includes('static final String RELEASE_POST = "/rest/v1/app_releases";') && tsp.includes('YELLOW = 0xFFFFEA00')
+      && np94.includes('if (testDriving()) return;') && fn94(np94, 'applyRelease').indexOf('if (testDriving()) return;') < fn94(np94, 'applyRelease').indexOf('boolean want = updateWanted(')
+      && !/customer_profiles|passport|phone|surname|select=\*|"PATCH"|"DELETE"/.test(tsp) && (tsp.match(/"POST"/g) || []).length === 1,
+      'пробная 10.94: жёлтая кнопка — только у eclips и eclipsik, файл сайта app-test.json, загрузка оранжевой кнопки, выпуск — одна вставка в app_releases');
+    assert.ok(np94.includes('kids.add(switchRow(a, card, IvaTestPatch.NOTE_TITLE, IvaTestPatch.NOTE_SUB, IvaTestPatch.K_TEST, cText, cGray, cOrange));')
+      && np94.includes('if (loggedIn(a) && IvaTestPatch.isTester(String.valueOf(get(a, "userEmail"))))')
+      && np94.includes('if (logged && !email.isEmpty()) try { IvaTestPatch.check(a, email, admin); } catch (Throwable ignore) {}')
+      && np94.includes('if (logged) try { IvaTestPatch.check(c, email, admin); } catch (Throwable ignore) {}')
+      && fn94(tsp, 'check').includes('if (!isTester(email) || !IvaNotifyPatch.on(c, K_TEST, admin) || IvaNotifyPatch.quiet(c, admin)) return;')
+      && np94.includes('String[] ids = {CH_MSG, CH_ORD, CH_UPD, CH_RENT, IvaTestPatch.CH_TEST};')
+      && np94.includes('static final long UPDATE_NOTE_EVERY_MS = 5L * 60 * 1000;') && fn94(np94, 'updateDue').includes('UPDATE_NOTE_EVERY_MS'),
+      'уведомления 10.94: «Уведомления пробной версии» — только у eclips и eclipsik, выключаются; о выпущенной — у всех, проверка раз в 5 минут');
+    const sq94 = R('supabase/migrations/20261022_app_releases_tester.sql');
+    assert.ok(sq94.includes("CREATE POLICY app_releases_insert_tester ON public.app_releases") && sq94.includes("confirmed_by = 'eclipsik.ru@mail.ru'")
+      && !/DROP (TABLE|POLICY app_releases_insert_creator)|TRUNCATE|GRANT (UPDATE|DELETE)/i.test(sq94.replace(/^--.*$/gm, ''))
+      && R('tools/app-releases-stand.py').includes('20261022_app_releases_tester.sql'),
+      'SQL 10.94: только добавляет право выпуска eclipsik (от своего имени); проверяется на стенде PostgreSQL');
+    for (const s2 of [wf, ck]) assert.ok(s2.includes('android/patches/IvaTestPatch.java'), 'IvaTestPatch.java — в списке javac сборки и проверки');
     assert.ok(wf.includes('            tests/censor-cases.txt\n') && /eq\("цензура 10\.92: общие случаи tests\/censor-cases\.txt/.test(tp)
       && R('tools/check.sh').includes('tools/censor-stand.py'), 'цензура 10.92: общие случаи — в IvaPatchTest (сборка) и на стенде PostgreSQL (check.sh)');
     // 10.89: фильтр — 3 + «Все ▾», выбрали — только выбранная; карточка — модель и состояние; бренд и модель — текстом
@@ -1115,7 +1140,7 @@ try {
       && mf.includes("if (e.target.closest('[data-msug]')) e.preventDefault();") && !/<link[^>]*theme\.css/.test(cab),
       'модели 10.82: сайт — общие модули; кабинет без theme.css');
     // 5. приложение: без новых вставок в smali — только из IvaKindPatch; файл в сборке; личных данных не читаем
-    assert.ok(!/IvaModelPatch|model/i.test(ap) && /IvaKindPatch\.java android\/patches\/IvaModelPatch\.java (android\/patches\/IvaFormPatch\.java )?(android\/patches\/IvaPhotoPatch\.java )?(android\/patches\/IvaCensorPatch\.java )?(android\/patches\/IvaChiefPatch\.java )?2>&1/.test(wf)
+    assert.ok(!/IvaModelPatch|model/i.test(ap) && /IvaKindPatch\.java android\/patches\/IvaModelPatch\.java (android\/patches\/IvaFormPatch\.java )?(android\/patches\/IvaPhotoPatch\.java )?(android\/patches\/IvaCensorPatch\.java )?(android\/patches\/IvaChiefPatch\.java )?(android\/patches\/IvaTestPatch\.java )?2>&1/.test(wf)
       && kp.includes('if (k == 0) IvaModelPatch.refresh(a);') && kp.includes('try { IvaModelPatch.onTab(a, tab); } catch (Throwable ignore) {}')
       && !/customer_profiles|passport|phone|surname/.test(mp),
       'модели 10.82: новых вставок в smali нет; личных данных не читаем');
@@ -1170,7 +1195,7 @@ try {
     assert.ok(kp.includes('static final String SUB_HINT = "Подкатегория (необязательно)";') && has(dex14, 'Подкатегория (необязательно)')
       && has(dex14, 'atCatSug') && has(dex14, 'atSubSug') && has(dex14, 'atName'),
       'автоподбор 10.81: штатные поля и текст пустой подкатегории есть в 10.14');
-    assert.ok(!/IvaKindPatch|kind/i.test(ap) && /IvaRentPatch\.java android\/patches\/IvaKindPatch\.java (android\/patches\/IvaModelPatch\.java )?(android\/patches\/IvaFormPatch\.java )?(android\/patches\/IvaPhotoPatch\.java )?(android\/patches\/IvaCensorPatch\.java )?(android\/patches\/IvaChiefPatch\.java )?2>&1/.test(wf),
+    assert.ok(!/IvaKindPatch|kind/i.test(ap) && /IvaRentPatch\.java android\/patches\/IvaKindPatch\.java (android\/patches\/IvaModelPatch\.java )?(android\/patches\/IvaFormPatch\.java )?(android\/patches\/IvaPhotoPatch\.java )?(android\/patches\/IvaCensorPatch\.java )?(android\/patches\/IvaChiefPatch\.java )?(android\/patches\/IvaTestPatch\.java )?2>&1/.test(wf),
       'автоподбор 10.81: новых вставок в smali и новых файлов нет');
     // 5. сайт: один модуль, вид пишется только когда справочник видов есть в базе
     assert.ok(nw.includes('<script src="assets/kind-guess.js?v=20261016-kind"></script>') && cab.includes('<script src="assets/kind-guess.js?v=20261016-kind"></script>')
@@ -1245,7 +1270,7 @@ try {
     const sql = R('supabase/migrations/20261015_category_tree.sql'), mv = R('supabase/migrations/20261015_category_tree_move.sql');
     const fnx = (src, name) => { const mm = new RegExp(`static (?:final )?[\\w.<>, \\[\\]]+ ${name}\\(`).exec(src); assert.ok(mm, `нет ${name}`); return src.slice(mm.index, src.indexOf('\n    }\n', mm.index)); };
     // 1. сборка и проверка компилируют IvaKindPatch; вставок в smali нет
-    assert.ok(/IvaRentPatch\.java android\/patches\/IvaKindPatch\.java (android\/patches\/IvaModelPatch\.java )?(android\/patches\/IvaFormPatch\.java )?(android\/patches\/IvaPhotoPatch\.java )?(android\/patches\/IvaCensorPatch\.java )?(android\/patches\/IvaChiefPatch\.java )?2>&1/.test(wf) && ck.includes('android/patches/IvaKindPatch.java'),
+    assert.ok(/IvaRentPatch\.java android\/patches\/IvaKindPatch\.java (android\/patches\/IvaModelPatch\.java )?(android\/patches\/IvaFormPatch\.java )?(android\/patches\/IvaPhotoPatch\.java )?(android\/patches\/IvaCensorPatch\.java )?(android\/patches\/IvaChiefPatch\.java )?(android\/patches\/IvaTestPatch\.java )?2>&1/.test(wf) && ck.includes('android/patches/IvaKindPatch.java'),
       'вид 10.79: IvaKindPatch компилируется в сборку и в проверку');
     assert.ok(!/IvaKindPatch|kind/i.test(ap), 'вид 10.79: новых вставок в smali нет');
     // 2. точки входа: onTab (справочник, форма, запись), onHub (только форма — запомненный выбор не трогает), касание сохранения

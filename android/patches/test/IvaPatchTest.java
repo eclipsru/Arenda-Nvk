@@ -457,8 +457,8 @@ public class IvaPatchTest {
             eq("уведомления 10.56: обновление — та же версия", IvaNotifyPatch.updateNews(130, 130, 0), false);
             eq("уведомления 10.56: обновление — сайт старее", IvaNotifyPatch.updateNews(127, 130, 0), false);
             eq("уведомления 10.56: проверка обновлений — первый раз", IvaNotifyPatch.updateDue(0, 1000L), true);
-            eq("уведомления 10.56: проверка обновлений — рано", IvaNotifyPatch.updateDue(1000L, 1000L + 5L * 3600000), false);
-            eq("уведомления 10.56: проверка обновлений — через 6 часов", IvaNotifyPatch.updateDue(1000L, 1000L + 6L * 3600000), true);
+            eq("уведомления 10.94: проверка обновлений — рано (через 4 минуты)", IvaNotifyPatch.updateDue(1000L, 1000L + 4L * 60000), false);
+            eq("уведомления 10.94: проверка обновлений — через 5 минут (раньше 6 часов)", IvaNotifyPatch.updateDue(1000L, 1000L + 5L * 60000), true);
             eq("уведомления 10.56: проверка обновлений — часы перевели назад", IvaNotifyPatch.updateDue(5000L, 1000L), true);
             eq("уведомления 10.56: текст обновления", IvaNotifyPatch.updateText("10.57"), "Версия 10.57 — откройте приложение и нажмите «Обновить»");
             eq("уведомления 10.56: текст обновления без номера", IvaNotifyPatch.updateText("null"), "Новая версия — откройте приложение и нажмите «Обновить»");
@@ -2126,6 +2126,40 @@ public class IvaPatchTest {
             eq("кабинет 10.93: дни назад", IvaChiefPatch.daysAgo("2026-10-15T00:00:01Z", ch93Now) + "," + IvaChiefPatch.daysAgo("2026-10-08T12:00:00", ch93Now) + ","
                 + IvaChiefPatch.daysAgo("кривое", ch93Now) + "," + IvaChiefPatch.daysAgo(null, ch93Now), "0,7,-1,-1");
         } catch (Exception ch93E) { eq("кабинет 10.93: тесты", String.valueOf(ch93E), ""); }
+        // 10.94: жёлтая (пробная) версия у eclips и eclipsik — кнопка, выбор, выпуск, уведомление
+        {
+            eq("пробная 10.94: кому видна", IvaTestPatch.isTester("eclips.ru@mail.ru") + "," + IvaTestPatch.isTester(" Eclipsik.RU@mail.ru ") + ","
+                + IvaTestPatch.isTester("someone@mail.ru") + "," + IvaTestPatch.isTester("") + "," + IvaTestPatch.isTester(null) + ","
+                + IvaTestPatch.isTester("xeclips.ru@mail.ru"), "true,true,false,false,false,false");
+            eq("пробная 10.94: файл — только APK в корне сайта", IvaTestPatch.feedFile("ProkatInstrumenta-10.93.apk") + "|"
+                + IvaTestPatch.feedFile("https://eclipsru.github.io/Arenda-Nvk/ProkatInstrumenta-10.94.apk") + "|"
+                + IvaTestPatch.feedFile("../ProkatInstrumenta-10.93.apk") + "|" + IvaTestPatch.feedFile("https://evil.ru/ProkatInstrumenta-10.93.apk") + "|"
+                + IvaTestPatch.feedFile("ProkatInstrumenta-10.93.apk.exe") + "|" + IvaTestPatch.feedFile(null),
+                "ProkatInstrumenta-10.93.apk|ProkatInstrumenta-10.94.apk||||");
+            eq("пробная 10.94: жёлтая кнопка — только у своих и пока пробная новее выпущенной",
+                IvaTestPatch.showTest(true, 168, 167) + "," + IvaTestPatch.showTest(true, 167, 167) + "," + IvaTestPatch.showTest(true, 166, 167) + ","
+                + IvaTestPatch.showTest(false, 168, 167) + "," + IvaTestPatch.showTest(true, 168, 0) + "," + IvaTestPatch.showTest(true, 0, 167),
+                "true,false,false,false,false,false");
+            eq("пробная 10.94: надпись", IvaTestPatch.title(168, 167, "10.94") + "|" + IvaTestPatch.title(168, 168, "10.94") + "|" + IvaTestPatch.title(168, 0, ""),
+                "Обновить до версии 10.94|Версия 10.94 · выпустить для всех|Обновить до версии 168");
+            eq("пробная 10.94: два варианта", String.join("|", IvaTestPatch.choices("10.94")), "Обновить версию 10.94|Релиз версии 10.94");
+            String t94Long = new String(new char[600]).replace('\0', 'я');
+            String t94Body = IvaTestPatch.releaseBody(168, "10.94", "ProkatInstrumenta-10.94.apk", false, "Пробная \"сборка\"\n" + t94Long);
+            eq("пробная 10.94: строка релиза — как у сайта", t94Body.startsWith("{\"version_code\":168,\"version_name\":\"10.94\",\"apk_url\":\"ProkatInstrumenta-10.94.apk\",\"reinstall\":false,\"notes\":\"Пробная \\\"сборка\\\"\\u000a")
+                + "," + t94Body.endsWith("я\"}") + "," + (t94Body.length() - t94Body.replace("я", "").length()), "true,true,484");   // 483 «я» после обрезки до 500 + «я» в «Пробная»
+            eq("пробная 10.94: ответы базы на выпуск", IvaTestPatch.releaseError("201", "") + "|" + IvaTestPatch.releaseError("409", "{\"code\":\"23505\"}") + "|"
+                + IvaTestPatch.releaseError("403", "{\"code\":\"42501\"}") + "|" + IvaTestPatch.releaseError("401", "") + "|"
+                + IvaTestPatch.releaseError("404", "{\"code\":\"PGRST205\"}") + "|" + IvaTestPatch.releaseError("400", "{\"code\":\"23514\"}") + "|"
+                + IvaTestPatch.releaseError("500", "x") + "|" + IvaTestPatch.releaseError(null, null),
+                "null|Эта версия уже выпущена|Нет права выпускать версию (для eclipsik.ru@mail.ru нужен SQL 20261022)|"
+                + "Нет права выпускать версию (для eclipsik.ru@mail.ru нужен SQL 20261022)|В базе нет таблицы релизов (SQL 20261005)|"
+                + "База не приняла номер или файл версии|Не удалось выпустить версию (ответ 500)|Не удалось выпустить версию (ответ —)");
+            eq("пробная 10.94: уведомлять о новой жёлтой", IvaTestPatch.testNews(168, 167, 0, 0) + "," + IvaTestPatch.testNews(168, 167, 168, 0) + ","
+                + IvaTestPatch.testNews(168, 168, 0, 0) + "," + IvaTestPatch.testNews(168, 167, 0, 168) + "," + IvaTestPatch.testNews(169, 167, 168, 0) + ","
+                + IvaTestPatch.testNews(0, 167, 0, 0), "true,false,false,false,true,false");
+            eq("пробная 10.94: файл сайта и переключатель", IvaTestPatch.TEST_URL + "|" + IvaTestPatch.K_TEST + "|" + IvaNotifyPatch.defOn(IvaTestPatch.K_TEST) + "|" + IvaTestPatch.NOTE_TITLE,
+                "https://eclipsru.github.io/Arenda-Nvk/app-test.json|test_build|true|Уведомления пробной версии");
+        }
         if (fail > 0) { System.out.println("ошибок: " + fail); System.exit(1); }
         System.out.println("все проверки IvaPatch пройдены");
     }
