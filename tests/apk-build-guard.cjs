@@ -793,12 +793,33 @@ try {
       && fp.includes('keepSaveLast(a, form);') && fp.includes('if (c.getVisibility() == View.GONE || c instanceof android.widget.Space) { i++; continue; }'),
       'форма 10.88: «Опубликовать» находится по id разметки и стоит последней (штатный отступ под ней остаётся)');
     assert.ok(has(arsc14, 'atSave') && has(arsc14, 'teSave'), 'APK 10.14: нет id atSave / teSave — кнопку публикации не найти');
-    // 10.88: частые условия — плашки под «Условиями аренды», можно несколько; строка добавляется / убирается
+    // 10.89 (просьба владельца 15.10): частые условия — одна строка с выпадающим списком; выбранное — в поле и из списка
     assert.ok(fp.includes('SEC + "4", IvaKindPatch.LBL + "atTerms", "atTerms", TERMS, IvaPatch.DEL_ROW_TAG') && fp.includes('static String termToggle(String terms, String p) {')
-      && fp.includes('static List<String> termOptions(String src, List<String> own) {') && fp.includes('if ("atTerms".equals(field) && tv.getParent() instanceof LinearLayout) paintTerms(')
+      && fp.includes('static List<String> termLeft(String src, String terms) {') && fp.includes('if ("atTerms".equals(field) && tv.getParent() instanceof LinearLayout) paintTerms(')
+      && !fp.includes('ownTerms') && !fp.includes('"Наличные или перевод"') && fp.includes('TERMS_PICK = "Выбрать из частых условий"')
       && (fp.match(/static final String\[\] TERMS_BASE = \{[^}]*\}/) || [''])[0].split('",').length >= 10,
-      'форма 10.88: частые условия под «Условиями аренды» — свои, по питанию и общие; выбрать можно хоть все');
-    assert.ok((tp.match(/eq\("форма 10\.88: /g) || []).length >= 6, 'IvaPatchTest: проверки 10.88');
+      'форма 10.89: частые условия — выпадающим списком под «Условиями аренды», без своих строк и «Наличные или перевод»');
+    assert.ok(fp.includes('static final boolean SHOW_SAMPLE = false;') && fp.includes('hideTop(form);') && fp.includes('TITLE_NATIVE = "Добавить инструмент", SUBTITLE_NATIVE = "Публикуется сразу"'),
+      'форма 10.89: сверху нет заголовка, подзаголовка и «по образцу» (черновик остаётся)');
+    // 10.89: фото — 5 окошек, большой просмотр, камера / галерея; результат — в свой Fragment, onActivityResult не трогаем
+    const php = R('android/patches/IvaPhotoPatch.java');
+    assert.ok(php.includes('public final class IvaPhotoPatch {') && php.includes('public static final class Picker extends android.app.Fragment {')
+      && php.includes('public Picker() {}') && php.includes('new Intent("android.provider.action.PICK_IMAGES")') && php.includes('new Intent(Intent.ACTION_PICK)')
+      && php.includes('android.provider.MediaStore.ACTION_IMAGE_CAPTURE') && php.includes('android.provider.MediaStore.Images.Media.EXTERNAL_CONTENT_URI, cv)')
+      && php.includes('if (old != null) android.os.StrictMode.setVmPolicy(old);') && php.includes('static final int SLOTS = 5, MAX_SIDE = 1600, JPEG_Q = 85')
+      && !/onActivityResult\(Activity|uses-permission|CAMERA"/.test(php) && fp.includes('try { IvaPhotoPatch.setup(a, form); } catch (Throwable ignore) {}'),
+      'фото 10.89: 5 окошек, «Сделать фото» / «Из галереи» без новых разрешений, результат — в IvaPhotoPatch.Picker');
+    for (const s2 of [wf, ck]) assert.ok(s2.includes('android/patches/IvaPhotoPatch.java'), 'IvaPhotoPatch.java — в списке javac сборки и проверки');
+    // 10.89: фильтр — 3 + «Все ▾», выбрали — только выбранная; карточка — модель и состояние; бренд и модель — текстом
+    const sp89 = R('android/patches/IvaSearchPatch.java'), mp89 = R('android/patches/IvaModelPatch.java');
+    assert.ok(sp89.includes('static final int FACET_TOP = 3;') && (sp89.match(/facetShown\(\w+Vis, \w+Counts, draft\.\w+, \w+Open, FACET_TOP\)/g) || []).length === 3
+      && (sp89.match(/if \(facetMore\(\w+Vis, draft\.\w+, FACET_TOP\)\)/g) || []).length === 3 && !sp89.includes('addOption(a, catBox, "Все \\u00b7 "'),
+      'фильтр 10.89: категории, подкатегории и вид — по 3 и «Все ▾»');
+    assert.ok(mp89.includes('rows.addAll(detHead(kt, modelName(a, jstr(j, "model_id")), jstr(j, "terms")));') && mp89.includes('try { paintTerms(a, (JSONObject) it); } catch (Throwable ignore) {}')
+      && mp89.includes('String nt = brandPut(String.valueOf(f.getText()), prev, brandSel, brands(idx, kindNow()));') && mp89.includes('try { syncName(a, f); } catch (Throwable ignore) {}'),
+      'карточка и «Модель» 10.89: модель и состояние в «Характеристиках», бренд — в поле, модель — в названии');
+    assert.ok((tp.match(/eq\("(форма|фото|модель|карточка|фильтр) 10\.89: /g) || []).length >= 13, 'IvaPatchTest: проверки 10.89');
+    assert.ok((tp.match(/eq\("форма 10\.88: /g) || []).length >= 4, 'IvaPatchTest: проверки 10.88');
     assert.ok(fp.includes('static SharedPreferences prefs(Activity a) { return a.getSharedPreferences("iva_form", 0); }')
       && fp.includes('new File(new File(a.getFilesDir(), "iva_draft"), "p" + i + ".jpg")') && !/onActivityResult|MediaStore|ACTION_IMAGE_CAPTURE/.test(fp),
       'форма 10.87: черновик — только на телефоне (prefs и файлы приложения); камеры и onActivityResult нет');
@@ -1047,7 +1068,7 @@ try {
       && mf.includes("if (e.target.closest('[data-msug]')) e.preventDefault();") && !/<link[^>]*theme\.css/.test(cab),
       'модели 10.82: сайт — общие модули; кабинет без theme.css');
     // 5. приложение: без новых вставок в smali — только из IvaKindPatch; файл в сборке; личных данных не читаем
-    assert.ok(!/IvaModelPatch|model/i.test(ap) && /IvaKindPatch\.java android\/patches\/IvaModelPatch\.java (android\/patches\/IvaFormPatch\.java )?2>&1/.test(wf)
+    assert.ok(!/IvaModelPatch|model/i.test(ap) && /IvaKindPatch\.java android\/patches\/IvaModelPatch\.java (android\/patches\/IvaFormPatch\.java )?(android\/patches\/IvaPhotoPatch\.java )?2>&1/.test(wf)
       && kp.includes('if (k == 0) IvaModelPatch.refresh(a);') && kp.includes('try { IvaModelPatch.onTab(a, tab); } catch (Throwable ignore) {}')
       && !/customer_profiles|passport|phone|surname/.test(mp),
       'модели 10.82: новых вставок в smali нет; личных данных не читаем');
@@ -1102,7 +1123,7 @@ try {
     assert.ok(kp.includes('static final String SUB_HINT = "Подкатегория (необязательно)";') && has(dex14, 'Подкатегория (необязательно)')
       && has(dex14, 'atCatSug') && has(dex14, 'atSubSug') && has(dex14, 'atName'),
       'автоподбор 10.81: штатные поля и текст пустой подкатегории есть в 10.14');
-    assert.ok(!/IvaKindPatch|kind/i.test(ap) && /IvaRentPatch\.java android\/patches\/IvaKindPatch\.java (android\/patches\/IvaModelPatch\.java )?(android\/patches\/IvaFormPatch\.java )?2>&1/.test(wf),
+    assert.ok(!/IvaKindPatch|kind/i.test(ap) && /IvaRentPatch\.java android\/patches\/IvaKindPatch\.java (android\/patches\/IvaModelPatch\.java )?(android\/patches\/IvaFormPatch\.java )?(android\/patches\/IvaPhotoPatch\.java )?2>&1/.test(wf),
       'автоподбор 10.81: новых вставок в smali и новых файлов нет');
     // 5. сайт: один модуль, вид пишется только когда справочник видов есть в базе
     assert.ok(nw.includes('<script src="assets/kind-guess.js?v=20261016-kind"></script>') && cab.includes('<script src="assets/kind-guess.js?v=20261016-kind"></script>')
@@ -1177,7 +1198,7 @@ try {
     const sql = R('supabase/migrations/20261015_category_tree.sql'), mv = R('supabase/migrations/20261015_category_tree_move.sql');
     const fnx = (src, name) => { const mm = new RegExp(`static (?:final )?[\\w.<>, \\[\\]]+ ${name}\\(`).exec(src); assert.ok(mm, `нет ${name}`); return src.slice(mm.index, src.indexOf('\n    }\n', mm.index)); };
     // 1. сборка и проверка компилируют IvaKindPatch; вставок в smali нет
-    assert.ok(/IvaRentPatch\.java android\/patches\/IvaKindPatch\.java (android\/patches\/IvaModelPatch\.java )?(android\/patches\/IvaFormPatch\.java )?2>&1/.test(wf) && ck.includes('android/patches/IvaKindPatch.java'),
+    assert.ok(/IvaRentPatch\.java android\/patches\/IvaKindPatch\.java (android\/patches\/IvaModelPatch\.java )?(android\/patches\/IvaFormPatch\.java )?(android\/patches\/IvaPhotoPatch\.java )?2>&1/.test(wf) && ck.includes('android/patches/IvaKindPatch.java'),
       'вид 10.79: IvaKindPatch компилируется в сборку и в проверку');
     assert.ok(!/IvaKindPatch|kind/i.test(ap), 'вид 10.79: новых вставок в smali нет');
     // 2. точки входа: onTab (справочник, форма, запись), onHub (только форма — запомненный выбор не трогает), касание сохранения
@@ -1227,7 +1248,7 @@ try {
     const rp = fnx(sp, 'refreshPanel');
     assert.ok(rp.indexOf('subBox.setVisibility(') < rp.indexOf('kindBox.removeAllViews();') && rp.includes('IvaKindPatch.forSub(IvaKindPatch.list(), draft.cat, draft.sub)')
       && rp.includes('facetVisible(kindKeys, kindCounts, draft.kind)') && rp.includes('nativeMatch(j, "cat", draft.cat, draft.sub, query) || !extraMatch(j, city, noKind)')
-      && rp.includes('draft.cat = key; draft.sub = ""; draft.kind = "";') && rp.includes('draft.sub = key.equals(draft.sub) ? "" : key; draft.kind = "";'),
+      && rp.includes('draft.cat = key.equals(draft.cat) ? "" : key; draft.sub = ""; draft.kind = "";') && rp.includes('draft.sub = key.equals(draft.sub) ? "" : key; draft.kind = "";'),
       'фильтр 10.79: «Вид» после «Подкатегории» — только непустые с числом; смена категории/подкатегории снимает вид');
     assert.ok(fnx(sp, 'applyDraft').includes('applied.kind = d.kind;') && fnx(sp, 'refreshChips').includes('applied.kind = f.kind;')
       && fnx(sp, 'applySearch').includes('applied.kind = kindFor(a, applied.kind);') && fnx(sp, 'refreshFilterButton').includes('activeCount(f.cat, f.sub, f.kind,'),

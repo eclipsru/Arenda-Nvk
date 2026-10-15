@@ -45,6 +45,10 @@ import java.util.WeakHashMap;
  *  * 10.88 (просьба владельца 15.10): «Города выдачи» нет — пункт выдачи с адресом и временем работы уже в карточке.
  *    Под «Условиями аренды» — частые условия плашками: нажали — строка добавилась в условия, ещё раз — убралась;
  *    можно выбрать хоть все. Сначала — свои условия из прошлых объявлений, затем по питанию (бензин / аккумулятор), затем общие.
+ *  * 10.89 (просьба владельца 15.10): сверху формы нет «Добавить инструмент», «Публикуется сразу…» и «Заполнить по
+ *    образцу» — форма начинается с «Что сдаёте» (строка черновика остаётся — только когда он есть). Частые условия —
+ *    одной строкой «Выбрать из частых условий ▾»: выбрали — условие в поле и пропало из списка (убрали из поля — вернулось).
+ *    Фото — IvaPhotoPatch (5 окошек, большой просмотр, «Сделать фото» / «Из галереи»).
  *  * 10.88: кнопка «Опубликовать» в 10.14 — не поле MainActivity, а id разметки (atSave); раньше её не находили
  *    (IvaPatch.view) — она оставалась посреди формы, а проверка, «Состояние» и вид при нажатии не срабатывали.
  *  Штатные поля только переставляются внутри той же формы и получают другие подсказки — их слушатели, id и проверки
@@ -62,31 +66,32 @@ final class IvaFormPatch {
         {"atPrice", "Например: 800"},
         {"atDep", "Пусто — залог за 5 суток аренды"},
         {"atDescr", "Что умеет, для каких работ, что важно знать"},
-        {"atTerms", "Выберите ниже или напишите своё"},
+        {"atTerms", "Напишите своё или выберите из списка ниже"},
         {"atDelPrice", "Цена доставки, ₽ за 1 км"},
     };
     static final String NATIVE_CAT_EMPTY = "Категория *", CAT_EMPTY = "Выберите категорию", SUB_EMPTY = "Выберите подкатегорию";
     static final String ERR_NAME = "Напишите название инструмента", ERR_CAT = "Выберите категорию", ERR_PRICE = "Укажите цену за сутки";
-    static final String TERMS_LABEL = "Частые условия — нажмите, чтобы добавить или убрать (можно все)";
+    static final String TERMS_PICK = "Выбрать из частых условий", TERMS_DONE = "Все частые условия уже добавлены";
+    static final String TITLE_NATIVE = "Добавить инструмент", SUBTITLE_NATIVE = "Публикуется сразу";
     /** Общие условия проката инструмента (по одному на строку условий). */
     static final String[] TERMS_BASE = {
-        "Паспорт при получении", "Оплата при получении", "Наличные или перевод", "Минимальный срок — 1 сутки",
+        "Паспорт при получении", "Оплата при получении", "Минимальный срок — 1 сутки",
         "Залог возвращаем при сдаче", "Проверяем при выдаче и при возврате", "Вернуть чистым",
         "Расходники — за счёт арендатора", "Поломка по вине арендатора — ремонт за его счёт",
         "Покажем, как пользоваться", "Продление — предупредить заранее", "Оформляем договор аренды",
     };
     static final String[] TERMS_FUEL = {"Топливо — за счёт арендатора", "Вернуть с полным баком"};
     static final String[] TERMS_BATT = {"Аккумуляторы выдаём заряженными"};
-    static final int TERMS_OWN_MAX = 4, TERMS_OWN_LEN = 60;
     static final String SAMPLE_LABEL = "Заполнить по образцу своего инструмента (всё, кроме фото)";
     static final String DRAFT_CONT = "Продолжить", DRAFT_DROP = "Удалить черновик";
     static final int MAX_PICS = 5, SAMPLE_MAX = 15;
+    static final boolean SHOW_SAMPLE = false;                                         // 10.89: строка «по образцу» убрана
     static final long SAVE_DELAY_MS = 1500, PUBLISH_QUIET_MS = 30000;
 
     /** Порядок пунктов формы. Ключ — штатное поле («atName»), подпись (IvaKindPatch.LBL + поле), «kind» или тег нашего блока. */
     static final String[] ORDER = {
         SAMPLE, DRAFT,
-        SEC + "1", IvaKindPatch.LBL + "atPhotos", "atPhotos", IvaKindPatch.LBL + "atName", "atName", ERR + "atName",
+        SEC + "1", IvaKindPatch.LBL + "atPhotos", "atPhotos", IvaPhotoPatch.TAG, IvaKindPatch.LBL + "atName", "atName", ERR + "atName",
         IvaModelPatch.NAME_SUG, IvaModelPatch.BLOCK,
         IvaKindPatch.LBL + "atCat", "atCat", ERR + "atCat", "atCatSug", IvaKindPatch.LBL + "atSub", "atSub", "atSubSug",
         IvaKindPatch.LBL + IvaKindPatch.KIND_KEY, IvaKindPatch.KIND_KEY,
@@ -201,42 +206,29 @@ final class IvaFormPatch {
         return base.isEmpty() ? p.trim() : base + "\n" + p.trim();
     }
 
-    /** Свои частые условия из прошлых объявлений: короткие строки, частые первыми; без «Состояния», адреса и телефонов. */
-    static List<String> ownTerms(List<String> texts, int max) {
-        LinkedHashMap<String, String> show = new LinkedHashMap<String, String>();
-        final HashMap<String, Integer> cnt = new HashMap<String, Integer>();
-        if (texts != null) for (String tx : texts) {
-            HashSet<String> once = new HashSet<String>();
-            for (String line : IvaPatch.condStrip(tx == null ? "" : tx).split("\n")) {
-                String l = line.trim().replaceAll("^[•·*–—-]+\\s*", "").replaceAll("[\\s.;,]+$", "");
-                String k = termKey(l);
-                if (l.length() < 4 || l.length() > TERMS_OWN_LEN || k.startsWith("состояние:") || k.contains("адрес")
-                        || l.replaceAll("[^0-9]", "").length() >= 5 || !once.add(k)) continue;
-                if (!show.containsKey(k)) show.put(k, l);
-                Integer c = cnt.get(k);
-                cnt.put(k, c == null ? 1 : c + 1);
-            }
-        }
-        List<String> keys = new ArrayList<String>(show.keySet());
-        java.util.Collections.sort(keys, new java.util.Comparator<String>() {   // устойчиво: при равенстве — как встретились
-            @Override public int compare(String x, String y) { return cnt.get(y) - cnt.get(x); }
-        });
-        List<String> out = new ArrayList<String>();
-        for (String k : keys) { if (out.size() >= max) break; out.add(show.get(k)); }
-        return out;
-    }
-
-    /** Плашки условий: свои → по питанию (бензин/дизель — топливо, аккумулятор — заряд) → общие; без повторов. */
-    static List<String> termOptions(String src, List<String> own) {
+    /** Частые условия: по питанию (бензин/дизель — топливо, аккумулятор — заряд), затем общие; без повторов. */
+    static List<String> termOptions(String src) {
         LinkedHashMap<String, String> m = new LinkedHashMap<String, String>();
         List<String> all = new ArrayList<String>();
-        if (own != null) all.addAll(own);
         String s = src == null ? "" : src.trim();
         if ("Бензин".equals(s) || "Дизель".equals(s)) all.addAll(Arrays.asList(TERMS_FUEL));
         if (IvaModelPatch.BATTERY.equals(s)) all.addAll(Arrays.asList(TERMS_BATT));
         all.addAll(Arrays.asList(TERMS_BASE));
         for (String p : all) { String k = termKey(p); if (!k.isEmpty() && !m.containsKey(k)) m.put(k, p.trim()); }
         return new ArrayList<String>(m.values());
+    }
+
+    /** 10.89: что осталось в выпадающем списке — частые условия, которых ещё нет строкой в поле. */
+    static List<String> termLeft(String src, String terms) {
+        List<String> out = new ArrayList<String>();
+        for (String p : termOptions(src)) if (!termHas(terms, p)) out.add(p);
+        return out;
+    }
+
+    /** 10.89: штатный заголовок и подзаголовок формы (их скрываем). */
+    static boolean nativeTop(CharSequence text) {
+        String t = text == null ? "" : text.toString().trim();
+        return t.equals(TITLE_NATIVE) || t.startsWith(SUBTITLE_NATIVE);
     }
 
     /** Строка черновика: «Перфоратор Makita HR2470 · 3 фото». */
@@ -360,6 +352,8 @@ final class IvaFormPatch {
     /** Вызывается из IvaKindPatch.arrange (форма «Добавить» открыта или поменялась). */
     static void setup(Activity a, LinearLayout form) {
         ensureViews(a, form);
+        hideTop(form);
+        try { IvaPhotoPatch.setup(a, form); } catch (Throwable ignore) {}       // 10.89: 5 окошек фото
         hints(a);
         paintErrors(a, form, false);
         paintTop(a, form);
@@ -416,6 +410,15 @@ final class IvaFormPatch {
             form.addView(d, at, new LinearLayout.LayoutParams(-1, -2));
         }
         for (String f : new String[]{"atName", "atPrice", "atDep", "atDescr", "atTerms", "atDelPrice"}) watchField(a, f);
+    }
+
+    /** 10.89: «Добавить инструмент» и «Публикуется сразу…» — скрыты (штатные TextView без id и тега). */
+    static void hideTop(LinearLayout form) {
+        for (int i = 0; i < form.getChildCount(); i++) {
+            View c = form.getChildAt(i);
+            if (c.getTag() == null && c instanceof TextView && !(c instanceof EditText) && !(c instanceof android.widget.Button)
+                    && c.getVisibility() != View.GONE && nativeTop(((TextView) c).getText())) c.setVisibility(View.GONE);
+        }
     }
 
     static View child(Activity a, LinearLayout form, String key) {
@@ -556,58 +559,90 @@ final class IvaFormPatch {
         });
     }
 
-    // ───── 10.88: плашки частых условий под «Условиями аренды» ─────
+    // ───── 10.89: частые условия — одной строкой с выпадающим списком под «Условиями аренды» ─────
+
+    static boolean termsOpen = false;
 
     static void paintTerms(final Activity a, final LinearLayout form) {
         View bv = form.findViewWithTag(TERMS);
         if (!(bv instanceof LinearLayout)) return;
-        LinearLayout box = (LinearLayout) bv;
+        final LinearLayout box = (LinearLayout) bv;
         final String terms = text(a, "atTerms");
-        List<String> texts = new ArrayList<String>();
-        List<JSONObject> l = mine;
-        if (l != null) for (JSONObject j : l) texts.add(js(j, "terms"));
-        List<String> opts = termOptions(str(IvaModelPatch.specVals.get(IvaModelPatch.SRC)), ownTerms(texts, TERMS_OWN_MAX));
-        StringBuilder sig = new StringBuilder();
-        for (String p : opts) sig.append(termHas(terms, p) ? '+' : '-').append(p).append('|');
-        sig.append(form.getWidth());
+        List<String> left = termLeft(str(IvaModelPatch.specVals.get(IvaModelPatch.SRC)), terms);
+        StringBuilder sig = new StringBuilder(termsOpen ? "1|" : "0|");
+        for (String p : left) sig.append(p).append('|');
         if (sig.toString().equals(sigs.get(box))) return;
         sigs.put(box, sig.toString());
         box.removeAllViews();
-        box.addView(IvaModelPatch.small(a, TERMS_LABEL), IvaModelPatch.lpTop(a, 8));
-        int avail = form.getWidth() - form.getPaddingLeft() - form.getPaddingRight();
-        if (avail <= 0) avail = a.getResources().getDisplayMetrics().widthPixels - IvaPatch.dp(a, 40);
-        int gap = IvaPatch.dp(a, 8), used = 0;
-        LinearLayout row = null;
-        for (final String p : opts) {
-            boolean on = termHas(terms, p);
-            TextView c = IvaSearchPatch.chip(a, on ? "\u2713 " + p : p, on, false);
-            c.setContentDescription(p + (on ? ". Выбрано, нажмите, чтобы убрать" : ". Нажмите, чтобы добавить"));
-            c.setOnClickListener(new View.OnClickListener() {
+        if (left.isEmpty()) termsOpen = false;
+        Object sv = IvaClientPatch.get(a, "atSub"), sug = IvaClientPatch.get(a, "atSubSug");
+        TextView f = new TextView(a);
+        f.setText(left.isEmpty() ? TERMS_DONE : TERMS_PICK);
+        f.setTextSize(15f);
+        f.setTextColor(left.isEmpty() ? IvaPatch.color(a, "gray2", 0xff6b7080) : IvaPatch.color(a, "text", 0xfff2f4f8));
+        f.setGravity(android.view.Gravity.CENTER_VERTICAL);
+        f.setSingleLine(true);
+        f.setEllipsize(android.text.TextUtils.TruncateAt.END);
+        if (sv instanceof TextView) {                                                 // как поле «Подкатегория»: фон, отступы, стрелка
+            TextView st = (TextView) sv;
+            f.setPadding(st.getPaddingLeft(), st.getPaddingTop(), st.getPaddingRight(), st.getPaddingBottom());
+            f.setBackground(IvaKindPatch.copy(st.getBackground(), a, "bg_field"));
+            try {
+                android.graphics.drawable.Drawable[] ds = st.getCompoundDrawables();
+                android.graphics.drawable.Drawable chev = ds != null && ds.length > 2 ? IvaKindPatch.copy(ds[2], a, null) : null;
+                if (chev != null && !left.isEmpty()) {
+                    chev.setBounds(ds[2].getBounds());
+                    if (termsOpen) chev.setLevel(1);
+                    f.setCompoundDrawables(null, null, chev, null);
+                }
+                f.setCompoundDrawablePadding(st.getCompoundDrawablePadding());
+            } catch (Throwable ignore) {}
+        } else {
+            f.setBackground(IvaPatch.drawable(a, "bg_field"));
+            f.setPadding(IvaPatch.dp(a, 15), IvaPatch.dp(a, 15), IvaPatch.dp(a, 15), IvaPatch.dp(a, 15));
+        }
+        f.setContentDescription(left.isEmpty() ? TERMS_DONE : TERMS_PICK + (termsOpen ? ". Список открыт" : ". Открыть список"));
+        if (!left.isEmpty()) {
+            f.setClickable(true);
+            f.setOnClickListener(new View.OnClickListener() {
+                @Override public void onClick(View v) {
+                    try { termsOpen = !termsOpen; IvaSearchPatch.hideKeyboard(a, v); paintTerms(a, form); } catch (Throwable ignore) {}
+                }
+            });
+        }
+        box.addView(f, IvaModelPatch.lpTop(a, 10));
+        if (!termsOpen || left.isEmpty()) return;
+        LinearLayout drop = new LinearLayout(a);
+        drop.setOrientation(LinearLayout.VERTICAL);
+        drop.setBackground(IvaKindPatch.copy(sug instanceof View ? ((View) sug).getBackground() : null, a, "bg_card"));
+        for (final String p : left) {
+            TextView t = new TextView(a);
+            t.setText(p);
+            t.setTextSize(15f);
+            t.setTextColor(IvaPatch.color(a, "text", 0xfff2f4f8));
+            t.setMinHeight(IvaPatch.dp(a, 44));
+            t.setGravity(android.view.Gravity.CENTER_VERTICAL);
+            t.setPadding(IvaPatch.dp(a, 15), IvaPatch.dp(a, 10), IvaPatch.dp(a, 15), IvaPatch.dp(a, 10));
+            t.setContentDescription(p + ". Добавить в условия");
+            IvaSearchPatch.feedback(a, t);
+            t.setOnClickListener(new View.OnClickListener() {
                 @Override public void onClick(View v) {
                     try {
                         Object o = IvaClientPatch.get(a, "atTerms");
                         if (!(o instanceof EditText)) return;
                         EditText e = (EditText) o;
-                        String nt = termToggle(String.valueOf(e.getText()), p);
+                        String cur = String.valueOf(e.getText());
+                        if (termHas(cur, p)) return;
+                        String nt = termToggle(cur, p);                               // дописать отдельной строкой
                         e.setText(nt);
                         e.setSelection(nt.length());
-                        paintTerms(a, form);
+                        paintTerms(a, form);                                          // пункт пропал из списка
                     } catch (Throwable ignore) {}
                 }
             });
-            c.measure(View.MeasureSpec.UNSPECIFIED, View.MeasureSpec.UNSPECIFIED);
-            int w = Math.min(c.getMeasuredWidth(), avail);
-            if (row == null || used + w > avail) {
-                row = new LinearLayout(a);
-                row.setOrientation(LinearLayout.HORIZONTAL);
-                box.addView(row, IvaModelPatch.lpTop(a, box.getChildCount() == 1 ? 6 : 8));
-                used = 0;
-            }
-            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(w >= avail ? -1 : -2, -2);
-            lp.rightMargin = w >= avail ? 0 : gap;
-            row.addView(c, lp);
-            used += w + gap;
+            drop.addView(t, new LinearLayout.LayoutParams(-1, -2));
         }
+        box.addView(drop, IvaModelPatch.lpTop(a, 4));
     }
 
     // ───── свои инструменты: образцы и частые условия ─────
@@ -648,7 +683,7 @@ final class IvaFormPatch {
 
     /** Строки над формой (черновик, образцы) — только пока форма пустая. */
     static void paintTop(final Activity a, LinearLayout form) {
-        loadMine(a);
+        if (SHOW_SAMPLE) loadMine(a);
         View dv = form.findViewWithTag(DRAFT), sv = form.findViewWithTag(SAMPLE);
         boolean empty = !hasContent(collect(a, false));
         final LinkedHashMap<String, String> d = empty ? draft(a) : null;
@@ -695,7 +730,8 @@ final class IvaFormPatch {
                 box.setVisibility(View.VISIBLE);
             }
         }
-        if (sv instanceof LinearLayout) {
+        if (sv != null) sv.setVisibility(View.GONE);                                  // 10.89: «по образцу» не показываем
+        if (SHOW_SAMPLE && sv instanceof LinearLayout) {
             LinearLayout box = (LinearLayout) sv;
             List<Map<String, String>> rows = new ArrayList<Map<String, String>>();
             List<JSONObject> l = mine;

@@ -605,6 +605,69 @@ final class IvaModelPatch {
         return out;
     }
 
+    /** 10.89 (просьба владельца 15.10): нажали бренд над полем «Модель». Поле пустое — бренд встаёт в начало («Makita »).
+     *  В поле другой бренд (из списка или прежний выбранный) — бренд меняется на нажатый, и список моделей — уже его
+     *  (модель прежнего бренда убирается). Свой текст без бренда не трогаем. Сняли бренд — убираем его, только если в поле
+     *  кроме него ничего нет. */
+    static String brandPut(String cur, String prev, String next, List<String> brands) {
+        String raw = cur == null ? "" : cur;
+        String t = raw.replace('\u00a0', ' ').trim();
+        String n = next == null ? "" : next.trim();
+        if (t.isEmpty()) return n.isEmpty() ? "" : n + " ";
+        List<String> all = new ArrayList<String>();
+        if (brands != null) all.addAll(brands);
+        if (prev != null && !prev.trim().isEmpty()) all.add(prev.trim());
+        if (!n.isEmpty()) all.add(n);
+        String lead = "", low = t.toLowerCase(Locale.ROOT);
+        for (String b : all) {
+            String bl = b == null ? "" : b.trim().toLowerCase(Locale.ROOT);
+            if (bl.isEmpty() || bl.length() <= lead.length() || !low.startsWith(bl)) continue;
+            if (low.length() == bl.length() || low.charAt(bl.length()) == ' ') lead = bl;
+        }
+        if (lead.isEmpty()) return raw;                                          // свой текст — как был
+        if (n.isEmpty()) return t.length() == lead.length() ? "" : raw;          // сняли бренд
+        if (lead.equals(n.toLowerCase(Locale.ROOT))) return raw;                 // тот же бренд
+        return n + " ";
+    }
+
+    /** 10.89 (просьба владельца 15.10): модель — в названии. Что дописали в прошлый раз (old) в конце названия —
+     *  меняем на новое; уже есть в названии — не дублируем (и не повторяем слова, которыми название уже кончается). */
+    static String nameWithModel(String name, String old, String nw) {
+        String n = name == null ? "" : name.replaceAll("\\s+$", "");
+        String o = old == null ? "" : old.trim(), m = nw == null ? "" : nw.trim().replaceAll("\\s+", " ");
+        String base = n;
+        if (!o.isEmpty() && n.toLowerCase(Locale.ROOT).endsWith(o.toLowerCase(Locale.ROOT)))
+            base = n.substring(0, n.length() - o.length()).replaceAll("\\s+$", "");
+        if (m.isEmpty()) return base;
+        if ((" " + base.toLowerCase(Locale.ROOT) + " ").contains(" " + m.toLowerCase(Locale.ROOT) + " ")) return base;
+        String[] bw = base.trim().isEmpty() ? new String[0] : base.trim().split("\\s+"), mw = m.split(" ");
+        int k = Math.min(bw.length, mw.length);
+        for (; k > 0; k--) {                                                       // хвост названия = начало модели
+            boolean same = true;
+            for (int i = 0; i < k && same; i++) same = bw[bw.length - k + i].equalsIgnoreCase(mw[i]);
+            if (same) break;
+        }
+        StringBuilder add = new StringBuilder();
+        for (int i = k; i < mw.length; i++) add.append(add.length() > 0 ? " " : "").append(mw[i]);
+        if (add.length() == 0) return base;
+        return base.isEmpty() ? add.toString() : base + " " + add;
+    }
+
+    static String nameModel = "";                     // что из «Модели» дописано в название в последний раз
+
+    /** Вписали модель руками — она же в конце названия (выбор из списка ставит название сам). */
+    static void syncName(Activity a, EditText f) {
+        if (chosen != null) return;
+        TextView nv = nameView(a);
+        if (nv == null) return;
+        String m = String.valueOf(f.getText()).trim(), cur = String.valueOf(nv.getText());
+        String nt = nameWithModel(cur, nameModel, m);
+        nameModel = m;
+        if (nt.equals(cur)) return;
+        quiet = true;
+        try { nv.setText(nt); } finally { quiet = false; }
+    }
+
     /** Надпись модели в поле «Модель»: «Makita HR2470». */
     static String modelText(Model m) { return m == null ? "" : (m.brand + " " + m.model).trim(); }
 
@@ -886,6 +949,7 @@ final class IvaModelPatch {
         IvaKindPatch.Kind kd = null;
         for (IvaKindPatch.Kind k : IvaKindPatch.list()) if (k.key.equals(m.kind)) { kd = k; break; }
         chosen = m;
+        nameModel = modelText(m);                                                 // 10.89: название кончается моделью
         LinkedHashMap<String, String>[] f = specsFill(specVals, specAuto, m.specs);
         specVals = f[0]; specAuto = f[1];
         quiet = true;
@@ -935,7 +999,11 @@ final class IvaModelPatch {
                 if (chosen != null && !String.valueOf(s).trim().equals(modelText(chosen))) chosen = null;   // модель стёрли или правят
                 final int my = ++modelSeq;
                 f.postDelayed(new Runnable() {
-                    @Override public void run() { if (my == modelSeq) try { fillModelDrop(a, f); } catch (Throwable ignore) {} }
+                    @Override public void run() {
+                        if (my != modelSeq) return;
+                        try { syncName(a, f); } catch (Throwable ignore) {}            // 10.89: модель — в названии
+                        try { fillModelDrop(a, f); } catch (Throwable ignore) {}
+                    }
                 }, DELAY_MS);
             }
         });
@@ -993,10 +1061,20 @@ final class IvaModelPatch {
                 c.setOnClickListener(new View.OnClickListener() {
                     @Override public void onClick(View v) {
                         try {
+                            String prev = brandSel;
                             brandSel = b.equals(brandSel) ? "" : b;
-                            refresh(a);
                             View fv = v.getRootView() == null ? null : v.getRootView().findViewWithTag(BLOCK + ":field");
-                            if (fv instanceof EditText) { fv.requestFocus(); fillModelDrop(a, (EditText) fv); }
+                            if (fv instanceof EditText) {                  // 10.89: бренд — текстом в поле «Модель»
+                                EditText f = (EditText) fv;
+                                String nt = brandPut(String.valueOf(f.getText()), prev, brandSel, brands(idx, kindNow()));
+                                if (!nt.equals(String.valueOf(f.getText()))) { f.setText(nt); f.setSelection(nt.length()); }
+                            }
+                            refresh(a);
+                            if (fv instanceof EditText) {
+                                fv.requestFocus();
+                                ((EditText) fv).setSelection(((EditText) fv).getText().length());
+                                fillModelDrop(a, (EditText) fv);
+                            }
                         } catch (Throwable ignore) {}
                     }
                 });
@@ -1253,15 +1331,86 @@ final class IvaModelPatch {
     }
 
     static final String DET_TAG = "iva_model_det";
+    static final String TERMS_HEAD = "Условия аренды";
+
+    // ───── 10.89 (просьба владельца 15.10): в карточке — всё из формы, по разделам ─────
+    //  «Характеристики»: Вид, Модель, Состояние (строка «Состояние: …» из условий), поля вида, Комплектация.
+    //  «Условия аренды»: без строки «Состояние», несколько строк — списком.
+
+    /** Первые строки «Характеристик»: вид, модель, состояние (пустое — строки нет). */
+    static List<String[]> detHead(String kindTitle, String model, String terms) {
+        List<String[]> rows = new ArrayList<String[]>();
+        if (kindTitle != null && !kindTitle.trim().isEmpty()) rows.add(new String[]{"Вид", kindTitle.trim()});
+        if (model != null && !model.trim().isEmpty()) rows.add(new String[]{MODEL_LABEL, model.trim()});
+        int c = IvaPatch.condIndex(terms);
+        if (c >= 0) rows.add(new String[]{IvaPatch.COND_LABEL, IvaPatch.COND_TITLES[c]});
+        return rows;
+    }
+
+    /** Текст штатной строки условий в карточке: без «Состояния»; одна строка — «Условия аренды: …», несколько — списком. */
+    static String cardTerms(String terms) {
+        List<String> lines = new ArrayList<String>();
+        for (String l : IvaPatch.condStrip(terms == null ? "" : terms).split("\n")) {
+            String t = l.trim().replaceAll("^[•·*–—-]+\\s*", "").trim();
+            if (!t.isEmpty()) lines.add(t);
+        }
+        if (lines.isEmpty()) return "";
+        if (lines.size() == 1) return TERMS_HEAD + ": " + lines.get(0);
+        StringBuilder b = new StringBuilder(TERMS_HEAD).append(':');
+        for (String l : lines) b.append("\n• ").append(l);
+        return b.toString();
+    }
+
+    static final Map<String, String> modelNames = java.util.Collections.synchronizedMap(new HashMap<String, String>());
+    static final java.util.Set<String> modelAsked = java.util.Collections.synchronizedSet(new java.util.HashSet<String>());
+
+    /** «Makita HR2470» по model_id: из загруженного справочника, из памяти или (один раз) запросом — потом карточка ещё раз. */
+    static String modelName(final Activity a, final String id) {
+        if (id == null || !id.matches("[0-9]{1,12}")) return "";
+        List<Model> ms = modelList;
+        if (ms != null) for (Model m : ms) if (String.valueOf(m.id).equals(id)) return modelText(m);
+        String got = modelNames.get(id);
+        if (got != null) return got;
+        if (a == null || !modelAsked.add(id)) return "";
+        new Thread(new Runnable() {
+            @Override public void run() {
+                try {
+                    String[] r = IvaClientPatch.apiCall(a, "/rest/v1/iva_models?select=brand,model&id=eq." + id, "GET", null, false);
+                    if (!ok(r)) return;
+                    org.json.JSONArray arr = new org.json.JSONArray(r[1].trim());
+                    JSONObject m = arr.length() > 0 ? arr.optJSONObject(0) : null;
+                    if (m == null) return;
+                    String t = (m.optString("brand", "") + " " + m.optString("model", "")).trim();
+                    if (t.isEmpty()) return;
+                    modelNames.put(id, t);
+                    a.runOnUiThread(new Runnable() { @Override public void run() { try { onDetail(a); } catch (Throwable ignore) {} } });
+                } catch (Throwable ignore) {}
+            }
+        }).start();
+        return "";
+    }
+
+    static String jstr(JSONObject j, String k) {
+        return j != null && j.has(k) && !j.isNull(k) ? j.optString(k, "").trim() : "";
+    }
+
+    /** Штатная строка условий карточки — по 10.89 (без «Состояния», списком); пусто — строки нет. */
+    static void paintTerms(Activity a, JSONObject j) {
+        Object tv = IvaClientPatch.get(a, "detTerms");
+        if (!(tv instanceof TextView)) return;
+        String t = cardTerms(jstr(j, "terms"));
+        if (t.isEmpty()) { ((TextView) tv).setVisibility(View.GONE); return; }
+        if (!t.equals(String.valueOf(((TextView) tv).getText()))) ((TextView) tv).setText(t);
+    }
 
     /** Строки блока карточки: «Вид» и характеристики. Подписи ещё не пришли, а характеристики есть — пусто (ждём). */
-    static List<String[]> detRows(JSONObject j) {
+    static List<String[]> detRows(Activity a, JSONObject j) {
         List<String[]> rows = new ArrayList<String[]>();
         String kind = j.has("kind") && !j.isNull("kind") ? j.optString("kind", "").trim() : "";
         LinkedHashMap<String, String> sp = toolSpecs(j);
         if (fields == null && !sp.isEmpty()) return rows;
         String kt = kind.isEmpty() ? "" : IvaKindPatch.titleOf(IvaKindPatch.list(), kind);
-        if (kt != null && !kt.isEmpty()) rows.add(new String[]{"Вид", kt});
+        rows.addAll(detHead(kt, modelName(a, jstr(j, "model_id")), jstr(j, "terms")));   // 10.89: + модель, состояние
         rows.addAll(specRows(sp, fieldsFor(fields, kind)));
         List<String> kit = j.has("kit") && !j.isNull("kit") ? parseStrList(j.optString("kit", "")) : new ArrayList<String>();   // 10.84
         if (!kit.isEmpty()) {
@@ -1279,7 +1428,8 @@ final class IvaModelPatch {
         LinearLayout box = (LinearLayout) ((View) nm).getParent();
         View old = box.findViewWithTag(DET_TAG);
         boolean srv = Boolean.TRUE.equals(IvaClientPatch.get(a, "detIsSrv"));
-        List<String[]> rows = it instanceof JSONObject && !srv ? detRows((JSONObject) it) : new ArrayList<String[]>();
+        if (it instanceof JSONObject && !srv) try { paintTerms(a, (JSONObject) it); } catch (Throwable ignore) {}   // 10.89
+        List<String[]> rows = it instanceof JSONObject && !srv ? detRows(a, (JSONObject) it) : new ArrayList<String[]>();
         if (it instanceof JSONObject && !srv && fields == null && !toolSpecs((JSONObject) it).isEmpty()) ensureFields(a);
         if (rows.isEmpty()) { if (old != null) old.setVisibility(View.GONE); return; }
         LinearLayout block = old instanceof LinearLayout ? (LinearLayout) old : null;

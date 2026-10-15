@@ -1872,19 +1872,76 @@ public class IvaPatchTest {
         eq("форма 10.88: можно выбрать все условия сразу и снять все обратно",
             fpAllOn + "," + fpAll.split("\n").length + "," + fpNone.isEmpty() + "," + IvaFormPatch.termHas("Паспорт при получении — обязательно", "Паспорт при получении"),
             "true," + IvaFormPatch.TERMS_BASE.length + ",true,false");
-        java.util.List<String> fpTx = java.util.Arrays.asList(
-            "Паспорт при получении\nЗвонить 8 900 123-45-67\nАдрес выдачи: ул. Ленина\nСостояние: Новый",
-            "Только самовывоз.\nпаспорт при получении\nСостояние: Хорошее", null,
-            "Очень длинное условие, которое не помещается в одну плашку и поэтому не подходит для быстрого выбора");
-        eq("форма 10.88: свои частые условия — частые первыми; без телефона, адреса, «Состояния», длинного; не больше max",
-            IvaFormPatch.ownTerms(fpTx, 4) + "|" + IvaFormPatch.ownTerms(fpTx, 1) + "|" + IvaFormPatch.ownTerms(null, 4),
-            "[Паспорт при получении, Только самовывоз]|[Паспорт при получении]|[]");
-        java.util.List<String> fpOpt = IvaFormPatch.termOptions("Бензин", java.util.Arrays.asList("Только самовывоз", "паспорт при получении."));
-        java.util.List<String> fpOptB = IvaFormPatch.termOptions("Аккумулятор", null), fpOptN = IvaFormPatch.termOptions("", null);
-        eq("форма 10.88: плашки — свои, затем по питанию (бензин — топливо, аккумулятор — заряд), затем общие; без повторов",
-            fpOpt.subList(0, 4) + "|" + fpOpt.size() + "|" + fpOptB.get(0) + "|" + fpOptN.size() + "|" + fpOptN.contains("Вернуть с полным баком"),
-            "[Только самовывоз, паспорт при получении., Топливо — за счёт арендатора, Вернуть с полным баком]|" + (IvaFormPatch.TERMS_BASE.length + 3)
-                + "|Аккумуляторы выдаём заряженными|" + IvaFormPatch.TERMS_BASE.length + "|false");
+        // 10.89: частые условия — выпадающий список: только то, чего ещё нет в поле; без «Наличные или перевод» и своих строк
+        java.util.List<String> fpOpt = IvaFormPatch.termOptions("Бензин"), fpOptB = IvaFormPatch.termOptions("Аккумулятор"), fpOptN = IvaFormPatch.termOptions("");
+        eq("форма 10.89: список — по питанию (бензин — топливо, аккумулятор — заряд), затем общие; «Наличные или перевод» убрано",
+            fpOpt.subList(0, 2) + "|" + fpOpt.size() + "|" + fpOptB.get(0) + "|" + fpOptN.size() + "|" + fpOptN.contains("Вернуть с полным баком")
+                + "|" + fpOptN.contains("Наличные или перевод") + "|" + fpOptN.contains("Паспорт РФ и договор"),
+            "[Топливо — за счёт арендатора, Вернуть с полным баком]|" + (IvaFormPatch.TERMS_BASE.length + 2)
+                + "|Аккумуляторы выдаём заряженными|" + IvaFormPatch.TERMS_BASE.length + "|false|false|false");
+        java.util.List<String> fpLeft = IvaFormPatch.termLeft("", "Свой текст\n• паспорт при получении.\nВернуть чистым");
+        eq("форма 10.89: выбранное пропадает из списка (и с маркером, и другим регистром), убрали из поля — вернулось",
+            fpLeft.contains("Паспорт при получении") + "," + fpLeft.contains("Вернуть чистым") + "," + fpLeft.size() + ","
+                + IvaFormPatch.termLeft("", "").size() + "," + IvaFormPatch.termLeft("", IvaFormPatch.termToggle("Вернуть чистым", "Вернуть чистым")).contains("Вернуть чистым"),
+            "false,false," + (IvaFormPatch.TERMS_BASE.length - 2) + "," + IvaFormPatch.TERMS_BASE.length + ",true");
+        eq("форма 10.89: скрываем штатные «Добавить инструмент» и «Публикуется сразу…», остальное — нет",
+            IvaFormPatch.nativeTop("Добавить инструмент") + "," + IvaFormPatch.nativeTop("Публикуется сразу — от вашего имени. Клиенты увидят его в поиске.")
+                + "," + IvaFormPatch.nativeTop("Что сдаёте") + "," + IvaFormPatch.nativeTop(null) + "," + IvaFormPatch.SHOW_SAMPLE,
+            "true,true,false,false,false");
+        // 10.89: фото — 5 окошек
+        eq("фото 10.89: окошки — фото по порядку, «+» в первом свободном, остальные пустые; 5 фото — «+» нет",
+            java.util.Arrays.toString(IvaPhotoPatch.slots(0)) + java.util.Arrays.toString(IvaPhotoPatch.slots(2)) + java.util.Arrays.toString(IvaPhotoPatch.slots(5))
+                + java.util.Arrays.toString(IvaPhotoPatch.slots(7)) + "|" + IvaPhotoPatch.left(0) + IvaPhotoPatch.left(3) + IvaPhotoPatch.left(6),
+            "[1, 2, 2, 2, 2][0, 0, 1, 2, 2][0, 0, 0, 0, 0][0, 0, 0, 0, 0]|520");
+        eq("фото 10.89: просмотр — нажали фото: открыть / ещё раз — скрыть; удалили фото — номер сдвигается или просмотр закрыт",
+            IvaPhotoPatch.toggle(-1, 2) + "," + IvaPhotoPatch.toggle(2, 2) + "," + IvaPhotoPatch.toggle(2, 0) + "|" + IvaPhotoPatch.afterRemove(3, 1) + ","
+                + IvaPhotoPatch.afterRemove(1, 1) + "," + IvaPhotoPatch.afterRemove(0, 2) + "," + IvaPhotoPatch.afterRemove(-1, 0),
+            "2,-1,0|2,-1,0,-1");
+        eq("фото 10.89: уменьшение при чтении (не меньше 1600 px) и поворот по EXIF",
+            IvaPhotoPatch.sampleSize(4000, 3000, 1600) + "," + IvaPhotoPatch.sampleSize(1600, 1200, 1600) + "," + IvaPhotoPatch.sampleSize(8000, 6000, 1600)
+                + "," + IvaPhotoPatch.sampleSize(100, 100, 0) + "|" + IvaPhotoPatch.rotationOf(6) + "," + IvaPhotoPatch.rotationOf(3) + ","
+                + IvaPhotoPatch.rotationOf(8) + "," + IvaPhotoPatch.rotationOf(1) + "," + IvaPhotoPatch.rotationOf(0),
+            "2,1,4,1|90,180,270,0,0");
+        // 10.89: бренд над «Моделью»
+        java.util.List<String> fpBr = java.util.Arrays.asList("Makita", "Bosch", "DeWalt", "Metabo HPT");
+        eq("модель 10.89: бренд — в пустое поле; другой бренд — меняется (модель прежнего убирается); свой текст — не трогаем",
+            "[" + IvaModelPatch.brandPut("", "", "Makita", fpBr) + "][" + IvaModelPatch.brandPut("Makita HR2470", "Makita", "Bosch", fpBr) + "]["
+                + IvaModelPatch.brandPut("makita", "", "Bosch", fpBr) + "][" + IvaModelPatch.brandPut("HR2470", "", "Makita", fpBr) + "]["
+                + IvaModelPatch.brandPut("Makita HR2470", "", "Makita", fpBr) + "][" + IvaModelPatch.brandPut("Metabo HPT DH26", "", "Metabo", java.util.Arrays.asList("Metabo", "Metabo HPT")) + "]",
+            "[Makita ][Bosch ][Bosch ][HR2470][Makita HR2470][Metabo ]");
+        eq("модель 10.89: сняли бренд — из поля уходит, только если кроме него ничего нет",
+            "[" + IvaModelPatch.brandPut("Makita ", "Makita", "", fpBr) + "][" + IvaModelPatch.brandPut("Makita HR2470", "Makita", "", fpBr) + "]["
+                + IvaModelPatch.brandPut("", "Makita", "", fpBr) + "]",
+            "[][Makita HR2470][]");
+        // 10.89: модель — в названии
+        eq("модель 10.89: модель дописывается в конец названия и меняется вместе с полем; без повторов",
+            "[" + IvaModelPatch.nameWithModel("Перфоратор", "", "Makita") + "][" + IvaModelPatch.nameWithModel("Перфоратор Makita", "Makita", "Makita HR2470") + "]["
+                + IvaModelPatch.nameWithModel("Перфоратор Makita HR2470", "Makita HR2470", "") + "][" + IvaModelPatch.nameWithModel("Перфоратор makita", "", "Makita HR2470") + "]["
+                + IvaModelPatch.nameWithModel("Перфоратор Makita HR2470 б/у", "Makita HR2470", "Bosch") + "][" + IvaModelPatch.nameWithModel("", "", "Bosch GBH 2-26") + "]["
+                + IvaModelPatch.nameWithModel("Перфоратор Makita HR2470", "", "makita hr2470") + "]",
+            "[Перфоратор Makita][Перфоратор Makita HR2470][Перфоратор][Перфоратор makita HR2470][Перфоратор Makita HR2470 б/у Bosch][Bosch GBH 2-26][Перфоратор Makita HR2470]");
+        // 10.89: карточка
+        eq("карточка 10.89: «Характеристики» начинаются с вида, модели и состояния (пустое — строки нет)",
+            rowsText(IvaModelPatch.detHead("Перфоратор", "Makita HR2470", "Паспорт\nСостояние: Новый")) + "|" + rowsText(IvaModelPatch.detHead("", "", "Без состояния"))
+                + "|" + rowsText(IvaModelPatch.detHead(null, " ", "Состояние: Рабочее")),
+            "Вид=Перфоратор;Модель=Makita HR2470;Состояние=Новый;||Состояние=Рабочее;");
+        eq("карточка 10.89: условия — без «Состояния»; одна строка — в строку, несколько — списком; пусто — строки нет",
+            "[" + IvaModelPatch.cardTerms("Паспорт при получении\nСостояние: Хорошее") + "][" + IvaModelPatch.cardTerms("• Паспорт\n\nВернуть чистым\nСостояние: Новый") + "]["
+                + IvaModelPatch.cardTerms("Состояние: Новый") + "][" + IvaModelPatch.cardTerms(null) + "]",
+            "[Условия аренды: Паспорт при получении][Условия аренды:\n• Паспорт\n• Вернуть чистым][][]");
+        // 10.89: фильтр — 3 + «Все ▾»
+        java.util.List<String> fsVis = java.util.Arrays.asList("a", "b", "c", "d", "e");
+        java.util.Map<String, Integer> fsCnt = new java.util.HashMap<String, Integer>();
+        fsCnt.put("a", 1); fsCnt.put("b", 5); fsCnt.put("c", 2); fsCnt.put("d", 5); fsCnt.put("e", 9);
+        eq("фильтр 10.89: сразу 3 самых наполненных; «Все» — остальные в штатном порядке; выбрали — только выбранная",
+            IvaSearchPatch.facetShown(fsVis, fsCnt, "", false, 3) + "|" + IvaSearchPatch.facetShown(fsVis, fsCnt, "", true, 3) + "|"
+                + IvaSearchPatch.facetShown(fsVis, fsCnt, "c", false, 3) + "|" + IvaSearchPatch.facetShown(fsVis, fsCnt, "x", false, 3) + "|"
+                + IvaSearchPatch.facetShown(java.util.Arrays.asList("a", "b"), fsCnt, "", false, 3),
+            "[e, b, d]|[e, b, d, a, c]|[c]|[e, b, d]|[b, a]");
+        eq("фильтр 10.89: кнопка «Все ▾» — только без выбора и когда вариантов больше трёх",
+            IvaSearchPatch.facetMore(fsVis, "", 3) + "," + IvaSearchPatch.facetMore(fsVis, "c", 3) + "," + IvaSearchPatch.facetMore(java.util.Arrays.asList("a", "b", "c"), "", 3)
+                + "," + IvaSearchPatch.facetMore(fsVis, "x", 3) + "," + IvaSearchPatch.FACET_MORE + "," + IvaSearchPatch.FACET_TOP,
+            "true,false,false,true,Все \u25be,3");
         eq("форма 10.87: цена из базы — без «.0»; пусто, 0 и мусор — пусто",
             IvaFormPatch.money("800.0") + "," + IvaFormPatch.money("1250.5") + "," + IvaFormPatch.money("0") + "," + IvaFormPatch.money("null")
                 + "," + IvaFormPatch.money("") + "," + IvaFormPatch.money("x"),
@@ -1908,9 +1965,15 @@ public class IvaPatchTest {
             (fpOrd.indexOf(IvaModelPatch.BLOCK) == fpOrd.indexOf(IvaModelPatch.NAME_SUG) + 1) + "," + (fpOrd.indexOf("atCat") < fpOrd.indexOf(IvaModelPatch.SPECS))
                 + "," + (fpOrd.indexOf(IvaModelPatch.HELP + ":price") + 2 == fpOrd.indexOf("atPrice")) + "," + (fpOrd.indexOf(IvaModelPatch.HELP) == fpOrd.indexOf("atDescr") + 1)
                 + "," + (fpOrd.indexOf(IvaFormPatch.TERMS) == fpOrd.indexOf("atTerms") + 1) + "," + fpOrd.get(fpOrd.size() - 1)
-                + "," + (fpOrd.size() == new java.util.HashSet<String>(fpOrd).size()),
-            "true,true,true,true,true,atSave,true");
+                + "," + (fpOrd.size() == new java.util.HashSet<String>(fpOrd).size()) + "," + (fpOrd.indexOf(IvaPhotoPatch.TAG) == fpOrd.indexOf("atPhotos") + 1),
+            "true,true,true,true,true,atSave,true,true");
         if (fail > 0) { System.out.println("ошибок: " + fail); System.exit(1); }
         System.out.println("все проверки IvaPatch пройдены");
+    }
+
+    static String rowsText(java.util.List<String[]> rows) {
+        StringBuilder b = new StringBuilder();
+        for (String[] r : rows) b.append(r[0]).append('=').append(r[1]).append(';');
+        return b.toString();
     }
 }

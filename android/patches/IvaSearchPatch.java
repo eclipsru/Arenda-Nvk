@@ -362,6 +362,52 @@ public final class IvaSearchPatch {
         return out;
     }
 
+    // 10.89 (просьба владельца 15.10): в фильтре сразу видно только 3 категории (подкатегории, вида) — где больше всего
+    // инструментов; остальные — кнопкой «Все ▾». Выбрали — список сворачивается, остаётся только выбранная (нажатие на неё
+    // снимает выбор и снова показывает три).
+    static final int FACET_TOP = 3;
+    static final String FACET_MORE = "Все \u25be", FACET_LESS = "Свернуть \u25b4";
+    static boolean catOpen = false, subOpen = false, kindOpen = false;
+
+    /** Порядок раскрытого списка: сначала top самых наполненных (при равенстве — штатный порядок), потом остальные — штатно. */
+    static List<String> facetOrder(List<String> visible, final Map<String, Integer> counts, int top) {
+        List<String> byCount = new ArrayList<String>(visible);
+        java.util.Collections.sort(byCount, new java.util.Comparator<String>() {   // устойчивая сортировка
+            @Override public int compare(String x, String y) { return cnt(counts, y) - cnt(counts, x); }
+        });
+        List<String> out = new ArrayList<String>(byCount.subList(0, Math.min(top, byCount.size())));
+        for (String k : visible) if (!out.contains(k)) out.add(k);
+        return out;
+    }
+
+    static int cnt(Map<String, Integer> m, String k) { Integer n = m == null ? null : m.get(k); return n == null ? 0 : n; }
+
+    /** Что показать: выбранное — только его; иначе top (или все, если раскрыто). */
+    static List<String> facetShown(List<String> visible, Map<String, Integer> counts, String sel, boolean open, int top) {
+        List<String> out = new ArrayList<String>();
+        if (sel != null && !sel.isEmpty() && visible.contains(sel)) { out.add(sel); return out; }
+        List<String> all = facetOrder(visible, counts, top);
+        return open ? all : new ArrayList<String>(all.subList(0, Math.min(top, all.size())));
+    }
+
+    /** Нужна ли кнопка «Все ▾» / «Свернуть ▴»: ничего не выбрано и вариантов больше top. */
+    static boolean facetMore(List<String> visible, String sel, int top) {
+        return (sel == null || sel.isEmpty() || !visible.contains(sel)) && visible.size() > top;
+    }
+
+    static void addMore(final Activity a, Flow box, final boolean open, final Runnable toggle) {
+        TextView c = chip(a, open ? FACET_LESS : FACET_MORE, false, false);
+        c.setContentDescription(open ? "Свернуть список" : "Показать все варианты");
+        c.setOnClickListener(new View.OnClickListener() {
+            @Override public void onClick(View v) {
+                if (draft == null) return;
+                toggle.run();
+                refreshPanel(a);
+            }
+        });
+        box.addView(c);
+    }
+
     static final String[] RADIUS_TITLES = {"любой", "5 км", "10 км", "25 км", "50 км"};
 
     static String priceChip(long from, long to) {
@@ -1624,6 +1670,7 @@ public final class IvaSearchPatch {
         if (panelRoot == null || sheet == null) return;
         if (panelRoot.getVisibility() != View.VISIBLE) {
             draft = current(a);
+            catOpen = false; subOpen = false; kindOpen = false;           // 10.89: списки — свёрнуты
             sheetSize = computeSheetHeight(a);
             FrameLayout.LayoutParams lp = (FrameLayout.LayoutParams) sheet.getLayoutParams();
             lp.height = sheetSize;
@@ -2180,13 +2227,16 @@ public final class IvaSearchPatch {
                 }
             }
             catBox.removeAllViews();
-            addOption(a, catBox, "Все \u00b7 " + allCount, draft.cat.isEmpty(),
-                new Runnable() { @Override public void run() { draft.cat = ""; draft.sub = ""; draft.kind = ""; } });
-            for (final String key : facetVisible(catKeys, catCounts, draft.cat)) {
+            List<String> catVis = facetVisible(catKeys, catCounts, draft.cat);              // 10.89: 3 + «Все ▾»
+            for (final String key : facetShown(catVis, catCounts, draft.cat, catOpen, FACET_TOP)) {
                 Integer cn = catCounts.get(key);
                 addOption(a, catBox, catTitles.get(key) + " \u00b7 " + (cn == null ? 0 : cn), key.equals(draft.cat),
-                    new Runnable() { @Override public void run() { draft.cat = key; draft.sub = ""; draft.kind = ""; } });
+                    new Runnable() { @Override public void run() {
+                        draft.cat = key.equals(draft.cat) ? "" : key; draft.sub = ""; draft.kind = ""; catOpen = false; subOpen = false; kindOpen = false;
+                    } });
             }
+            if (facetMore(catVis, draft.cat, FACET_TOP))
+                addMore(a, catBox, catOpen, new Runnable() { @Override public void run() { catOpen = !catOpen; } });
             subBox.removeAllViews();
             Object subs = IvaClientPatch.get(a, "subcats");
             if (!draft.cat.isEmpty() && subs instanceof ArrayList) {
@@ -2199,11 +2249,16 @@ public final class IvaSearchPatch {
                     subKeys.add(key);
                     subTitles.put(key, ((JSONObject) o).optString("title", key));
                 }
-                for (final String key : facetVisible(subKeys, subCounts, draft.sub)) {
+                List<String> subVis = facetVisible(subKeys, subCounts, draft.sub);
+                for (final String key : facetShown(subVis, subCounts, draft.sub, subOpen, FACET_TOP)) {
                     Integer sn = subCounts.get(key);
                     addOption(a, subBox, subTitles.get(key) + " \u00b7 " + (sn == null ? 0 : sn), key.equals(draft.sub),
-                        new Runnable() { @Override public void run() { draft.sub = key.equals(draft.sub) ? "" : key; draft.kind = ""; } });
+                        new Runnable() { @Override public void run() {
+                            draft.sub = key.equals(draft.sub) ? "" : key; draft.kind = ""; subOpen = false; kindOpen = false;
+                        } });
                 }
+                if (facetMore(subVis, draft.sub, FACET_TOP))
+                    addMore(a, subBox, subOpen, new Runnable() { @Override public void run() { subOpen = !subOpen; } });
             }
             boolean hasSubs = subBox.getChildCount() > 0;
             subTitleView.setVisibility(hasSubs ? View.VISIBLE : View.GONE);
@@ -2226,11 +2281,14 @@ public final class IvaSearchPatch {
                 }
                 List<String> kindKeys = new ArrayList<String>();
                 for (IvaKindPatch.Kind kd : kinds) kindKeys.add(kd.key);
-                for (final String key : facetVisible(kindKeys, kindCounts, draft.kind)) {
+                List<String> kindVis = facetVisible(kindKeys, kindCounts, draft.kind);
+                for (final String key : facetShown(kindVis, kindCounts, draft.kind, kindOpen, FACET_TOP)) {
                     Integer kn = kindCounts.get(key);
                     addOption(a, kindBox, IvaKindPatch.titleOf(kinds, key) + " \u00b7 " + (kn == null ? 0 : kn), key.equals(draft.kind),
-                        new Runnable() { @Override public void run() { draft.kind = key.equals(draft.kind) ? "" : key; } });
+                        new Runnable() { @Override public void run() { draft.kind = key.equals(draft.kind) ? "" : key; kindOpen = false; } });
                 }
+                if (facetMore(kindVis, draft.kind, FACET_TOP))
+                    addMore(a, kindBox, kindOpen, new Runnable() { @Override public void run() { kindOpen = !kindOpen; } });
             }
             boolean hasKinds = kindBox.getChildCount() > 0;
             kindTitleView.setVisibility(hasKinds ? View.VISIBLE : View.GONE);
