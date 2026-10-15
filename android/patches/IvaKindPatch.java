@@ -13,6 +13,12 @@
 //    Не опубликовалось — кабинет не открывается, запомненный выбор пропадает (через 3 минуты или при любой другой вкладке).
 //  * Фильтр (IvaSearchPatch): раздел «Вид» после «Подкатегории» — только виды, где есть инструменты, с числом.
 //
+//  * 10.81 (этап 1 справочника моделей, решение владельца 15.10.2026 — журнал, решение №30): в форме «Добавить» админ
+//    пишет название — категория, подкатегория и вид подставляются сами по словам из iva_kinds.words (миграция
+//    20261016_kind_words.sql). Подстановка — так же, как штатный выбор из списка (те же поля и тексты). Выбранное
+//    руками не перезаписывается. Слов в базе нет (SQL не применён) — автоподбора нет, всё как в 10.79.
+//    Тот же алгоритм на сайте — assets/kind-guess.js; оба проверяются на tests/kind-guess-cases.txt.
+//
 // Новых вставок в smali нет: всё — из IvaPatch.onTab / onHub и касания кнопки сохранения (IvaPatch.condRow).
 // Любая ошибка — формы и фильтр работают как раньше, без вида.
 package ru.prokatnvsk.app;
@@ -147,9 +153,123 @@ final class IvaKindPatch {
         return (sugIndex == subIndex + 1 ? sugIndex : subIndex) + 1;
     }
 
+    // ───── 10.81: автоподбор по названию (чистая логика — под тестами, та же, что assets/kind-guess.js) ─────
+
+    static final String WORDS_PATH = "/rest/v1/iva_kinds?select=key,words&active=eq.true";
+    static final String PREFS_WORDS = "words";
+    static final String SUB_HINT = "Подкатегория (необязательно)";   // штатный текст пустой подкатегории
+    static final long AUTO_DELAY_MS = 400;                           // пауза после ввода, чтобы не дёргать поля на каждой букве
+
+    static final class Guess {
+        final String cat, sub, kind;
+        Guess(String cat, String sub, String kind) {
+            this.cat = cat == null ? "" : cat; this.sub = sub == null ? "" : sub; this.kind = kind == null ? "" : kind;
+        }
+        @Override public String toString() { return cat + "/" + sub + "/" + kind; }
+    }
+
+    /** Название → слова: строчные, ё→е, всё кроме латиницы, кириллицы и цифр — разделитель. */
+    static String[] tokens(String s) {
+        String t = (s == null ? "" : s).toLowerCase(Locale.ROOT).replace('ё', 'е').replaceAll("[^a-zа-я0-9]+", " ").trim();
+        return t.isEmpty() ? new String[0] : t.split(" ");
+    }
+
+    /** Очки записи «болгар 125»: каждая часть — начало какого-то слова названия; сумма длин частей, иначе 0. */
+    static int entryScore(String entry, String[] toks) {
+        String[] parts = tokens(entry);
+        if (parts.length == 0) return 0;
+        int total = 0;
+        for (String p : parts) {
+            boolean hit = false;
+            for (String t : toks) if (t.startsWith(p)) { hit = true; break; }
+            if (!hit) return 0;
+            total += p.length();
+        }
+        return total;
+    }
+
+    /** Лучший вид: больше очков у лучшей записи, при равенстве — больше подошедших записей. Один лучший → всё;
+     *  несколько в одной подкатегории → категория + подкатегория; в одной категории → категория; иначе — ничего. */
+    static Guess guess(String name, List<Kind> all, java.util.Map<String, String[]> words) {
+        Guess none = new Guess("", "", "");
+        String[] toks = tokens(name);
+        if (toks.length == 0 || all == null || words == null) return none;
+        List<Kind> best = new ArrayList<Kind>();
+        int bs = 0, bn = 0;
+        for (Kind k : all) {
+            if (k == null || k.key.isEmpty() || k.cat.isEmpty() || k.sub.isEmpty()) continue;
+            String[] ws = words.get(k.key);
+            if (ws == null) continue;
+            int m = 0, n = 0;
+            for (String w : ws) {
+                int sc = entryScore(w, toks);
+                if (sc > 0) { n++; if (sc > m) m = sc; }
+            }
+            if (m == 0) continue;
+            if (m > bs || (m == bs && n > bn)) { bs = m; bn = n; best.clear(); best.add(k); }
+            else if (m == bs && n == bn) best.add(k);
+        }
+        if (best.isEmpty()) return none;
+        Kind f = best.get(0);
+        if (best.size() == 1) return new Guess(f.cat, f.sub, f.key);
+        boolean sameSub = true, sameCat = true;
+        for (Kind k : best) {
+            if (!k.cat.equals(f.cat)) { sameCat = false; sameSub = false; }
+            else if (!k.sub.equals(f.sub)) sameSub = false;
+        }
+        if (sameSub) return new Guess(f.cat, f.sub, "");
+        if (sameCat) return new Guess(f.cat, "", "");
+        return none;
+    }
+
+    /** Поле можно менять: оно пустое или в нём всё ещё то, что подставили мы в прошлый раз. */
+    static boolean mayFill(String cur, String lastAuto) {
+        String c = cur == null ? "" : cur;
+        return c.isEmpty() || c.equals(lastAuto == null ? "" : lastAuto);
+    }
+
+    /** Что поставить в форме: {категория, подкатегория, вид} или null — ничего не менять. cur — что в форме сейчас,
+     *  auto — что подставили мы в прошлый раз. Категорию, выбранную руками, не меняем; подкатегорию и вид, выбранные
+     *  руками, — тоже (пока категория та же). То же — ivaKindPlan в assets/kind-guess.js. */
+    static String[] plan(String curCat, String curSub, String curKind, String autoCat, String autoSub, String autoKind, Guess g) {
+        String cc = curCat == null ? "" : curCat, cs = curSub == null ? "" : curSub, ck = curKind == null ? "" : curKind;
+        if (g == null || g.cat.isEmpty()) return null;
+        if (!mayFill(cc, autoCat) && !cc.equals(g.cat)) return null;
+        boolean catChanged = !g.cat.equals(cc);
+        String sub = catChanged || mayFill(cs, autoSub) || cs.equals(g.sub) ? g.sub : cs;
+        String kind;
+        if (sub.equals(g.sub) && (catChanged || !sub.equals(cs) || mayFill(ck, autoKind) || ck.equals(g.kind))) kind = g.kind;
+        else kind = sub.equals(cs) ? ck : "";
+        if (g.cat.equals(cc) && sub.equals(cs) && kind.equals(ck)) return null;
+        return new String[]{g.cat, sub, kind};
+    }
+
+    /** [{"key":"drill","words":["дрел","drill"]}, …] → вид → слова. Не массив (ошибка, нет столбца) — null. */
+    static java.util.Map<String, String[]> parseWords(String text) throws Exception {
+        String t = text == null ? "" : text.trim();
+        if (!t.startsWith("[")) return null;
+        JSONArray arr = new JSONArray(t);
+        java.util.Map<String, String[]> out = new java.util.HashMap<String, String[]>();
+        for (int i = 0; i < arr.length(); i++) {
+            JSONObject o = arr.optJSONObject(i);
+            if (o == null) continue;
+            String key = clean(o.optString("key", ""));
+            JSONArray w = o.optJSONArray("words");
+            if (key.isEmpty() || w == null) continue;
+            List<String> ws = new ArrayList<String>();
+            for (int j = 0; j < w.length(); j++) {
+                String x = clean(w.optString(j, ""));
+                if (!x.isEmpty()) ws.add(x);
+            }
+            if (!ws.isEmpty()) out.put(key, ws.toArray(new String[0]));
+        }
+        return out;
+    }
+
     // ════════════════════════════════ 2. Загрузка справочника ════════════════════════════════
 
     static volatile List<Kind> kinds = null;       // null — ещё нет (или SQL не применён)
+    static volatile java.util.Map<String, String[]> words = null;   // 10.81: слова автоподбора; null — нет (SQL не применён)
     static volatile boolean loading = false;
     static volatile long triedAt = 0, loadedAt = 0;
 
@@ -178,6 +298,12 @@ final class IvaKindPatch {
                     if (cached != null && !cached.isEmpty()) kinds = cached;
                 } catch (Throwable ignore) {}
             }
+            if (words == null) {
+                try {
+                    java.util.Map<String, String[]> cw = parseWords(a.getSharedPreferences(PREFS, 0).getString(PREFS_WORDS, ""));
+                    if (cw != null && !cw.isEmpty()) words = cw;
+                } catch (Throwable ignore) {}
+            }
             long now = System.currentTimeMillis();
             if (loading) return;
             if (loadedAt > 0 ? now - loadedAt < REFRESH_MS : now - triedAt < RETRY_MS) return;
@@ -193,6 +319,7 @@ final class IvaKindPatch {
                                 kinds = fresh;
                                 loadedAt = System.currentTimeMillis();
                                 try { a.getSharedPreferences(PREFS, 0).edit().putString(PREFS_KEY, r[1]).apply(); } catch (Throwable ignore) {}
+                                loadWords(a);
                                 a.runOnUiThread(new Runnable() {
                                     @Override public void run() {
                                         try { refreshRows(a); IvaSearchPatch.refreshPanel(a); } catch (Throwable ignore) {}
@@ -208,6 +335,23 @@ final class IvaKindPatch {
                 }
             }).start();
         } catch (Throwable ignore) { loading = false; }
+    }
+
+    /** 10.81: слова автоподбора — отдельным запросом (тот же поток, после видов). Столбца нет (400) — автоподбора нет. */
+    static void loadWords(Activity a) {
+        try {
+            String[] r = IvaClientPatch.apiCall(a, WORDS_PATH, "GET", null, false);
+            if (r != null && r.length > 1 && r[0] != null && r[0].startsWith("2")) {
+                java.util.Map<String, String[]> w = parseWords(r[1]);
+                if (w != null) {
+                    words = w;
+                    try { a.getSharedPreferences(PREFS, 0).edit().putString(PREFS_WORDS, r[1]).apply(); } catch (Throwable ignore) {}
+                }
+            } else if (r != null && r[0] != null && (r[0].startsWith("404") || r[0].startsWith("400"))) {
+                words = null;
+                try { a.getSharedPreferences(PREFS, 0).edit().remove(PREFS_WORDS).apply(); } catch (Throwable ignore) {}
+            }
+        } catch (Throwable ignore) {}
     }
 
     // ════════════════════════════════ 3. Поле «Вид» в формах ════════════════════════════════
@@ -296,6 +440,98 @@ final class IvaKindPatch {
             if (co instanceof TextView) watch(a, (TextView) co);
         }
         paint(a, k, row);
+        if (k == 0) watchName(a);
+    }
+
+    // ───── 10.81: автоподбор в форме «Добавить» ─────
+
+    static final String[] auto = {"", "", ""};          // что подставили мы в прошлый раз: категория, подкатегория, вид
+    static int nameSeq = 0;
+
+    /** Название в форме «Добавить» меняется — через паузу подбираем категорию, подкатегорию и вид. Штатный слушатель
+     *  не заменяется (addTextChangedListener добавляет свой). */
+    static void watchName(final Activity a) {
+        Object no = IvaClientPatch.get(a, FORM[0][5]);
+        if (!(no instanceof TextView)) return;
+        final TextView nv = (TextView) no;
+        if (watched.containsKey(nv)) return;
+        watched.put(nv, Boolean.TRUE);
+        nv.addTextChangedListener(new android.text.TextWatcher() {
+            @Override public void beforeTextChanged(CharSequence s, int st, int c, int n) {}
+            @Override public void onTextChanged(CharSequence s, int st, int b, int c) {}
+            @Override public void afterTextChanged(android.text.Editable s) {
+                final int my = ++nameSeq;
+                nv.postDelayed(new Runnable() {
+                    @Override public void run() {
+                        if (my != nameSeq) return;               // ещё печатают
+                        try { autofill(a); } catch (Throwable ignore) {}
+                    }
+                }, AUTO_DELAY_MS);
+            }
+        });
+    }
+
+    /** Заголовок из штатного списка (cats / subcats); нет в списке — null (не подставляем). */
+    static String nativeTitle(Activity a, String list, String cat, String key) {
+        Object l = IvaClientPatch.get(a, list);
+        if (!(l instanceof ArrayList)) return null;
+        for (Object o : (ArrayList) l) {
+            if (!(o instanceof JSONObject)) continue;
+            JSONObject j = (JSONObject) o;
+            if (!key.equals(j.optString("key", ""))) continue;
+            if (cat != null && !cat.equals(j.optString("cat", ""))) continue;
+            String t = clean(j.optString("title", ""));
+            return t.isEmpty() ? key : t;
+        }
+        return null;
+    }
+
+    static void autofill(Activity a) {
+        if (kinds == null || words == null) return;                  // SQL не применён — как в 10.79
+        Object no = IvaClientPatch.get(a, FORM[0][5]);
+        Object co = IvaClientPatch.get(a, FORM[0][0]), so = IvaClientPatch.get(a, FORM[0][2]);
+        if (!(no instanceof TextView) || !(co instanceof TextView) || !(so instanceof TextView)) return;
+        if (!((View) no).isShown()) return;                          // формы нет на экране
+        Guess g = guess(String.valueOf(((TextView) no).getText()), list(), words);
+        if (g.cat.isEmpty()) return;
+        String catTitle = nativeTitle(a, "cats", null, g.cat);
+        if (catTitle == null) return;                                // категории нет в штатном списке — не трогаем
+        String subTitle = g.sub.isEmpty() ? "" : nativeTitle(a, "subcats", g.cat, g.sub);
+        if (subTitle == null) { g = new Guess(g.cat, "", ""); subTitle = ""; }
+        String curCat = str(IvaClientPatch.get(a, FORM[0][1])), curSub = str(IvaClientPatch.get(a, FORM[0][3]));
+        String[] p = plan(curCat, curSub, sel[0], auto[0], auto[1], auto[2], g);
+        if (p == null) return;
+        TextView catV = (TextView) co, subV = (TextView) so;
+        int text = IvaPatch.color(a, "text", 0xfff2f4f8), hint = IvaPatch.color(a, "gray2", 0xff6b7080);
+        hideDrop(a, "atCatSug"); hideDrop(a, "atSubSug");
+        if (!p[0].equals(curCat)) {                                  // как штатный выбор категории
+            IvaClientPatch.set(a, FORM[0][1], p[0]);
+            catV.setText(catTitle);
+            catV.setTextColor(text);
+            IvaClientPatch.set(a, FORM[0][3], "");
+            subV.setText(SUB_HINT);
+            curSub = "";
+            IvaNotifyPatch.flash(catV);
+        }
+        if (!p[1].equals(curSub)) {                                  // как штатный выбор подкатегории
+            IvaClientPatch.set(a, FORM[0][3], p[1]);
+            subV.setText(p[1].isEmpty() ? SUB_HINT : subTitle);
+            subV.setTextColor(p[1].isEmpty() ? hint : text);
+            if (!p[1].isEmpty()) IvaNotifyPatch.flash(subV);
+        }
+        boolean kindNew = !p[2].isEmpty() && !p[2].equals(sel[0]);
+        sel[0] = p[2];
+        auto[0] = p[0]; auto[1] = p[1]; auto[2] = p[2];
+        refreshRows(a);
+        if (kindNew) {
+            View f = catV.getRootView() == null ? null : catV.getRootView().findViewWithTag(ROW_TAG + FORM[0][2] + ":field");
+            if (f != null) IvaNotifyPatch.flash(f);
+        }
+    }
+
+    static void hideDrop(Activity a, String field) {
+        Object d = IvaClientPatch.get(a, field);
+        if (d instanceof View) ((View) d).setVisibility(View.GONE);
     }
 
     /** Сменили категорию или подкатегорию (штатный код меняет текст поля) — поле «Вид» пересчитывается. */

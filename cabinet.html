@@ -320,6 +320,7 @@ textarea.inp{resize:vertical;min-height:70px}
 <link rel="stylesheet" href="assets/geo.css?v=20260923-photon">
 <script src="assets/geo.js?v=20260923-photon"></script>
 <script src="assets/email-guard.js?v=20260926-email"></script>
+<script src="assets/kind-guess.js?v=20261016-kind"></script>
 </head>
 <body>
 <div class="app" id="app">
@@ -1185,6 +1186,18 @@ async function cabTools(t){
     b.onclick=function(e){var c=e.target.closest('[data-id]');if(c&&c.id!=='addT')toolForm(c.getAttribute('data-id'))};
   }catch(e){b.innerHTML='<div class="empt">Ошибка: '+esc(e.message)+'</div>'}
 }
+/* 10.81: «Вид инструмента» (iva_kinds) со словами автоподбора; нет таблицы — пусто, форма как раньше */
+var kindsP=null;
+function loadKinds(){
+  if(S.kinds)return Promise.resolve(S.kinds);
+  if(kindsP)return kindsP;
+  var base='/rest/v1/iva_kinds?active=eq.true&order=sort.asc,title.asc&select=key,cat,sub,title,sort';
+  kindsP=api(base+',words').catch(function(){return api(base)}).catch(function(){return []}).then(function(r){
+    S.kinds=(Array.isArray(r)?r:[]).filter(function(k){return k&&k.key&&k.cat&&k.sub}).map(function(k){return {key:k.key,cat:k.cat,sub:k.sub,title:k.title||k.key,words:Array.isArray(k.words)?k.words:[]}});
+    kindsP=null;return S.kinds;
+  });
+  return kindsP;
+}
 function toolForm(id){
   if(!id&&S.limited.indexOf(S.me)>=0){toast('Доступ ограничен: погасите задолженность по комиссии');return}
   var t=id?tById(id):null;
@@ -1193,6 +1206,7 @@ function toolForm(id){
   +'<span class="lbl">Название *</span><input class="inp" id="fName" value="'+esc(t?t.name:'')+'">'
   +'<span class="lbl">Категория</span><select class="inp" id="fCat"><option value="">—</option>'+S.cats.map(function(c){return '<option value="'+esc(c.key)+'"'+(t&&t.cat===c.key?' selected':'')+'>'+esc(c.title)+'</option>'}).join('')+'</select>'
   +'<span class="lbl">Подкатегория</span><select class="inp" id="fSub"></select>'
+  +'<span class="lbl hide" id="fKindL">Вид инструмента</span><select class="inp hide" id="fKind"></select>'
   +'<span class="lbl">Цена в сутки, ₽ *</span><input class="inp" id="fPrice" type="number" inputmode="numeric" value="'+(t&&t.price!=null?t.price:'')+'">'
   +'<span class="lbl">Залог, ₽ (по умолчанию 5 × цена)</span><input class="inp" id="fDep" type="number" inputmode="numeric" value="'+(t&&t.deposit!=null?t.deposit:'')+'">'
   +'<span class="lbl">Описание</span><textarea class="inp" id="fDescr">'+esc(t?t.descr||'':'')+'</textarea>'
@@ -1209,7 +1223,35 @@ function toolForm(id){
   var depTouched=!!(t&&t.deposit!=null);
   $('fPrice').oninput=function(){if(!depTouched)$('fDep').value=(+this.value||0)*5||''};
   $('fDep').oninput=function(){depTouched=true};
-  $('fCat').onchange=fillSubs;
+  $('fCat').onchange=function(){fillSubs();fillKinds()};
+  $('fSub').onchange=fillKinds;
+  /* 10.81: «Вид инструмента» и автоподбор по названию (assets/kind-guess.js — как в приложении) */
+  var kindSel='',auto={cat:'',sub:'',kind:''},autoT=0;
+  function fillKinds(){
+    var c=$('fCat').value,s=$('fSub').value,cur=$('fKind').value||kindSel;
+    var ks=(S.kinds||[]).filter(function(k){return c&&s&&k.cat===c&&k.sub===s});
+    if(!ks.some(function(k){return k.key===cur}))cur='';
+    $('fKind').innerHTML='<option value="">—</option>'+ks.map(function(k){return '<option value="'+esc(k.key)+'"'+(k.key===cur?' selected':'')+'>'+esc(k.title)+'</option>'}).join('');
+    $('fKind').value=cur;kindSel=cur;
+    $('fKind').classList.toggle('hide',!ks.length);$('fKindL').classList.toggle('hide',!ks.length);
+  }
+  $('fKind').onchange=function(){kindSel=this.value};
+  function autoKind(){
+    if(typeof ivaGuessKind!=='function'||!(S.kinds||[]).some(function(k){return k.words&&k.words.length}))return;
+    var g=ivaGuessKind($('fName').value,S.kinds);
+    if(!g.cat||!S.cats.some(function(c){return c.key===g.cat}))return;
+    if(g.sub&&!S.subs.some(function(x){return x.cat===g.cat&&x.key===g.sub}))g={cat:g.cat,sub:'',kind:''};
+    var p=ivaKindPlan({cat:$('fCat').value,sub:$('fSub').value,kind:$('fKind').value},auto,g);
+    if(!p)return;
+    if($('fCat').value!==p.cat){$('fCat').value=p.cat;fillSubs()}
+    $('fSub').value=p.sub;kindSel=p.kind;$('fKind').value='';fillKinds();
+    auto={cat:p.cat,sub:p.sub,kind:p.kind};
+  }
+  if(!t)$('fName').oninput=function(){clearTimeout(autoT);autoT=setTimeout(function(){try{autoKind()}catch(e){}},300)};
+  loadKinds().then(function(){
+    if(t&&S.kinds.length)api('/rest/v1/tools?select=kind&id=eq.'+t.id).then(function(r){kindSel=(r&&r[0]&&r[0].kind)||'';fillKinds()}).catch(function(){});
+    else fillKinds();
+  });
   function fillSubs(){
     var c=$('fCat').value;
     $('fSub').innerHTML='<option value="">—</option>'+S.subs.filter(function(s){return s.cat===c}).map(function(s){return '<option value="'+esc(s.key)+'"'+(t&&t.sub===s.key?' selected':'')+'>'+esc(s.title)+'</option>'}).join('');
@@ -1230,6 +1272,7 @@ function toolForm(id){
     if(!nm||pr<=0){toast('Укажите название и цену');return}
     var imgsA=$('fImgs').value.split('\n').map(function(x){return x.trim()}).filter(Boolean);
     var body={name:nm,price:pr,deposit:(+$('fDep').value||Math.round(pr*5)),descr:$('fDescr').value.trim(),terms:$('fTerms').value.trim(),cat:$('fCat').value,sub:$('fSub').value,delivery:$('fDel').classList.contains('on'),delivery_price:+$('fDP').value||0,active:$('fAct').classList.contains('on'),img:imgsA[0]||'',imgs:imgsA};
+    if(S.kinds&&S.kinds.length){var kv=$('fKind').classList.contains('hide')?'':$('fKind').value;if(kv||t)body.kind=kv||null}   /* 10.81: вид — только когда справочник видов есть в базе */
     var btn=$('fSave');btn.textContent='Сохраняем…';btn.disabled=true;
     try{
       if(t)await api('/rest/v1/tools?id=eq.'+t.id,'PATCH',body);

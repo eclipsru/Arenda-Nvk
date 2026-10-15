@@ -1334,6 +1334,77 @@ public class IvaPatchTest {
                     "timeout|UnknownHostException|RuntimeException|неизвестная ошибка|80");
             }
         }
+        {   // 10.81: автоподбор категории, подкатегории и вида по названию — те же случаи, что tests/kind-guess.cjs
+            java.util.List<IvaKindPatch.Kind> kwAk = new java.util.ArrayList<IvaKindPatch.Kind>();
+            java.util.Map<String, String[]> kwAw = new java.util.HashMap<String, String[]>();
+            String[][] kwMini = {{"a1", "c1", "s1", "перфорат|перфорат max"}, {"a2", "c1", "s1", "перфорат|перфорат plus"},
+                {"b1", "c1", "s2", "пил|цепн пил"}, {"d1", "c2", "s3", "пил|пил по металл"}, {"e1", "c1", "s4", "фрез"}, {"e2", "c1", "s5", "фрез"}};
+            for (String[] kwM : kwMini) { kwAk.add(new IvaKindPatch.Kind(kwM[0], kwM[1], kwM[2], kwM[0], 0)); kwAw.put(kwM[0], kwM[3].split("\\|")); }
+            eq("автоподбор 10.81: ничья в подкатегории → категория и подкатегория", IvaKindPatch.guess("Перфоратор Makita", kwAk, kwAw).toString(), "c1/s1/");
+            eq("автоподбор 10.81: уточнение выигрывает", IvaKindPatch.guess("перфоратор SDS-MAX", kwAk, kwAw).toString(), "c1/s1/a1");
+            eq("автоподбор 10.81: сочетание выигрывает у общего", IvaKindPatch.guess("Цепная пила", kwAk, kwAw).toString(), "c1/s2/b1");
+            eq("автоподбор 10.81: ничья между категориями → ничего", IvaKindPatch.guess("Пила", kwAk, kwAw).toString(), "//");
+            eq("автоподбор 10.81: ничья в категории → только категория", IvaKindPatch.guess("Фреза", kwAk, kwAw).toString(), "c1//");
+            eq("автоподбор 10.81: часть — только начало слова", IvaKindPatch.guess("бензопила", kwAk, kwAw).toString(), "//");
+            eq("автоподбор 10.81: пусто, нет слов, нет справочника → ничего",
+                IvaKindPatch.guess("", kwAk, kwAw) + "," + IvaKindPatch.guess(null, kwAk, kwAw) + "," + IvaKindPatch.guess("пила", kwAk, null) + "," + IvaKindPatch.guess("пила", null, kwAw), "//,//,//,//");
+            eq("автоподбор 10.81: нормализация", String.join(" ", IvaKindPatch.tokens("Шуруповёрт-дрель, 18V!")), "шуруповерт дрель 18v");
+            eq("автоподбор 10.81: ручной выбор не перезаписывается",
+                IvaKindPatch.mayFill("", "x") + "," + IvaKindPatch.mayFill("x", "x") + "," + IvaKindPatch.mayFill("y", "x") + "," + IvaKindPatch.mayFill(null, null), "true,true,false,true");
+            IvaKindPatch.Guess kwG1 = new IvaKindPatch.Guess("power", "hammers", "rotary-sds-max");
+            String[][] kwPl = {
+                {"", "", "", "", "", "", "power/hammers/rotary-sds-max", "пустая форма — всё"},
+                {"garden", "", "", "", "", "", "null", "категорию выбрали руками — не меняем"},
+                {"power", "hammers", "", "power", "hammers", "", "power/hammers/rotary-sds-max", "уточнили название — вид дописан"},
+                {"power", "drills", "", "power", "", "", "null", "подкатегорию выбрали руками — остаётся, вид не ставим"},
+                {"power", "", "", "", "", "", "power/hammers/rotary-sds-max", "та же категория руками — подкатегорию и вид дописываем"},
+                {"power", "hammers", "rotary-sds-max", "", "", "", "null", "уже стоит то же — ничего"},
+            };
+            for (String[] kwC : kwPl) {
+                String[] kwPr = IvaKindPatch.plan(kwC[0], kwC[1], kwC[2], kwC[3], kwC[4], kwC[5], kwG1);
+                eq("автоподбор 10.81: план — " + kwC[7], kwPr == null ? "null" : kwPr[0] + "/" + kwPr[1] + "/" + kwPr[2], kwC[6]);
+            }
+            String[] kwR1 = IvaKindPatch.plan("power", "hammers", "rotary-sds-max", "power", "hammers", "rotary-sds-max", new IvaKindPatch.Guess("power", "hammers", ""));
+            String[] kwR2 = IvaKindPatch.plan("power", "hammers", "rotary-sds-plus", "power", "hammers", "", new IvaKindPatch.Guess("power", "hammers", ""));
+            String[] kwR3 = IvaKindPatch.plan("power", "hammers", "rotary-sds-max", "power", "hammers", "rotary-sds-max", new IvaKindPatch.Guess("garden", "trimmers", "chainsaw"));
+            String[] kwR4 = IvaKindPatch.plan("", "", "", "", "", "", new IvaKindPatch.Guess("", "", ""));
+            eq("автоподбор 10.81: план — общее название снимает наш вид, ручной вид остаётся, новое название заменяет наше, пусто — ничего",
+                (kwR1 == null ? "null" : kwR1[0] + "/" + kwR1[1] + "/" + kwR1[2]) + "," + (kwR2 == null ? "null" : "x") + "," + (kwR3 == null ? "null" : kwR3[0] + "/" + kwR3[1] + "/" + kwR3[2]) + "," + (kwR4 == null ? "null" : "x"),
+                "power/hammers/,null,garden/trimmers/chainsaw,null");
+            eq("автоподбор 10.81: запрос слов — свой, справочник видов прежний (нет столбца — только без автоподбора)",
+                IvaKindPatch.WORDS_PATH + " | " + IvaKindPatch.KINDS_PATH.contains("words"),
+                "/rest/v1/iva_kinds?select=key,words&active=eq.true | false");
+            // настоящий словарь: виды из 20261015_category_tree.sql, слова из 20261016_kind_words.sql, случаи — общий файл
+            try {
+                String kwTree = new String(java.nio.file.Files.readAllBytes(java.nio.file.Paths.get("supabase/migrations/20261015_category_tree.sql")), "UTF-8");
+                String kwWsql = new String(java.nio.file.Files.readAllBytes(java.nio.file.Paths.get("supabase/migrations/20261016_kind_words.sql")), "UTF-8");
+                int kwI0 = kwTree.indexOf("insert into public.iva_kinds"), kwI1 = kwTree.indexOf("on conflict (key)", kwI0);
+                java.util.regex.Matcher kwKm = java.util.regex.Pattern.compile("\\('([a-z0-9-]+)',\\s*'([a-z0-9-]+)',\\s*'([a-z0-9-]+)',\\s*'([^']+)',\\s*(\\d+)\\)").matcher(kwTree.substring(kwI0, kwI1));
+                java.util.List<IvaKindPatch.Kind> kwRk = new java.util.ArrayList<IvaKindPatch.Kind>();
+                while (kwKm.find()) kwRk.add(new IvaKindPatch.Kind(kwKm.group(1), kwKm.group(2), kwKm.group(3), kwKm.group(4), Integer.parseInt(kwKm.group(5))));
+                java.util.Map<String, String[]> kwRw = new java.util.HashMap<String, String[]>();
+                java.util.regex.Matcher kwWm = java.util.regex.Pattern.compile("(?m)^\\s*\\('([a-z0-9-]+)', array\\[(.*)\\]::text\\[\\]\\)").matcher(kwWsql);
+                while (kwWm.find()) {
+                    String[] kwParts = kwWm.group(2).split(",");
+                    for (int kwJ = 0; kwJ < kwParts.length; kwJ++) kwParts[kwJ] = kwParts[kwJ].trim().replaceAll("^'|'$", "");
+                    kwRw.put(kwWm.group(1), kwParts);
+                }
+                eq("автоподбор 10.81: настоящий словарь — 159 видов, у всех есть слова", kwRk.size() + "/" + kwRw.size(), "159/159");
+                int kwOkc = 0, kwTotal = 0;
+                StringBuilder kwBadc = new StringBuilder();
+                for (String kwLine : new String(java.nio.file.Files.readAllBytes(java.nio.file.Paths.get("tests/kind-guess-cases.txt")), "UTF-8").split("\n")) {
+                    if (kwLine.trim().isEmpty() || kwLine.startsWith("#")) continue;
+                    String[] kwC = kwLine.split("\\|", -1);
+                    kwTotal++;
+                    String kwGot = IvaKindPatch.guess(kwC[0], kwRk, kwRw).toString();
+                    if (kwGot.equals(kwC[1] + "/" + kwC[2] + "/" + kwC[3])) kwOkc++; else if (kwBadc.length() < 300) kwBadc.append(kwC[0]).append(" → ").append(kwGot).append("; ");
+                }
+                eq("автоподбор 10.81: общие случаи tests/kind-guess-cases.txt (" + kwTotal + ") — как на сайте", kwOkc == kwTotal && kwTotal >= 120 ? "все" : kwBadc.toString(), "все");
+                int kwOkt = 0;
+                for (IvaKindPatch.Kind kwK : kwRk) if (IvaKindPatch.guess(kwK.title, kwRk, kwRw).toString().equals(kwK.cat + "/" + kwK.sub + "/" + kwK.key)) kwOkt++;
+                eq("автоподбор 10.81: название каждого вида подбирает сам вид", kwOkt + "/" + kwRk.size(), "159/159");
+            } catch (Throwable kwE) { eq("автоподбор 10.81: настоящий словарь", "исключение " + kwE, ""); }
+        }
         if (fail > 0) { System.out.println("ошибок: " + fail); System.exit(1); }
         System.out.println("все проверки IvaPatch пройдены");
     }

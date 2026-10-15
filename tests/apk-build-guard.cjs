@@ -770,6 +770,67 @@ try {
       assert.ok(has(arsc14, str) || has(dex14, str), `APK 10.14: нет «${str}» — правка 10.67 не найдёт штатное поле`);
     assert.ok(/eq\("админ 10\.67: /.test(tp) && /eq\("подкатегория 10\.67: /.test(tp) && /eq\("кабинет 10\.67: /.test(tp), 'IvaPatchTest: проверки 10.67');
   }
+  // 10.81 (этап 1 справочника моделей, решение владельца 15.10.2026, №30): категория, подкатегория и вид подставляются
+  // сами по названию — в форме «Добавить» приложения и на сайте (new.html, cabinet.html). Слова — iva_kinds.words (SQL).
+  {
+    const kp = R('android/patches/IvaKindPatch.java'), tp = R('android/patches/test/IvaPatchTest.java'), wf = R('.github/workflows/build-apk.yml');
+    const sql = R('supabase/migrations/20261016_kind_words.sql'), chk = R('tools/check.sh'), ap = R('android/patches/apply.py');
+    const kg = R('assets/kind-guess.js'), nw = R('new.html'), cab = R('cabinet.html'), sb = R('assets/sb.js');
+    const jt = R('tests/kind-guess.cjs'), bt = R('tests/kind-guess-browser.cjs');
+    const fnx = (src, name) => { const mm = new RegExp(`static (?:final )?[\\w.<>, \\[\\]]+ ${name}\\(`).exec(src); assert.ok(mm, `нет ${name}`); return src.slice(mm.index, src.indexOf('\n    }\n', mm.index)); };
+    // 1. SQL: столбец words, слова для всех 159 видов, повтор безопасен, откат в конце; стенд в check.sh
+    assert.ok(sql.includes("alter table public.iva_kinds add column if not exists words text[] not null default '{}';")
+      && sql.includes('and k.words is distinct from v.words;') && sql.includes('--   alter table public.iva_kinds drop column if exists words;')
+      && (sql.match(/^\s*\('[a-z0-9-]+', array\[/gm) || []).length === 159 && !/\bdrop table\b|\bdelete from\b|\btruncate\b/i.test(sql.split('Откат')[0]),
+      'автоподбор 10.81: SQL — столбец words для 159 видов, повтор безопасен, ничего не удаляет, откат в конце');
+    assert.ok(chk.includes('tools/kind-words-stand.py') && / kind-guess; do/.test(chk) && / kind-guess-browser; do/.test(chk),
+      'автоподбор 10.81: стенд SQL, тест алгоритма и браузерный тест — в check.sh');
+    // 2. приложение: слова — отдельным запросом (старый запрос видов не меняется: нет столбца — только без автоподбора)
+    assert.ok(kp.includes('static final String WORDS_PATH = "/rest/v1/iva_kinds?select=key,words&active=eq.true";') && !/KINDS_PATH = "[^"]*words/.test(kp),
+      'автоподбор 10.81: слова — своим запросом, справочник видов прежний');
+    const lw = fnx(kp, 'loadWords');
+    assert.ok(lw.includes('r[0].startsWith("404") || r[0].startsWith("400")') && lw.includes('words = null;') && lw.includes('.remove(PREFS_WORDS)'),
+      'автоподбор 10.81: столбца нет — слова забываются, автоподбора нет');
+    // 3. алгоритм — как на сайте: ё→е, слова, начало слова, ничья → общее
+    const tk = fnx(kp, 'tokens'), es = fnx(kp, 'entryScore'), gs = fnx(kp, 'guess'), pl = fnx(kp, 'plan');
+    assert.ok(tk.includes(`.toLowerCase(Locale.ROOT).replace('ё', 'е').replaceAll("[^a-zа-я0-9]+", " ")`) && es.includes('if (t.startsWith(p)) { hit = true; break; }')
+      && gs.includes('if (m > bs || (m == bs && n > bn))') && gs.includes('if (sameSub) return new Guess(f.cat, f.sub, "");') && gs.includes('if (sameCat) return new Guess(f.cat, "", "");')
+      && kg.includes(".toLowerCase().replace(/ё/g, 'е')") && kg.includes(".replace(/[^a-zа-я0-9]+/g, ' ')") && kg.includes('toks[j].lastIndexOf(p, 0) === 0')
+      && kg.includes('if (m > bs || (m === bs && n > bn))'),
+      'автоподбор 10.81: алгоритм в приложении и на сайте один и тот же');
+    assert.ok(pl.includes('if (!mayFill(cc, autoCat) && !cc.equals(g.cat)) return null;') && kg.includes('if (!ivaKindMayFill(cc, last.cat) && cc !== g.cat) return null;'),
+      'автоподбор 10.81: категорию, выбранную руками, не меняем (приложение и сайт)');
+    // 4. форма «Добавить»: свой слушатель названия (штатный не заменяется), пауза, как штатный выбор; правка — без автоподбора
+    const wn = fnx(kp, 'watchName'), af = fnx(kp, 'autofill');
+    assert.ok(wn.includes('Object no = IvaClientPatch.get(a, FORM[0][5]);') && wn.includes('nv.addTextChangedListener(') && wn.includes('if (my != nameSeq) return;')
+      && wn.includes('}, AUTO_DELAY_MS);') && !/setOnClickListener|setText\(|setOnFocusChangeListener/.test(wn) && fnx(kp, 'refreshRow').includes('if (k == 0) watchName(a);'),
+      'автоподбор 10.81: слушатель названия добавляется (штатный не трогаем), с паузой, только в форме «Добавить»');
+    assert.ok(af.includes('if (kinds == null || words == null) return;') && af.includes("if (!((View) no).isShown()) return;")
+      && af.includes('if (catTitle == null) return;') && af.includes('String[] p = plan(curCat, curSub, sel[0], auto[0], auto[1], auto[2], g);')
+      && af.includes('IvaClientPatch.set(a, FORM[0][1], p[0]);') && af.includes('IvaClientPatch.set(a, FORM[0][3], "");') && af.includes('IvaClientPatch.set(a, FORM[0][3], p[1]);')
+      && af.includes('catV.setTextColor(text);') && af.includes('hideDrop(a, "atCatSug"); hideDrop(a, "atSubSug");') && !af.includes('FORM[1]'),
+      'автоподбор 10.81: подстановка — как штатный выбор (ключ, текст, цвет, списки закрыты); категории нет в штатном списке — не трогаем');
+    assert.ok(kp.includes('static final String SUB_HINT = "Подкатегория (необязательно)";') && has(dex14, 'Подкатегория (необязательно)')
+      && has(dex14, 'atCatSug') && has(dex14, 'atSubSug') && has(dex14, 'atName'),
+      'автоподбор 10.81: штатные поля и текст пустой подкатегории есть в 10.14');
+    assert.ok(!/IvaKindPatch|kind/i.test(ap) && /IvaRentPatch\.java android\/patches\/IvaKindPatch\.java 2>&1/.test(wf),
+      'автоподбор 10.81: новых вставок в smali и новых файлов нет');
+    // 5. сайт: один модуль, вид пишется только когда справочник видов есть в базе
+    assert.ok(nw.includes('<script src="assets/kind-guess.js?v=20261016-kind"></script>') && cab.includes('<script src="assets/kind-guess.js?v=20261016-kind"></script>')
+      && nw.includes('if (KINDS_DB.length){') && nw.includes("if (F.kind || EDIT_ID) payload.kind = F.kind || null;")
+      && cab.includes("if(S.kinds&&S.kinds.length){var kv=") && sb.includes('if (data.kind) row.kind = data.kind;')
+      && sb.includes("try { rows = await api(base + ',words'); }") && sb.includes('catch(e){ try { rows = await api(base); } catch(e2){ return []; } }')
+      && !/TOOL_FIELDS = [^;]*kind/.test(sb),
+      'автоподбор 10.81: сайт — общий модуль; вид в запросе только при справочнике видов; общий список полей объявления не меняется');
+    assert.ok(nw.includes("(canAuto() && !EDIT_ID ?") && cab.includes("if(!t)$('fName').oninput="),
+      'автоподбор 10.81: на сайте автоподбор только для нового объявления');
+    // 6. приложение и сайт проверяются на одних и тех же случаях и настоящем словаре
+    assert.ok(tp.includes('java.nio.file.Paths.get("tests/kind-guess-cases.txt")') && jt.includes("'tests/kind-guess-cases.txt'")
+      && tp.includes('supabase/migrations/20261016_kind_words.sql') && jt.includes('supabase/migrations/20261016_kind_words.sql') && bt.includes('20261016_kind_words.sql'),
+      'автоподбор 10.81: Java и JS — одни и те же случаи и словарь из SQL');
+    assert.ok((tp.match(/eq\("автоподбор 10\.81: /g) || []).length >= 15, 'IvaPatchTest: проверки 10.81');
+    assert.ok(/NEW_NAME: '10\.81'/.test(wf) && /NEW_CODE: '155'/.test(wf) && /TEST_NOTES: 'Тестовая сборка 10\.81: /.test(wf), 'версия 10.81 (155)');
+  }
   // 10.80 (просьба владельца 15.10.2026): обновление без окон. Серое окно «Всё готово!» убрано; «Показать окно установки»
   // ничего не делало — в манифесте не было REQUEST_INSTALL_PACKAGES (системный установщик молча отменял установку).
   {
@@ -815,7 +876,6 @@ try {
     assert.ok(fnx(np, 'releaseCheck').includes('cleanupUpdates(a.getApplicationContext());') && fnx(np, 'staleUpdate').includes('Integer.parseInt(m.group(1)) <= installed'),
       'обновление 10.80: файлы уже установленных обновлений удаляются');
     assert.ok(!/customer_profiles|passport|surname|AlarmManager|WorkManager|com\.google\.android\.gms/.test(np), 'обновление 10.80: без личных данных и сервисов Google');
-    assert.ok(/NEW_NAME: '10\.80'/.test(wf) && /NEW_CODE: '154'/.test(wf), 'версия 10.80 (154)');
     assert.ok((tp.match(/eq\("обновление 10\.80: /g) || []).length >= 9, 'IvaPatchTest: проверки 10.80');
   }
   // 10.79 (решение владельца 15.10.2026, №28): новое дерево категорий (15 категорий, «Другое» в каждой) — одним SQL; «Вид

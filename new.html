@@ -96,7 +96,8 @@ textarea.inp{resize:vertical;min-height:110px;font-family:inherit;line-height:1.
 
 <script src="assets/data.js"></script>
 <script src="assets/geo.js?v=20260923-photon"></script>
-<script src="assets/sb.js?v=20260923-photon"></script>
+<script src="assets/sb.js?v=20261016-kind"></script>
+<script src="assets/kind-guess.js?v=20261016-kind"></script>
 <script src="assets/app-release.js?v=20261009-rel"></script>
 <script src="assets/app.js?v=20261009-rel"></script>
 <script>
@@ -109,12 +110,15 @@ textarea.inp{resize:vertical;min-height:110px;font-family:inherit;line-height:1.
   let uploadsInFlight = 0;
   window.addEventListener('beforeunload',function(e){ if(editDirty){e.preventDefault();e.returnValue='';} });
   let CATS_DB = [], SUBS_DB = [];
+  let KINDS_DB = [];                       /* 10.81: виды (iva_kinds) со словами автоподбора; пусто — SQL не применён */
+  let AUTO = { cat:'', sub:'', kind:'' };  /* что подставил автоподбор в прошлый раз — ручной выбор не трогаем */
+  let autoTimer = 0;
   let step = 1;
   const TOTAL = 5;
 
   /* Состояние формы */
   let F = {
-    cat:'', sub:'', imgs:[], name:'', descr:'', cond:'good',
+    cat:'', sub:'', kind:'', imgs:[], name:'', descr:'', cond:'good',
     price:'', deposit:'', terms:'', delivery:false, delivery_price:40, address:'', city:'', pickup_lat:null, pickup_lng:null
   };
 
@@ -158,9 +162,48 @@ textarea.inp{resize:vertical;min-height:110px;font-family:inherit;line-height:1.
     }).join('') + '</div>';
   }
 
+  /* 10.81: виды подкатегории и автоподбор по названию (assets/kind-guess.js — тот же алгоритм, что в приложении) */
+  function kindsFor(cat, sub){
+    return KINDS_DB.filter(function(k){ return cat && sub && k.cat === cat && k.sub === sub; });
+  }
+  function kindKeep(){
+    if (F.kind && !kindsFor(F.cat, F.sub).some(function(k){ return k.key === F.kind; })) F.kind = '';
+  }
+  function canAuto(){
+    return typeof ivaGuessKind === 'function' && KINDS_DB.some(function(k){ return k.words && k.words.length; });
+  }
+  function autoKind(){
+    if (!canAuto()) return;
+    let g = ivaGuessKind(F.name, KINDS_DB);
+    if (!g.cat || !CATS_DB.some(function(c){ return c.key === g.cat; })) return;
+    if (g.sub && !SUBS_DB.some(function(x){ return x.cat === g.cat && x.key === g.sub; })) g = { cat:g.cat, sub:'', kind:'' };
+    const p = ivaKindPlan({ cat:F.cat, sub:F.sub, kind:F.kind }, AUTO, g);
+    if (!p) return;
+    F.cat = p.cat; F.sub = p.sub; F.kind = p.kind;
+    AUTO = { cat:p.cat, sub:p.sub, kind:p.kind };
+    saveDraft();
+    const area = $('catArea');
+    if (area){ area.innerHTML = catHTML(); bad('fCat', false); }
+    livePreview();
+  }
+
   function body1(){
-    const subs = SUBS_DB.filter(function(s){ return s.cat === F.cat; });
     return '<div class="box">' +
+      (canAuto() && !EDIT_ID ?
+        '<div class="fld" id="fWhat">' +
+          '<label>Что сдаёте <span class="muted" style="font-weight:400">— категория подберётся сама</span></label>' +
+          '<input class="inp" id="iWhat" maxlength="90" placeholder="Например: Перфоратор Makita HR2470" value="' + esc(F.name) + '">' +
+          '<div class="hint">Это же название будет у объявления — его можно поправить на шаге «Описание».</div>' +
+        '</div>' : '') +
+      '<div id="catArea">' + catHTML() + '</div>' +
+    '</div>';
+  }
+
+  function catHTML(){
+    const subs = SUBS_DB.filter(function(s){ return s.cat === F.cat; });
+    kindKeep();
+    const kinds = kindsFor(F.cat, F.sub);
+    return '' +
       '<div class="fld" id="fCat">' +
         '<label>Категория инструмента</label>' +
         '<div class="pick">' +
@@ -183,7 +226,16 @@ textarea.inp{resize:vertical;min-height:110px;font-family:inherit;line-height:1.
                      (F.sub === s.key ? ' class="on"' : '') + '>' + esc(s.title) + '</button>';
             }).join('') +
           '</div></div>' : '') +
-    '</div>';
+      (kinds.length ?
+        '<div class="fld" id="fKind" style="margin:14px 0 0"><label>Вид инструмента ' +
+          '<span class="muted" style="font-weight:400">— необязательно</span></label>' +
+          '<div class="pick row">' +
+            '<button type="button" data-kind=""' + (!F.kind ? ' class="on"' : '') + '>Без уточнения</button>' +
+            kinds.map(function(k){
+              return '<button type="button" data-kind="' + esc(k.key) + '"' +
+                     (F.kind === k.key ? ' class="on"' : '') + '>' + esc(k.title) + '</button>';
+            }).join('') +
+          '</div></div>' : '');
   }
 
   function body2(){
@@ -299,6 +351,7 @@ textarea.inp{resize:vertical;min-height:110px;font-family:inherit;line-height:1.
       '</article>' +
       '<div class="box" style="margin-top:14px">' +
         '<div class="sum-row"><span>Категория</span><b>' + esc(catTitleDB(F.cat) || '—') + '</b></div>' +
+        (F.kind && kindTitle(F.kind) ? '<div class="sum-row"><span>Вид</span><b>' + esc(kindTitle(F.kind)) + '</b></div>' : '') +
         '<div class="sum-row"><span>Фото</span><b>' + (F.imgs.length || '—') + '</b></div>' +
         '<div class="sum-row"><span>Цена</span><b>' + (F.price ? rub(F.price) + '/сут' : '—') + '</b></div>' +
         '<div class="sum-row"><span>Залог</span><b>' + (F.price || F.deposit ? rub(dep) : '—') + '</b></div>' +
@@ -306,6 +359,11 @@ textarea.inp{resize:vertical;min-height:110px;font-family:inherit;line-height:1.
           (F.delivery ? 'Доставка ' + (F.delivery_price || 0) + ' ₽/км' : 'Самовывоз') + '</b></div>' +
       '</div>' +
     '</div>';
+  }
+
+  function kindTitle(k){
+    const x = KINDS_DB.find(function(y){ return y.key === k; });
+    return x ? x.title : '';
   }
 
   function catTitleDB(k){
@@ -347,10 +405,13 @@ textarea.inp{resize:vertical;min-height:110px;font-family:inherit;line-height:1.
 
     root.onclick = function(e){
       const c = e.target.closest('[data-cat]');
-      if (c){ F.cat = c.getAttribute('data-cat'); F.sub = ''; saveDraft(); render(); return; }
+      if (c){ F.cat = c.getAttribute('data-cat'); F.sub = ''; F.kind = ''; saveDraft(); render(); return; }
 
       const s = e.target.closest('[data-sub]');
-      if (s){ F.sub = s.getAttribute('data-sub'); saveDraft(); render(); return; }
+      if (s){ F.sub = s.getAttribute('data-sub'); kindKeep(); saveDraft(); render(); return; }
+
+      const kd = e.target.closest('[data-kind]');
+      if (kd){ F.kind = kd.getAttribute('data-kind'); saveDraft(); render(); return; }
 
       const cd = e.target.closest('[data-cond]');
       if (cd){ F.cond = cd.getAttribute('data-cond'); saveDraft(); render(); return; }
@@ -367,6 +428,14 @@ textarea.inp{resize:vertical;min-height:110px;font-family:inherit;line-height:1.
     const bk = $('bBack'); if (bk) bk.addEventListener('click', function(){ step--; render(); });
     const nx = $('bNext'); if (nx) nx.addEventListener('click', function(){ if (validate()) { step++; saveDraft(); render(); } });
     const sv = $('bSave'); if (sv) sv.addEventListener('click', publish);
+
+    /* Шаг 1: название → категория, подкатегория и вид (10.81) */
+    const wh = $('iWhat');
+    if (wh) wh.addEventListener('input', function(){
+      F.name = this.value; saveDraft();
+      clearTimeout(autoTimer);
+      autoTimer = setTimeout(function(){ try { autoKind(); } catch(e){} }, 300);
+    });
 
     /* Поля шага 3 */
     const nm = $('iName');
@@ -550,6 +619,11 @@ textarea.inp{resize:vertical;min-height:110px;font-family:inherit;line-height:1.
       pickup_lat: pickupLat,
       pickup_lng: pickupLng
     };
+    /* 10.81: вид — только когда справочник видов есть в базе (значит, есть и tools.kind) */
+    if (KINDS_DB.length){
+      kindKeep();
+      if (F.kind || EDIT_ID) payload.kind = F.kind || null;
+    }
 
     if (EDIT_ID){
       try {
@@ -626,6 +700,7 @@ textarea.inp{resize:vertical;min-height:110px;font-family:inherit;line-height:1.
     } catch(e){
       CATS_DB = CATS; SUBS_DB = SUBS;   /* запасной вариант — справочник из data.js */
     }
+    try { KINDS_DB = await loadKinds(); } catch(e){ KINDS_DB = []; }
 
     if (EDIT_ID){
       try {
@@ -652,6 +727,13 @@ textarea.inp{resize:vertical;min-height:110px;font-family:inherit;line-height:1.
         // Старую категорию не теряем, даже если её убрали из активного справочника.
         if (F.cat && !CATS_DB.some(c=>c.key===F.cat)) CATS_DB.push({key:F.cat,title:catTitle(F.cat)});
         if (F.sub && !SUBS_DB.some(c=>c.key===F.sub&&c.cat===F.cat)) SUBS_DB.push({key:F.sub,cat:F.cat,title:subTitle(F.sub)});
+        /* вид объявления — отдельным запросом: общий список полей объявления вид не читает */
+        if (KINDS_DB.length){
+          try {
+            const kr = await api('/rest/v1/tools?select=kind&id=eq.' + encodeURIComponent(EDIT_ID));
+            F.kind = (kr && kr[0] && kr[0].kind) || '';
+          } catch(e){ F.kind = ''; }
+        }
         document.title='Редактирование объявления — Ива';
         step=3;render();return;
       } catch(err){

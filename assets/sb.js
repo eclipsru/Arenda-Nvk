@@ -312,6 +312,19 @@ async function loadCats(){
   return { cats: cats || [], subs: subs || [] };
 }
 
+/* 10.81: «Вид инструмента» (iva_kinds) со словами автоподбора. Нет столбца words — виды без слов;
+   нет таблицы (SQL не применён) — пусто, формы работают как раньше. */
+async function loadKinds(){
+  const base = '/rest/v1/iva_kinds?active=eq.true&order=sort.asc,title.asc&select=key,cat,sub,title,sort';
+  let rows;
+  try { rows = await api(base + ',words'); }
+  catch(e){ try { rows = await api(base); } catch(e2){ return []; } }
+  return (Array.isArray(rows) ? rows : []).map(function(k){
+    return { key: k.key, cat: k.cat, sub: k.sub, title: k.title || k.key, sort: k.sort || 0,
+             words: Array.isArray(k.words) ? k.words : [] };
+  }).filter(function(k){ return k.key && k.cat && k.sub; });
+}
+
 /* ---------- Объявления ---------- */
 const TOOL_FIELDS = 'id,name,cat,sub,descr,price,deposit,imgs,img,delivery,' +
                     'delivery_price,terms,pickup_city,pickup_address,pickup_lat,pickup_lng,' +
@@ -358,6 +371,7 @@ async function createTool(data){
     status:         data.status || 'active',
     active:         (data.status || 'active') === 'active'
   };
+  if (data.kind) row.kind = data.kind;   /* 10.81: вид — только если выбран (без вида столбец не нужен) */
   const r = await api('/rest/v1/tools', 'POST', row, { Prefer: 'return=representation' });
   return (r && r[0]) || null;
 }
