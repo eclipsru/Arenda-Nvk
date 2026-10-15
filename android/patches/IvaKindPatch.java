@@ -695,15 +695,12 @@ final class IvaKindPatch {
                 if (!editLoaded || editId.isEmpty() || kind.equals(orig[1])) return;   // вид не менялся — писать нечего
                 pendingId = editId;
             } else {
-                String city = "";
-                try { city = IvaFormPatch.cityExtra(IvaFormPatch.cityValue(a)); } catch (Throwable e) { city = ""; }   // 10.87
-                if (kind.isEmpty() && city.isEmpty()) return;            // новое объявление без вида и города — ничего не нужно
+                if (kind.isEmpty()) return;                              // новое объявление без вида — ничего не нужно
                 pendingId = "";
                 pendingName = name;
                 pendingEmail = str(IvaClientPatch.get(a, "userEmail"));
                 if (pendingEmail.isEmpty()) return;
                 try { pendingExtra = IvaModelPatch.saveExtra(a, kind, name); } catch (Throwable e) { pendingExtra = ""; }   // 10.82
-                if (!city.isEmpty()) pendingExtra = city + (pendingExtra.isEmpty() ? "" : "," + pendingExtra);   // город — первым (kit — последним, dropKit)
             }
             pendingKind = kind;
             pendingForm = k;
@@ -777,8 +774,7 @@ final class IvaKindPatch {
         View v;
         if (KIND_KEY.equals(key)) v = form.findViewWithTag(ROW_TAG + FORM[0][2]);
         else {
-            Object o = IvaClientPatch.get(a, key);
-            v = o instanceof View ? (View) o : null;
+            v = IvaPatch.view(a, key);                                   // 10.88: поле или id разметки («atSave»)
             if (v != null && "atPhotos".equals(key) && v.getParent() instanceof View) v = (View) v.getParent();   // лента фото — в HorizontalScrollView
         }
         return v != null && v.getParent() == form ? v : null;
@@ -819,7 +815,7 @@ final class IvaKindPatch {
             if (KIND_KEY.equals(l[0])) topMargin(f.findViewWithTag(ROW_TAG + FORM[0][2] + ":field"), FIELD_TOP_DP, a);
             else topMargin(f, FIELD_TOP_DP, a);
         }
-        // 2. 10.87: разделы, порядок пунктов, подсказки, ошибки, черновик, образцы, город (IvaFormPatch)
+        // 2. 10.87: разделы, порядок пунктов, подсказки, ошибки, черновик, образцы; 10.88: частые условия (IvaFormPatch)
         try { IvaFormPatch.setup(a, form); } catch (Throwable ignore) {}
     }
 

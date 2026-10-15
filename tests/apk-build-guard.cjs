@@ -781,11 +781,24 @@ try {
       && ip.includes('try { stop = IvaFormPatch.onSaveTouch(a, e.getActionMasked()); } catch (Throwable ignore) {}') && ip.includes('if (k == 0 && v.isEnabled()) {'),
       'форма 10.87: вызовы IvaFormPatch — из arrange, onTab и касания «Опубликовать» (только форма «Добавить»)');
     assert.ok(fp.includes('static final String ERR_NAME = "Напишите название инструмента", ERR_CAT = "Выберите категорию", ERR_PRICE = "Укажите цену за сутки";')
-      && fp.includes('static final String CITY_LABEL = "Город выдачи"') && fp.includes('static final int MAX_PICS = 5, SAMPLE_MAX = 15, CITY_CHIPS = 6;'),
-      'форма 10.87: тексты ошибок, «Город выдачи», не больше 5 фото');
-    assert.ok(kp.includes('try { city = IvaFormPatch.cityExtra(IvaFormPatch.cityValue(a)); } catch (Throwable e) { city = ""; }   // 10.87')
-      && fp.includes('String c = IvaSearchPatch.city(city);') && fp.includes('if (c.isEmpty() || c.length() > 60) return "";'),
-      'форма 10.87: город выдачи — тем же нормализатором, что и поиск; пусто — поле не отправляется');
+      && fp.includes('static final int MAX_PICS = 5, SAMPLE_MAX = 15;'),
+      'форма 10.87: тексты ошибок, не больше 5 фото');
+    // 10.88 (просьба владельца 15.10): «Города выдачи» нет — пункт выдачи с адресом и временем уже в карточке
+    assert.ok(!/pickup_city|cityExtra|cityValue|CITY_LABEL|Город выдачи/.test(fp + kp) && kp.includes('if (kind.isEmpty()) return;                              // новое объявление без вида — ничего не нужно'),
+      'форма 10.88: города выдачи в форме нет, в запись после публикации он не пишется');
+    // 10.88: кнопки «Опубликовать» / «Сохранить» в 10.14 — id разметки (не поля MainActivity): находим по id
+    const vw = ip.slice(ip.indexOf('static View view(Activity a, String name) {'), ip.indexOf('static View view(Activity a, String name) {') + 420);
+    assert.ok(vw.includes('Object o = get(a, name);') && vw.includes('a.getResources().getIdentifier(name, "id", a.getPackageName());') && vw.includes('a.findViewById(id)')
+      && ip.includes('final View save = view(a, saveField);') && kp.includes('v = IvaPatch.view(a, key);') && fp.includes('View save = IvaPatch.view(a, "atSave");')
+      && fp.includes('keepSaveLast(a, form);') && fp.includes('if (c.getVisibility() == View.GONE || c instanceof android.widget.Space) { i++; continue; }'),
+      'форма 10.88: «Опубликовать» находится по id разметки и стоит последней (штатный отступ под ней остаётся)');
+    assert.ok(has(arsc14, 'atSave') && has(arsc14, 'teSave'), 'APK 10.14: нет id atSave / teSave — кнопку публикации не найти');
+    // 10.88: частые условия — плашки под «Условиями аренды», можно несколько; строка добавляется / убирается
+    assert.ok(fp.includes('SEC + "4", IvaKindPatch.LBL + "atTerms", "atTerms", TERMS, IvaPatch.DEL_ROW_TAG') && fp.includes('static String termToggle(String terms, String p) {')
+      && fp.includes('static List<String> termOptions(String src, List<String> own) {') && fp.includes('if ("atTerms".equals(field) && tv.getParent() instanceof LinearLayout) paintTerms(')
+      && (fp.match(/static final String\[\] TERMS_BASE = \{[^}]*\}/) || [''])[0].split('",').length >= 10,
+      'форма 10.88: частые условия под «Условиями аренды» — свои, по питанию и общие; выбрать можно хоть все');
+    assert.ok((tp.match(/eq\("форма 10\.88: /g) || []).length >= 6, 'IvaPatchTest: проверки 10.88');
     assert.ok(fp.includes('static SharedPreferences prefs(Activity a) { return a.getSharedPreferences("iva_form", 0); }')
       && fp.includes('new File(new File(a.getFilesDir(), "iva_draft"), "p" + i + ".jpg")') && !/onActivityResult|MediaStore|ACTION_IMAGE_CAPTURE/.test(fp),
       'форма 10.87: черновик — только на телефоне (prefs и файлы приложения); камеры и onActivityResult нет');
@@ -1192,7 +1205,7 @@ try {
       'вид 10.79: новое объявление — своё, с этим названием, свежее, последнее');
     const st = fnx(kp, 'onSaveTouch');
     assert.ok(st.includes('pendingAt = 0;') && st.includes('if (kinds == null) return;') && st.includes('if (!editLoaded || editId.isEmpty() || kind.equals(orig[1])) return;')
-      && st.includes('if (kind.isEmpty() && city.isEmpty()) return;'),   // 10.87: без вида — только город выдачи
+      && st.includes('if (kind.isEmpty()) return;'),
       'вид 10.79: без SQL — ничего; правка — только если вид загружен и изменён; новое без вида и города — ничего');
     // 4. справочник — публичный (без входа), копия на телефоне; нет таблицы — вида нигде нет
     assert.ok(kp.includes('static final String KINDS_PATH = "/rest/v1/iva_kinds?select=key,cat,sub,title,sort&active=eq.true&order=sort.asc,title.asc";')

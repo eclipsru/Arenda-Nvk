@@ -35,38 +35,52 @@ import java.util.WeakHashMap;
 /**
  * 10.87 · Форма «Добавить инструмент» (просьба владельца 15.10.2026: «понятно, удобно, структурировано», решения — на нас).
  *  * Пункты собраны в разделы: «Что сдаёте» (фото, название, модель, категория / подкатегория / вид) → «Характеристики
- *    и состояние» → «Цена» → «Выдача и условия» (город выдачи, условия, доставка) → «Описание» (+ «Сгенерировать»).
+ *    и состояние» → «Цена» → «Условия и доставка» → «Описание» (+ «Сгенерировать») → «Опубликовать» — в самом низу.
  *  * Внутри полей — примеры («Например: 800»), а не повтор подписи; обязательные подписи — со звёздочкой.
  *  * Цена за сутки обязательна. Нет названия, категории или цены — «Опубликовать» не срабатывает, под полем красная
  *    строка, экран прокручивается к первому такому полю (раньше пустая цена молча не отправлялась).
  *  * Черновик: заполненное (и фото) сохраняется само; открыли пустую форму — строка «Продолжить заполнение?».
  *    Опубликовали — черновик удаляется.
  *  * «Заполнить по образцу»: свои инструменты кнопками — всё, кроме фото (как «Создать копию» у Ozon).
- *  * «Город выдачи»: по умолчанию — город прошлого объявления (раньше без адреса объявление считалось Новочеркасским).
+ *  * 10.88 (просьба владельца 15.10): «Города выдачи» нет — пункт выдачи с адресом и временем работы уже в карточке.
+ *    Под «Условиями аренды» — частые условия плашками: нажали — строка добавилась в условия, ещё раз — убралась;
+ *    можно выбрать хоть все. Сначала — свои условия из прошлых объявлений, затем по питанию (бензин / аккумулятор), затем общие.
+ *  * 10.88: кнопка «Опубликовать» в 10.14 — не поле MainActivity, а id разметки (atSave); раньше её не находили
+ *    (IvaPatch.view) — она оставалась посреди формы, а проверка, «Состояние» и вид при нажатии не срабатывали.
  *  Штатные поля только переставляются внутри той же формы и получают другие подсказки — их слушатели, id и проверки
  *  не меняются; правка инструмента не меняется. Новых точек входа в штатный код нет (IvaPatch.onTab / onHub).
  */
 final class IvaFormPatch {
     private IvaFormPatch() {}
 
-    static final String SEC = "iva_sec:", ERR = "iva_err:", CITY = "iva_city", SAMPLE = "iva_sample", DRAFT = "iva_draft";
+    static final String SEC = "iva_sec:", ERR = "iva_err:", TERMS = "iva_terms", SAMPLE = "iva_sample", DRAFT = "iva_draft";
     static final String[][] SECTIONS = {
-        {"1", "Что сдаёте"}, {"2", "Характеристики и состояние"}, {"3", "Цена"}, {"4", "Выдача и условия"}, {"5", "Описание"},
+        {"1", "Что сдаёте"}, {"2", "Характеристики и состояние"}, {"3", "Цена"}, {"4", "Условия и доставка"}, {"5", "Описание"},
     };
     static final String[][] HINTS = {
         {"atName", "Например: перфоратор Makita HR2470"},
         {"atPrice", "Например: 800"},
         {"atDep", "Пусто — залог за 5 суток аренды"},
         {"atDescr", "Что умеет, для каких работ, что важно знать"},
-        {"atTerms", "Например: паспорт, выдача с 9:00 до 20:00"},
+        {"atTerms", "Выберите ниже или напишите своё"},
         {"atDelPrice", "Цена доставки, ₽ за 1 км"},
     };
     static final String NATIVE_CAT_EMPTY = "Категория *", CAT_EMPTY = "Выберите категорию", SUB_EMPTY = "Выберите подкатегорию";
     static final String ERR_NAME = "Напишите название инструмента", ERR_CAT = "Выберите категорию", ERR_PRICE = "Укажите цену за сутки";
-    static final String CITY_LABEL = "Город выдачи", CITY_HINT = "Например: Новочеркасск";
+    static final String TERMS_LABEL = "Частые условия — нажмите, чтобы добавить или убрать (можно все)";
+    /** Общие условия проката инструмента (по одному на строку условий). */
+    static final String[] TERMS_BASE = {
+        "Паспорт при получении", "Оплата при получении", "Наличные или перевод", "Минимальный срок — 1 сутки",
+        "Залог возвращаем при сдаче", "Проверяем при выдаче и при возврате", "Вернуть чистым",
+        "Расходники — за счёт арендатора", "Поломка по вине арендатора — ремонт за его счёт",
+        "Покажем, как пользоваться", "Продление — предупредить заранее", "Оформляем договор аренды",
+    };
+    static final String[] TERMS_FUEL = {"Топливо — за счёт арендатора", "Вернуть с полным баком"};
+    static final String[] TERMS_BATT = {"Аккумуляторы выдаём заряженными"};
+    static final int TERMS_OWN_MAX = 4, TERMS_OWN_LEN = 60;
     static final String SAMPLE_LABEL = "Заполнить по образцу своего инструмента (всё, кроме фото)";
     static final String DRAFT_CONT = "Продолжить", DRAFT_DROP = "Удалить черновик";
-    static final int MAX_PICS = 5, SAMPLE_MAX = 15, CITY_CHIPS = 6;
+    static final int MAX_PICS = 5, SAMPLE_MAX = 15;
     static final long SAVE_DELAY_MS = 1500, PUBLISH_QUIET_MS = 30000;
 
     /** Порядок пунктов формы. Ключ — штатное поле («atName»), подпись (IvaKindPatch.LBL + поле), «kind» или тег нашего блока. */
@@ -79,7 +93,7 @@ final class IvaFormPatch {
         SEC + "2", IvaModelPatch.SPECS, IvaModelPatch.KIT, IvaPatch.COND_ROW_TAG + ":atTerms",
         SEC + "3", IvaModelPatch.HELP + ":price", IvaKindPatch.LBL + "atPrice", "atPrice", ERR + "atPrice",
         IvaKindPatch.LBL + "atDep", "atDep",
-        SEC + "4", CITY, IvaKindPatch.LBL + "atTerms", "atTerms", IvaPatch.DEL_ROW_TAG + ":atDelToggle", "atDelToggle", "atDelPrice",
+        SEC + "4", IvaKindPatch.LBL + "atTerms", "atTerms", TERMS, IvaPatch.DEL_ROW_TAG + ":atDelToggle", "atDelToggle", "atDelPrice",
         SEC + "5", "atDescr", IvaModelPatch.HELP,
         "atSave",
     };
@@ -151,13 +165,78 @@ final class IvaFormPatch {
         return num(g(st, "pics")) > 0;
     }
 
-    /** Город по умолчанию: прошлый выбранный в форме → город последнего своего объявления → город профиля. */
-    static String defaultCity(String last, String latestTool, String profile) {
-        for (String c : new String[]{last, latestTool, profile}) {
-            String x = IvaSearchPatch.city(c);
-            if (!x.isEmpty()) return x;
+    // ───── 10.88: частые условия аренды ─────
+
+    /** Ключ строки условий для сравнения: без регистра, «ё» = «е», без маркера в начале и точки в конце. */
+    static String termKey(String s) {
+        if (s == null) return "";
+        String t = s.toLowerCase(Locale.ROOT).replace('ё', 'е').replace('\u00a0', ' ');
+        t = t.replaceAll("^[\\s•·*–—-]+", "").replaceAll("[\\s.;,!]+$", "").replaceAll("\\s+", " ");
+        return t.trim();
+    }
+
+    /** Есть ли условие отдельной строкой в поле «Условия аренды». */
+    static boolean termHas(String terms, String p) {
+        String k = termKey(p);
+        if (terms == null || k.isEmpty()) return false;
+        for (String line : terms.split("\n")) if (termKey(line).equals(k)) return true;
+        return false;
+    }
+
+    /** Нажали плашку: условия нет — дописать отдельной строкой в конец; есть — убрать эту строку (остальное как было). */
+    static String termToggle(String terms, String p) {
+        String t = terms == null ? "" : terms.replace("\r", "");
+        String k = termKey(p);
+        if (k.isEmpty()) return t;
+        if (termHas(t, p)) {
+            StringBuilder b = new StringBuilder();
+            for (String line : t.split("\n")) {
+                if (termKey(line).equals(k)) continue;
+                if (b.length() > 0) b.append('\n');
+                b.append(line);
+            }
+            return b.toString().replaceAll("\\s+$", "");
         }
-        return "";
+        String base = t.replaceAll("\\s+$", "");
+        return base.isEmpty() ? p.trim() : base + "\n" + p.trim();
+    }
+
+    /** Свои частые условия из прошлых объявлений: короткие строки, частые первыми; без «Состояния», адреса и телефонов. */
+    static List<String> ownTerms(List<String> texts, int max) {
+        LinkedHashMap<String, String> show = new LinkedHashMap<String, String>();
+        final HashMap<String, Integer> cnt = new HashMap<String, Integer>();
+        if (texts != null) for (String tx : texts) {
+            HashSet<String> once = new HashSet<String>();
+            for (String line : IvaPatch.condStrip(tx == null ? "" : tx).split("\n")) {
+                String l = line.trim().replaceAll("^[•·*–—-]+\\s*", "").replaceAll("[\\s.;,]+$", "");
+                String k = termKey(l);
+                if (l.length() < 4 || l.length() > TERMS_OWN_LEN || k.startsWith("состояние:") || k.contains("адрес")
+                        || l.replaceAll("[^0-9]", "").length() >= 5 || !once.add(k)) continue;
+                if (!show.containsKey(k)) show.put(k, l);
+                Integer c = cnt.get(k);
+                cnt.put(k, c == null ? 1 : c + 1);
+            }
+        }
+        List<String> keys = new ArrayList<String>(show.keySet());
+        java.util.Collections.sort(keys, new java.util.Comparator<String>() {   // устойчиво: при равенстве — как встретились
+            @Override public int compare(String x, String y) { return cnt.get(y) - cnt.get(x); }
+        });
+        List<String> out = new ArrayList<String>();
+        for (String k : keys) { if (out.size() >= max) break; out.add(show.get(k)); }
+        return out;
+    }
+
+    /** Плашки условий: свои → по питанию (бензин/дизель — топливо, аккумулятор — заряд) → общие; без повторов. */
+    static List<String> termOptions(String src, List<String> own) {
+        LinkedHashMap<String, String> m = new LinkedHashMap<String, String>();
+        List<String> all = new ArrayList<String>();
+        if (own != null) all.addAll(own);
+        String s = src == null ? "" : src.trim();
+        if ("Бензин".equals(s) || "Дизель".equals(s)) all.addAll(Arrays.asList(TERMS_FUEL));
+        if (IvaModelPatch.BATTERY.equals(s)) all.addAll(Arrays.asList(TERMS_BATT));
+        all.addAll(Arrays.asList(TERMS_BASE));
+        for (String p : all) { String k = termKey(p); if (!k.isEmpty() && !m.containsKey(k)) m.put(k, p.trim()); }
+        return new ArrayList<String>(m.values());
     }
 
     /** Строка черновика: «Перфоратор Makita HR2470 · 3 фото». */
@@ -205,7 +284,6 @@ final class IvaFormPatch {
         m.put("cond", String.valueOf(c < 0 ? IvaPatch.COND_DEFAULT : c));
         m.put("deliv", j != null && j.optBoolean("delivery", false) ? "1" : "0");
         m.put("delp", money(js(j, "delivery_price")));
-        m.put("city", js(j, "pickup_city"));
         JSONObject sp = j == null ? null : j.optJSONObject("specs");
         if (sp != null) for (Iterator<String> it = sp.keys(); it.hasNext(); ) {
             String k = it.next();
@@ -230,13 +308,6 @@ final class IvaFormPatch {
             if (d == Math.rint(d)) return String.valueOf((long) d);
             return String.valueOf(d);
         } catch (Throwable e) { return ""; }
-    }
-
-    /** Кусок тела записи: ,"pickup_city":"…" без начальной запятой. Пусто — нечего. */
-    static String cityExtra(String city) {
-        String c = IvaSearchPatch.city(city);
-        if (c.isEmpty() || c.length() > 60) return "";
-        return "\"pickup_city\":\"" + jsonEsc(c) + "\"";
     }
 
     static String jsonEsc(String s) {
@@ -285,7 +356,6 @@ final class IvaFormPatch {
     static volatile List<JSONObject> mine = null;
     static volatile boolean mineLoading = false;
     static volatile long mineTriedAt = 0;
-    static String cityDefault = "";
 
     /** Вызывается из IvaKindPatch.arrange (форма «Добавить» открыта или поменялась). */
     static void setup(Activity a, LinearLayout form) {
@@ -293,14 +363,15 @@ final class IvaFormPatch {
         hints(a);
         paintErrors(a, form, false);
         paintTop(a, form);
+        paintTerms(a, form);
         layout(a, form);
         resolveModel(a);
         scheduleSave(a);
     }
 
     static void ensureViews(Activity a, LinearLayout form) {
-        Object save = IvaClientPatch.get(a, "atSave");
-        int at = save instanceof View && ((View) save).getParent() == form ? form.indexOfChild((View) save) : form.getChildCount();
+        View save = IvaPatch.view(a, "atSave");                                     // 10.88: id разметки, не поле
+        int at = save != null && save.getParent() == form ? form.indexOfChild(save) : form.getChildCount();
         for (int i = 0; i < SECTIONS.length; i++) {
             if (form.findViewWithTag(SEC + SECTIONS[i][0]) != null) continue;
             TextView t = new TextView(a);
@@ -324,7 +395,12 @@ final class IvaFormPatch {
             lp.topMargin = IvaPatch.dp(a, 4);
             form.addView(e, at++, lp);
         }
-        if (form.findViewWithTag(CITY) == null) form.addView(buildCity(a), at++, new LinearLayout.LayoutParams(-1, -2));
+        if (form.findViewWithTag(TERMS) == null) {
+            LinearLayout t = new LinearLayout(a);
+            t.setTag(TERMS);
+            t.setOrientation(LinearLayout.VERTICAL);
+            form.addView(t, at++, new LinearLayout.LayoutParams(-1, -2));
+        }
         if (form.findViewWithTag(SAMPLE) == null) {
             LinearLayout s = new LinearLayout(a);
             s.setTag(SAMPLE);
@@ -371,6 +447,21 @@ final class IvaFormPatch {
             form.addView(w, pos);
         }
         if (focus != null && !focus.isFocused()) focus.requestFocus();
+        keepSaveLast(a, form);
+    }
+
+    /** 10.88: «Опубликовать» — последним видимым пунктом: что видно ниже кнопки (кроме штатного отступа) — над ней. */
+    static void keepSaveLast(Activity a, LinearLayout form) {
+        View save = child(a, form, "atSave");
+        if (save == null) return;
+        int i = form.indexOfChild(save) + 1;
+        while (i < form.getChildCount()) {
+            View c = form.getChildAt(i);
+            if (c.getVisibility() == View.GONE || c instanceof android.widget.Space) { i++; continue; }
+            form.removeView(c);
+            form.addView(c, form.indexOfChild(save));
+            i = form.indexOfChild(save) + 1;
+        }
     }
 
     static void hints(Activity a) {
@@ -402,11 +493,7 @@ final class IvaFormPatch {
             if (!(no instanceof View) || !(((View) no).getParent() instanceof LinearLayout)) return false;
             LinearLayout form = (LinearLayout) ((View) no).getParent();
             saveBlocked = paintErrors(a, form, true);
-            if (!saveBlocked) {
-                publishAt = System.currentTimeMillis();
-                String c = cityValue(a);
-                if (!c.isEmpty()) prefs(a).edit().putString("city", c).apply();
-            }
+            if (!saveBlocked) publishAt = System.currentTimeMillis();
         }
         return saveBlocked;
     }
@@ -462,113 +549,68 @@ final class IvaFormPatch {
                 try {
                     if (tv.getParent() instanceof LinearLayout) paintErrors(a, (LinearLayout) tv.getParent(), false);
                     if ("atName".equals(field) || "atPrice".equals(field)) paintTopLater(a, tv);
+                    if ("atTerms".equals(field) && tv.getParent() instanceof LinearLayout) paintTerms(a, (LinearLayout) tv.getParent());
                     scheduleSave(a);
                 } catch (Throwable ignore) {}
             }
         });
     }
 
-    // ───── «Город выдачи» ─────
+    // ───── 10.88: плашки частых условий под «Условиями аренды» ─────
 
-    static View buildCity(final Activity a) {
-        LinearLayout box = new LinearLayout(a);
-        box.setTag(CITY);
-        box.setOrientation(LinearLayout.VERTICAL);
-        box.addView(IvaModelPatch.small(a, CITY_LABEL), IvaModelPatch.lpTop(a, 12));
-        final EditText e = new EditText(a);
-        e.setTag(CITY + ":field");
-        Object no = IvaClientPatch.get(a, "atName");
-        IvaModelPatch.styleInput(a, e, no instanceof TextView ? (TextView) no : null);
-        e.setSingleLine(true);
-        e.setHint(CITY_HINT);
-        e.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_CAP_WORDS);
-        box.addView(e, IvaModelPatch.lpTop(a, 6));
-        HorizontalScrollView hs = new HorizontalScrollView(a);
-        hs.setTag(CITY + ":hs");
-        hs.setHorizontalScrollBarEnabled(false);
-        hs.setOverScrollMode(View.OVER_SCROLL_NEVER);
-        hs.setVisibility(View.GONE);
-        final LinearLayout row = new LinearLayout(a);
-        row.setOrientation(LinearLayout.HORIZONTAL);
-        hs.addView(row, new HorizontalScrollView.LayoutParams(-2, -2));
-        box.addView(hs, IvaModelPatch.lpTop(a, 6));
-        final HorizontalScrollView fhs = hs;
-        e.setOnFocusChangeListener(new View.OnFocusChangeListener() {
-            @Override public void onFocusChange(View v, boolean has) {
-                try { if (has) paintCityChips(a, e, row); fhs.setVisibility(has ? View.VISIBLE : View.GONE); } catch (Throwable ignore) {}
-            }
-        });
-        e.addTextChangedListener(new android.text.TextWatcher() {
-            @Override public void beforeTextChanged(CharSequence s, int st, int c, int n) {}
-            @Override public void onTextChanged(CharSequence s, int st, int b, int c) {}
-            @Override public void afterTextChanged(android.text.Editable s) {
-                try { if (e.hasFocus()) paintCityChips(a, e, row); scheduleSave(a); } catch (Throwable ignore) {}
-            }
-        });
-        String d = defaultCity(prefs(a).getString("city", ""), latestCity(), IvaSearchPatch.profileCity);
-        if (!d.isEmpty()) e.setText(d);
-        cityDefault = d;
-        return box;
-    }
-
-    static void paintCityChips(final Activity a, final EditText e, final LinearLayout row) {
-        row.removeAllViews();
-        String q = String.valueOf(e.getText());
-        String cur = IvaSearchPatch.city(q);
-        List<String> all = IvaSearchPatch.pickerCities(cur.isEmpty() ? "" : q, cityCounts(), IvaSearchPatch.profileCity);
-        if (all.size() == 1 && IvaSearchPatch.cityKey(all.get(0)).equals(IvaSearchPatch.cityKey(cur))) all = new ArrayList<String>();
-        int n = 0;
-        for (final String c : all) {
-            if (n++ >= CITY_CHIPS) break;
-            TextView t = IvaSearchPatch.chip(a, c, false, false);
-            t.setOnClickListener(new View.OnClickListener() {
+    static void paintTerms(final Activity a, final LinearLayout form) {
+        View bv = form.findViewWithTag(TERMS);
+        if (!(bv instanceof LinearLayout)) return;
+        LinearLayout box = (LinearLayout) bv;
+        final String terms = text(a, "atTerms");
+        List<String> texts = new ArrayList<String>();
+        List<JSONObject> l = mine;
+        if (l != null) for (JSONObject j : l) texts.add(js(j, "terms"));
+        List<String> opts = termOptions(str(IvaModelPatch.specVals.get(IvaModelPatch.SRC)), ownTerms(texts, TERMS_OWN_MAX));
+        StringBuilder sig = new StringBuilder();
+        for (String p : opts) sig.append(termHas(terms, p) ? '+' : '-').append(p).append('|');
+        sig.append(form.getWidth());
+        if (sig.toString().equals(sigs.get(box))) return;
+        sigs.put(box, sig.toString());
+        box.removeAllViews();
+        box.addView(IvaModelPatch.small(a, TERMS_LABEL), IvaModelPatch.lpTop(a, 8));
+        int avail = form.getWidth() - form.getPaddingLeft() - form.getPaddingRight();
+        if (avail <= 0) avail = a.getResources().getDisplayMetrics().widthPixels - IvaPatch.dp(a, 40);
+        int gap = IvaPatch.dp(a, 8), used = 0;
+        LinearLayout row = null;
+        for (final String p : opts) {
+            boolean on = termHas(terms, p);
+            TextView c = IvaSearchPatch.chip(a, on ? "\u2713 " + p : p, on, false);
+            c.setContentDescription(p + (on ? ". Выбрано, нажмите, чтобы убрать" : ". Нажмите, чтобы добавить"));
+            c.setOnClickListener(new View.OnClickListener() {
                 @Override public void onClick(View v) {
                     try {
-                        e.setText(c);
-                        e.setSelection(e.getText().length());
-                        IvaSearchPatch.hideKeyboard(a, e);
-                        e.clearFocus();
+                        Object o = IvaClientPatch.get(a, "atTerms");
+                        if (!(o instanceof EditText)) return;
+                        EditText e = (EditText) o;
+                        String nt = termToggle(String.valueOf(e.getText()), p);
+                        e.setText(nt);
+                        e.setSelection(nt.length());
+                        paintTerms(a, form);
                     } catch (Throwable ignore) {}
                 }
             });
-            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-2, -2);
-            lp.rightMargin = IvaPatch.dp(a, 8);
-            row.addView(t, lp);
+            c.measure(View.MeasureSpec.UNSPECIFIED, View.MeasureSpec.UNSPECIFIED);
+            int w = Math.min(c.getMeasuredWidth(), avail);
+            if (row == null || used + w > avail) {
+                row = new LinearLayout(a);
+                row.setOrientation(LinearLayout.HORIZONTAL);
+                box.addView(row, IvaModelPatch.lpTop(a, box.getChildCount() == 1 ? 6 : 8));
+                used = 0;
+            }
+            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(w >= avail ? -1 : -2, -2);
+            lp.rightMargin = w >= avail ? 0 : gap;
+            row.addView(c, lp);
+            used += w + gap;
         }
     }
 
-    static Map<String, Integer> cityCounts() {
-        Map<String, Integer> m = new HashMap<String, Integer>();
-        Object l = IvaSearchPatch.fullTools;
-        if (!(l instanceof ArrayList)) return m;
-        for (Object o : (ArrayList) l) {
-            if (!(o instanceof JSONObject)) continue;
-            String c = IvaSearchPatch.toolCityOf((JSONObject) o);
-            Integer x = m.get(c);
-            m.put(c, x == null ? 1 : x + 1);
-        }
-        return m;
-    }
-
-    static EditText cityField(Activity a) {
-        Object no = IvaClientPatch.get(a, "atName");
-        View root = no instanceof View ? ((View) no).getRootView() : null;
-        View f = root == null ? null : root.findViewWithTag(CITY + ":field");
-        return f instanceof EditText ? (EditText) f : null;
-    }
-
-    static String cityValue(Activity a) {
-        EditText e = cityField(a);
-        return e == null ? "" : IvaSearchPatch.city(String.valueOf(e.getText()));
-    }
-
-    static String latestCity() {
-        List<JSONObject> l = mine;
-        if (l != null) for (JSONObject j : l) { String c = js(j, "pickup_city"); if (!c.isEmpty()) return c; }
-        return "";
-    }
-
-    // ───── свои инструменты: образцы и город ─────
+    // ───── свои инструменты: образцы и частые условия ─────
 
     static void loadMine(final Activity a) {
         long now = System.currentTimeMillis();
@@ -590,14 +632,11 @@ final class IvaFormPatch {
                     a.runOnUiThread(new Runnable() {
                         @Override public void run() {
                             try {
-                                EditText e = cityField(a);
-                                if (e != null && String.valueOf(e.getText()).trim().isEmpty() && !e.hasFocus()) {
-                                    String d = defaultCity(prefs(a).getString("city", ""), latestCity(), IvaSearchPatch.profileCity);
-                                    if (!d.isEmpty()) { e.setText(d); cityDefault = d; }
-                                }
                                 Object no = IvaClientPatch.get(a, "atName");
-                                if (no instanceof View && ((View) no).getParent() instanceof LinearLayout)
+                                if (no instanceof View && ((View) no).getParent() instanceof LinearLayout) {
                                     paintTop(a, (LinearLayout) ((View) no).getParent());
+                                    paintTerms(a, (LinearLayout) ((View) no).getParent());
+                                }
                             } catch (Throwable ignore) {}
                         }
                     });
@@ -735,8 +774,6 @@ final class IvaFormPatch {
         Object dl = IvaClientPatch.get(a, "atDeliv");
         m.put("deliv", dl instanceof Boolean && (Boolean) dl ? "1" : "0");
         m.put("delp", text(a, "atDelPrice"));
-        EditText ce = cityField(a);
-        m.put("city", ce == null ? "" : String.valueOf(ce.getText()));
         for (Map.Entry<String, String> e : IvaModelPatch.specVals.entrySet())
             if (e.getValue() != null && !e.getValue().trim().isEmpty()) m.put("spec." + e.getKey(), e.getValue());
         int i = 0;
@@ -786,9 +823,6 @@ final class IvaFormPatch {
             if (row != null) row.performClick();
         }
         setText(a, "atDelPrice", g(st, "delp"));
-        EditText ce = cityField(a);
-        String city = IvaSearchPatch.city(g(st, "city"));
-        if (ce != null && !city.isEmpty()) ce.setText(city);
         if (withPics) loadPics(a, num(g(st, "pics")));
         resolveModel(a);
         IvaModelPatch.refresh(a);

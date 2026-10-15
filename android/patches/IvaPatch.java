@@ -687,6 +687,17 @@ public final class IvaPatch {
     static Object get(Object o, String name) {
         try { return field(o.getClass(), name).get(o); } catch (Throwable e) { return null; }
     }
+    /** 10.88: штатный элемент — полем MainActivity, а нет такого поля — по id разметки. Кнопки «Опубликовать
+     *  инструмент» (atSave) и «Сохранить» (teSave) в 10.14 — только id: get() их не находил, и всё, что висело на
+     *  касании кнопки (строка «Состояние», вид и модель после публикации, проверка формы), не срабатывало. */
+    static View view(Activity a, String name) {
+        Object o = get(a, name);
+        if (o instanceof View) return (View) o;
+        try {
+            int id = a.getResources().getIdentifier(name, "id", a.getPackageName());
+            return id == 0 ? null : a.findViewById(id);
+        } catch (Throwable e) { return null; }
+    }
     static void set(Object o, String name, Object v) {
         try { field(o.getClass(), name).set(o, v); } catch (Throwable ignore) {}
     }
@@ -916,10 +927,10 @@ public final class IvaPatch {
     }
 
     static void condRow(final Activity a, String termsField, String saveField, final int k) {
-        Object to = get(a, termsField), so = get(a, saveField);
+        Object to = get(a, termsField);
         if (!(to instanceof android.widget.EditText) || !(((View) to).getParent() instanceof LinearLayout)) return;
         final android.widget.EditText terms = (android.widget.EditText) to;
-        final View save = so instanceof View ? (View) so : null;
+        final View save = view(a, saveField);                         // 10.88: кнопки — id разметки, не поля
         LinearLayout form = (LinearLayout) terms.getParent();
         final String tag = COND_ROW_TAG + ":" + termsField;
         View row = form.findViewWithTag(tag);

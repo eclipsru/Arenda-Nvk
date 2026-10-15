@@ -1857,14 +1857,34 @@ public class IvaPatchTest {
         eq("форма 10.87: строка черновика",
             IvaFormPatch.draftTitle(fpDec) + "|" + IvaFormPatch.draftTitle(fpPic),
             "Есть незаконченный инструмент: «Перфоратор Makita HR2470» · 3 фото|Есть незаконченный инструмент: без названия · 1 фото");
-        eq("форма 10.87: город по умолчанию — прошлый в форме, затем последнего объявления, затем профиля",
-            IvaFormPatch.defaultCity("", " Ростов-на-Дону ", "Шахты") + "|" + IvaFormPatch.defaultCity("Аксай", "Ростов-на-Дону", "") + "|"
-                + IvaFormPatch.defaultCity(null, "", "Шахты") + "|" + IvaFormPatch.defaultCity("", "", ""),
-            "Ростов-на-Дону|Аксай|Шахты|");
-        eq("форма 10.87: город в записи — JSON-строка; пусто, с кавычками (не похоже на город) или слишком длинно — ничего",
-            IvaFormPatch.cityExtra("Ростов-на-Дону") + "|" + IvaFormPatch.cityExtra("") + "|" + IvaFormPatch.cityExtra("Город \"Х\"") + "|"
-                + IvaFormPatch.cityExtra("оченьдлинноеназваниегородакотороготочнонебываетнасветеииникогданебудет"),
-            "\"pickup_city\":\"Ростов-на-Дону\"|||");
+        // 10.88: частые условия аренды — плашки добавляют / убирают строку, остальное в поле не трогается
+        eq("форма 10.88: условие — отдельной строкой в конец; ещё раз — убирается, остальные строки как были",
+            IvaFormPatch.termToggle("", "Паспорт при получении") + "|" + IvaFormPatch.termToggle("Свой текст\n", "Вернуть чистым")
+                + "|" + IvaFormPatch.termToggle("Свой текст\nвернуть чистым.\nЕщё", "Вернуть чистым")
+                + "|" + IvaFormPatch.termToggle("• Вернуть Чистым", "Вернуть чистым") + "|" + IvaFormPatch.termToggle("Текст", "  "),
+            "Паспорт при получении|Свой текст\nВернуть чистым|Свой текст\nЕщё||Текст");
+        String fpAll = "";
+        for (String fpP : IvaFormPatch.TERMS_BASE) fpAll = IvaFormPatch.termToggle(fpAll, fpP);
+        boolean fpAllOn = true;
+        for (String fpP : IvaFormPatch.TERMS_BASE) fpAllOn &= IvaFormPatch.termHas(fpAll, fpP);
+        String fpNone = fpAll;
+        for (String fpP : IvaFormPatch.TERMS_BASE) fpNone = IvaFormPatch.termToggle(fpNone, fpP);
+        eq("форма 10.88: можно выбрать все условия сразу и снять все обратно",
+            fpAllOn + "," + fpAll.split("\n").length + "," + fpNone.isEmpty() + "," + IvaFormPatch.termHas("Паспорт при получении — обязательно", "Паспорт при получении"),
+            "true," + IvaFormPatch.TERMS_BASE.length + ",true,false");
+        java.util.List<String> fpTx = java.util.Arrays.asList(
+            "Паспорт при получении\nЗвонить 8 900 123-45-67\nАдрес выдачи: ул. Ленина\nСостояние: Новый",
+            "Только самовывоз.\nпаспорт при получении\nСостояние: Хорошее", null,
+            "Очень длинное условие, которое не помещается в одну плашку и поэтому не подходит для быстрого выбора");
+        eq("форма 10.88: свои частые условия — частые первыми; без телефона, адреса, «Состояния», длинного; не больше max",
+            IvaFormPatch.ownTerms(fpTx, 4) + "|" + IvaFormPatch.ownTerms(fpTx, 1) + "|" + IvaFormPatch.ownTerms(null, 4),
+            "[Паспорт при получении, Только самовывоз]|[Паспорт при получении]|[]");
+        java.util.List<String> fpOpt = IvaFormPatch.termOptions("Бензин", java.util.Arrays.asList("Только самовывоз", "паспорт при получении."));
+        java.util.List<String> fpOptB = IvaFormPatch.termOptions("Аккумулятор", null), fpOptN = IvaFormPatch.termOptions("", null);
+        eq("форма 10.88: плашки — свои, затем по питанию (бензин — топливо, аккумулятор — заряд), затем общие; без повторов",
+            fpOpt.subList(0, 4) + "|" + fpOpt.size() + "|" + fpOptB.get(0) + "|" + fpOptN.size() + "|" + fpOptN.contains("Вернуть с полным баком"),
+            "[Только самовывоз, паспорт при получении., Топливо — за счёт арендатора, Вернуть с полным баком]|" + (IvaFormPatch.TERMS_BASE.length + 3)
+                + "|Аккумуляторы выдаём заряженными|" + IvaFormPatch.TERMS_BASE.length + "|false");
         eq("форма 10.87: цена из базы — без «.0»; пусто, 0 и мусор — пусто",
             IvaFormPatch.money("800.0") + "," + IvaFormPatch.money("1250.5") + "," + IvaFormPatch.money("0") + "," + IvaFormPatch.money("null")
                 + "," + IvaFormPatch.money("") + "," + IvaFormPatch.money("x"),
@@ -1881,13 +1901,13 @@ public class IvaPatchTest {
             "Перфоратор аккумуля…|Фен");
         StringBuilder fpO = new StringBuilder();
         for (String fpK : IvaFormPatch.ORDER) if (fpK.startsWith(IvaFormPatch.SEC) || fpK.startsWith("at") && !fpK.startsWith("atC") && !fpK.startsWith("atS")) fpO.append(fpK).append(' ');
-        eq("форма 10.87: порядок — фото, название · цена, залог · город … условия, доставка · описание · кнопка",
+        eq("форма 10.88: порядок — фото, название · цена, залог · условия, доставка · описание · кнопка",
             fpO.toString().trim(), "iva_sec:1 atPhotos atName iva_sec:2 iva_sec:3 atPrice atDep iva_sec:4 atTerms atDelToggle atDelPrice iva_sec:5 atDescr");
         java.util.List<String> fpOrd = java.util.Arrays.asList(IvaFormPatch.ORDER);
-        eq("форма 10.87: «Модель» под названием, категория — до характеристик, подсказка цены — над ценой, «Сгенерировать» — под описанием, город — первым в выдаче",
+        eq("форма 10.88: «Модель» под названием, категория — до характеристик, подсказка цены — над ценой, «Сгенерировать» — под описанием, частые условия — под условиями, «Опубликовать» — последней",
             (fpOrd.indexOf(IvaModelPatch.BLOCK) == fpOrd.indexOf(IvaModelPatch.NAME_SUG) + 1) + "," + (fpOrd.indexOf("atCat") < fpOrd.indexOf(IvaModelPatch.SPECS))
                 + "," + (fpOrd.indexOf(IvaModelPatch.HELP + ":price") + 2 == fpOrd.indexOf("atPrice")) + "," + (fpOrd.indexOf(IvaModelPatch.HELP) == fpOrd.indexOf("atDescr") + 1)
-                + "," + (fpOrd.indexOf(IvaFormPatch.CITY) == fpOrd.indexOf(IvaFormPatch.SEC + "4") + 1) + "," + fpOrd.get(fpOrd.size() - 1)
+                + "," + (fpOrd.indexOf(IvaFormPatch.TERMS) == fpOrd.indexOf("atTerms") + 1) + "," + fpOrd.get(fpOrd.size() - 1)
                 + "," + (fpOrd.size() == new java.util.HashSet<String>(fpOrd).size()),
             "true,true,true,true,true,atSave,true");
         if (fail > 0) { System.out.println("ошибок: " + fail); System.exit(1); }
