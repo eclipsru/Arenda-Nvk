@@ -970,7 +970,6 @@ public final class IvaClientPatch {
             saveBtn.setAllCaps(false);
             saveBtn.setTextSize(15.5f);
             saveBtn.setTypeface(null, android.graphics.Typeface.BOLD);
-            saveBtn.setTextColor(Color.WHITE);
             saveBtn.setOnClickListener(new View.OnClickListener() { @Override public void onClick(View v) { save(); } });
             bottom.addView(saveBtn, new LinearLayout.LayoutParams(-1, dp(50)));
             root.addView(bottom, new LinearLayout.LayoutParams(-1, -2));
@@ -1011,11 +1010,12 @@ public final class IvaClientPatch {
             FrameLayout circleBox = new FrameLayout(a);
             GradientDrawable bg = new GradientDrawable();
             bg.setShape(GradientDrawable.OVAL);
-            bg.setColor(cOrange);
+            bg.setColor(cCard);                                              // 10.96: круг «рамкой», буквы оранжевые
+            bg.setStroke(Math.max(1, Math.round(IvaPatch.OUTLINE_DP * a.getResources().getDisplayMetrics().density)), cOrange);
             circleBox.setBackground(bg);
             avatarInitials = new TextView(a);
             avatarInitials.setTextSize(32f);
-            avatarInitials.setTextColor(Color.WHITE);
+            avatarInitials.setTextColor(cOrange);
             avatarInitials.setTypeface(null, android.graphics.Typeface.BOLD);
             avatarInitials.setGravity(Gravity.CENTER);
             circleBox.addView(avatarInitials, new FrameLayout.LayoutParams(-1, -1));
@@ -1227,7 +1227,9 @@ public final class IvaClientPatch {
             boolean enabled = loaded && !saving && !uploading;
             saveBtn.setEnabled(enabled);
             saveBtn.setText(saveButtonText(loaded, saving, uploading));
-            saveBtn.setBackground(rounded(enabled ? cOrange : cFieldLine, 0, 12));
+            // 10.96: «рамкой» — тёмная, оранжевая рамка и текст; пока нельзя нажать — серая рамка и серый текст
+            saveBtn.setBackground(enabled ? IvaPatch.accentBg(a, cOrange, 12) : rounded(cCard, cFieldLine, 12));
+            saveBtn.setTextColor(enabled ? cOrange : cGray);
             if (avatarBtn != null) avatarBtn.setEnabled(loaded && !uploading && !saving);
         }
 

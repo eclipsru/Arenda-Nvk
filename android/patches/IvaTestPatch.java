@@ -219,25 +219,16 @@ public class IvaTestPatch {
         btn = new WeakReference<View>(b);
     }
 
-    /** Вид — как у оранжевой кнопки обновления (15sp, жирный, радиус 12dp, заливка-прогресс), только жёлтая с тёмным текстом. */
+    /** Вид — как у кнопки обновления (15sp, жирный, радиус 12dp, рамкой; 10.96), только жёлтая: жёлтая рамка и текст, полоса при загрузке. */
     static View button(final Activity a, String text) {
         Button b = new Button(a);
         b.setTag(TEST_TAG);
-        b.setTextColor(INK);
+        b.setTextColor(YELLOW);
         b.setTypeface(Typeface.DEFAULT_BOLD);
         b.setTextSize(15);
         b.setAllCaps(false);
         b.setText(text);
-        float r = IvaNotifyPatch.dp(a, 12);
-        GradientDrawable track = new GradientDrawable();
-        track.setColor(YELLOW_TRACK);
-        track.setCornerRadius(r);
-        GradientDrawable fill = new GradientDrawable();
-        fill.setColor(YELLOW);
-        fill.setCornerRadius(r);
-        LayerDrawable bg = new LayerDrawable(new Drawable[]{track, new ClipDrawable(fill, Gravity.LEFT, ClipDrawable.HORIZONTAL)});
-        bg.setLevel(10000);
-        b.setBackground(bg);
+        b.setBackground(IvaPatch.accentProgressBg(a, YELLOW, 12));
         b.setPadding(IvaNotifyPatch.dp(a, 14), IvaNotifyPatch.dp(a, 12), IvaNotifyPatch.dp(a, 14), IvaNotifyPatch.dp(a, 12));
         b.setOnClickListener(new View.OnClickListener() {
             @Override public void onClick(View v) { try { tap(a, v); } catch (Throwable ignore) {} }

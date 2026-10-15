@@ -806,7 +806,7 @@ public class IvaPatchTest {
                 IvaChatPatch.voiceTimeLabel(-1, 75) + "|" + IvaChatPatch.voiceTimeLabel(0, 75) + "|" + IvaChatPatch.voiceTimeLabel(12500, 75) + "|" + IvaChatPatch.voiceTimeLabel(-1, 0), "1:15|1:15|0:12|");
             eq("голосовые 10.60: доля прослушанного", IvaChatPatch.voiceProgress(2500, 10000) + "|" + IvaChatPatch.voiceProgress(12000, 10000) + "|" + IvaChatPatch.voiceProgress(500, 0) + "|" + IvaChatPatch.voiceProgress(-1, 100), "0.25|1.0|0.0|0.0");
             eq("голосовые 10.60: размеры как в ВК", IvaChatPatch.VOICE_BTN_DP + "|" + IvaChatPatch.VOICE_BAR_DP + "|" + IvaChatPatch.VOICE_GAP_DP + "|" + IvaChatPatch.VOICE_WAVE_H_DP + "|" + IvaChatPatch.VOICE_PEAKS, "40|2.0|1.5|24.0|64");
-            eq("голосовые 10.60: непрослушанное — полупрозрачный белый", Integer.toHexString(IvaChatPatch.VOICE_REST_MINE) + "|" + Integer.toHexString(IvaChatPatch.VOICE_REST_OTHER), "73ffffff|59ffffff");
+            eq("голосовые 10.60: непрослушанное — полупрозрачный белый (10.96: пузырь тёмный у всех)", Integer.toHexString(IvaChatPatch.VOICE_REST_OTHER), "59ffffff");
             String vn = IvaChatPatch.voiceCacheName("https://x.supabase.co/storage/v1/object/public/voice/v1760-123.m4a?t=1");
             eq("голосовые 10.58: имя в кэше — из ссылки", vn.endsWith("-v1760-123.m4a"), true);
             eq("голосовые 10.58: имя в кэше без опасных символов", IvaChatPatch.voiceCacheName("https://x/voice/../a b%.m4a").matches("[0-9a-f]+-[A-Za-z0-9._-]+") && !IvaChatPatch.voiceCacheName("https://x/voice/../a b%.m4a").contains("/"), true);
@@ -1319,10 +1319,10 @@ public class IvaPatchTest {
                     IvaNotifyPatch.updPercent(0, 1000) + "," + IvaNotifyPatch.updPercent(455, 1000) + "," + IvaNotifyPatch.updPercent(1000, 1000) + ","
                     + IvaNotifyPatch.updPercent(1500, 1000) + "," + IvaNotifyPatch.updPercent(10, -1) + "," + IvaNotifyPatch.updPercent(10, 0) + ","
                     + IvaNotifyPatch.updPercent(1_337_455L, 1_337_455L), "0,45,100,100,-1,-1,100");
-                eq("обновление 10.80: заливка кнопки — во время загрузки по процентам, иначе полная",
+                eq("обновление 10.80: полоса на кнопке (10.96) — во время загрузки по процентам, иначе её нет (кнопка рамкой)",
                     IvaNotifyPatch.updLevel(IvaNotifyPatch.UPD_DL, 0) + "," + IvaNotifyPatch.updLevel(IvaNotifyPatch.UPD_DL, 45) + "," + IvaNotifyPatch.updLevel(IvaNotifyPatch.UPD_DL, -1)
                     + "," + IvaNotifyPatch.updLevel(IvaNotifyPatch.UPD_DL, 140) + "," + IvaNotifyPatch.updLevel(IvaNotifyPatch.UPD_IDLE, 45) + "," + IvaNotifyPatch.updLevel(IvaNotifyPatch.UPD_READY, 0),
-                    "0,4500,0,10000,10000,10000");
+                    "0,4500,0,10000,0,0");
                 eq("обновление 10.80: файл — во внутреннем кэше, по номеру сборки", IvaNotifyPatch.updFileName(154), "iva-update-154.apk");
                 eq("обновление 10.80: удаляем только файлы уже установленных (и старый штатный), чужие файлы не трогаем",
                     IvaNotifyPatch.staleUpdate("iva-update-153.apk", 154) + "," + IvaNotifyPatch.staleUpdate("iva-update-154.apk", 154) + ","
@@ -2126,6 +2126,10 @@ public class IvaPatchTest {
             eq("кабинет 10.93: дни назад", IvaChiefPatch.daysAgo("2026-10-15T00:00:01Z", ch93Now) + "," + IvaChiefPatch.daysAgo("2026-10-08T12:00:00", ch93Now) + ","
                 + IvaChiefPatch.daysAgo("кривое", ch93Now) + "," + IvaChiefPatch.daysAgo(null, ch93Now), "0,7,-1,-1");
         } catch (Exception ch93E) { eq("кабинет 10.93: тесты", String.valueOf(ch93E), ""); }
+        // 10.96: кнопки «рамкой» — подсветка нажатия и полоса загрузки тем же цветом, прозрачнее
+        eq("рамкой 10.96: прозрачность цвета рамки", Integer.toHexString(IvaPatch.withAlpha(IvaPatch.OUTLINE_ACCENT, IvaPatch.OUTLINE_PRESSED_A)) + ","
+            + Integer.toHexString(IvaPatch.withAlpha(IvaTestPatch.YELLOW, IvaPatch.OUTLINE_PROGRESS_A)) + "," + Integer.toHexString(IvaPatch.withAlpha(0x12345678, 0x1FF)) + ","
+            + Integer.toHexString(IvaPatch.OUTLINE_FILL) + "," + IvaPatch.OUTLINE_DP, "33ff8f1f,40ffea00,ff345678,ff1a1d24,1.5");
         // 10.95: «Пункт выдачи» — проверки полей, график (как в базе), подсказки адреса (как сайт), запросы
         {
             eq("пункт 10.95: email проката", IvaPickupPatch.emailOk("prokat@mail.ru") + "," + IvaPickupPatch.emailOk(" Prokat@Mail.RU ") + ","

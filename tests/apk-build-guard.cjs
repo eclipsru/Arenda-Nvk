@@ -511,10 +511,10 @@ try {
       'голосовые 10.60: пузырь в колонке по своему размеру (без размеров сжимался до подписи времени); долгое нажатие — удалить, как у текста');
     const vb = cp.slice(cp.indexOf('static View voiceBubble('), cp.indexOf('static void voiceShow('));
     assert.ok(vb.includes('setBg(a, v, mine ? "bg_bubble_me" : "bg_bubble_other");') && vb.includes('int accent = color(a, "orange");')
-      && vb.includes('new VoiceBtn(a, mine ? 0xFFFFFFFF : accent, mine ? accent : 0xFFFFFFFF)') && vb.includes('new VoiceWave(a, pk, mine ? 0xFFFFFFFF : accent, mine ? VOICE_REST_MINE : VOICE_REST_OTHER, den)')
+      && vb.includes('new VoiceBtn(a, accent);') && vb.includes('new VoiceWave(a, pk, accent, VOICE_REST_OTHER, den)')   // 10.96: рамкой у всех
       && vb.includes('voiceWavePx(known, sw, den)') && vb.includes('if (pk == null) voiceAskWave(a, m.audio);') && vb.includes('voiceSeek(a, key, m.audio, ui, e.getX()')
       && !/#[0-9A-Fa-f]{6}|0x[0-9A-Fa-f]{8}/.test(vb.replace(/0xFFFFFFFF/g, '')),
-      'голосовые 10.60: как в ВК — круглая кнопка слева, волна, длительность; цвета приложения (оранжевый из темы, белый), без новых цветов');
+      'голосовые 10.60/10.96: как в ВК — круглая кнопка слева (рамкой), волна, длительность; цвета приложения, без новых цветов');
     assert.ok(cp.includes('if (!outEos) return null;') && cp.includes('java.io.File wf = new java.io.File(f.getPath() + ".wave");')
       && cp.includes('synchronized (vPeaksAsked) { vPeaksAsked.remove(url); }') && cp.includes('if (u != null) u.wave.setPeaks(fp);'),
       'голосовые 10.60: волна по настоящей громкости (в фоне, кэш рядом с файлом), дорисовывается на месте без перерисовки чата; не вышло — ровная линия');
@@ -884,7 +884,7 @@ try {
     const pk = R('android/patches/IvaPickupPatch.java'), rp95 = R('android/patches/IvaRentPatch.java'), np95 = R('android/patches/IvaNotifyPatch.java');
     assert.ok(np95.includes('if (admin) try { IvaPickupPatch.settingsRow(a, page, cText, cGray, cOrange); } catch (Throwable ignore) {}')
       && np95.indexOf('IvaPickupPatch.settingsRow(') < np95.indexOf('IvaRentPatch.settingsSection(a, page,')
-      && pk.includes('u.page = IvaChiefPatch.page(a, ROW_TITLE, PAGE_SUB, false);') && pk.includes('g.setStroke(Math.max(1, dp(a, 1.5f)), cOrange);')
+      && pk.includes('u.page = IvaChiefPatch.page(a, ROW_TITLE, PAGE_SUB, false);') && pk.includes('b.setBackground(IvaPatch.accentBg(a, cOrange, 12));')
       && pk.includes('static final String TABLE = "/rest/v1/iva_pickup_points";') && pk.includes('static final String PHOTON = "https://photon.komoot.io/api/";')
       && R('assets/geo.js').includes("const endpoint='https://photon.komoot.io/api/';")
       && pk.includes('try { ne = IvaCensorPatch.fieldError(p.name); } catch (Throwable ignore) {}')
@@ -901,6 +901,38 @@ try {
       && !/DROP TABLE|TRUNCATE|DELETE FROM/i.test(sq95.replace(/^--.*$/gm, '')) && R('tools/check.sh').includes('tools/pickup-stand.py'),
       'SQL 10.95: пункты — только свои у действующего админа, до 20, «Срок аренды» по первому; без удаления данных; стенд PostgreSQL в check.sh');
     for (const s2 of [wf, ck]) assert.ok(s2.includes('android/patches/IvaPickupPatch.java'), 'IvaPickupPatch.java — в списке javac сборки и проверки');
+    // 10.96 (решение владельца 16.10.2026): все кнопки и выбранные элементы — «рамкой», как «Добавить» в «Пункт выдачи»; и впредь
+    {
+      const ol = R('android/patches/axml_outline.py'), ip96 = R('android/patches/IvaPatch.java');
+      const fn96 = (src, name) => { const mm = new RegExp(`static (?:final )?[\\w.<>, \\[\\]]+ ${name}\\(`).exec(src); assert.ok(mm, `нет ${name}`); return src.slice(mm.index, src.indexOf('\n    }\n', mm.index)); };
+      assert.ok(wf.indexOf('python3 android/patches/axml_install.py "$W/AndroidManifest.xml"') < wf.indexOf('python3 android/patches/axml_outline.py "$W"')
+        && wf.indexOf('python3 android/patches/axml_outline.py "$W"') < wf.indexOf('java -jar "$RUNNER_TEMP/apktool.jar" b ')
+        && R('tools/check.sh').includes('python3 android/patches/axml_outline.py /tmp/iva-outline'),
+        'рамкой 10.96: фоны переделываются в ресурсах до пересборки APK; проверка — в check.sh на ресурсах 10.14');
+      for (const n of ['bg_btn_orange_shape', 'bg_btn_orange_pressed', 'bg_chip_on', 'bg_bubble_me', 'bg_nav_circle_on', 'bg_badge', 'bg_avatar'])
+        assert.ok(ol.includes(`'${n}': ('bg_`) && has(arsc14, n), `рамкой 10.96: ${n} — переделывается и есть в APK 10.14`);
+      assert.ok(ol.includes('CARD = 0xFF1A1D24') && ol.includes('ORANGE = 0xFFFF8F1F') && ol.includes('STROKE_1_5DP = 0x0000C011') && ol.includes('LAYOUT_TEXTS = 13')
+        && ip96.includes('static final int OUTLINE_FILL = 0xFF1A1D24, OUTLINE_ACCENT = 0xFFFF8F1F;') && ip96.includes('static final float OUTLINE_DP = 1.5f;'),
+        'рамкой 10.96: в ресурсах и в коде — одни и те же цвета и рамка 1,5dp');
+      const ot = ap.slice(ap.indexOf('OUTLINE_TEXT = ('), ap.indexOf('\n)\n', ap.indexOf('OUTLINE_TEXT = (')));
+      assert.ok((ot.match(/, (\d)\),/g) || []).map(x => +x.match(/\d/)[0]).reduce((x, y) => x + y, 0) === 13 && !/invoke/.test(ot)
+        && ap.includes("lines[i] = lines[i].replace('0x7f01000f', '0x7f01000a')") && !/feedCard|setMode|renderChat|setCircle/.test(ot),
+        'рамкой 10.96: в штатном коде только 13 констант цвета (белый → оранжевый), без вызовов; сердечко избранного, вкладки входа и меню не трогаем');
+      // впредь: без оранжевой/жёлтой заливки и без белого текста на кнопках — только IvaPatch.accentButton / accentBg / accentProgressBg
+      const files96 = ['IvaPatch', 'IvaClientPatch', 'IvaSearchPatch', 'IvaChatPatch', 'IvaOrderPatch', 'IvaNotifyPatch', 'IvaReviewPatch', 'IvaPushPatch', 'IvaRentPatch',
+        'IvaKindPatch', 'IvaModelPatch', 'IvaFormPatch', 'IvaPhotoPatch', 'IvaCensorPatch', 'IvaChiefPatch', 'IvaTestPatch', 'IvaPickupPatch'];
+      for (const f of files96) {
+        const src = R(`android/patches/${f}.java`).split('\n').filter(l => !/^\s*paint\.setColor\(/.test(l) && !l.includes('more.setTextColor(0xffffffff);')).join('\n');
+        assert.ok(!/setTextColor\((Color\.WHITE|0x[fF]{8})\)/.test(src) && !/"white"/.test(src.replace('"white".equals(name)', ''))
+          && !/\.setColor\((cOrange|orange|UPD_ORANGE|YELLOW|accent|color\(a, "orange"[^)]*\)|IvaPatch\.color\(a, "orange"[^)]*\))\)/.test(src)
+          && !/(pill|rounded|hubPill|choiceBg)\(\s*(a,\s*)?(\w+ \? )?(cOrange|orange|color\(a, "orange")/.test(src),
+          `рамкой 10.96: в ${f}.java нет оранжевой/жёлтой заливки и белого текста на кнопках (только IvaPatch.accentButton / accentBg)`);
+      }
+      assert.ok(fn96(ip96, 'accentButton').includes('b.setTextColor(o);') && fn96(ip96, 'accentBg').includes('android.R.attr.state_pressed')
+        && R('android/patches/IvaPickupPatch.java').includes('b.setBackground(IvaPatch.accentBg(a, cOrange, 12));')
+        && R('docs/README-DEV.md').includes('Кнопки «рамкой» (решение владельца 16.10.2026, приложение с 10.96)'),
+        'рамкой 10.96: образец — «Добавить» в «Пункт выдачи»; общее правило — в README-DEV');
+    }
     assert.ok(wf.includes('            tests/censor-cases.txt\n') && /eq\("цензура 10\.92: общие случаи tests\/censor-cases\.txt/.test(tp)
       && R('tools/check.sh').includes('tools/censor-stand.py'), 'цензура 10.92: общие случаи — в IvaPatchTest (сборка) и на стенде PostgreSQL (check.sh)');
     // 10.89: фильтр — 3 + «Все ▾», выбрали — только выбранная; карточка — модель и состояние; бренд и модель — текстом
@@ -1251,10 +1283,12 @@ try {
     assert.ok(!/SelfUpdate|install/i.test(ap), 'обновление 10.80: новых вставок в smali нет');
     // 2. кнопка своя, вид как у штатной; штатные окна (ProgressDialog, «Всё готово!») не вызываются
     const ub = fnx(np, 'updateButton');
-    assert.ok(ub.includes('b.setTag(UPDATE_BTN_TAG);') && ub.includes('b.setTextColor(0xFFFFFFFF);') && ub.includes('b.setTextSize(15);') && ub.includes('float r = dp(a, 12);')
-      && ub.includes('new ClipDrawable(fill, Gravity.LEFT, ClipDrawable.HORIZONTAL)') && np.includes('UPD_ORANGE = 0xFFFF8F1F')
+    // 10.96: рамкой — оранжевая рамка и текст, полоса (ClipDrawable в IvaPatch.accentProgressBg) — только во время загрузки
+    const apb = fnx(R('android/patches/IvaPatch.java'), 'accentProgressBg');
+    assert.ok(ub.includes('b.setTag(UPDATE_BTN_TAG);') && ub.includes('b.setTextColor(UPD_ORANGE);') && ub.includes('b.setTextSize(15);') && ub.includes('b.setBackground(IvaPatch.accentProgressBg(a, UPD_ORANGE, 12));')
+      && apb.includes('new android.graphics.drawable.ClipDrawable(bar, Gravity.LEFT, android.graphics.drawable.ClipDrawable.HORIZONTAL)') && np.includes('UPD_ORANGE = 0xFFFF8F1F')
       && !/ProgressDialog|AlertDialog|showReadyDialog|onButtonTap|showButtonOnUi"/.test(np),
-      'обновление 10.80: кнопка как штатная (оранжевая, 15sp, радиус 12dp), прогресс — заливкой на кнопке; без серых окон');
+      'обновление 10.80/10.96: кнопка рамкой (оранжевая рамка и текст, 15sp, радиус 12dp), прогресс — полосой на кнопке; без серых окон');
     const apr = fnx(np, 'applyRelease');
     assert.ok(apr.includes('if (old != null && (!want || relShown != code || old != updBtn.get())) { box.removeView(old); old = null; }')
       && apr.includes('boolean want = updateWanted(code, installedCode(a), apk);'),
@@ -1420,9 +1454,9 @@ try {
       && fnx(cp, 'renderHeader').includes('if (adminMark(myH, openPartner, adminEmails())) {'),
       'чат 10.78: у создателя в переписке с админом справа «Админ» вместо картинки инструмента (и в шапке)');
     const ab = fnx(cp, 'adminBadge');
-    assert.ok(ab.includes('setBg(a, t, "bg_chip_on");') && ab.includes('text(a, ADMIN_BADGE, 12, "white", true)') && !/#[0-9A-Fa-f]{6}|0x[0-9A-Fa-f]{8}/.test(ab)
+    assert.ok(ab.includes('setBg(a, t, "bg_chip_on");') && ab.includes('text(a, ADMIN_BADGE, 12, "orange", true)') && !/#[0-9A-Fa-f]{6}|0x[0-9A-Fa-f]{8}/.test(ab)
       && cp.includes('static final String ADMIN_BADGE = "Админ", SUPPORT_SUB = "Чат поддержки";') && has(arsc14, 'bg_chip_on') && has(arsc14, 'ic_chat'),
-      'чат 10.78: «Админ» — оранжевая таблетка приложения, без новых цветов');
+      'чат 10.78: «Админ» — таблетка приложения (с 10.96 рамкой), без новых цветов');
     assert.ok(!/IvaRentPatch|cabinet|adminMark/.test(ap), '10.78: новых вставок в smali нет');
     assert.ok((tp.match(/eq\("(аренда|кабинет|чат) 10\.78: /g) || []).length >= 14, 'IvaPatchTest: проверки 10.78');
   }

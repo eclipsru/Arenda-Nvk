@@ -497,11 +497,7 @@ public class IvaPickupPatch {
         b.setTypeface(null, Typeface.BOLD);
         b.setTextColor(cOrange);
         b.setGravity(Gravity.CENTER);
-        GradientDrawable g = new GradientDrawable();
-        g.setColor(color(a, "card", 0xff1a1d24));
-        g.setStroke(Math.max(1, dp(a, 1.5f)), cOrange);
-        g.setCornerRadius(dp(a, 12));
-        b.setBackground(g);
+        b.setBackground(IvaPatch.accentBg(a, cOrange, 12));   // 10.96: этот вид — образец для всех кнопок приложения
         b.setPadding(dp(a, 14), dp(a, 14), dp(a, 14), dp(a, 14));
         b.setClickable(true);
         return b;
@@ -716,11 +712,8 @@ public class IvaPickupPatch {
         TextView save = new TextView(a);
         save.setText("Сохранить");
         save.setTextSize(15f);
-        save.setTypeface(null, Typeface.BOLD);
-        save.setTextColor(0xffffffff);
+        IvaPatch.accentButton(a, save);                  // 10.96: как «Добавить» — рамкой
         save.setGravity(Gravity.CENTER);
-        Drawable ob = IvaSearchPatch.drawable(a, "bg_btn_orange");
-        if (ob != null) save.setBackground(ob); else save.setBackgroundColor(u.cOrange);
         save.setPadding(dp(a, 12), dp(a, 13), dp(a, 12), dp(a, 13));
         TextView cancel = IvaChiefPatch.text(a, "Отмена", 15f, u.cGray, true);
         cancel.setGravity(Gravity.CENTER);

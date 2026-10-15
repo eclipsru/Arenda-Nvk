@@ -172,7 +172,7 @@ public final class IvaPhotoPatch {
         if (sig.toString().equals(sigs.get(box))) return;
         sigs.put(box, sig.toString());
         box.removeAllViews();
-        int orange = IvaPatch.color(a, "orange", 0xffff8f1f), white = IvaPatch.color(a, "white", 0xffffffff);
+        int orange = IvaPatch.color(a, "orange", 0xffff8f1f);
         if (selected >= 0) {                                                       // большой просмотр — над окошками
             FrameLayout pv = new FrameLayout(a);
             android.graphics.drawable.Drawable bg = IvaPatch.drawable(a, "bg_photo");
@@ -217,7 +217,7 @@ public final class IvaPhotoPatch {
                 }
                 TextView x = new TextView(a);                                      // «×» — как в штатной ленте
                 x.setText("\u00d7");
-                x.setTextColor(white);
+                x.setTextColor(orange);                                           // 10.96: кружок рамкой — «×» оранжевый
                 x.setTextSize(13f);
                 x.setTypeface(null, android.graphics.Typeface.BOLD);
                 x.setGravity(Gravity.CENTER);

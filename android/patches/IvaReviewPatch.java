@@ -726,9 +726,7 @@ public final class IvaReviewPatch {
         b.setTextSize(15f);
         b.setTypeface(null, Typeface.BOLD);
         if (primary) {
-            b.setTextColor(Color.WHITE);
-            Drawable d = drawable(a, "bg_btn_orange");
-            if (d != null) b.setBackground(d); else b.setBackgroundColor(color(a, "orange", 0xffff8f1f));
+            IvaPatch.accentButton(a, b);                 // 10.96: «рамкой» — тёмная, оранжевая рамка и текст
         } else {
             b.setTextColor(color(a, "orange", 0xffff8f1f));
             b.setBackground(IvaClientPatch.choiceBg(a, "card", 0xff1a1d24, IvaClientPatch.CHOICE_RADIUS_DP));

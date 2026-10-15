@@ -2177,11 +2177,8 @@ public final class IvaOrderPatch {
         TextView close = new TextView(a);
         close.setText("Закрыть");
         close.setGravity(Gravity.CENTER);
-        close.setTextColor(Color.WHITE);
         close.setTextSize(15f);
-        close.setTypeface(null, Typeface.BOLD);
-        Drawable btn = drawable(a, "bg_btn_orange");
-        if (btn != null) close.setBackground(btn); else close.setBackgroundColor(cOrange);
+        IvaPatch.accentButton(a, close);                 // 10.96: «рамкой»
         LinearLayout.LayoutParams cl = new LinearLayout.LayoutParams(-1, dp(a, 50));
         cl.setMargins(dp(a, 16), dp(a, 8), dp(a, 16), dp(a, 16));
         sh.addView(close, cl);

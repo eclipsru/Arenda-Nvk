@@ -257,6 +257,16 @@ else
   skip "стенд «Пункта выдачи»: нет pgserver (PG_PY=<python с pgserver> bash tools/check.sh)"
 fi
 
+head_ "4.5.8. Кнопки «рамкой» в ресурсах APK (axml_outline.py на ресурсах 10.14)"
+rm -rf /tmp/iva-outline && mkdir -p /tmp/iva-outline
+if (cd /tmp/iva-outline && unzip -q "$OLDPWD/ProkatInstrumenta-10.14.apk" 'res/*' resources.arsc) \
+   && python3 android/patches/axml_outline.py /tmp/iva-outline >/tmp/iva-test-outline.log 2>&1 \
+   && ! python3 android/patches/axml_outline.py /tmp/iva-outline >/dev/null 2>&1; then
+  ok "рамкой: 7 фонов переделаны, белый текст на них → оранжевый (13 мест в каждой разметке); повторный запуск останавливается"
+else
+  bad "axml_outline.py"; tail -4 /tmp/iva-test-outline.log | sed 's/^/      /'
+fi
+
 head_ "4.6. Скачивание приложения у всех: файл выпущенной версии на месте"
 # Выпущенная версия живёт строкой в базе (app_releases) и ссылается на файл в корне сайта.
 # Если файл убрать, у всех пользователей ломается «Скачать APK». Код 2 = проверить не удалось (нет сети).

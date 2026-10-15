@@ -953,6 +953,9 @@ final class IvaChatPatch {
             }
         });
         hookedSend = new WeakReference<View>(send);
+        // 10.96: кружок отправки — рамкой (bg_nav_circle_on в ресурсах), белый самолётик → оранжевый
+        if (send instanceof ViewGroup && ((ViewGroup) send).getChildCount() > 0 && ((ViewGroup) send).getChildAt(0) instanceof ImageView)
+            ((ImageView) ((ViewGroup) send).getChildAt(0)).setColorFilter(color(a, "orange"));
     }
 
     static void send(final Activity a) {
@@ -1553,7 +1556,7 @@ final class IvaChatPatch {
             voice = voiceBubble(a, m, mine);
             col.addView(voice, new LinearLayout.LayoutParams(-2, -2));   // по своему размеру (без этого сжимался до ширины времени)
         } else if (!m.text.isEmpty()) {
-            TextView t = text(a, m.text, 15, mine ? "white" : "text", false);
+            TextView t = text(a, m.text, 15, mine ? "orange" : "text", false);   // 10.96: свой пузырь — рамкой, текст оранжевый
             setBg(a, t, mine ? "bg_bubble_me" : "bg_bubble_other");
             t.setPadding(dp(a, 14), dp(a, 8), dp(a, 14), dp(a, 8));
             t.setMaxWidth(maxW);
@@ -1625,7 +1628,6 @@ final class IvaChatPatch {
     static final int VOICE_PEAKS = 64;                // столько уровней громкости хранится; на экране — сколько столбиков влезает
     static final int VOICE_BTN_DP = 40;
     static final float VOICE_BAR_DP = 2f, VOICE_GAP_DP = 1.5f, VOICE_WAVE_H_DP = 24f, VOICE_BAR_MIN_DP = 2f;
-    static final int VOICE_REST_MINE = 0x73FFFFFF;    // непрослушанная часть волны на оранжевом пузыре
     static final int VOICE_REST_OTHER = 0x59FFFFFF;   // на тёмном
 
     static android.media.MediaPlayer vMp;
@@ -1754,20 +1756,23 @@ final class IvaChatPatch {
         final android.graphics.Paint p = new android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG);
         final android.graphics.Path path = new android.graphics.Path();
         final android.graphics.RectF rf = new android.graphics.RectF();
-        final int bg, fg;
+        final int fg;
         int state;                       // 0 ▶, 1 ❚❚, 2 загрузка
 
-        VoiceBtn(android.content.Context c, int bg, int fg) { super(c); this.bg = bg; this.fg = fg; }
+        /** 10.96: кружок «рамкой» (1,5dp) и значок — одним фирменным цветом. */
+        VoiceBtn(android.content.Context c, int fg) { super(c); this.fg = fg; }
 
         void setState(int s) { if (s != state) { state = s; invalidate(); } }
 
         @Override protected void onDraw(android.graphics.Canvas c) {
             float w = getWidth(), h = getHeight(), r = Math.min(w, h) / 2f, cx = w / 2f, cy = h / 2f;
-            p.setStyle(android.graphics.Paint.Style.FILL);
+            float sw = Math.max(1f, IvaPatch.OUTLINE_DP * getResources().getDisplayMetrics().density);
             p.setPathEffect(null);
-            p.setColor(bg);
-            c.drawCircle(cx, cy, r, p);
+            p.setStyle(android.graphics.Paint.Style.STROKE);
+            p.setStrokeWidth(sw);
             p.setColor(fg);
+            c.drawCircle(cx, cy, r - sw / 2f, p);
+            p.setStyle(android.graphics.Paint.Style.FILL);
             if (state == 1) {
                 float bw = r * 0.2f, bh = r * 0.78f, g = r * 0.14f;
                 rf.set(cx - g - bw, cy - bh / 2, cx - g, cy + bh / 2);
@@ -1838,11 +1843,11 @@ final class IvaChatPatch {
         LinearLayout v = new LinearLayout(a);
         v.setOrientation(LinearLayout.HORIZONTAL);
         v.setGravity(Gravity.CENTER_VERTICAL);
-        setBg(a, v, mine ? "bg_bubble_me" : "bg_bubble_other");   // как у текста: свои — оранжевые, чужие — тёмные
+        setBg(a, v, mine ? "bg_bubble_me" : "bg_bubble_other");   // как у текста: свои — оранжевой рамкой (10.96), чужие — тёмные
         v.setPadding(dp(a, 8), dp(a, 8), dp(a, 14), dp(a, 8));
 
         final VoiceUi ui = new VoiceUi();
-        ui.btn = new VoiceBtn(a, mine ? 0xFFFFFFFF : accent, mine ? accent : 0xFFFFFFFF);
+        ui.btn = new VoiceBtn(a, accent);                          // 10.96: кружок «рамкой», значок оранжевый — у всех
         v.addView(ui.btn, new LinearLayout.LayoutParams(dp(a, VOICE_BTN_DP), dp(a, VOICE_BTN_DP)));
 
         int known = m.dur;
@@ -1856,9 +1861,9 @@ final class IvaChatPatch {
         synchronized (vPeaks) { pk = vPeaks.get(m.audio); }
         LinearLayout col = new LinearLayout(a);
         col.setOrientation(LinearLayout.VERTICAL);
-        ui.wave = new VoiceWave(a, pk, mine ? 0xFFFFFFFF : accent, mine ? VOICE_REST_MINE : VOICE_REST_OTHER, den);
+        ui.wave = new VoiceWave(a, pk, accent, VOICE_REST_OTHER, den);   // 10.96: пузырь тёмный у всех
         col.addView(ui.wave, new LinearLayout.LayoutParams(voiceWavePx(known, sw, den), dp(a, (int) VOICE_WAVE_H_DP)));
-        ui.dur = text(a, known > 0 ? durLabel(known) : "", 12, mine ? "white" : "gray", false);
+        ui.dur = text(a, known > 0 ? durLabel(known) : "", 12, mine ? "orange" : "gray", false);
         ui.dur.setSingleLine(true);
         if (mine) ui.dur.setAlpha(0.85f);
         LinearLayout.LayoutParams dl = new LinearLayout.LayoutParams(-2, -2);
@@ -2438,7 +2443,7 @@ final class IvaChatPatch {
         when.addView(text(a, hm(at, tz), 12, c.unread > 0 ? "orange" : "gray2", c.unread > 0));
         when.addView(text(a, dmy(at, tz), 11, "gray2", false));
         if (c.unread > 0) {
-            TextView badge = text(a, String.valueOf(Math.min(99, c.unread)), 11, "white", true);
+            TextView badge = text(a, String.valueOf(Math.min(99, c.unread)), 11, "orange", true);   // 10.96: кружок рамкой
             badge.setGravity(Gravity.CENTER);
             setBg(a, badge, "bg_badge");
             badge.setMinWidth(dp(a, 18));
@@ -2562,7 +2567,7 @@ final class IvaChatPatch {
     static View avatar(Activity a, String email, String name, int sizeDp) {
         FrameLayout f = new FrameLayout(a);
         setBg(a, f, "bg_avatar");
-        TextView t = text(a, letter(name), Math.max(12, sizeDp * 2 / 5), "white", true);
+        TextView t = text(a, letter(name), Math.max(12, sizeDp * 2 / 5), "orange", true);   // 10.96: bg_avatar — рамкой
         f.addView(t, new FrameLayout.LayoutParams(-2, -2, Gravity.CENTER));
         ImageView iv = new ImageView(a);
         iv.setScaleType(ImageView.ScaleType.CENTER_CROP);
@@ -2616,9 +2621,9 @@ final class IvaChatPatch {
     }
 
     /** Скруглённая картинка инструмента (штатный ключ кэша "ctool"+id), иначе гаечный ключ. */
-    /** 10.78: «Админ» — оранжевая «таблетка» приложения (bg_chip_on), белый жирный текст. */
+    /** 10.78: «Админ» — «таблетка» приложения (bg_chip_on; с 10.96 — рамкой), оранжевый жирный текст. */
     static TextView adminBadge(Activity a) {
-        TextView t = text(a, ADMIN_BADGE, 12, "white", true);
+        TextView t = text(a, ADMIN_BADGE, 12, "orange", true);
         t.setGravity(Gravity.CENTER);
         t.setSingleLine(true);
         setBg(a, t, "bg_chip_on");

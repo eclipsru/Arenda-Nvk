@@ -1274,7 +1274,8 @@ public final class IvaNotifyPatch {
     }
 
     /** Заливка кнопки (0…10000): во время загрузки — проценты, иначе полная. */
-    static int updLevel(int state, int pct) { return state == UPD_DL ? Math.max(0, Math.min(100, pct)) * 100 : 10000; }
+    // 10.96 (кнопки «рамкой»): полоса видна только во время загрузки, в остальное время — одна рамка
+    static int updLevel(int state, int pct) { return state == UPD_DL ? Math.max(0, Math.min(100, pct)) * 100 : 0; }
 
     /** Имя файла обновления в кэше. */
     static String updFileName(int code) { return UPD_FILE + code + UPD_EXT; }
@@ -1295,21 +1296,13 @@ public final class IvaNotifyPatch {
     static View updateButton(final Activity a, final int code, final String name, final String apk) {
         Button b = new Button(a);
         b.setTag(UPDATE_BTN_TAG);
-        b.setTextColor(0xFFFFFFFF);
+        b.setTextColor(UPD_ORANGE);
         b.setTypeface(Typeface.DEFAULT_BOLD);
         b.setTextSize(15);
         b.setAllCaps(false);
         b.setText(updText(UPD_IDLE, name, -1));
-        float r = dp(a, 12);
-        GradientDrawable track = new GradientDrawable();
-        track.setColor(UPD_TRACK);
-        track.setCornerRadius(r);
-        GradientDrawable fill = new GradientDrawable();
-        fill.setColor(UPD_ORANGE);
-        fill.setCornerRadius(r);
-        LayerDrawable bg = new LayerDrawable(new Drawable[]{track, new ClipDrawable(fill, Gravity.LEFT, ClipDrawable.HORIZONTAL)});
-        bg.setLevel(10000);
-        b.setBackground(bg);
+        // 10.96: «рамкой» — тёмная, оранжевая рамка и текст; во время загрузки — полупрозрачная полоса по процентам
+        b.setBackground(IvaPatch.accentProgressBg(a, UPD_ORANGE, 12));
         b.setPadding(dp(a, 14), dp(a, 12), dp(a, 14), dp(a, 12));
         b.setOnClickListener(new View.OnClickListener() {
             @Override public void onClick(View v) { try { updateTap(a, code, name, apk); } catch (Throwable ignore) {} }
@@ -1926,7 +1919,7 @@ public final class IvaNotifyPatch {
                             boolean on = RENT_HOURS[i] == sel;
                             Drawable cb = drawable(a, on ? "bg_chip_on" : "bg_chip");
                             if (cb != null) rentChips[i].setBackground(cb);
-                            rentChips[i].setTextColor(on ? cText : cGray);
+                            rentChips[i].setTextColor(on ? cOrange : cGray);   // 10.96: выбранный чип — рамкой, текст оранжевый
                             rentChips[i].setTypeface(null, on ? android.graphics.Typeface.BOLD : android.graphics.Typeface.NORMAL);
                             rentChips[i].setEnabled(ron);
                         }

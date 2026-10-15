@@ -371,11 +371,8 @@ public final class IvaCensorPatch {
         ic.setGravity(Gravity.CENTER);
         ic.setTextSize(13f);
         ic.setTypeface(null, Typeface.BOLD);
-        ic.setTextColor(color(a, "bg", 0xff101217));
-        GradientDrawable sh = new GradientDrawable();
-        sh.setShape(GradientDrawable.OVAL);
-        sh.setColor(color(a, "orange", 0xffff8f1f));
-        ic.setBackground(sh);
+        ic.setTextColor(color(a, "orange", 0xffff8f1f));                   // 10.96: кружок «рамкой», а не заливкой
+        ic.setBackground(IvaPatch.accentBg(a, color(a, "orange", 0xffff8f1f), -1));
         row.addView(ic, new LinearLayout.LayoutParams(dp(a, 20), dp(a, 20)));
         LinearLayout col = new LinearLayout(a);
         col.setOrientation(LinearLayout.VERTICAL);

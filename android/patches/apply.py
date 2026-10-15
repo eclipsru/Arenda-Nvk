@@ -20,6 +20,9 @@
  12. renderProfile()                          : только на шаге 10.30 → IvaClientPatch.onProfile(this) (профиль обычного клиента)
  13. onNewIntent(Intent) — НОВЫЙ метод (10.59, решение владельца 14.10.2026): штатных методов не трогает;
      super.onNewIntent → setIntent → IvaPatch.onNewIntent(this, intent) (нажатие на уведомление при открытом приложении)
+ 14. (10.96, решение владельца 16.10.2026: кнопки «рамкой») — БЕЗ новых вызовов: в 12 штатных методах, где белый текст
+     ставится на оранжевую кнопку / выбранный переключатель / кружок «×» / букву аватарки, константа цвета
+     @color/white (0x7f01000f) → @color/orange (0x7f01000a). Сами фоны переделывает axml_outline.py.
  Плюс versionCode/versionName в apktool.yml.
 """
 import os
@@ -29,6 +32,23 @@ from pathlib import Path
 
 P = 'Lru/prokatnvsk/app/IvaPatch;'
 DELIV = 'Lru/prokatnvsk/app/MainActivity;->delivTxt:Ljava/lang/String;'
+
+
+# 10.96: где штатный код ставит белый текст на оранжевую кнопку / выбранное / кружок / аватарку (метод → сколько раз)
+OUTLINE_TEXT = (
+    (r' buildChiefPanel\(\)V$', 1),                       # «Добавить админа»
+    (r'lambda\$buildAdminPage\$181\$', 1),                 # «Сохранить тариф»
+    (r'lambda\$editHoursDialog\$211\$', 1),                # выбранные дни в часах работы
+    (r'lambda\$editToolDialog\$240\$', 1),                 # выбранное в правке инструмента
+    (r' openDetail\(Lorg/json/JSONObject;Z\)V$', 1),       # буква аватарки продавца
+    (r' paintDelToggle\(Z\)V$', 1),                        # «Доставка: есть»
+    (r' renderAdmOrders\(\)V$', 2),                        # кнопки заявок админа
+    (r' renderAtPhotos\(\)V$', 1),                         # «×» на фото (добавление)
+    (r' renderTePhotos\(\)V$', 1),                         # «×» на фото (правка)
+    (r' sectionButton\(', 1),                              # кнопки разделов кабинета
+    (r' showCrashOverlay\(\)V$', 1),                       # «Скопировать»
+    (r' teActiveStyle\(\)V$', 1),                          # выбранное в правке инструмента
+)
 
 
 def esc(s):
@@ -193,6 +213,16 @@ def patch(lines):
         die(f'MainActivity: ожидался .super Landroid/app/Activity;, а не {sup}')
     lines.extend(NEW_INTENT)
     done.append('13 onNewIntent (новый метод)')
+
+    # 14. 10.96: белый текст на (бывших) оранжевых фонах → оранжевый; только значение константы, вызовов не добавляем
+    for name_re, want in OUTLINE_TEXT:
+        s, e = one_method(lines, name_re)
+        hits = [i for i in range(s, e) if re.match(r'\s*const (\w+), 0x7f01000f$', lines[i])]
+        if len(hits) != want:
+            die(f'стиль рамкой: в {name_re} белый цвет найден {len(hits)} раз, нужно {want}')
+        for i in hits:
+            lines[i] = lines[i].replace('0x7f01000f', '0x7f01000a')
+    done.append('14 текст на кнопках оранжевый (%d мест)' % sum(w for _, w in OUTLINE_TEXT))
 
     return done
 

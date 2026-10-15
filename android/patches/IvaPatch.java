@@ -792,6 +792,60 @@ public final class IvaPatch {
     // скрыта (не удалена): на её месте строка в виде полей формы (bg_field) — «Доставка» с подписью и выключатель.
     // Нажатие на строку нажимает штатную кнопку (performClick): штатный код сам меняет atDeliv/teDeliv и показывает
     // или прячет поле «Доставка, ₽ за 1 км» — логика публикации и правки не меняется.
+    // ───────────── 10.96: единый стиль «рамкой» (решение владельца 16.10.2026) ─────────────
+    // Все кнопки и выбранные элементы — как «Добавить» в «Пункт выдачи»: тёмный фон (card), рамка 1,5dp и жирный текст
+    // фирменного цвета (оранжевый; у пробной версии — жёлтый). Заливки оранжевым/жёлтым больше нет — и в новых кнопках тоже.
+    // Штатные фоны (bg_btn_orange, bg_chip_on, кружки, пузыри, аватарки) переделаны прямо в ресурсах (axml_outline.py).
+    static final int OUTLINE_FILL = 0xFF1A1D24, OUTLINE_ACCENT = 0xFFFF8F1F;
+    static final float OUTLINE_DP = 1.5f;
+    static final int OUTLINE_PRESSED_A = 0x33, OUTLINE_PROGRESS_A = 0x40;
+
+    /** Тот же цвет с другой прозрачностью (0…255). */
+    static int withAlpha(int color, int alpha) { return (color & 0x00FFFFFF) | ((alpha & 0xFF) << 24); }
+
+    /** Форма «рамкой»: заливка fill (0 — прозрачная), рамка accent 1,5dp; radiusDp &lt; 0 — круг. */
+    static GradientDrawable outlineShape(float density, int fill, int accent, float radiusDp) {
+        GradientDrawable g = new GradientDrawable();
+        if (radiusDp < 0) g.setShape(GradientDrawable.OVAL); else g.setCornerRadius(radiusDp * density);
+        g.setColor(fill);
+        g.setStroke(Math.max(1, Math.round(OUTLINE_DP * density)), accent);
+        return g;
+    }
+
+    /** Фон кнопки «рамкой»; при нажатии — лёгкая подсветка цветом рамки. radiusDp &lt; 0 — круг. */
+    static android.graphics.drawable.Drawable accentBg(Context c, int accent, float radiusDp) {
+        float d = c.getResources().getDisplayMetrics().density;
+        android.graphics.drawable.StateListDrawable s = new android.graphics.drawable.StateListDrawable();
+        s.addState(new int[]{android.R.attr.state_pressed}, outlineShape(d, withAlpha(accent, OUTLINE_PRESSED_A), accent, radiusDp));
+        s.addState(new int[0], outlineShape(d, OUTLINE_FILL, accent, radiusDp));
+        return s;
+    }
+
+    /** Кнопка «рамкой»: штатный bg_btn_orange (в APK он уже рамкой), без него — свой такой же; текст — оранжевый жирный. */
+    static void accentButton(Activity a, TextView b) {
+        int o = color(a, "orange", OUTLINE_ACCENT);
+        android.graphics.drawable.Drawable d = drawable(a, "bg_btn_orange");
+        b.setBackground(d != null ? d : accentBg(a, o, 14));
+        b.setTextColor(o);
+        b.setTypeface(null, android.graphics.Typeface.BOLD);
+    }
+
+    /** Кнопка с прогрессом (обновление): рамка, а во время загрузки — полупрозрачная полоса по уровню 0…10000. */
+    static android.graphics.drawable.LayerDrawable accentProgressBg(Context c, int accent, float radiusDp) {
+        float d = c.getResources().getDisplayMetrics().density;
+        GradientDrawable base = new GradientDrawable();
+        base.setColor(OUTLINE_FILL);
+        base.setCornerRadius(radiusDp * d);
+        GradientDrawable bar = new GradientDrawable();
+        bar.setColor(withAlpha(accent, OUTLINE_PROGRESS_A));
+        bar.setCornerRadius(radiusDp * d);
+        android.graphics.drawable.LayerDrawable l = new android.graphics.drawable.LayerDrawable(new android.graphics.drawable.Drawable[]{
+            base, new android.graphics.drawable.ClipDrawable(bar, Gravity.LEFT, android.graphics.drawable.ClipDrawable.HORIZONTAL),
+            outlineShape(d, Color.TRANSPARENT, accent, radiusDp)});
+        l.setLevel(0);
+        return l;
+    }
+
     static int color(Activity a, String n, int f) { return IvaClientPatch.navColor(a, n, f); }
     static int dp(Activity a, float v) { return IvaSearchPatch.dp(a, v); }
     static android.graphics.drawable.Drawable drawable(Activity a, String n) { return IvaSearchPatch.drawable(a, n); }
@@ -1034,7 +1088,7 @@ public final class IvaPatch {
         if (r != null) condPaintRow(a, r, tag, k);
     }
 
-    /** Выбранное — оранжевое (bg_btn_orange, белый жирный), остальные — как поля формы (bg_field). */
+    /** Выбранное — «рамкой» (bg_btn_orange, оранжевый жирный; 10.96), остальные — как поля формы (bg_field). */
     static void condPaintRow(Activity a, View row, String tag, int k) {
         for (int i = 0; i < COND_TITLES.length; i++) {
             View v = row.findViewWithTag(tag + ":" + i);
@@ -1043,8 +1097,9 @@ public final class IvaPatch {
             boolean on = i == condSel[k];
             android.graphics.drawable.Drawable bg = drawable(a, on ? "bg_btn_orange" : "bg_field");
             if (bg != null) b.setBackground(bg);
-            else b.setBackgroundColor(on ? color(a, "orange", 0xffff8f1f) : color(a, "card", 0xff1a1d24));
-            b.setTextColor(on ? 0xffffffff : color(a, "text", 0xfff2f4f8));
+            else if (on) b.setBackground(accentBg(a, color(a, "orange", OUTLINE_ACCENT), 14));
+            else b.setBackgroundColor(color(a, "card", 0xff1a1d24));
+            b.setTextColor(on ? color(a, "orange", OUTLINE_ACCENT) : color(a, "text", 0xfff2f4f8));
             b.setTypeface(null, on ? android.graphics.Typeface.BOLD : android.graphics.Typeface.NORMAL);
         }
     }

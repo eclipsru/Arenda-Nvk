@@ -1501,8 +1501,9 @@ public final class IvaSearchPatch {
         c.setPadding(dp(a, 12), 0, dp(a, 12), 0);
         Drawable b = drawable(a, on ? "bg_chip_on" : "bg_chip");
         if (b != null) c.setBackground(b);
-        else c.setBackground(pill(a, on ? color(a, "orange", 0xffff8f1f) : color(a, "card", 0xff1a1d24), on ? 0 : 0xff3a4050));
-        c.setTextColor(on ? 0xffffffff : color(a, "text", 0xfff2f4f8));
+        else if (on) c.setBackground(IvaPatch.accentBg(a, color(a, "orange", 0xffff8f1f), 20));
+        else c.setBackground(pill(a, color(a, "card", 0xff1a1d24), 0xff3a4050));
+        c.setTextColor(on ? color(a, "orange", 0xffff8f1f) : color(a, "text", 0xfff2f4f8));   // 10.96: выбранный — рамкой
         c.setClickable(true);
         if (removable) c.setContentDescription(text + ". Убрать фильтр");
         return c;
@@ -2110,15 +2111,11 @@ public final class IvaSearchPatch {
         resetBtn = reset;
         TextView show = new TextView(a);
         show.setTextSize(15f);
-        show.setTypeface(null, android.graphics.Typeface.BOLD);
-        show.setTextColor(0xffffffff);
         show.setGravity(Gravity.CENTER);
         show.setSingleLine(true);
         show.setEllipsize(TextUtils.TruncateAt.END);
         show.setPadding(dp(a, 8), 0, dp(a, 8), 0);
-        Drawable ob = drawable(a, "bg_btn_orange");
-        if (ob != null) show.setBackground(ob);
-        else show.setBackground(pill(a, cOrange, 0));
+        IvaPatch.accentButton(a, show);       // 10.96: «рамкой»
         show.setClickable(true);
         show.setOnClickListener(new View.OnClickListener() { @Override public void onClick(View v) { applyDraft(a); } });
         foot.addView(show, new LinearLayout.LayoutParams(0, dp(a, SHEET_BTN_DP), 2f));
