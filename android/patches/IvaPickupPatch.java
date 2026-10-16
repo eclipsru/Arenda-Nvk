@@ -17,7 +17,9 @@ import android.text.InputType;
 import android.text.TextWatcher;
 import android.view.Gravity;
 import android.view.View;
+import android.view.ViewGroup;
 import android.view.WindowManager;
+import android.view.animation.DecelerateInterpolator;
 import android.view.inputmethod.InputMethodManager;
 import android.widget.CompoundButton;
 import android.widget.EditText;
@@ -60,6 +62,12 @@ import java.util.Map;
 public class IvaPickupPatch {
     static final String TABLE = "/rest/v1/iva_pickup_points";
     static final String COLS = "id,name,address,city,lat,lng,open_min,close_min,email,created_at";
+    static final String COLS_TEL = COLS + ",tel";       // 10.99: телефон пункта (SQL 20261025_pickup_tel.sql)
+    static final String L_TEL = "Телефон пункта выдачи";
+    static final String NO_TEL = "Телефон пункта заработает после обновления базы (SQL 10.99)";
+    static final long ANIM_MS = 280;
+    /** В базе есть колонка tel (последняя загрузка). Без SQL 10.99 — пункты без телефона, как в 10.95. */
+    static volatile boolean telDb = true;
     static final String PHOTON = "https://photon.komoot.io/api/";
     static final String ROW_TITLE = "Пункты выдачи", ROW_SUB = "Адрес, график и email проката";
     static final String PAGE_SUB = "Где вы выдаёте инструмент. По графику первого пункта считается «Срок аренды → До закрытия пункта».";
@@ -70,7 +78,7 @@ public class IvaPickupPatch {
 
     /** Пункт выдачи (как строка базы). open/close — минуты Пн…Вс; выходной — -1 и -1. */
     static final class Point {
-        String id = "", name = "", address = "", city = "", email = "";
+        String id = "", name = "", address = "", city = "", email = "", tel = "";
         Double lat, lng;
         int[] open = fill(OPEN_DEF), close = fill(CLOSE_DEF);
     }
@@ -96,6 +104,18 @@ public class IvaPickupPatch {
         if (t.length() < 5) return "Введите полный адрес: город, улица, дом";
         if (t.length() > 300) return "Адрес — не длиннее 300 символов";
         return "";
+    }
+
+    /** Телефон пункта необязателен; если указан — 10–15 цифр (та же проверка, что в «Данных проката» и в базе). */
+    static String telErr(String s) {
+        String t = s == null ? "" : s.trim();
+        if (t.length() > 30) return "Проверьте номер: 10–15 цифр, например +7 900 123-45-67";
+        return IvaShopPatch.telErr(t);
+    }
+
+    static String telLine(String tel) {
+        String t = tel == null ? "" : tel.trim();
+        return "Телефон: " + (t.isEmpty() ? "не указан" : t);
     }
 
     static String emailErr(String s) {
@@ -166,8 +186,10 @@ public class IvaPickupPatch {
         try { return URLEncoder.encode(s == null ? "" : s, "UTF-8"); } catch (Throwable e) { return ""; }
     }
 
-    static String listPath(String email) {
-        return TABLE + "?select=" + COLS + "&owner_email=eq." + enc(email == null ? "" : email.trim().toLowerCase(Locale.ROOT))
+    static String listPath(String email) { return listPath(email, false); }
+
+    static String listPath(String email, boolean tel) {
+        return TABLE + "?select=" + (tel ? COLS_TEL : COLS) + "&owner_email=eq." + enc(email == null ? "" : email.trim().toLowerCase(Locale.ROOT))
             + "&order=created_at.asc,id.asc";
     }
 
@@ -184,11 +206,26 @@ public class IvaPickupPatch {
             + ",\"email\":" + IvaNotifyPatch.jsonStr(p.email.trim().toLowerCase(Locale.ROOT)) + "}";
     }
 
+    /** 10.99: то же + телефон пункта (если колонка есть в базе). */
+    static String body(Point p, boolean tel) {
+        String b = body(p);
+        if (!tel) return b;
+        return b.substring(0, b.length() - 1) + ",\"tel\":" + IvaNotifyPatch.jsonStr(p.tel == null ? "" : p.tel.trim()) + "}";
+    }
+
+    /** Ответ «такой колонки нет» — SQL 10.99 не применён. */
+    static boolean noTel(String code, String body) {
+        String b = body == null ? "" : body;
+        return b.contains("tel") && (b.contains("42703") || b.contains("PGRST204") || b.contains("does not exist") || b.contains("Could not find"));
+    }
+
     /** Ответ базы — понятной фразой; успех — "". */
     static String dbError(String code, String body) {
         String c = code == null ? "" : code, b = body == null ? "" : body;
         if (c.startsWith("2")) return "";
         if (b.contains("Не больше 20")) return "Не больше 20 пунктов выдачи";
+        if (noTel(c, b)) return NO_TEL;
+        if (b.contains("iva_pickup_tel")) return "Проверьте телефон: 10–15 цифр";
         if (b.contains("PGRST205") || b.contains("42P01") || "404".equals(c)) return NO_DB;
         if (b.contains("42501") || "401".equals(c) || "403".equals(c)) return "Нет права: пункты добавляет действующий админ";
         if (b.contains("23514")) return "База не приняла данные — проверьте поля";
@@ -289,6 +326,7 @@ public class IvaPickupPatch {
             p.address = o.optString("address", "");
             p.city = o.isNull("city") ? "" : o.optString("city", "");
             p.email = o.optString("email", "");
+            p.tel = o.isNull("tel") ? "" : o.optString("tel", "");
             if (!o.isNull("lat") && !o.isNull("lng")) { p.lat = o.optDouble("lat"); p.lng = o.optDouble("lng"); }
             int[] op = arr(String.valueOf(o.opt("open_min"))), cl = arr(String.valueOf(o.opt("close_min")));
             if (op != null && cl != null) { p.open = op; p.close = cl; }
@@ -299,7 +337,13 @@ public class IvaPickupPatch {
 
     /** Список своих пунктов из базы; [0] — код ответа, ошибка — исключение. */
     static List<Point> load(Activity a, String[] code) throws Exception {
-        String[] r = IvaClientPatch.apiCall(a, listPath(me(a)), "GET", null, true);
+        String[] r = IvaClientPatch.apiCall(a, listPath(me(a), true), "GET", null, true);
+        boolean tel = true;
+        if (r != null && !r[0].startsWith("2") && noTel(r[0], r.length > 1 ? r[1] : "")) {   // без SQL 10.99 — как раньше
+            tel = false;
+            r = IvaClientPatch.apiCall(a, listPath(me(a)), "GET", null, true);
+        }
+        if (r != null && r[0].startsWith("2")) telDb = tel;
         code[0] = r == null ? "" : r[0];
         if (r == null || !r[0].startsWith("2")) throw new Exception(dbError(code[0], r != null && r.length > 1 ? r[1] : ""));
         return parse(r.length > 1 ? r[1] : "");
@@ -455,6 +499,7 @@ public class IvaPickupPatch {
         TextView status;
         List<Point> points = new ArrayList<Point>();
         int cText, cGray, cOrange, cRed = 0xffff5a5f;
+        Runnable editClose;     // 10.99: открытое изменение в карточке — как его закрыть
     }
 
     static void openPage(final Activity a) {
@@ -531,33 +576,42 @@ public class IvaPickupPatch {
     static void drawList(final Ui u) {
         final Activity a = u.a;
         u.items.removeAllViews();
+        u.editClose = null;
         u.status.setTextColor(u.cGray);
         u.status.setText(u.points.isEmpty() ? "Пунктов пока нет — нажмите «Добавить»" : countText(u.points.size()));
         for (int i = 0; i < u.points.size(); i++) {
             final Point p = u.points.get(i);
-            LinearLayout c = IvaChiefPatch.card(a);
+            final LinearLayout c = IvaChiefPatch.card(a);
             LinearLayout top = new LinearLayout(a);
             top.setOrientation(LinearLayout.HORIZONTAL);
             top.setGravity(Gravity.CENTER_VERTICAL);
             top.addView(IvaChiefPatch.text(a, p.name, 16f, u.cText, true), new LinearLayout.LayoutParams(0, -2, 1f));
             if (i == 0) top.addView(IvaChiefPatch.text(a, "по нему «Срок аренды»", 12f, u.cOrange, false));
             c.addView(top);
+            // всё, что под названием, — в info: при «Изменить» оно уступает место полям (карточка растягивается вниз)
+            final LinearLayout info = new LinearLayout(a);
+            info.setOrientation(LinearLayout.VERTICAL);
             TextView ad = IvaChiefPatch.text(a, p.address, 14f, u.cText, false);
             ad.setPadding(0, dp(a, 6), 0, 0);
-            c.addView(ad);
+            info.addView(ad);
+            if (telDb) {   // 10.99: телефон пункта
+                TextView tl = IvaChiefPatch.text(a, telLine(p.tel), 13f, p.tel.trim().isEmpty() ? u.cGray : u.cText, false);
+                tl.setPadding(0, dp(a, 4), 0, 0);
+                info.addView(tl);
+            }
             TextView hr = IvaChiefPatch.text(a, hoursText(p.open, p.close), 13f, u.cGray, false);
             hr.setPadding(0, dp(a, 4), 0, 0);
-            c.addView(hr);
+            info.addView(hr);
             TextView em = IvaChiefPatch.text(a, "Email проката: " + p.email, 13f, u.cGray, false);
             em.setPadding(0, dp(a, 4), 0, 0);
-            c.addView(em);
+            info.addView(em);
             LinearLayout btns = new LinearLayout(a);
             btns.setOrientation(LinearLayout.HORIZONTAL);
             btns.setPadding(0, dp(a, 10), 0, 0);
             TextView ed = IvaSearchPatch.chip(a, "Изменить", true, false);
             TextView del = IvaSearchPatch.chip(a, "Удалить", false, false);
             ed.setOnClickListener(new View.OnClickListener() {
-                @Override public void onClick(View v) { showForm(u, copy(p), false); }
+                @Override public void onClick(View v) { editInCard(u, copy(p), c, info); }
             });
             del.setOnClickListener(new View.OnClickListener() {
                 @Override public void onClick(View v) { askDelete(u, p); }
@@ -566,7 +620,8 @@ public class IvaPickupPatch {
             el.rightMargin = dp(a, 8);
             btns.addView(ed, el);
             btns.addView(del, new LinearLayout.LayoutParams(-2, -2));
-            c.addView(btns);
+            info.addView(btns);
+            c.addView(info);
             LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2);
             lp.topMargin = dp(a, 10);
             u.items.addView(c, lp);
@@ -575,7 +630,7 @@ public class IvaPickupPatch {
 
     static Point copy(Point s) {
         Point p = new Point();
-        p.id = s.id; p.name = s.name; p.address = s.address; p.city = s.city; p.email = s.email; p.lat = s.lat; p.lng = s.lng;
+        p.id = s.id; p.name = s.name; p.address = s.address; p.city = s.city; p.email = s.email; p.tel = s.tel; p.lat = s.lat; p.lng = s.lng;
         p.open = s.open.clone(); p.close = s.close.clone();
         return p;
     }
@@ -606,6 +661,7 @@ public class IvaPickupPatch {
                         toast(u.a, done);
                         u.form.removeAllViews();
                         u.form.setVisibility(View.GONE);
+                        u.editClose = null;
                         reload(u);
                     }
                 });
@@ -613,46 +669,154 @@ public class IvaPickupPatch {
         }).start();
     }
 
-    // ── форма: Название, Адрес (подсказки), График, Email проката ──
+    // ── плавное раскрытие (10.99): высота от «как было» до «как стало», затем снова по содержимому ──
 
-    static TextView label(Ui u, String s) {
-        TextView t = IvaChiefPatch.text(u.a, s, 13f, u.cGray, true);
-        t.setPadding(dp(u.a, 2), dp(u.a, 14), 0, dp(u.a, 6));
-        return t;
+    /** Высота вида по содержимому при его нынешней ширине. */
+    static int wrapHeight(View v) {
+        int w = v.getWidth();
+        if (w <= 0) return -1;
+        v.measure(View.MeasureSpec.makeMeasureSpec(w, View.MeasureSpec.EXACTLY), View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED));
+        return v.getMeasuredHeight();
     }
 
-    static EditText field(Ui u, String hint, String value) {
-        Activity a = u.a;
-        EditText f = new EditText(a);
-        f.setSingleLine(true);
-        f.setHint(hint);
-        f.setText(value);
-        f.setTextColor(u.cText);
-        f.setHintTextColor(color(a, "gray2", 0xff6b7080));
-        f.setTextSize(15f);
-        Drawable fb = IvaSearchPatch.drawable(a, "bg_field");
-        if (fb != null) f.setBackground(fb);
-        f.setPadding(dp(a, 14), dp(a, 12), dp(a, 14), dp(a, 12));
-        return f;
+    /** Высота from → to (вниз — растягивается, вверх — сжимается; лишнее обрезается краем карточки). */
+    static void animateHeight(final View v, int from, int to, final Runnable end) {
+        final ViewGroup.LayoutParams lp = v.getLayoutParams();
+        if (lp == null || from < 0 || to < 0 || from == to) {
+            if (lp != null) { lp.height = ViewGroup.LayoutParams.WRAP_CONTENT; v.setLayoutParams(lp); }
+            if (end != null) end.run();
+            return;
+        }
+        android.animation.ValueAnimator va = android.animation.ValueAnimator.ofInt(from, to);
+        va.setDuration(ANIM_MS);
+        va.setInterpolator(new DecelerateInterpolator(1.6f));
+        va.addUpdateListener(new android.animation.ValueAnimator.AnimatorUpdateListener() {
+            @Override public void onAnimationUpdate(android.animation.ValueAnimator an) {
+                lp.height = (Integer) an.getAnimatedValue();
+                v.setLayoutParams(lp);
+            }
+        });
+        va.addListener(new android.animation.AnimatorListenerAdapter() {
+            boolean done;
+            void finish() {
+                if (done) return;
+                done = true;
+                lp.height = ViewGroup.LayoutParams.WRAP_CONTENT;   // дальше — по содержимому (ошибки полей, подсказки адреса)
+                v.setLayoutParams(lp);
+                if (end != null) try { end.run(); } catch (Throwable ignore) {}
+            }
+            @Override public void onAnimationEnd(android.animation.Animator an) { finish(); }
+            @Override public void onAnimationCancel(android.animation.Animator an) { finish(); }
+        });
+        lp.height = from;
+        v.setLayoutParams(lp);
+        va.start();
     }
 
-    static TextView err(Ui u) {
-        TextView t = IvaChiefPatch.text(u.a, "", 12f, u.cRed, false);
-        t.setPadding(dp(u.a, 2), dp(u.a, 4), 0, 0);
-        t.setVisibility(View.GONE);
-        return t;
+    static void fadeIn(View v) {
+        v.setAlpha(0f);
+        v.animate().alpha(1f).setDuration(ANIM_MS).start();
     }
 
-    static void setErr(TextView t, String s) { t.setText(s); t.setVisibility(s == null || s.isEmpty() ? View.GONE : View.VISIBLE); }
+    static void scrollTo(Ui u, View child) {
+        try {
+            View sv = (View) u.page.list.getParent();
+            if (!(sv instanceof ScrollView)) return;
+            int y = 0;
+            for (View v = child; v != null && v != u.page.list; v = (View) v.getParent()) y += v.getTop();
+            ((ScrollView) sv).smoothScrollTo(0, Math.max(0, y - dp(u.a, 8)));
+        } catch (Throwable ignore) {}
+    }
 
+    /** Закрыть открытую форму (новый пункт сверху или изменение в карточке). */
+    static void closeForms(Ui u, boolean animated) {
+        Runnable ec = u.editClose;
+        u.editClose = null;
+        if (ec != null) try { ec.run(); } catch (Throwable ignore) {}
+        if (u.form.getVisibility() == View.VISIBLE) {
+            if (animated) closeTopForm(u);
+            else { u.form.removeAllViews(); u.form.setVisibility(View.GONE); }
+        }
+    }
+
+    static void closeTopForm(final Ui u) {
+        hideKb(u.a, u.form);
+        animateHeight(u.form, u.form.getHeight(), 0, new Runnable() {
+            @Override public void run() { u.form.removeAllViews(); u.form.setVisibility(View.GONE); }
+        });
+    }
+
+    /** «Добавить»: форма нового пункта — сверху, раскрывается вниз. */
     static void showForm(final Ui u, final Point p, final boolean isNew) {
         final Activity a = u.a;
+        closeForms(u, false);
         final LinearLayout f = u.form;
         f.removeAllViews();
         f.setVisibility(View.VISIBLE);
         LinearLayout box = IvaChiefPatch.card(a);
         f.addView(box);
         box.addView(IvaChiefPatch.text(a, isNew ? "Новый пункт выдачи" : "Изменить пункт", 16f, u.cText, true));
+        final EditText name = buildForm(u, p, isNew, box, new Runnable() { @Override public void run() { closeTopForm(u); } });
+        // форма — сразу под «Добавить»: прокрутка наверх, раскрытие вниз и курсор в «Название»
+        f.post(new Runnable() {
+            @Override public void run() {
+                try {
+                    animateHeight(f, 0, wrapHeight(f), null);
+                    fadeIn(f);
+                    View sv = (View) u.page.list.getParent();
+                    if (sv instanceof ScrollView) ((ScrollView) sv).smoothScrollTo(0, 0);
+                    name.requestFocus();
+                    if (isNew) {
+                        InputMethodManager im = (InputMethodManager) a.getSystemService(Activity.INPUT_METHOD_SERVICE);
+                        if (im != null) im.showSoftInput(name, InputMethodManager.SHOW_IMPLICIT);
+                    }
+                } catch (Throwable ignore) {}
+            }
+        });
+    }
+
+    /** «Изменить»: карточка растягивается вниз — вместо адреса, графика и кнопок появляются поля (10.99). */
+    static void editInCard(final Ui u, final Point p, final LinearLayout card, final View info) {
+        final Activity a = u.a;
+        if (card.findViewWithTag(EDIT_TAG) != null) return;      // уже открыта
+        closeForms(u, false);
+        final int from = card.getHeight();
+        final LinearLayout box = new LinearLayout(a);
+        box.setOrientation(LinearLayout.VERTICAL);
+        box.setTag(EDIT_TAG);
+        View line = new View(a);                                   // тонкая черта: ниже — изменение
+        line.setBackgroundColor(0x22ffffff);
+        LinearLayout.LayoutParams ll = new LinearLayout.LayoutParams(-1, Math.max(1, dp(a, 1)));
+        ll.topMargin = dp(a, 10);
+        box.addView(line, ll);
+        final Runnable[] close = new Runnable[1];
+        close[0] = new Runnable() {
+            @Override public void run() {
+                if (u.editClose == close[0]) u.editClose = null;
+                hideKb(a, card);
+                int start = card.getHeight();
+                box.setVisibility(View.GONE);
+                info.setVisibility(View.VISIBLE);
+                int to = wrapHeight(card);
+                box.setVisibility(View.VISIBLE);
+                box.animate().alpha(0f).setDuration(ANIM_MS).start();
+                fadeIn(info);
+                animateHeight(card, start, to, new Runnable() { @Override public void run() { card.removeView(box); } });
+            }
+        };
+        buildForm(u, p, false, box, close[0]);
+        info.setVisibility(View.GONE);
+        card.addView(box, new LinearLayout.LayoutParams(-1, -2));
+        u.editClose = close[0];
+        fadeIn(box);
+        animateHeight(card, from, wrapHeight(card), new Runnable() { @Override public void run() { scrollTo(u, card); } });
+    }
+
+    static final String EDIT_TAG = "iva_pickup_edit_10_99";
+
+    /** Поля пункта в box: Название, Адрес (подсказки), Телефон пункта выдачи, График, Email проката; «Сохранить» / «Отмена». */
+    static EditText buildForm(final Ui u, final Point p, final boolean isNew, final LinearLayout box, final Runnable onCancel) {
+        final Activity a = u.a;
 
         // Название
         box.addView(label(u, "Название"));
@@ -676,6 +840,19 @@ public class IvaPickupPatch {
         final TextView addrE = err(u);
         box.addView(addrE);
         hookSuggest(u, addr, sug, p);
+
+        // Телефон пункта выдачи (10.99)
+        box.addView(label(u, L_TEL));
+        final EditText tel = field(u, "+7 900 123-45-67", p.tel);
+        tel.setInputType(InputType.TYPE_CLASS_PHONE);
+        box.addView(tel, new LinearLayout.LayoutParams(-1, -2));
+        final TextView telE = err(u);
+        box.addView(telE);
+        if (!telDb) {
+            tel.setEnabled(false);
+            telE.setTextColor(u.cOrange);
+            setErr(telE, NO_TEL);
+        }
 
         // График
         box.addView(label(u, "График"));
@@ -725,40 +902,60 @@ public class IvaPickupPatch {
         box.addView(btns);
 
         cancel.setOnClickListener(new View.OnClickListener() {
-            @Override public void onClick(View v) { hideKb(a, name); f.removeAllViews(); f.setVisibility(View.GONE); }
+            @Override public void onClick(View v) { hideKb(a, name); onCancel.run(); }
         });
         save.setOnClickListener(new View.OnClickListener() {
             @Override public void onClick(View v) {
                 p.name = String.valueOf(name.getText());
                 p.address = String.valueOf(addr.getText());
                 p.email = String.valueOf(mail.getText()).trim();
-                String ne = nameErr(p.name), ae = addrErr(p.address), me = emailErr(p.email);
+                if (telDb) p.tel = String.valueOf(tel.getText()).trim();
+                String ne = nameErr(p.name), ae = addrErr(p.address), me = emailErr(p.email), te = telDb ? telErr(p.tel) : "";
                 if (ne.isEmpty()) try { ne = IvaCensorPatch.fieldError(p.name); } catch (Throwable ignore) {}
                 if (ae.isEmpty()) try { ae = IvaCensorPatch.fieldError(p.address); } catch (Throwable ignore) {}
                 String de = hoursOk(p.open, p.close) ? "" : "Нужен хотя бы один рабочий день; закрытие — позже открытия";
                 setErr(nameE, ne); setErr(addrE, ae); setErr(mailE, me); setErr(daysE, de);
-                if (!ne.isEmpty() || !ae.isEmpty() || !me.isEmpty() || !de.isEmpty()) return;
+                if (telDb) { telE.setTextColor(u.cRed); setErr(telE, te); }
+                if (!ne.isEmpty() || !ae.isEmpty() || !me.isEmpty() || !de.isEmpty() || !te.isEmpty()) return;
                 hideKb(a, name);
-                if (isNew) write(u, "POST", TABLE, body(p), "Пункт «" + p.name.trim() + "» добавлен");
-                else write(u, "PATCH", idPath(p.id), body(p), "Пункт сохранён");
+                if (isNew) write(u, "POST", TABLE, body(p, telDb), "Пункт «" + p.name.trim() + "» добавлен");
+                else write(u, "PATCH", idPath(p.id), body(p, telDb), "Пункт сохранён");
             }
         });
-
-        // форма — сразу под «Добавить»: прокрутка наверх и курсор в «Название»
-        name.requestFocus();
-        name.post(new Runnable() {
-            @Override public void run() {
-                try {
-                    View sv = (View) u.page.list.getParent();
-                    if (sv instanceof ScrollView) ((ScrollView) sv).smoothScrollTo(0, 0);
-                    if (isNew) {
-                        InputMethodManager im = (InputMethodManager) a.getSystemService(Activity.INPUT_METHOD_SERVICE);
-                        if (im != null) im.showSoftInput(name, InputMethodManager.SHOW_IMPLICIT);
-                    }
-                } catch (Throwable ignore) {}
-            }
-        });
+        return name;
     }
+
+    // ── форма: Название, Адрес (подсказки), Телефон пункта, График, Email проката ──
+
+    static TextView label(Ui u, String s) {
+        TextView t = IvaChiefPatch.text(u.a, s, 13f, u.cGray, true);
+        t.setPadding(dp(u.a, 2), dp(u.a, 14), 0, dp(u.a, 6));
+        return t;
+    }
+
+    static EditText field(Ui u, String hint, String value) {
+        Activity a = u.a;
+        EditText f = new EditText(a);
+        f.setSingleLine(true);
+        f.setHint(hint);
+        f.setText(value);
+        f.setTextColor(u.cText);
+        f.setHintTextColor(color(a, "gray2", 0xff6b7080));
+        f.setTextSize(15f);
+        Drawable fb = IvaSearchPatch.drawable(a, "bg_field");
+        if (fb != null) f.setBackground(fb);
+        f.setPadding(dp(a, 14), dp(a, 12), dp(a, 14), dp(a, 12));
+        return f;
+    }
+
+    static TextView err(Ui u) {
+        TextView t = IvaChiefPatch.text(u.a, "", 12f, u.cRed, false);
+        t.setPadding(dp(u.a, 2), dp(u.a, 4), 0, 0);
+        t.setVisibility(View.GONE);
+        return t;
+    }
+
+    static void setErr(TextView t, String s) { t.setText(s); t.setVisibility(s == null || s.isEmpty() ? View.GONE : View.VISIBLE); }
 
     static void hideKb(Activity a, View v) {
         try {

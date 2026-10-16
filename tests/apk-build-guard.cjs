@@ -1674,6 +1674,31 @@ try {
       'SQL 10.98: только новые колонки admins с проверками; политики и данные не трогаются');
     assert.ok((tp.match(/eq\("прокат 10\.98: /g) || []).length >= 15 && (tp.match(/eq\("аватар 10\.98: /g) || []).length >= 6, 'IvaPatchTest: проверки 10.98');
   }
+  // 10.99 (просьба владельца 16.10.2026): «Телефон пункта выдачи» в карточке и в форме; «Изменить» — карточка растягивается вниз, поля в ней
+  {
+    const pk = R('android/patches/IvaPickupPatch.java'), tp = R('android/patches/test/IvaPatchTest.java'), sq = R('supabase/migrations/20261025_pickup_tel.sql'),
+      st = R('tools/pickup-stand.py');
+    const fn = (src, name) => { const m = new RegExp('static [\\w.<>\\[\\]]+ ' + name + '\\(').exec(src); assert.ok(m, 'нет ' + name);
+      return src.slice(m.index, src.indexOf('\n    }\n', m.index)); };
+    const dl = fn(pk, 'drawList'), bf = fn(pk, 'buildForm'), ec = fn(pk, 'editInCard');
+    assert.ok(dl.includes('telLine(p.tel)') && dl.includes('editInCard(u, copy(p), c, info)') && !dl.includes('showForm(u, copy(p), false)')
+      && bf.indexOf('label(u, "Адрес")') < bf.indexOf('label(u, L_TEL)') && bf.indexOf('label(u, L_TEL)') < bf.indexOf('label(u, "График")')
+      && bf.includes('tel.setInputType(InputType.TYPE_CLASS_PHONE);') && bf.includes('te = telDb ? telErr(p.tel) : ""')
+      && bf.includes('write(u, "PATCH", idPath(p.id), body(p, telDb), "Пункт сохранён")') && pk.includes('static final String L_TEL = "Телефон пункта выдачи";'),
+      'пункт 10.99: телефон — в карточке и полем «Телефон пункта выдачи» под адресом; без SQL — как в 10.95');
+    assert.ok(ec.includes('info.setVisibility(View.GONE);') && ec.includes('animateHeight(card, from, wrapHeight(card),')
+      && ec.includes('animateHeight(card, start, to,') && fn(pk, 'animateHeight').includes('lp.height = ViewGroup.LayoutParams.WRAP_CONTENT;')
+      && fn(pk, 'showForm').includes('animateHeight(f, 0, wrapHeight(f), null);'),
+      'пункт 10.99: «Изменить» — карточка плавно растягивается вниз, «Отмена» — сжимается; «Добавить» — тоже раскрывается');
+    // телефон пункта — данные проката, не клиента: личные данные клиентов в файле по-прежнему не читаются
+    assert.ok(!/customer_profiles|passport|phone|surname|select=\*/.test(pk) && pk.includes('static final String COLS_TEL = COLS + ",tel";'),
+      'пункт 10.99: колонка tel пункта; личных данных клиентов нет');
+    assert.ok(sq.includes('ALTER TABLE public.iva_pickup_points ADD COLUMN IF NOT EXISTS tel text NOT NULL DEFAULT') && sq.includes('GRANT UPDATE (tel) ON public.iva_pickup_points TO authenticated;')
+      && !/DROP TABLE|TRUNCATE|DELETE FROM|DROP POLICY|CREATE POLICY|GRANT (SELECT|DELETE)/i.test(sq.replace(/^--.*$/gm, ''))
+      && st.includes("TEL = rd('supabase/migrations/20261025_pickup_tel.sql')"),
+      'SQL 10.99: только колонка tel с проверкой и право писать её; политики не трогаются; стенд PostgreSQL');
+    assert.ok((tp.match(/eq\("пункт 10\.99: /g) || []).length >= 6, 'IvaPatchTest: проверки 10.99');
+  }
   // 10.75 (просьба владельца 14.10.2026): в «Настройках» — кнопка «Уведомления» (с 10.97 — открывает отдельную страницу);
   // внутри сверху «Открыть настройки уведомлений Android», потом какие присылать, потом расписание, потом всё остальное
   {

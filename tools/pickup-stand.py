@@ -29,6 +29,7 @@ def rd(p):
 
 RENT = rd('supabase/migrations/20261014_rent_end_mode.sql')
 SQL = rd('supabase/migrations/20261023_pickup_points.sql')
+TEL = rd('supabase/migrations/20261025_pickup_tel.sql')   # 10.99: телефон пункта
 _src = rd('tools/category-tree-stand.py')
 BASELINE = None
 for node in ast.parse(_src).body:
@@ -128,6 +129,34 @@ check('админ не добавляет пункт другому админу
 check('админ2 добавляет свой', as_(srv, 'admin2@x.ru', ins('Второй прокат'))[0] == 'OK')
 check('админ видит только свои', uval(srv, 'admin@x.ru', "select count(*) from public.iva_pickup_points") == '1')
 check('создатель видит все', uval(srv, 'chief@x.ru', "select count(*) from public.iva_pickup_points") == '2')
+
+# 10.99: телефон пункта (20261025_pickup_tel.sql)
+st, out = q(srv, TEL)
+check('20261025_pickup_tel.sql применяется (пункты уже есть)', st == 'OK', out[-600:])
+st, out = q(srv, TEL)
+check('повторный запуск 20261025 — без ошибок', st == 'OK', out[-600:])
+check('у прежних пунктов телефон пустой', uval(srv, 'admin@x.ru', "select '['||tel||']' from public.iva_pickup_points") == '[]')
+check('админ пишет телефон своему пункту', as_(srv, 'admin@x.ru', "update public.iva_pickup_points set tel = '+7 (383) 123-45-67'")[0] == 'OK'
+      and uval(srv, 'admin@x.ru', "select tel from public.iva_pickup_points") == '+7 (383) 123-45-67')
+check('админ добавляет пункт сразу с телефоном', as_(srv, 'admin2@x.ru', ins('С телефоном').replace(', email)', ', email, tel)').replace("'Prokat@Mail.ru')", "'Prokat@Mail.ru', '8 900 123 45 67')"))[0] == 'OK'
+      and uval(srv, 'admin2@x.ru', "select tel from public.iva_pickup_points where name = 'С телефоном'") == '8 900 123 45 67')
+for bad in ('12345', '+7 900 abc 45 67', '1234567890123456', '+7 (900) 123-45-67' + ' ' * 20):
+    st, out = as_(srv, 'admin@x.ru', "update public.iva_pickup_points set tel = '%s'" % bad)
+    check('неверный телефон «%s» — отказ' % bad.strip(), st == 'ERR' and 'iva_pickup_tel' in out, out[-200:])
+check('телефон можно стереть', as_(srv, 'admin@x.ru', "update public.iva_pickup_points set tel = ''")[0] == 'OK')
+st, out = as_(srv, 'admin@x.ru', "update public.iva_pickup_points set tel = '+7 900 000-00-00' where name = 'С телефоном'")
+check('чужой пункт телефоном не меняется', uval(srv, 'admin2@x.ru', "select tel from public.iva_pickup_points where name = 'С телефоном'") == '8 900 123 45 67', out[-200:])
+check('админ удаляет свой пункт с телефоном (дальше — прежние 2 пункта)', as_(srv, 'admin2@x.ru', "delete from public.iva_pickup_points where name = 'С телефоном'")[0] == 'OK'
+      and uval(srv, 'chief@x.ru', "select count(*) from public.iva_pickup_points") == '2')
+check('клиент телефоны пунктов не видит', uval(srv, 'client@x.ru', "select count(*) from public.iva_pickup_points") == '0')
+mt = re.search(r'ОТКАТ[^\n]*\n((?:--\s+(?:ALTER|NOTIFY)[^\n]*\n)+)', TEL)
+rb = '\n'.join(l.lstrip('-').strip() for l in mt.group(1).splitlines()) if mt else ''
+st, out = q(srv, rb)
+check('откат 10.99 из шапки — колонки нет, пункты на месте', bool(rb) and st == 'OK'
+      and val(srv, "select count(*) from information_schema.columns where table_name = 'iva_pickup_points' and column_name = 'tel'") == '0'
+      and val(srv, "select count(*) > 0 from public.iva_pickup_points") == 't', out[-300:])
+st, out = q(srv, TEL)
+check('после отката 20261025 применяется снова', st == 'OK', out[-300:])
 check('клиент не видит ничего', uval(srv, 'client@x.ru', "select count(*) from public.iva_pickup_points") == '0')
 st, out = as_(srv, '', "select count(*) from public.iva_pickup_points", role='anon')
 check('без входа таблица закрыта', st == 'ERR', out[-200:])

@@ -2300,6 +2300,28 @@ public class IvaPatchTest {
                 "Настройка проката|Данные проката|Пункты выдачи|Название проката|Адрес организации|ИП организации|Номер телефона (для связи с начальником)|Время работы|Рабочие дни");
             eq("прокат 10.98: подсказка «Срока аренды»", IvaRentPatch.LINK_HINT.contains("«Настройки → Настройка проката → Пункты выдачи»") + "", "true");
         }
+        {   // 10.99: телефон пункта выдачи; изменение — в карточке
+            eq("пункт 10.99: телефон пункта — необязателен, 10–15 цифр", IvaPickupPatch.telErr("") + "|" + IvaPickupPatch.telErr(" +7 (383) 123-45-67 ") + "|"
+                + IvaPickupPatch.telErr("12345").isEmpty() + "|" + IvaPickupPatch.telErr("+7 900 abc 45 67").isEmpty() + "|"
+                + IvaPickupPatch.telErr("8 900 123 45 67") + "|" + IvaPickupPatch.telErr("+7 (900) 123-45-67               ").isEmpty() + "|"
+                + IvaPickupPatch.telErr("1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6").isEmpty() + "|" + IvaPickupPatch.telErr(null), "||false|false||true|false|");
+            eq("пункт 10.99: строка в карточке", IvaPickupPatch.telLine(" +7 900 123-45-67 ") + "|" + IvaPickupPatch.telLine("") + "|" + IvaPickupPatch.telLine(null),
+                "Телефон: +7 900 123-45-67|Телефон: не указан|Телефон: не указан");
+            IvaPickupPatch.Point p99 = new IvaPickupPatch.Point();
+            p99.name = "Склад"; p99.address = "Новосибирск, улица Ленина, д. 5"; p99.email = "p@mail.ru"; p99.tel = " +7 900 \"1\" ";
+            String b99 = IvaPickupPatch.body(p99, true);
+            eq("пункт 10.99: телефон уходит в базу, без SQL — как раньше", b99.endsWith(",\"email\":\"p@mail.ru\",\"tel\":\"+7 900 \\\"1\\\"\"}") + "|"
+                + IvaPickupPatch.body(p99, false).equals(IvaPickupPatch.body(p99)) + "|" + IvaPickupPatch.body(p99, false).contains("tel")
+                + "|" + b99.startsWith(IvaPickupPatch.body(p99).substring(0, IvaPickupPatch.body(p99).length() - 1)), "true|true|false|true");
+            eq("пункт 10.99: столбцы — с телефоном / без", IvaPickupPatch.listPath("a@x.ru", true).contains("select=id,name,address,city,lat,lng,open_min,close_min,email,created_at,tel&")
+                + "|" + IvaPickupPatch.listPath("a@x.ru", false).equals(IvaPickupPatch.listPath("a@x.ru")) + "|" + IvaPickupPatch.listPath("a@x.ru").contains("tel"), "true|true|false");
+            eq("пункт 10.99: ответы базы про телефон", IvaPickupPatch.noTel("400", "{\"code\":\"42703\",\"message\":\"column iva_pickup_points.tel does not exist\"}") + "|"
+                + IvaPickupPatch.noTel("400", "{\"code\":\"PGRST204\",\"message\":\"Could not find the 'tel' column\"}") + "|" + IvaPickupPatch.noTel("403", "{\"code\":\"42501\"}") + "|"
+                + IvaPickupPatch.dbError("400", "{\"code\":\"PGRST204\",\"message\":\"Could not find the 'tel' column\"}") + "|"
+                + IvaPickupPatch.dbError("400", "{\"code\":\"23514\",\"message\":\"violates check constraint \\\"iva_pickup_tel\\\"\"}"),
+                "true|true|false|Телефон пункта заработает после обновления базы (SQL 10.99)|Проверьте телефон: 10–15 цифр");
+            eq("пункт 10.99: название поля", IvaPickupPatch.L_TEL, "Телефон пункта выдачи");
+        }
         if (fail > 0) { System.out.println("ошибок: " + fail); System.exit(1); }
         System.out.println("все проверки IvaPatch пройдены");
     }
