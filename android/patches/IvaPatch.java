@@ -414,6 +414,8 @@ public final class IvaPatch {
         try { IvaKindPatch.onTab(a, tab); } catch (Throwable ignore) {}     // 10.79: «Вид инструмента» — справочник, форма, запись
         try { IvaClientPatch.authBackup(a); } catch (Throwable ignore) {}   // 10.69: копия входа (пишется, лишь когда ключ сменился)
         try { IvaReviewPatch.onTab(a, tab); } catch (Throwable ignore) {}   // 10.70: отзывы — страница инструмента и проката
+        try { IvaAvatarPatch.onTab(a, tab); } catch (Throwable ignore) {}   // 10.98: «Мои данные» — фото кругом, крупнее, выбор области
+        try { IvaShopPatch.onTab(a, tab); } catch (Throwable ignore) {}     // 10.98: «Мои данные» — только ФИО, телефон, мессенджеры
         try {
             String t = tab == null ? "" : tab;
             int orange = navColor(a, "orange", 0xffff9800);

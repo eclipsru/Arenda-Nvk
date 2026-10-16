@@ -2222,6 +2222,84 @@ public class IvaPatchTest {
             eq("пробная 10.94: файл сайта и переключатель", IvaTestPatch.TEST_URL + "|" + IvaTestPatch.K_TEST + "|" + IvaNotifyPatch.defOn(IvaTestPatch.K_TEST) + "|" + IvaTestPatch.NOTE_TITLE,
                 "https://eclipsru.github.io/Arenda-Nvk/app-test.json|test_build|true|Уведомления пробной версии");
         }
+        {   // 10.98: аватарки — выбор области кругом, центр старых фото, нажатие на край
+            eq("аватар 10.98: круг не больше картинки и внутри неё", java.util.Arrays.toString(IvaAvatarPatch.clamp(50, 50, 500, 0, 0, 200, 100, 10)) + "|"
+                + java.util.Arrays.toString(IvaAvatarPatch.clamp(-100, 300, 5, 10, 20, 200, 100, 10)) + "|"
+                + java.util.Arrays.toString(IvaAvatarPatch.clamp(5, 5, 30, 0, 0, 16, 40, 36)),
+                "[50.0, 50.0, 50.0]|[20.0, 110.0, 10.0]|[8.0, 8.0, 8.0]");
+            eq("аватар 10.98: квадрат картинки под кругом", java.util.Arrays.toString(IvaAvatarPatch.srcRect(100, 60, 40, 0, 10, 0.5f, 400, 200)) + "|"
+                + java.util.Arrays.toString(IvaAvatarPatch.srcRect(1000, 1000, 40, 0, 0, 0.5f, 400, 200)) + "|"
+                + java.util.Arrays.toString(IvaAvatarPatch.srcRect(0, 0, 1000, 0, 0, 0.5f, 400, 200)) + "|"
+                + java.util.Arrays.toString(IvaAvatarPatch.srcRect(10, 10, 5, 0, 0, 0f, 300, 200)),
+                "[120, 20, 160]|[240, 40, 160]|[0, 0, 200]|[0, 0, 200]");
+            float[] f98 = IvaAvatarPatch.fit(1000, 800, 400, 200, 10);
+            eq("аватар 10.98: фото вписано в окно", Math.round(f98[0]) + "," + Math.round(f98[1]) + "," + Math.round(f98[2] * 100) + "|"
+                + java.util.Arrays.toString(IvaAvatarPatch.fit(100, 100, 0, 50, 0)), "10,155,245|[0.0, 0.0, 1.0]");
+            eq("аватар 10.98: центр не квадратного фото", java.util.Arrays.toString(IvaAvatarPatch.centerSquare(300, 200)) + "|"
+                + java.util.Arrays.toString(IvaAvatarPatch.centerSquare(200, 300)) + "|" + java.util.Arrays.toString(IvaAvatarPatch.centerSquare(0, 0)),
+                "[50, 0, 200]|[0, 50, 200]|[0, 0, 1]");
+            eq("аватар 10.98: что взял палец", IvaAvatarPatch.grab(100, 100, 100, 100, 50, 10) + "," + IvaAvatarPatch.grab(150, 100, 100, 100, 50, 10) + ","
+                + IvaAvatarPatch.grab(300, 300, 100, 100, 50, 10) + "," + IvaAvatarPatch.grab(136, 136, 100, 100, 50, 10) + ","
+                + IvaAvatarPatch.grab(100, 145, 100, 100, 50, 10) + "," + IvaAvatarPatch.grab(100, 125, 100, 100, 50, 10), "1,2,1,2,2,1");
+            eq("аватар 10.98: адрес фото", IvaAvatarPatch.isUrl(" https://x/a.jpg") + "," + IvaAvatarPatch.isUrl("http://x") + "," + IvaAvatarPatch.isUrl("ftp://x") + ","
+                + IvaAvatarPatch.isUrl("") + "," + IvaAvatarPatch.isUrl(null), "true,true,false,false,false");
+            eq("аватар 10.98: размеры", IvaAvatarPatch.HEAD_DP + "," + IvaAvatarPatch.PAGE_DP + "," + IvaClientPatch.AVATAR_DP + "," + IvaAvatarPatch.OUT_PX
+                + "," + IvaAvatarPatch.JPEG_Q, "72,120,120,512,90");
+        }
+        {   // 10.98: «Настройка проката» → «Данные проката»
+            eq("прокат 10.98: время из прежней строки", java.util.Arrays.toString(IvaShopPatch.parseTime("Пн–Сб 8:00–20:00")) + "|"
+                + java.util.Arrays.toString(IvaShopPatch.parseTime("09.30 до 18.00")) + "|" + java.util.Arrays.toString(IvaShopPatch.parseTime("10:00 — 24:00")) + "|"
+                + IvaShopPatch.parseTime("20:00-08:00") + "|" + IvaShopPatch.parseTime("25:00-26:00") + "|" + IvaShopPatch.parseTime("с 9 до 18") + "|"
+                + IvaShopPatch.parseTime(null), "[480, 1200]|[570, 1080]|[600, 1440]|null|null|null|null");
+            eq("прокат 10.98: дни из прежней строки", IvaShopPatch.daysFromText("Пн–Сб 8:00–20:00") + "," + IvaShopPatch.daysFromText("Ежедневно 9-18") + ","
+                + IvaShopPatch.daysFromText("сб, вс") + "," + IvaShopPatch.daysFromText("Пт-Пн") + "," + IvaShopPatch.daysFromText("пнд встреча") + ","
+                + IvaShopPatch.daysFromText("9:00-18:00") + "," + IvaShopPatch.daysFromText("Пн, Ср, Пт") + "," + IvaShopPatch.daysFromText(null), "63,127,96,113,0,0,21,0");
+            eq("прокат 10.98: дни строкой", IvaShopPatch.daysText(63) + "|" + IvaShopPatch.daysText(127) + "|" + IvaShopPatch.daysText(96) + "|"
+                + IvaShopPatch.daysText(21) + "|" + IvaShopPatch.daysText(59) + "|" + IvaShopPatch.daysText(113) + "|" + IvaShopPatch.daysText(0) + "|"
+                + IvaShopPatch.daysText(1) + "|" + IvaShopPatch.daysText(255), "Пн–Сб|Ежедневно|Сб, Вс|Пн, Ср, Пт|Пн, Вт, Чт–Сб|Пн, Пт–Вс||Пн|Ежедневно");
+            eq("прокат 10.98: «Время работы» для заявки и сайта", IvaShopPatch.hoursText(31, 540, 1080, "x") + "|" + IvaShopPatch.hoursText(0, 540, 1080, "")
+                + "|" + IvaShopPatch.hoursText(31, -1, -1, " с 9 до 18 ") + "|" + IvaShopPatch.hoursText(127, 0, 1440, "") + "|" + IvaShopPatch.hoursText(1, 600, 600, null),
+                "Пн–Пт 09:00–18:00|09:00–18:00|с 9 до 18|Ежедневно 00:00–24:00|");
+            eq("прокат 10.98: проверки полей", IvaShopPatch.nameErr(" А ") + "|" + IvaShopPatch.nameErr("Прокат-НВ") + "|"
+                + IvaShopPatch.nameErr(new String(new char[101]).replace('\0', 'я')) + "|" + IvaShopPatch.addrErr("") + "|" + IvaShopPatch.addrErr("Нск") + "|"
+                + IvaShopPatch.ipErr(new String(new char[151]).replace('\0', 'я')) + "|" + IvaShopPatch.ipErr("ИП Иванов"),
+                "Введите название проката||Название — не длиннее 100 символов||Введите адрес полностью: город, улица, дом|Не длиннее 150 символов|");
+            eq("прокат 10.98: телефон начальника", IvaShopPatch.telErr("+7 (900) 123-45-67") + "|" + IvaShopPatch.telErr("") + "|" + IvaShopPatch.telErr("12345").isEmpty()
+                + "|" + IvaShopPatch.telErr("+7 900 abc 45 67").isEmpty() + "|" + IvaShopPatch.telErr("8 900 123 45 67") + "|"
+                + IvaShopPatch.telErr("1234567890123456").isEmpty(), "||false|false||false");
+            eq("прокат 10.98: время с … до …", IvaShopPatch.timeErr(-1, -1) + "|" + IvaShopPatch.timeErr(540, -1) + "|" + IvaShopPatch.timeErr(600, 540) + "|"
+                + IvaShopPatch.timeErr(540, 1080), "|Выберите и начало, и конец|Конец должен быть позже начала|");
+            java.util.Map<String, String> r98 = new java.util.HashMap<String, String>();
+            r98.put("company", " Прокат "); r98.put("org_address", "Нск, Ленина 5"); r98.put("work_hours", "Пн–Сб 8:00–20:00"); r98.put("work_days", null);
+            r98.put("org_tel", "null");
+            IvaShopPatch.Data d98 = IvaShopPatch.fromRow(r98, true);
+            eq("прокат 10.98: строка admins → поля", d98.name + "|" + d98.addr + "|" + d98.from + "-" + d98.to + "|" + d98.days + "|" + d98.tel + "|" + d98.full,
+                "Прокат|Нск, Ленина 5|480-1200|63|null|true".replace("|null|", "||"));
+            r98.put("work_days", "5");
+            eq("прокат 10.98: дни из базы важнее строки", IvaShopPatch.fromRow(r98, true).days + "," + IvaShopPatch.fromRow(new java.util.HashMap<String, String>(), false).from, "5,-1");
+            IvaShopPatch.Data b98 = new IvaShopPatch.Data();
+            b98.name = " Прокат  \"НВ\" "; b98.addr = "Нск,\nЛенина 5"; b98.hoursRaw = "old"; b98.from = 540; b98.to = 1080; b98.days = 31;
+            b98.ip = "ИП Иванов\\"; b98.tel = " +7 900 ";
+            eq("прокат 10.98: что уходит в admins", IvaShopPatch.body(b98, true) + "|" + IvaShopPatch.body(b98, false),
+                "{\"company\":\"Прокат \\\"НВ\\\"\",\"org_address\":\"Нск, Ленина 5\",\"work_hours\":\"Пн–Пт 09:00–18:00\",\"org_ip\":\"ИП Иванов\\\\\",\"org_tel\":\"+7 900\",\"work_days\":31}|"
+                + "{\"company\":\"Прокат \\\"НВ\\\"\",\"org_address\":\"Нск, Ленина 5\",\"work_hours\":\"Пн–Пт 09:00–18:00\"}");
+            eq("прокат 10.98: экранирование", IvaShopPatch.q("a\u0001b\tc\r"), "\"a\\u0001b\\tc\\r\"");
+            eq("прокат 10.98: нет колонок (SQL не применён)", IvaShopPatch.noColumn("400", "{\"code\":\"PGRST204\",\"message\":\"Could not find the 'org_ip' column\"}") + ","
+                + IvaShopPatch.noColumn("400", "{\"code\":\"42703\",\"message\":\"column admins.org_ip does not exist\"}") + ","
+                + IvaShopPatch.noColumn("403", "{\"code\":\"42501\"}") + "," + IvaShopPatch.noColumn("400", null), "true,true,false,false");
+            eq("прокат 10.98: ФИО на три поля", String.join("/", IvaShopPatch.splitFio("Иванов  Иван Иванович", null)) + "|" + String.join("/", IvaShopPatch.splitFio("Иван", null))
+                + "|" + String.join("/", IvaShopPatch.splitFio("Иванов Иван", null)) + "|" + String.join("/", IvaShopPatch.splitFio("", null)) + "|"
+                + String.join("/", IvaShopPatch.splitFio("де ла Круз Хуан", new String[]{"де ла Круз", "Хуан", ""})) + "|"
+                + String.join("/", IvaShopPatch.splitFio("Петров Пётр", new String[]{"Иванов", "Иван", ""})) + "|"
+                + String.join("/", IvaShopPatch.splitFio("Оглы Мамед Али Оглы", null)),
+                "Иванов/Иван/Иванович|/Иван/|Иванов/Иван/|//|де ла Круз/Хуан/|Петров/Пётр/|Оглы/Мамед/Али Оглы");
+            eq("прокат 10.98: ФИО одной строкой", IvaShopPatch.joinFio(" Иванов ", "", " Петрович ") + "|" + IvaShopPatch.joinFio("", "", "") + "|"
+                + IvaShopPatch.joinFio("Иванов", "Иван", "Иванович"), "Иванов Петрович||Иванов Иван Иванович");
+            eq("прокат 10.98: названия", IvaShopPatch.ROW_TITLE + "|" + IvaShopPatch.DATA_TITLE + "|" + IvaPickupPatch.ROW_TITLE + "|" + IvaShopPatch.L_NAME + "|"
+                + IvaShopPatch.L_ADDR + "|" + IvaShopPatch.L_IP + "|" + IvaShopPatch.L_TEL + "|" + IvaShopPatch.L_TIME + "|" + IvaShopPatch.L_DAYS,
+                "Настройка проката|Данные проката|Пункты выдачи|Название проката|Адрес организации|ИП организации|Номер телефона (для связи с начальником)|Время работы|Рабочие дни");
+            eq("прокат 10.98: подсказка «Срока аренды»", IvaRentPatch.LINK_HINT.contains("«Настройки → Настройка проката → Пункты выдачи»") + "", "true");
+        }
         if (fail > 0) { System.out.println("ошибок: " + fail); System.exit(1); }
         System.out.println("все проверки IvaPatch пройдены");
     }

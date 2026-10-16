@@ -1660,10 +1660,9 @@ public final class IvaNotifyPatch {
             final LinearLayout body = new LinearLayout(a);
             body.setOrientation(LinearLayout.VERTICAL);
             final Runnable[] onPage = new Runnable[1];
-            // 10.77: «Аренда» — только админам: как считать окончание аренды (сутки / до закрытия пункта)
-            // 10.95: «Пункт выдачи» — только админам, отдельная страница (по первому пункту считается «Срок аренды»)
-            if (admin) try { IvaPickupPatch.settingsRow(a, page, cText, cGray, cOrange); } catch (Throwable ignore) {}
-            if (admin) try { IvaRentPatch.settingsSection(a, page, cText, cGray, cOrange); } catch (Throwable ignore) {}
+            // 10.98 (просьба владельца 16.10.2026): «Пункты выдачи» (10.95) и «Срок аренды» (10.77) перенесены
+            // в «Настройка проката» — только админам, отдельная страница; там же «Данные проката».
+            if (admin) try { IvaShopPatch.settingsRow(a, page, cText, cGray, cOrange); } catch (Throwable ignore) {}
             head.setContentDescription(NOTIF_TITLE + ", открыть");
             head.setOnClickListener(new View.OnClickListener() {
                 @Override public void onClick(View v) {

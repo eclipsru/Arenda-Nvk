@@ -668,7 +668,7 @@ public class IvaRentPatch {
     }
 
     // 10.95: «Срок аренды» ↔ «Пункт выдачи»
-    static final String LINK_HINT = "Время закрытия — из графика первого пункта выдачи; меняется в «Настройки → Пункт выдачи». "
+    static final String LINK_HINT = "Время закрытия — из графика первого пункта выдачи; меняется в «Настройки → Настройка проката → Пункты выдачи». "
         + "Выходной день: если срок выпадает на него, вернуть можно до закрытия следующего рабочего дня.";
     static volatile java.lang.ref.WeakReference<Runnable> relinkRef = new java.lang.ref.WeakReference<Runnable>(null);
 
@@ -679,7 +679,7 @@ public class IvaRentPatch {
     }
 
     static void linkedToast(Activity a) {
-        try { Toast.makeText(a, "Время закрытия — из графика пункта «" + IvaPickupPatch.mainName(a) + "». Измените его в «Пункт выдачи»", Toast.LENGTH_LONG).show(); } catch (Throwable ignore) {}
+        try { Toast.makeText(a, "Время закрытия — из графика пункта «" + IvaPickupPatch.mainName(a) + "». Измените его в «Настройка проката → Пункты выдачи»", Toast.LENGTH_LONG).show(); } catch (Throwable ignore) {}
     }
 
     static LinearLayout option(Activity a, LinearLayout body, String title, String sub, int cText, int cGray) {

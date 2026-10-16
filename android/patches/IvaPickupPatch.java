@@ -61,7 +61,7 @@ public class IvaPickupPatch {
     static final String TABLE = "/rest/v1/iva_pickup_points";
     static final String COLS = "id,name,address,city,lat,lng,open_min,close_min,email,created_at";
     static final String PHOTON = "https://photon.komoot.io/api/";
-    static final String ROW_TITLE = "Пункт выдачи", ROW_SUB = "Адрес, график и email проката";
+    static final String ROW_TITLE = "Пункты выдачи", ROW_SUB = "Адрес, график и email проката";
     static final String PAGE_SUB = "Где вы выдаёте инструмент. По графику первого пункта считается «Срок аренды → До закрытия пункта».";
     static final String ADD = "Добавить";
     static final String NO_DB = "Заработает после обновления базы (SQL 10.95)";

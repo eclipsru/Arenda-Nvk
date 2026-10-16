@@ -1008,11 +1008,6 @@ public final class IvaClientPatch {
             box.setGravity(Gravity.CENTER_HORIZONTAL);
             box.setPadding(0, dp(4), 0, dp(18));
             FrameLayout circleBox = new FrameLayout(a);
-            GradientDrawable bg = new GradientDrawable();
-            bg.setShape(GradientDrawable.OVAL);
-            bg.setColor(cCard);                                              // 10.96: круг «рамкой», буквы оранжевые
-            bg.setStroke(Math.max(1, Math.round(IvaPatch.OUTLINE_DP * a.getResources().getDisplayMetrics().density)), cOrange);
-            circleBox.setBackground(bg);
             avatarInitials = new TextView(a);
             avatarInitials.setTextSize(32f);
             avatarInitials.setTextColor(cOrange);
@@ -1022,7 +1017,12 @@ public final class IvaClientPatch {
             avatarImage = new ImageView(a);
             avatarImage.setScaleType(ImageView.ScaleType.CENTER_CROP);
             circleBox.addView(avatarImage, new FrameLayout.LayoutParams(-1, -1));
-            box.addView(circleBox, new LinearLayout.LayoutParams(dp(96), dp(96)));
+            // 10.98: круг «рамкой» (10.96) — только пока фото нет; под фото краёв нет. Крупнее: 96 → 120dp.
+            circleBox.setBackground(IvaAvatarPatch.hole(a, avatarImage));
+            circleBox.setClickable(true);
+            circleBox.setContentDescription("Фото профиля");
+            circleBox.setOnClickListener(new View.OnClickListener() { @Override public void onClick(View v) { tapAvatar(); } });
+            box.addView(circleBox, new LinearLayout.LayoutParams(dp(AVATAR_DP), dp(AVATAR_DP)));
             avatarBtn = new Button(a);
             avatarBtn.setText("Изменить фото");
             avatarBtn.setAllCaps(false);
@@ -1355,8 +1355,29 @@ public final class IvaClientPatch {
         }
 
         // ── фото профиля ──
+        /** 10.98: фото есть — просмотр (с «Изменить фото»), нет — сразу выбор. */
+        void tapAvatar() {
+            Bitmap b = IvaAvatarPatch.photoOf(avatarImage);
+            if (b == null || uploading) { pickAvatar(); return; }
+            final String path = clientAvatarPath == null ? "" : clientAvatarPath.trim();
+            IvaAvatarPatch.viewer(a, b, path.isEmpty() ? null : new IvaAvatarPatch.Loader() {
+                @Override public Bitmap load() throws Exception { return decodeAvatar(downloadClientAvatar(a, path), IvaAvatarPatch.VIEW_PX); }
+            }, true, new Runnable() { @Override public void run() { pickAvatar(); } });
+        }
+
+        /** 10.98: галерея → выбор области кругом (IvaAvatarPatch) → загрузка готового квадрата. */
         void pickAvatar() {
             if (!loaded || uploading || saving) return;
+            boolean ok = IvaAvatarPatch.pick(a, new IvaAvatarPatch.Done() {
+                @Override public void done(byte[] jpeg, Bitmap preview) {
+                    if (clientScreen == ProfileScreen.this && isShowing()) uploadJpeg(jpeg, preview);
+                }
+            });
+            if (!ok) pickAvatarPlain();
+        }
+
+        /** Прежний выбор фото без выбора области — если окно выбора не открылось. */
+        void pickAvatarPlain() {
             try {
                 android.app.FragmentManager fm = a.getFragmentManager();
                 android.app.Fragment f = fm.findFragmentByTag(AVATAR_PICKER_TAG);
@@ -1374,6 +1395,43 @@ public final class IvaClientPatch {
             }
         }
 
+        /** 10.98: уже обрезанное фото (квадрат под кругом) — сразу в хранилище. */
+        void uploadJpeg(final byte[] jpeg, final Bitmap shown) {
+            if (jpeg == null || uploading) return;
+            uploading = true;
+            final int version = ++avatarVersion;
+            avatarStatus.setTextColor(cGray);
+            avatarStatus.setText("Загружаем фото…");
+            if (shown != null) showAvatar(shown);
+            refreshSave();
+            final String before = clientAvatarPath == null ? "" : clientAvatarPath;
+            new Thread(new Runnable() { @Override public void run() {
+                try {
+                    final String path = uploadClientAvatar(a, jpeg);
+                    final Bitmap preview = shown != null ? shown : decodeAvatar(jpeg, dp(AVATAR_DP));
+                    a.runOnUiThread(new Runnable() { @Override public void run() {
+                        uploading = false;
+                        clientAvatarPath = path;
+                        if (version == avatarVersion && preview != null) showAvatar(preview);
+                        rememberClientAvatar(avatarCacheKey(clientProfileEmail, path), preview);
+                        showClientAvatar(a);
+                        avatarChanged = !path.equals(before);
+                        avatarStatus.setTextColor(cGray);
+                        avatarStatus.setText(avatarChanged ? "Фото загружено — нажмите «Сохранить»" : "Фото обновлено");
+                        refreshSave();
+                    }});
+                } catch (final Throwable e) {
+                    a.runOnUiThread(new Runnable() { @Override public void run() {
+                        uploading = false;
+                        String msg = brief(e.getMessage());
+                        avatarStatus.setTextColor(cRed);
+                        avatarStatus.setText("Не удалось загрузить фото" + (msg.isEmpty() ? "" : ": " + msg));
+                        refreshSave();
+                    }});
+                }
+            }}).start();
+        }
+
         void uploadAvatar(final android.net.Uri uri) {
             if (uri == null || uploading) return;
             uploading = true;
@@ -1387,7 +1445,7 @@ public final class IvaClientPatch {
                     byte[] raw = readUri(a, uri);
                     final byte[] jpeg = prepareAvatar(raw);
                     final String path = uploadClientAvatar(a, jpeg);
-                    final Bitmap preview = decodeAvatar(jpeg, dp(96));
+                    final Bitmap preview = decodeAvatar(jpeg, dp(AVATAR_DP));
                     a.runOnUiThread(new Runnable() { @Override public void run() {
                         uploading = false;
                         clientAvatarPath = path;
@@ -1417,7 +1475,7 @@ public final class IvaClientPatch {
 
         void showAvatar(Bitmap b) {
             if (avatarImage == null || b == null) return;
-            Bitmap round = circle(b, dp(96), 0);
+            Bitmap round = circle(b, dp(AVATAR_DP), 0);
             avatarImage.setImageBitmap(round != null ? round : b);
             if (avatarInitials != null) avatarInitials.setVisibility(View.INVISIBLE);
         }
@@ -1434,7 +1492,7 @@ public final class IvaClientPatch {
             new Thread(new Runnable() { @Override public void run() {
                 try {
                     byte[] bytes = downloadClientAvatar(a, path);
-                    final Bitmap b = decodeAvatar(bytes, dp(96));
+                    final Bitmap b = decodeAvatar(bytes, dp(AVATAR_DP));
                     if (b != null && path.equals(savedAvatarPath())) rememberClientAvatar(key, b);
                     a.runOnUiThread(new Runnable() { @Override public void run() {
                         if (clientScreen == ProfileScreen.this && version == avatarVersion && b != null) showAvatar(b);
@@ -1472,6 +1530,7 @@ public final class IvaClientPatch {
         } catch (Throwable ignore) {}
         try { showClientName(a); } catch (Throwable ignore) {}
         try { showClientAvatar(a); } catch (Throwable ignore) {}
+        try { IvaAvatarPatch.onProfile(a); } catch (Throwable ignore) {}   // 10.98: фото кругом без краёв, крупнее, просмотр
         try { installClientNav(a); } catch (Throwable ignore) {}
         try { if (hubVisible && !isClient(a)) callNativeTab(a, "home"); } catch (Throwable ignore) {}   // выход из аккаунта
     }
@@ -2659,6 +2718,39 @@ public final class IvaClientPatch {
     }
 
     static final int AVATAR_MAX = 640;   // как на сайте: «JPG или PNG, до 640 px»
+    static final int AVATAR_DP = 120;    // 10.98: кружок «Настроек профиля» крупнее (было 96)
+    static final String NEED_NAME = "need_name";
+
+    /** 10.98: фото, выбранное в строке «Кабинета», — путь в записи клиента; остальные поля отправляются такими,
+     * как сохранены (та же функция, что у «Сохранить»). "" — готово; NEED_NAME — в записи нет имени (его требует база). */
+    static String saveAvatarPath(Activity a, String path) {
+        JSONObject p = clientProfile == null ? new JSONObject() : clientProfile;
+        if (p.optString("given_name", "").trim().isEmpty()) return NEED_NAME;
+        try {
+            JSONObject pp = p.optJSONObject("passport_data");
+            JSONObject body = new JSONObject();
+            body.put("p_surname", p.optString("surname", ""));
+            body.put("p_given_name", p.optString("given_name", ""));
+            body.put("p_patronymic", p.optString("patronymic", ""));
+            body.put("p_phone", p.optString("phone", ""));
+            body.put("p_city", p.optString("city", ""));
+            body.put("p_address", p.optString("address", ""));
+            body.put("p_passport_data", pp != null ? pp : new JSONObject());
+            body.put("p_avatar_path", path);
+            String[] r = apiCall(a, "/rest/v1/rpc/save_my_customer_profile", "POST", body.toString(), true);
+            if (r == null) return "нет ответа сервера";
+            if (!r[0].startsWith("2")) return serverMessage(r[0], r.length > 1 ? r[1] : "");
+            JSONObject saved = rpcFirst(r[1]);
+            if (saved.length() > 0) {
+                clientProfile = saved;
+                clientAvatarPath = saved.optString("avatar_path", path);
+            }
+            return "";
+        } catch (Throwable e) {
+            String m = brief(e.getMessage());
+            return m.isEmpty() ? "нет связи с сервером" : m;
+        }
+    }
 
     /** Фото из галереи → JPEG не больше 640 px по большей стороне, с учётом поворота камеры. */
     static byte[] prepareAvatar(byte[] raw) throws Exception {

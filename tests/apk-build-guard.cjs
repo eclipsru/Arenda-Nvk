@@ -882,8 +882,11 @@ try {
     for (const s2 of [wf, ck]) assert.ok(s2.includes('android/patches/IvaTestPatch.java'), 'IvaTestPatch.java — в списке javac сборки и проверки');
     // 10.95: «Пункт выдачи» — строка в настройках у админов, отдельная страница, запись в iva_pickup_points; «Срок аренды» — по первому пункту
     const pk = R('android/patches/IvaPickupPatch.java'), rp95 = R('android/patches/IvaRentPatch.java'), np95 = R('android/patches/IvaNotifyPatch.java');
-    assert.ok(np95.includes('if (admin) try { IvaPickupPatch.settingsRow(a, page, cText, cGray, cOrange); } catch (Throwable ignore) {}')
-      && np95.indexOf('IvaPickupPatch.settingsRow(') < np95.indexOf('IvaRentPatch.settingsSection(a, page,')
+    // 10.98: строки «Пункты выдачи» и «Срок аренды» переехали на страницу «Настройка проката» (тоже только у админов)
+    const sh95 = R('android/patches/IvaShopPatch.java');
+    assert.ok(np95.includes('if (admin) try { IvaShopPatch.settingsRow(a, page, cText, cGray, cOrange); } catch (Throwable ignore) {}')
+      && sh95.includes('try { IvaPickupPatch.settingsRow(a, list, cText, cGray, cOrange); } catch (Throwable ignore) {}')
+      && sh95.indexOf('IvaPickupPatch.settingsRow(') < sh95.indexOf('IvaRentPatch.settingsSection(a, list,')
       && pk.includes('u.page = IvaChiefPatch.page(a, ROW_TITLE, PAGE_SUB, false);') && pk.includes('b.setBackground(IvaPatch.accentBg(a, cOrange, 12));')
       && pk.includes('static final String TABLE = "/rest/v1/iva_pickup_points";') && pk.includes('static final String PHOTON = "https://photon.komoot.io/api/";')
       && R('assets/geo.js').includes("const endpoint='https://photon.komoot.io/api/';")
@@ -1193,7 +1196,7 @@ try {
       && mf.includes("if (e.target.closest('[data-msug]')) e.preventDefault();") && !/<link[^>]*theme\.css/.test(cab),
       'модели 10.82: сайт — общие модули; кабинет без theme.css');
     // 5. приложение: без новых вставок в smali — только из IvaKindPatch; файл в сборке; личных данных не читаем
-    assert.ok(!/IvaModelPatch|model/i.test(ap) && /IvaKindPatch\.java android\/patches\/IvaModelPatch\.java (android\/patches\/IvaFormPatch\.java )?(android\/patches\/IvaPhotoPatch\.java )?(android\/patches\/IvaCensorPatch\.java )?(android\/patches\/IvaChiefPatch\.java )?(android\/patches\/IvaTestPatch\.java )?(android\/patches\/IvaPickupPatch\.java )?2>&1/.test(wf)
+    assert.ok(!/IvaModelPatch|model/i.test(ap) && /IvaKindPatch\.java android\/patches\/IvaModelPatch\.java (android\/patches\/IvaFormPatch\.java )?(android\/patches\/IvaPhotoPatch\.java )?(android\/patches\/IvaCensorPatch\.java )?(android\/patches\/IvaChiefPatch\.java )?(android\/patches\/IvaTestPatch\.java )?(android\/patches\/IvaPickupPatch\.java )?(android\/patches\/IvaAvatarPatch\.java )?(android\/patches\/IvaShopPatch\.java )?2>&1/.test(wf)
       && kp.includes('if (k == 0) IvaModelPatch.refresh(a);') && kp.includes('try { IvaModelPatch.onTab(a, tab); } catch (Throwable ignore) {}')
       && !/customer_profiles|passport|phone|surname/.test(mp),
       'модели 10.82: новых вставок в smali нет; личных данных не читаем');
@@ -1248,7 +1251,7 @@ try {
     assert.ok(kp.includes('static final String SUB_HINT = "Подкатегория (необязательно)";') && has(dex14, 'Подкатегория (необязательно)')
       && has(dex14, 'atCatSug') && has(dex14, 'atSubSug') && has(dex14, 'atName'),
       'автоподбор 10.81: штатные поля и текст пустой подкатегории есть в 10.14');
-    assert.ok(!/IvaKindPatch|kind/i.test(ap) && /IvaRentPatch\.java android\/patches\/IvaKindPatch\.java (android\/patches\/IvaModelPatch\.java )?(android\/patches\/IvaFormPatch\.java )?(android\/patches\/IvaPhotoPatch\.java )?(android\/patches\/IvaCensorPatch\.java )?(android\/patches\/IvaChiefPatch\.java )?(android\/patches\/IvaTestPatch\.java )?(android\/patches\/IvaPickupPatch\.java )?2>&1/.test(wf),
+    assert.ok(!/IvaKindPatch|kind/i.test(ap) && /IvaRentPatch\.java android\/patches\/IvaKindPatch\.java (android\/patches\/IvaModelPatch\.java )?(android\/patches\/IvaFormPatch\.java )?(android\/patches\/IvaPhotoPatch\.java )?(android\/patches\/IvaCensorPatch\.java )?(android\/patches\/IvaChiefPatch\.java )?(android\/patches\/IvaTestPatch\.java )?(android\/patches\/IvaPickupPatch\.java )?(android\/patches\/IvaAvatarPatch\.java )?(android\/patches\/IvaShopPatch\.java )?2>&1/.test(wf),
       'автоподбор 10.81: новых вставок в smali и новых файлов нет');
     // 5. сайт: один модуль, вид пишется только когда справочник видов есть в базе
     assert.ok(nw.includes('<script src="assets/kind-guess.js?v=20261016-kind"></script>') && cab.includes('<script src="assets/kind-guess.js?v=20261016-kind"></script>')
@@ -1325,7 +1328,7 @@ try {
     const sql = R('supabase/migrations/20261015_category_tree.sql'), mv = R('supabase/migrations/20261015_category_tree_move.sql');
     const fnx = (src, name) => { const mm = new RegExp(`static (?:final )?[\\w.<>, \\[\\]]+ ${name}\\(`).exec(src); assert.ok(mm, `нет ${name}`); return src.slice(mm.index, src.indexOf('\n    }\n', mm.index)); };
     // 1. сборка и проверка компилируют IvaKindPatch; вставок в smali нет
-    assert.ok(/IvaRentPatch\.java android\/patches\/IvaKindPatch\.java (android\/patches\/IvaModelPatch\.java )?(android\/patches\/IvaFormPatch\.java )?(android\/patches\/IvaPhotoPatch\.java )?(android\/patches\/IvaCensorPatch\.java )?(android\/patches\/IvaChiefPatch\.java )?(android\/patches\/IvaTestPatch\.java )?(android\/patches\/IvaPickupPatch\.java )?2>&1/.test(wf) && ck.includes('android/patches/IvaKindPatch.java'),
+    assert.ok(/IvaRentPatch\.java android\/patches\/IvaKindPatch\.java (android\/patches\/IvaModelPatch\.java )?(android\/patches\/IvaFormPatch\.java )?(android\/patches\/IvaPhotoPatch\.java )?(android\/patches\/IvaCensorPatch\.java )?(android\/patches\/IvaChiefPatch\.java )?(android\/patches\/IvaTestPatch\.java )?(android\/patches\/IvaPickupPatch\.java )?(android\/patches\/IvaAvatarPatch\.java )?(android\/patches\/IvaShopPatch\.java )?2>&1/.test(wf) && ck.includes('android/patches/IvaKindPatch.java'),
       'вид 10.79: IvaKindPatch компилируется в сборку и в проверку');
     assert.ok(!/IvaKindPatch|kind/i.test(ap), 'вид 10.79: новых вставок в smali нет');
     // 2. точки входа: onTab (справочник, форма, запись), onHub (только форма — запомненный выбор не трогает), касание сохранения
@@ -1483,10 +1486,12 @@ try {
     assert.ok(fnx(rp, 'group').includes('IvaNotifyPatch.rentEnds(pid, oid, o.optString("tools_text", ""), o.optInt("days", 0),') && fnx(rp, 'group').includes('ruleOf(o)'),
       'аренда 10.77: таймер — те же сроки инструментов, что напоминание');
     // настройки: только админам, «Срок аренды» под «Уведомлениями» (с 10.97 — отдельной страницей), сбой не ломает настройки
-    const os = fnx(np, 'openSettings');
-    assert.ok(os.includes('if (admin) try { IvaRentPatch.settingsSection(a, page, cText, cGray, cOrange); } catch (Throwable ignore) {}')
-      && os.indexOf('IvaRentPatch.settingsSection') > os.indexOf('page.addView(head, hl);'),
-      'аренда 10.77: «Аренда» — только у админов, под «Уведомлениями»');
+    // 10.98: «Срок аренды» — на странице «Настройка проката» (строка — только у админов, под «Уведомлениями»)
+    const os = fnx(np, 'openSettings'), shp = R('android/patches/IvaShopPatch.java');
+    assert.ok(os.includes('if (admin) try { IvaShopPatch.settingsRow(a, page, cText, cGray, cOrange); } catch (Throwable ignore) {}')
+      && os.indexOf('IvaShopPatch.settingsRow') > os.indexOf('page.addView(head, hl);') && !os.includes('IvaRentPatch.settingsSection')
+      && fnx(shp, 'openPage').includes('try { IvaRentPatch.settingsSection(a, list, cText, cGray, cOrange); } catch (Throwable ignore) {}'),
+      'аренда 10.77: «Аренда» — только у админов, под «Уведомлениями» (10.98 — в «Настройка проката»)');
     const ss = fnx(rp, 'settingsSection');
     assert.ok(ss.includes('IvaChiefPatch.subPage(a, HEAD_TITLE, body, ref[0]);') && !ss.includes('body.setVisibility(') && ss.includes('drawable(a, "bg_card")') && ss.includes('IvaNotifyPatch.tint(ds, cOrange);')
       && ss.includes('closeBox.setVisibility(byClose ? View.VISIBLE : View.GONE);') && ss.includes('"Хотя бы один день должен быть рабочим"')
@@ -1592,18 +1597,82 @@ try {
       && sp.includes('p.list.addView(content, new LinearLayout.LayoutParams(-1, -2));') && sp.includes('if (has) try { onFocus.run(); } catch (Throwable ignore) {}'),
       'настройки 10.97: IvaChiefPatch.subPage — отдельная страница как «Пункт выдачи», содержимое переносится целиком (повторное открытие работает)');
     // все пункты «Настроек»: строка в openSettings + строки, которые вставляют IvaPickupPatch.settingsRow и IvaRentPatch.settingsSection
-    const os97 = fn97(np97, 'openSettings'), rows = [os97, fn97(rp97, 'settingsSection'), fn97(pk97, 'settingsRow')];
+    // 10.98: + «Настройка проката» (IvaShopPatch: строка, её страница и «Данные проката»)
+    const sh97 = R('android/patches/IvaShopPatch.java');
+    const os97 = fn97(np97, 'openSettings'), rows = [os97, fn97(rp97, 'settingsSection'), fn97(pk97, 'settingsRow'),
+      fn97(sh97, 'settingsRow'), fn97(sh97, 'openPage'), fn97(sh97, 'openData')];
     for (const r of rows) assert.ok(!/setVisibility\(\s*open\b|\.setRotation\(open|rotation\(open|развернуть|свернуть/.test(r),
       'настройки 10.97: в «Настройках» ничего не раскрывается и не сворачивается на месте');
     assert.ok(/IvaChiefPatch\.subPage\(a, NOTIF_TITLE, body,/.test(os97) && /IvaChiefPatch\.subPage\(a, HEAD_TITLE, body,/.test(rows[1])
-      && rows[2].includes('openPage(a)') && fn97(pk97, 'openPage').includes('IvaChiefPatch.page(a, ROW_TITLE, PAGE_SUB, false)'),
+      && rows[2].includes('openPage(a)') && fn97(pk97, 'openPage').includes('IvaChiefPatch.page(a, ROW_TITLE, PAGE_SUB, false)')
+      && rows[3].includes('openPage(a, cText, cGray, cOrange)') && rows[4].includes('IvaChiefPatch.page(a, ROW_TITLE, null, false)')
+      && rows[4].includes('openData(a)') && rows[5].includes('u.page = IvaChiefPatch.page(a, DATA_TITLE, null, false);'),
       'настройки 10.97: «Уведомления», «Пункт выдачи», «Срок аренды» — каждый открывается своей страницей');
     // новый пункт в «Настройках» — только строкой, открывающей страницу: всё, что вставляется в page, — это head/строки пунктов
     const pageAdds = (os97.match(/page\.addView\((\w+)/g) || []).map(x => x.replace('page.addView(', ''));
-    assert.ok(pageAdds.length === 1 && pageAdds[0] === 'head' && (os97.match(/\(a, page, cText, cGray, cOrange\)/g) || []).length === 2,
+    assert.ok(pageAdds.length === 1 && pageAdds[0] === 'head' && (os97.match(/\(a, page, cText, cGray, cOrange\)/g) || []).length === 1,   // 10.98: одна строка «Настройка проката» вместо двух
       'настройки 10.97: в «Настройки» вставляются только строки пунктов (новый пункт — строкой со своей страницей)');
     assert.ok(dev.includes('Каждый пункт «Настроек» — отдельной страницей (правило владельца 16.10.2026, приложение с 10.97)'),
       'настройки 10.97: правило записано в README-DEV');
+  }
+  // 10.98 (просьба владельца 16.10.2026): «Настройка проката» (только админам) — «Данные проката», «Пункты выдачи», «Срок аренды»;
+  // «Мои данные» — только Фамилия, Имя, Отчество, телефон, мессенджеры; аватарка у всех — кругом без краёв, крупнее, просмотр, выбор области
+  {
+    const sh = R('android/patches/IvaShopPatch.java'), av = R('android/patches/IvaAvatarPatch.java'), cl = R('android/patches/IvaClientPatch.java'),
+      ip = R('android/patches/IvaPatch.java'), np = R('android/patches/IvaNotifyPatch.java'), pk = R('android/patches/IvaPickupPatch.java'),
+      rp = R('android/patches/IvaRentPatch.java'), ap = R('android/patches/apply.py'), tp = R('android/patches/test/IvaPatchTest.java'),
+      wf = R('.github/workflows/build-apk.yml'), ck = R('.github/workflows/check.yml'), sq = R('supabase/migrations/20261024_rental_data.sql');
+    const fn = (src, name) => { const m = new RegExp('static [\\w.<>\\[\\]]+ ' + name + '\\(').exec(src); assert.ok(m, 'нет ' + name);
+      return src.slice(m.index, src.indexOf('\n    }\n', m.index)); };
+    for (const s2 of [wf, ck]) assert.ok(s2.includes('android/patches/IvaAvatarPatch.java') && s2.includes('android/patches/IvaShopPatch.java'),
+      'прокат 10.98: IvaAvatarPatch.java и IvaShopPatch.java — в списке javac сборки и проверки');
+    // без новых вставок в smali: всё из IvaPatch.onTab, IvaClientPatch.onProfile и openSettings
+    assert.ok(!/IvaAvatarPatch|IvaShopPatch/.test(ap)
+      && ip.includes('try { IvaAvatarPatch.onTab(a, tab); } catch (Throwable ignore) {}') && ip.includes('try { IvaShopPatch.onTab(a, tab); } catch (Throwable ignore) {}')
+      && cl.includes('try { IvaAvatarPatch.onProfile(a); } catch (Throwable ignore) {}'),
+      'прокат 10.98: новых вставок в smali нет (onTab, onProfile, openSettings)');
+    // «Настройка проката» — только админам; внутри три пункта, каждый своей страницей; «Пункты выдачи» переименован
+    const os = fn(np, 'openSettings'), op = fn(sh, 'openPage');
+    assert.ok(os.includes('if (admin) try { IvaShopPatch.settingsRow(a, page, cText, cGray, cOrange); } catch (Throwable ignore) {}')
+      && !os.includes('IvaPickupPatch.settingsRow') && !os.includes('IvaRentPatch.settingsSection')
+      && op.indexOf('openData(a)') > 0 && op.indexOf('openData(a)') < op.indexOf('IvaPickupPatch.settingsRow(a, list,')
+      && op.indexOf('IvaPickupPatch.settingsRow(a, list,') < op.indexOf('IvaRentPatch.settingsSection(a, list,')
+      && sh.includes('static final String ROW_TITLE = "Настройка проката"') && sh.includes('DATA_TITLE = "Данные проката"')
+      && pk.includes('static final String ROW_TITLE = "Пункты выдачи"') && rp.includes('«Настройки → Настройка проката → Пункты выдачи»'),
+      'прокат 10.98: «Настройка проката» только у админов — «Данные проката», «Пункты выдачи», «Срок аренды»');
+    // «Данные проката»: аватарка вверху, поля с названиями над полями в порядке владельца
+    const od = fn(sh, 'openData');
+    const order = ['IvaAvatarPatch.circleBox(a, IvaAvatarPatch.PAGE_DP', 'field(u, list, L_NAME', 'field(u, list, L_ADDR', 'field(u, list, L_IP',
+      'field(u, list, L_TEL', 'list.addView(label(u, L_TIME));', 'list.addView(label(u, L_DAYS));'];
+    for (let i = 1; i < order.length; i++) assert.ok(od.indexOf(order[i - 1]) >= 0 && od.indexOf(order[i - 1]) < od.indexOf(order[i]), 'прокат 10.98: порядок полей — ' + order[i]);
+    assert.ok(fn(sh, 'field').indexOf('list.addView(label(u, lbl));') < fn(sh, 'field').indexOf('list.addView(f,')
+      && sh.includes('IvaPickupPatch.time(a, "Начало работы"') && sh.includes('IvaSearchPatch.chip(a, DAYS[i], false, false)')
+      && sh.includes('try { ne = IvaCensorPatch.fieldError(u.d.name); } catch (Throwable ignore) {}'),
+      'прокат 10.98: названия над полями; время — выбор часов; дни — чипы; название проверяется цензурой');
+    // запись — только своя строка admins (как штатное «Сохранить»), без личных данных клиентов
+    assert.ok(sh.includes('"/rest/v1/admins?email=eq." + IvaAvatarPatch.encode(me(a)), "PATCH"') && !/customer_profiles|passport|surname|select=\*|"DELETE"|"POST"/.test(sh)
+      && !/customer_profiles|passport|surname|select=\*|"DELETE"/.test(av),
+      'прокат 10.98: пишется только своя строка admins; личных данных клиентов не читаем');
+    // «Мои данные»: прячем перенесённые поля, ФИО — тремя полями (в full_name уходит одной строкой)
+    const md = fn(sh, 'myData');
+    assert.ok(md.includes('new String[]{"adCompany", "adOrgAddr", "adAddr", "adHours"}') && md.includes('{"Фамилия", "Имя", "Отчество"}')
+      && md.includes('fio.setText(joinFio(sn, nn, on));') && md.includes('fio.setVisibility(View.GONE);') && md.includes('"Номер телефона"')
+      && fn(sh, 'syncNative').includes('"adCompany"'),
+      'прокат 10.98: «Мои данные» — только Фамилия, Имя, Отчество, телефон, мессенджеры (данные проката — в скрытых штатных полях)');
+    // аватарка: выбор области кругом, просмотр, круг без краёв, крупнее
+    assert.ok(av.includes('public static final class Picker extends android.app.Fragment') && av.includes('f.startActivityForResult(Intent.createChooser(i, "Выберите фото"), REQ);')
+      && av.includes('hole.setFillType(Path.FillType.EVEN_ODD);') && av.includes('static final int OUT_PX = 512')
+      && av.includes('if (hasPhoto(photo.get())) return;') && av.includes('HEAD_DP = 72, PAGE_DP = 120')
+      && fn(av, 'onProfile').includes('frame.setBackground(hole(a, iv));') && fn(av, 'dataPage').includes('av.setBackground(hole(a, av));')
+      && cl.includes('circleBox.setBackground(IvaAvatarPatch.hole(a, avatarImage));') && cl.includes('static final int AVATAR_DP = 120;')
+      && fn(av, 'saveAdminPhoto').includes('body.put("avatar", url);'),
+      'аватар 10.98: круг без краёв (фон только без фото), 72/120dp, просмотр, выбор области и размера круга');
+    assert.ok(cl.includes('if (!ok) pickAvatarPlain();') && fn(cl, 'saveAvatarPath').includes('if (p.optString("given_name", "").trim().isEmpty()) return NEED_NAME;'),
+      'аватар 10.98: прежний выбор фото — запасной; фото клиента без имени в записи не сохраняется');
+    assert.ok(sq.includes('alter table public.admins add column if not exists org_ip text;') && sq.includes('work_days between 0 and 127')
+      && !/drop table|truncate|delete from|drop policy|create policy/i.test(sq.replace(/^--.*$/gm, '')) && sq.includes("notify pgrst, 'reload schema';"),
+      'SQL 10.98: только новые колонки admins с проверками; политики и данные не трогаются');
+    assert.ok((tp.match(/eq\("прокат 10\.98: /g) || []).length >= 15 && (tp.match(/eq\("аватар 10\.98: /g) || []).length >= 6, 'IvaPatchTest: проверки 10.98');
   }
   // 10.75 (просьба владельца 14.10.2026): в «Настройках» — кнопка «Уведомления» (с 10.97 — открывает отдельную страницу);
   // внутри сверху «Открыть настройки уведомлений Android», потом какие присылать, потом расписание, потом всё остальное
@@ -1623,7 +1692,8 @@ try {
       && at('schedSw[0] = switchRow(') < at('body.addView(status, sl);') && at('body.addView(status, sl);') < at('body.addView(note, nl);'),
       'настройки 10.75: порядок — Android, какие присылать, расписание, остальное');
     const os75 = os.replace('IvaRentPatch.settingsSection(a, page, cText, cGray, cOrange)', '')   // 10.77: «Аренда» — отдельная кнопка ниже
-      .replace('IvaPickupPatch.settingsRow(a, page, cText, cGray, cOrange)', '');   // 10.95: «Пункт выдачи» — тоже отдельная кнопка
+      .replace('IvaPickupPatch.settingsRow(a, page, cText, cGray, cOrange)', '')   // 10.95: «Пункт выдачи» — тоже отдельная кнопка
+      .replace('IvaShopPatch.settingsRow(a, page, cText, cGray, cOrange)', '');    // 10.98: «Настройка проката» вместо двух строк выше
     assert.ok(!/(?:page|root)\.addView\((?:status|test|note|push|card|sc|sys|body)\b/.test(os75) && (os75.match(/page\.addView\(/g) || []).length === 1
       && (os75.match(/\bpage\b/g) || []).length === 5 && !/\(a, page\b/.test(os75),
       'настройки 10.75: всё про уведомления — внутри списка, снаружи только кнопка');
