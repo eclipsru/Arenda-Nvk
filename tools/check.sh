@@ -267,6 +267,35 @@ else
   bad "axml_outline.py"; tail -4 /tmp/iva-test-outline.log | sed 's/^/      /'
 fi
 
+head_ "4.5.9. Свой звук уведомлений: провайдер в манифесте 10.14 (axml_sound.py после остальных) и файл звука"
+rm -rf /tmp/iva-sound && mkdir -p /tmp/iva-sound
+if unzip -q -o ProkatInstrumenta-10.14.apk AndroidManifest.xml -d /tmp/iva-sound \
+   && python3 android/patches/axml_service.py /tmp/iva-sound/AndroidManifest.xml >/tmp/iva-test-sound.log 2>&1 \
+   && python3 android/patches/axml_push.py /tmp/iva-sound/AndroidManifest.xml >>/tmp/iva-test-sound.log 2>&1 \
+   && python3 android/patches/axml_install.py /tmp/iva-sound/AndroidManifest.xml >>/tmp/iva-test-sound.log 2>&1 \
+   && python3 android/patches/axml_sound.py /tmp/iva-sound/AndroidManifest.xml >>/tmp/iva-test-sound.log 2>&1 \
+   && python3 android/patches/axml_sound.py /tmp/iva-sound/AndroidManifest.xml 2>&1 | grep -q 'уже есть' \
+   && python3 - /tmp/iva-sound/AndroidManifest.xml android/sounds/iva_notify.mp3 <<'PY' >>/tmp/iva-test-sound.log 2>&1
+import struct, sys
+sys.path.insert(0, 'android/patches')
+from axml_permissions import read_pool
+raw = open(sys.argv[1], 'rb').read()
+ps = struct.unpack_from('<I', raw, 12)[0]
+st = read_pool(raw[8:8 + ps])[0]
+rs = struct.unpack_from('<I', raw, 8 + ps + 4)[0]
+ids = struct.unpack_from('<%dI' % ((rs - 8) // 4), raw, 8 + ps + 8)
+assert st[ids.index(0x01010018)] == 'authorities' and st[ids.index(0x01010003)] == 'name' and st[ids.index(0x01010010)] == 'exported'
+assert 'ru.prokatnvsk.app.IvaSoundPatch$Files' in st and 'ru.prokatnvsk.app.ivasound' in st and st.count('provider') == 1
+f = open(sys.argv[2], 'rb').read()
+assert f[:3] != b'ID3' and f[0] == 0xFF and (f[1] & 0xE0) == 0xE0 and 1000 < len(f) <= 1024 * 1024
+print('ok')
+PY
+then
+  ok "звук: провайдер IvaSoundPatch\$Files (ru.prokatnvsk.app.ivasound) в манифесте, атрибуты на своих id; повторный запуск ничего не меняет; MP3 без тегов"
+else
+  bad "axml_sound.py / android/sounds/iva_notify.mp3"; tail -4 /tmp/iva-test-sound.log | sed 's/^/      /'
+fi
+
 head_ "4.6. Скачивание приложения у всех: файл выпущенной версии на месте"
 # Выпущенная версия живёт строкой в базе (app_releases) и ссылается на файл в корне сайта.
 # Если файл убрать, у всех пользователей ломается «Скачать APK». Код 2 = проверить не удалось (нет сети).

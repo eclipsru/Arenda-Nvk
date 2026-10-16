@@ -2322,6 +2322,29 @@ public class IvaPatchTest {
                 "true|true|false|Телефон пункта заработает после обновления базы (SQL 10.99)|Проверьте телефон: 10–15 цифр");
             eq("пункт 10.99: название поля", IvaPickupPatch.L_TEL, "Телефон пункта выдачи");
         }
+        {   // 10.100: свой звук у всех уведомлений
+            eq("звук 10.100: адрес звука для системы", IvaSoundPatch.uriText(), "content://ru.prokatnvsk.app.ivasound/notify.mp3");
+            String[] chs = {IvaNotifyPatch.CH_MSG, IvaNotifyPatch.CH_ORD, IvaNotifyPatch.CH_UPD, IvaNotifyPatch.CH_RENT, IvaTestPatch.CH_TEST};
+            StringBuilder on = new StringBuilder(), off = new StringBuilder();
+            for (String c : chs) { on.append(IvaSoundPatch.channelId(c, true)).append('|'); off.append(IvaSoundPatch.channelId(c, false)).append('|'); }
+            eq("звук 10.100: новые категории — у всех пяти", on.toString(), "iva_msg_s1|iva_orders_s1|iva_update_s1|iva_rent_s1|iva_test_build_s1|");
+            eq("звук 10.100: без звука в APK — прежние категории", off.toString(), "iva_msg|iva_orders|iva_update|iva_rent|iva_test_build|");
+            eq("звук 10.100: провайдер отдаёт только звук и только на чтение", IvaSoundPatch.servable("/notify.mp3", "r") + "|" + IvaSoundPatch.servable("/notify.mp3", null) + "|"
+                + IvaSoundPatch.servable("/notify.mp3", "w") + "|" + IvaSoundPatch.servable("/notify.mp3", "rw") + "|" + IvaSoundPatch.servable("/../shared_prefs/x.xml", "r") + "|"
+                + IvaSoundPatch.servable("/notify.mp3/../x", "r") + "|" + IvaSoundPatch.servable(null, "r") + "|" + IvaSoundPatch.servable("", "r"),
+                "true|true|false|false|false|false|false|false");
+            eq("звук 10.100: ответы провайдера на запрос", IvaSoundPatch.column("_display_name", 5) + "|" + IvaSoundPatch.column("title", 5) + "|" + IvaSoundPatch.column("_size", 36570L) + "|"
+                + IvaSoundPatch.column("mime_type", 5) + "|" + IvaSoundPatch.column("_id", 5) + "|" + IvaSoundPatch.column("_data", 5), "notify.mp3|Ива|36570|audio/mpeg|1|null");
+            String snd = "";
+            try {
+                byte[] f = java.nio.file.Files.readAllBytes(java.nio.file.Paths.get("android/sounds/iva_notify.mp3"));
+                boolean frame = f.length > 4 && (f[0] & 0xff) == 0xff && (f[1] & 0xe0) == 0xe0;
+                boolean id3 = f.length > 3 && f[0] == 'I' && f[1] == 'D' && f[2] == '3';
+                boolean v1 = f.length > 128 && f[f.length - 128] == 'T' && f[f.length - 127] == 'A' && f[f.length - 126] == 'G';
+                snd = frame + "|" + id3 + "|" + v1 + "|" + (f.length > 1000 && f.length <= 1024 * 1024);
+            } catch (Exception e) { snd = "нет файла: " + e; }
+            eq("звук 10.100: файл звука — MP3 без тегов, до 1 МБ", snd, "true|false|false|true");
+        }
         if (fail > 0) { System.out.println("ошибок: " + fail); System.exit(1); }
         System.out.println("все проверки IvaPatch пройдены");
     }

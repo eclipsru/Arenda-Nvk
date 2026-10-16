@@ -1196,7 +1196,7 @@ try {
       && mf.includes("if (e.target.closest('[data-msug]')) e.preventDefault();") && !/<link[^>]*theme\.css/.test(cab),
       'модели 10.82: сайт — общие модули; кабинет без theme.css');
     // 5. приложение: без новых вставок в smali — только из IvaKindPatch; файл в сборке; личных данных не читаем
-    assert.ok(!/IvaModelPatch|model/i.test(ap) && /IvaKindPatch\.java android\/patches\/IvaModelPatch\.java (android\/patches\/IvaFormPatch\.java )?(android\/patches\/IvaPhotoPatch\.java )?(android\/patches\/IvaCensorPatch\.java )?(android\/patches\/IvaChiefPatch\.java )?(android\/patches\/IvaTestPatch\.java )?(android\/patches\/IvaPickupPatch\.java )?(android\/patches\/IvaAvatarPatch\.java )?(android\/patches\/IvaShopPatch\.java )?2>&1/.test(wf)
+    assert.ok(!/IvaModelPatch|model/i.test(ap) && /IvaKindPatch\.java android\/patches\/IvaModelPatch\.java (android\/patches\/IvaFormPatch\.java )?(android\/patches\/IvaPhotoPatch\.java )?(android\/patches\/IvaCensorPatch\.java )?(android\/patches\/IvaChiefPatch\.java )?(android\/patches\/IvaTestPatch\.java )?(android\/patches\/IvaPickupPatch\.java )?(android\/patches\/IvaAvatarPatch\.java )?(android\/patches\/IvaShopPatch\.java )?(android\/patches\/IvaSoundPatch\.java )?2>&1/.test(wf)
       && kp.includes('if (k == 0) IvaModelPatch.refresh(a);') && kp.includes('try { IvaModelPatch.onTab(a, tab); } catch (Throwable ignore) {}')
       && !/customer_profiles|passport|phone|surname/.test(mp),
       'модели 10.82: новых вставок в smali нет; личных данных не читаем');
@@ -1251,7 +1251,7 @@ try {
     assert.ok(kp.includes('static final String SUB_HINT = "Подкатегория (необязательно)";') && has(dex14, 'Подкатегория (необязательно)')
       && has(dex14, 'atCatSug') && has(dex14, 'atSubSug') && has(dex14, 'atName'),
       'автоподбор 10.81: штатные поля и текст пустой подкатегории есть в 10.14');
-    assert.ok(!/IvaKindPatch|kind/i.test(ap) && /IvaRentPatch\.java android\/patches\/IvaKindPatch\.java (android\/patches\/IvaModelPatch\.java )?(android\/patches\/IvaFormPatch\.java )?(android\/patches\/IvaPhotoPatch\.java )?(android\/patches\/IvaCensorPatch\.java )?(android\/patches\/IvaChiefPatch\.java )?(android\/patches\/IvaTestPatch\.java )?(android\/patches\/IvaPickupPatch\.java )?(android\/patches\/IvaAvatarPatch\.java )?(android\/patches\/IvaShopPatch\.java )?2>&1/.test(wf),
+    assert.ok(!/IvaKindPatch|kind/i.test(ap) && /IvaRentPatch\.java android\/patches\/IvaKindPatch\.java (android\/patches\/IvaModelPatch\.java )?(android\/patches\/IvaFormPatch\.java )?(android\/patches\/IvaPhotoPatch\.java )?(android\/patches\/IvaCensorPatch\.java )?(android\/patches\/IvaChiefPatch\.java )?(android\/patches\/IvaTestPatch\.java )?(android\/patches\/IvaPickupPatch\.java )?(android\/patches\/IvaAvatarPatch\.java )?(android\/patches\/IvaShopPatch\.java )?(android\/patches\/IvaSoundPatch\.java )?2>&1/.test(wf),
       'автоподбор 10.81: новых вставок в smali и новых файлов нет');
     // 5. сайт: один модуль, вид пишется только когда справочник видов есть в базе
     assert.ok(nw.includes('<script src="assets/kind-guess.js?v=20261016-kind"></script>') && cab.includes('<script src="assets/kind-guess.js?v=20261016-kind"></script>')
@@ -1328,7 +1328,7 @@ try {
     const sql = R('supabase/migrations/20261015_category_tree.sql'), mv = R('supabase/migrations/20261015_category_tree_move.sql');
     const fnx = (src, name) => { const mm = new RegExp(`static (?:final )?[\\w.<>, \\[\\]]+ ${name}\\(`).exec(src); assert.ok(mm, `нет ${name}`); return src.slice(mm.index, src.indexOf('\n    }\n', mm.index)); };
     // 1. сборка и проверка компилируют IvaKindPatch; вставок в smali нет
-    assert.ok(/IvaRentPatch\.java android\/patches\/IvaKindPatch\.java (android\/patches\/IvaModelPatch\.java )?(android\/patches\/IvaFormPatch\.java )?(android\/patches\/IvaPhotoPatch\.java )?(android\/patches\/IvaCensorPatch\.java )?(android\/patches\/IvaChiefPatch\.java )?(android\/patches\/IvaTestPatch\.java )?(android\/patches\/IvaPickupPatch\.java )?(android\/patches\/IvaAvatarPatch\.java )?(android\/patches\/IvaShopPatch\.java )?2>&1/.test(wf) && ck.includes('android/patches/IvaKindPatch.java'),
+    assert.ok(/IvaRentPatch\.java android\/patches\/IvaKindPatch\.java (android\/patches\/IvaModelPatch\.java )?(android\/patches\/IvaFormPatch\.java )?(android\/patches\/IvaPhotoPatch\.java )?(android\/patches\/IvaCensorPatch\.java )?(android\/patches\/IvaChiefPatch\.java )?(android\/patches\/IvaTestPatch\.java )?(android\/patches\/IvaPickupPatch\.java )?(android\/patches\/IvaAvatarPatch\.java )?(android\/patches\/IvaShopPatch\.java )?(android\/patches\/IvaSoundPatch\.java )?2>&1/.test(wf) && ck.includes('android/patches/IvaKindPatch.java'),
       'вид 10.79: IvaKindPatch компилируется в сборку и в проверку');
     assert.ok(!/IvaKindPatch|kind/i.test(ap), 'вид 10.79: новых вставок в smali нет');
     // 2. точки входа: onTab (справочник, форма, запись), onHub (только форма — запомненный выбор не трогает), касание сохранения
@@ -1698,6 +1698,51 @@ try {
       && st.includes("TEL = rd('supabase/migrations/20261025_pickup_tel.sql')"),
       'SQL 10.99: только колонка tel с проверкой и право писать её; политики не трогаются; стенд PostgreSQL');
     assert.ok((tp.match(/eq\("пункт 10\.99: /g) || []).length >= 6, 'IvaPatchTest: проверки 10.99');
+  }
+  // 10.100 (решение владельца 16.10.2026): свой звук у всех уведомлений приложения — файл владельца из android/sounds
+  {
+    const sp = R('android/patches/IvaSoundPatch.java'), np = R('android/patches/IvaNotifyPatch.java'), tp = R('android/patches/test/IvaPatchTest.java'),
+      ax = R('android/patches/axml_sound.py'), wf = R('.github/workflows/build-apk.yml'), ck = R('.github/workflows/check.yml'),
+      chk = R('tools/check.sh'), ap = R('android/patches/apply.py');
+    const fn = (src, name) => { const m = new RegExp('static [\\w.<>\\[\\]]+ ' + name + '\\(').exec(src); assert.ok(m, 'нет ' + name);
+      return src.slice(m.index, src.indexOf('\n    }\n', m.index)); };
+    assert.ok(fs.existsSync(path.join(ROOT, 'android/sounds/iva_notify.mp3')) && fs.existsSync(path.join(ROOT, 'android/sounds/ringtone-sms-notification.mp3')),
+      'звук 10.100: файл владельца на месте, в APK — его копия без тегов android/sounds/iva_notify.mp3');
+    // провайдер: только чтение одного файла; без MediaStore, внешней памяти и file://
+    assert.ok(sp.includes('static final String AUTH = "ru.prokatnvsk.app.ivasound";') && sp.includes('static final String ASSET = "iva_notify.mp3";')
+      && fn(sp, 'servable').includes('return ("/" + FILE).equals(path) && (mode == null || "r".equals(mode));')
+      && sp.includes('ParcelFileDescriptor.open(cached(getContext()), ParcelFileDescriptor.MODE_READ_ONLY)')
+      && (sp.match(/throw new UnsupportedOperationException\("только чтение"\);/g) || []).length === 3
+      && !/MediaStore|getExternal|WRITE_EXTERNAL|file:\/\/|Uri\.fromFile|MODE_READ_WRITE|MODE_WRITE/.test(sp.replace(/\/\*[\s\S]*?\*\//g, '')),
+      'звук 10.100: провайдер отдаёт только звук и только на чтение; внешней памяти и file:// нет');
+    assert.ok(fn(sp, 'ready').includes('getAssets().open(ASSET)') && fn(sp, 'ready').includes('resolveContentProvider(AUTH, 0) != null')
+      && fn(sp, 'attrs').includes('AudioAttributes.USAGE_NOTIFICATION') && fn(sp, 'legacy').includes('b.setDefaults(Notification.DEFAULT_ALL);'),
+      'звук 10.100: свой звук — только если и файл, и провайдер есть в APK; иначе всё как в 10.99');
+    // категории: новые id со звуком, старые удаляются, выключенная остаётся выключенной; оба Builder — с новой категорией
+    const ec = fn(np, 'ensureChannels'), sn = np.slice(np.indexOf('static void showNote(Context a, String ch, int id, String title, String text, String open, String target) {'));
+    assert.ok(ec.includes('boolean snd = IvaSoundPatch.ready(c);') && ec.includes('String sid = IvaSoundPatch.channelId(id, snd);')
+      && ec.includes('if (nm.getNotificationChannel(sid) != null) continue;') && ec.includes('if (old != null && old.getImportance() == NotificationManager.IMPORTANCE_NONE) imp = NotificationManager.IMPORTANCE_NONE;')
+      && ec.includes('if (snd) IvaSoundPatch.apply(ch);') && ec.includes('if (old != null) try { nm.deleteNotificationChannel(id); } catch (Throwable ignore) {}')
+      && ec.indexOf('nm.createNotificationChannel(ch);') < ec.indexOf('nm.deleteNotificationChannel(id)'),
+      'звук 10.100: категории пересоздаются со звуком (+_s1), старые удаляются после создания новых, выключенные остаются выключенными');
+    assert.ok(sn.includes('String sysCh = IvaSoundPatch.channelId(ch, IvaSoundPatch.ready(c));') && (sn.slice(0, sn.indexOf('\n    }\n')).match(/new Notification\.Builder\(c, sysCh\)/g) || []).length === 2
+      && !sn.slice(0, sn.indexOf('\n    }\n')).includes('new Notification.Builder(c, ch)') && sn.includes('IvaSoundPatch.legacy(c, b);')
+      && !/DEFAULT_ALL/.test(np),
+      'звук 10.100: каждое уведомление — в категорию со своим звуком; Android 7 и раньше — звук на уведомлении');
+    // манифест и сборка
+    assert.ok(ax.includes('PROVIDER = "ru.prokatnvsk.app.IvaSoundPatch$Files"') && ax.includes('AUTHORITY = "ru.prokatnvsk.app.ivasound"') && ax.includes('"authorities": 0x01010018'),
+      'звук 10.100: axml_sound.py — провайдер с authorities ru.prokatnvsk.app.ivasound');
+    assert.ok(wf.indexOf('python3 android/patches/axml_outline.py "$W"') < wf.indexOf('python3 android/patches/axml_sound.py "$W/AndroidManifest.xml"')
+      && wf.indexOf('python3 android/patches/axml_sound.py "$W/AndroidManifest.xml"') < wf.indexOf('java -jar "$RUNNER_TEMP/apktool.jar" b ')
+      && wf.indexOf('java -jar "$RUNNER_TEMP/apktool.jar" b ') < wf.indexOf('zip -q -X -0 "$RUNNER_TEMP/unsigned.apk" assets/iva_notify.mp3')
+      && wf.indexOf('zip -q -X -0 "$RUNNER_TEMP/unsigned.apk" assets/iva_notify.mp3') < wf.indexOf('"$BT/zipalign" -f -p 4')
+      && /sparse-checkout: \|[\s\S]*\n {12}android\/sounds\/iva_notify\.mp3\n {10}sparse-checkout-cone-mode: false/.test(wf)
+      && wf.includes("grep -cx 'assets/iva_notify.mp3')\" = 1 ] || bad") && wf.includes("grep -c 'ru.prokatnvsk.app.ivasound')\" -ge 1 ] || bad"),
+      'звук 10.100: сборка — провайдер в манифест до пересборки, звук в APK после неё (до выравнивания), готовый APK проверяется');
+    assert.ok(wf.includes('android/patches/IvaSoundPatch.java') && ck.includes('android/patches/IvaSoundPatch.java') && !/IvaSoundPatch/.test(ap)
+      && chk.includes('python3 android/patches/axml_sound.py /tmp/iva-sound/AndroidManifest.xml'),
+      'звук 10.100: IvaSoundPatch.java — в списках javac, без новых вставок в smali; check.sh проверяет провайдер на манифесте 10.14');
+    assert.ok((tp.match(/eq\("звук 10\.100: /g) || []).length >= 6, 'IvaPatchTest: проверки 10.100');
   }
   // 10.75 (просьба владельца 14.10.2026): в «Настройках» — кнопка «Уведомления» (с 10.97 — открывает отдельную страницу);
   // внутри сверху «Открыть настройки уведомлений Android», потом какие присылать, потом расписание, потом всё остальное

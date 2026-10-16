@@ -704,14 +704,22 @@ public final class IvaNotifyPatch {
         NotificationManager nm = (NotificationManager) c.getSystemService(Context.NOTIFICATION_SERVICE);
         if (nm == null) return;
         String[] ids = {CH_MSG, CH_ORD, CH_UPD, CH_RENT, IvaTestPatch.CH_TEST};
+        // 10.100: свой звук — категории с новыми id (+"_s1") и звуком владельца; старые удаляются (звук у созданной
+        // категории Android менять не даёт). Выключенная человеком категория остаётся выключенной.
+        boolean snd = IvaSoundPatch.ready(c);
         for (String id : ids) {
-            if (nm.getNotificationChannel(id) != null) continue;
+            String sid = IvaSoundPatch.channelId(id, snd);
+            if (nm.getNotificationChannel(sid) != null) continue;
             int imp = CH_UPD.equals(id) ? NotificationManager.IMPORTANCE_DEFAULT : NotificationManager.IMPORTANCE_HIGH;
-            NotificationChannel ch = new NotificationChannel(id, channelName(id), imp);
+            NotificationChannel old = snd ? nm.getNotificationChannel(id) : null;
+            if (old != null && old.getImportance() == NotificationManager.IMPORTANCE_NONE) imp = NotificationManager.IMPORTANCE_NONE;
+            NotificationChannel ch = new NotificationChannel(sid, channelName(id), imp);
             ch.setDescription(CH_MSG.equals(id) ? "Когда вам пишут в чат" : CH_ORD.equals(id) ? "Заявки на ваши инструменты"
                 : CH_RENT.equals(id) ? "Скоро закончится срок аренды" : IvaTestPatch.CH_TEST.equals(id) ? IvaTestPatch.NOTE_SUB
                 : "Когда вышла новая версия приложения");
+            if (snd) IvaSoundPatch.apply(ch);
             nm.createNotificationChannel(ch);
+            if (old != null) try { nm.deleteNotificationChannel(id); } catch (Throwable ignore) {}
         }
     }
 
@@ -735,7 +743,8 @@ public final class IvaNotifyPatch {
             NotificationManager nm = (NotificationManager) c.getSystemService(Context.NOTIFICATION_SERVICE);
             if (nm == null) return;
             ensureChannels(c);
-            Notification.Builder b = Build.VERSION.SDK_INT >= 26 ? new Notification.Builder(c, ch) : new Notification.Builder(c);
+            String sysCh = IvaSoundPatch.channelId(ch, IvaSoundPatch.ready(c));
+            Notification.Builder b = Build.VERSION.SDK_INT >= 26 ? new Notification.Builder(c, sysCh) : new Notification.Builder(c);
             Intent it = new Intent(c, mainClass(a));
             it.putExtra(EXTRA_OPEN, open);
             it.putExtra(EXTRA_TARGET, target == null ? "" : target);
@@ -757,11 +766,11 @@ public final class IvaNotifyPatch {
             if (!conversation(a, b, ch, title, text, open, target)) b.setStyle(new Notification.BigTextStyle().bigText(text));
             if (Build.VERSION.SDK_INT < 26) {
                 b.setPriority(CH_UPD.equals(ch) ? Notification.PRIORITY_DEFAULT : Notification.PRIORITY_HIGH);
-                b.setDefaults(Notification.DEFAULT_ALL);
+                IvaSoundPatch.legacy(c, b);
             }
             if (CH_MSG.equals(ch)) {
                 b.setVisibility(Notification.VISIBILITY_PRIVATE);
-                Notification.Builder pub = Build.VERSION.SDK_INT >= 26 ? new Notification.Builder(c, ch) : new Notification.Builder(c);
+                Notification.Builder pub = Build.VERSION.SDK_INT >= 26 ? new Notification.Builder(c, sysCh) : new Notification.Builder(c);
                 setIcons(c, pub, icon);
                 pub.setContentTitle(title).setContentText("Откройте приложение, чтобы прочитать");
                 b.setPublicVersion(pub.build());
