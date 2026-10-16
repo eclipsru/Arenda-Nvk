@@ -583,14 +583,14 @@ select.inp{cursor:pointer;appearance:none;
 /* Вариант 2 (проба, 16.10.2026): обычная плитка, предмет без фона слева и чуть «вылезает» вверх за плитку,
    название — белое, как на стандартной плитке, в правом нижнем углу.
    Ряду с такими плитками нужен запас сверху — класс .cats.pop (отступ сверху и между рядами). */
-.cats.pop{padding-top:34px;row-gap:42px}
-.cat.pop{position:relative;overflow:visible;min-height:118px;padding:0}
+.cats.pop{padding-top:34px;row-gap:42px;grid-template-columns:repeat(auto-fill,minmax(150px,1fr))}
+.cat.pop{position:relative;overflow:visible;min-height:118px;padding:0;min-width:0}
 .cat.pop img{position:absolute;left:6px;bottom:6px;height:132%;width:auto;pointer-events:none;
   filter:drop-shadow(0 8px 10px rgba(0,0,0,.55));transform-origin:50% 100%;transition:transform .2s}
 .cat.pop:hover img{transform:translateY(-3px) scale(1.03)}
 .cat.pop b{position:absolute;right:14px;bottom:12px;max-width:52%;text-align:right;color:var(--tx)}
 @media (max-width:600px){
-  .cats.pop{padding-top:30px;row-gap:36px}
+  .cats.pop{padding-top:30px;row-gap:36px;grid-template-columns:repeat(2,minmax(0,1fr))}
   .cat.pop{min-height:108px;padding:0}
   .cat.pop img{left:4px;height:128%}
   .cat.pop b{right:12px;bottom:11px;max-width:50%}
