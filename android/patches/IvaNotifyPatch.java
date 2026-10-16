@@ -1655,22 +1655,19 @@ public final class IvaNotifyPatch {
             LinearLayout.LayoutParams hl = new LinearLayout.LayoutParams(-1, -2);
             hl.topMargin = dp(a, 10);
             page.addView(head, hl);
+            // 10.97 (правило владельца 16.10.2026): каждый пункт «Настроек» — отдельной страницей. Содержимое «Уведомлений»
+            // собирается здесь же, но в «Настройки» не вставляется: по нажатию переносится на свою страницу (subPage).
             final LinearLayout body = new LinearLayout(a);
             body.setOrientation(LinearLayout.VERTICAL);
-            body.setVisibility(View.GONE);
-            page.addView(body, new LinearLayout.LayoutParams(-1, -2));
-            try { page.setLayoutTransition(new android.animation.LayoutTransition()); } catch (Throwable ignore) {}
+            final Runnable[] onPage = new Runnable[1];
             // 10.77: «Аренда» — только админам: как считать окончание аренды (сутки / до закрытия пункта)
             // 10.95: «Пункт выдачи» — только админам, отдельная страница (по первому пункту считается «Срок аренды»)
             if (admin) try { IvaPickupPatch.settingsRow(a, page, cText, cGray, cOrange); } catch (Throwable ignore) {}
             if (admin) try { IvaRentPatch.settingsSection(a, page, cText, cGray, cOrange); } catch (Throwable ignore) {}
-            head.setContentDescription(NOTIF_TITLE + ", развернуть");
+            head.setContentDescription(NOTIF_TITLE + ", открыть");
             head.setOnClickListener(new View.OnClickListener() {
                 @Override public void onClick(View v) {
-                    boolean open = body.getVisibility() != View.VISIBLE;
-                    body.setVisibility(open ? View.VISIBLE : View.GONE);
-                    try { chev.animate().rotation(open ? 90f : 0f).setDuration(180).start(); } catch (Throwable e) { chev.setRotation(open ? 90f : 0f); }
-                    v.setContentDescription(NOTIF_TITLE + (open ? ", свернуть" : ", развернуть"));
+                    try { IvaChiefPatch.subPage(a, NOTIF_TITLE, body, onPage[0]); } catch (Throwable ignore) {}
                 }
             });
 
@@ -1938,6 +1935,7 @@ public final class IvaNotifyPatch {
             });
             ref[0] = refresh;
             ref0[0] = refresh;
+            onPage[0] = refresh;                 // 10.97: вернулись на страницу «Уведомления» из настроек Android — обновить
             refresh.run();
 
             final Dialog d = new Dialog(a, android.R.style.Theme_Material_NoActionBar);

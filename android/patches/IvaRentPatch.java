@@ -415,7 +415,8 @@ public class IvaRentPatch {
         return g;
     }
 
-    /** Раскрывающаяся «Срок аренды» под «Уведомлениями» (только у админов). Сохраняется в базу сразу после изменения. */
+    /** «Срок аренды» под «Уведомлениями» (только у админов): строка в «Настройках», по нажатию — отдельная страница
+     *  (10.97, правило владельца: каждый пункт настроек — отдельной страницей). Сохраняется в базу сразу после изменения. */
     static void settingsSection(final Activity a, LinearLayout page, final int cText, final int cGray, final int cOrange) {
         final Rule st = cached(a);
         final boolean[] edited = new boolean[1];
@@ -452,17 +453,14 @@ public class IvaRentPatch {
         LinearLayout.LayoutParams hl = new LinearLayout.LayoutParams(-1, -2);
         hl.topMargin = IvaOrderPatch.dp(a, 10);
         page.addView(head, hl);
+        // 10.97: содержимое собирается здесь, но в «Настройки» не вставляется — по нажатию переносится на свою страницу
         final LinearLayout body = new LinearLayout(a);
         body.setOrientation(LinearLayout.VERTICAL);
-        body.setVisibility(View.GONE);
-        page.addView(body, new LinearLayout.LayoutParams(-1, -2));
-        head.setContentDescription(HEAD_TITLE + ", развернуть");
+        final Runnable[] ref = new Runnable[1];
+        head.setContentDescription(HEAD_TITLE + ", открыть");
         head.setOnClickListener(new View.OnClickListener() {
             @Override public void onClick(View v) {
-                boolean open = body.getVisibility() != View.VISIBLE;
-                body.setVisibility(open ? View.VISIBLE : View.GONE);
-                try { chev.animate().rotation(open ? 90f : 0f).setDuration(180).start(); } catch (Throwable e) { chev.setRotation(open ? 90f : 0f); }
-                v.setContentDescription(HEAD_TITLE + (open ? ", свернуть" : ", развернуть"));
+                try { IvaChiefPatch.subPage(a, HEAD_TITLE, body, ref[0]); } catch (Throwable ignore) {}
             }
         });
 
@@ -487,7 +485,6 @@ public class IvaRentPatch {
         final Switch[] open = new Switch[7];
         final boolean[] drawing = new boolean[1];
         final TextView status = new TextView(a);
-        final Runnable[] ref = new Runnable[1];
         final Runnable[] save = new Runnable[1];
         for (int i = 0; i < 7; i++) {
             final int day = i;

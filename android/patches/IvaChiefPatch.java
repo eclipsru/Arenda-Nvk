@@ -247,6 +247,24 @@ public final class IvaChiefPatch {
         return p;
     }
 
+    /**
+     * 10.97 (правило владельца 16.10.2026): каждый пункт «Настроек» открывается ОТДЕЛЬНОЙ страницей — ничего не раскрывается
+     * на месте. Готовое содержимое пункта переносится на новую страницу (как «Пункт выдачи»): переключатели, загрузка
+     * и сохранение — те же объекты, состояние не теряется. Страница закрывается «‹ Назад» или кнопкой «Назад» телефона —
+     * возвращаемся в «Настройки». onFocus — когда страница снова на экране (вернулись из настроек Android и т. п.).
+     */
+    static Page subPage(final Activity a, String title, View content, final Runnable onFocus) {
+        Page p = page(a, title, null, false);
+        android.view.ViewParent vp = content.getParent();
+        if (vp instanceof ViewGroup) ((ViewGroup) vp).removeView(content);
+        content.setVisibility(View.VISIBLE);
+        p.list.addView(content, new LinearLayout.LayoutParams(-1, -2));
+        if (onFocus != null) p.list.getViewTreeObserver().addOnWindowFocusChangeListener(new android.view.ViewTreeObserver.OnWindowFocusChangeListener() {
+            @Override public void onWindowFocusChanged(boolean has) { if (has) try { onFocus.run(); } catch (Throwable ignore) {} }
+        });
+        return p;
+    }
+
     static TextView hint(Activity a, String s) {
         TextView t = text(a, s, 14f, color(a, "gray", 0xff9aa1b0), false);
         t.setGravity(Gravity.CENTER);

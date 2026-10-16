@@ -1482,16 +1482,16 @@ try {
       'аренда 10.77: напоминание клиенту — по режиму проката (та же формула, что у таймера)');
     assert.ok(fnx(rp, 'group').includes('IvaNotifyPatch.rentEnds(pid, oid, o.optString("tools_text", ""), o.optInt("days", 0),') && fnx(rp, 'group').includes('ruleOf(o)'),
       'аренда 10.77: таймер — те же сроки инструментов, что напоминание');
-    // настройки: только админам, раскрывающаяся «Аренда» под «Уведомлениями», сбой не ломает настройки
+    // настройки: только админам, «Срок аренды» под «Уведомлениями» (с 10.97 — отдельной страницей), сбой не ломает настройки
     const os = fnx(np, 'openSettings');
     assert.ok(os.includes('if (admin) try { IvaRentPatch.settingsSection(a, page, cText, cGray, cOrange); } catch (Throwable ignore) {}')
-      && os.indexOf('IvaRentPatch.settingsSection') > os.indexOf('page.addView(body, new LinearLayout.LayoutParams(-1, -2));'),
+      && os.indexOf('IvaRentPatch.settingsSection') > os.indexOf('page.addView(head, hl);'),
       'аренда 10.77: «Аренда» — только у админов, под «Уведомлениями»');
     const ss = fnx(rp, 'settingsSection');
-    assert.ok(ss.includes('body.setVisibility(View.GONE);') && ss.includes('drawable(a, "bg_card")') && ss.includes('IvaNotifyPatch.tint(ds, cOrange);')
+    assert.ok(ss.includes('IvaChiefPatch.subPage(a, HEAD_TITLE, body, ref[0]);') && !ss.includes('body.setVisibility(') && ss.includes('drawable(a, "bg_card")') && ss.includes('IvaNotifyPatch.tint(ds, cOrange);')
       && ss.includes('closeBox.setVisibility(byClose ? View.VISIBLE : View.GONE);') && ss.includes('"Хотя бы один день должен быть рабочим"')
       && ss.includes('status.postDelayed(doSave, 700)') && ss.includes('st.tz = TimeZone.getDefault().getID();') && ss.includes('|| edited[0]) return;'),
-      'аренда 10.77: свёрнуто, в стиле приложения; время закрытия — только в режиме «до закрытия»; сохраняется в базу; загрузка не затирает правку');
+      'аренда 10.77/10.97: отдельной страницей, в стиле приложения; время закрытия — только в режиме «до закрытия»; сохраняется в базу; загрузка не затирает правку');
     assert.ok(rp.includes('DAY_TITLE = "Сутки"') && rp.includes('CLOSE_TITLE = "До закрытия пункта"') && rp.includes('static final String MODE_DAY = "day", MODE_CLOSE = "close";'),
       'аренда 10.77: два режима');
     // таймер: клиенту — карточка и подробности; админу — карточка заявки и подробности; только выданные активные
@@ -1581,17 +1581,41 @@ try {
     assert.ok(!ap.includes('openWith') && !ap.includes('checkRent') && !ap.includes('openById'), 'связь/аренда 10.76: новых вставок в smali нет');
     assert.ok((tp.match(/eq\("связь 10\.76: /g) || []).length >= 12 && (tp.match(/eq\("аренда 10\.76: /g) || []).length >= 16, 'IvaPatchTest: проверки 10.76');
   }
-  // 10.75 (просьба владельца 14.10.2026): в «Настройках» — раскрывающаяся кнопка «Уведомления», по умолчанию свёрнута;
+  // 10.97 (правило владельца 16.10.2026): каждый пункт «Настроек» открывается ОТДЕЛЬНОЙ страницей — ничего не раскрывается на месте
+  {
+    const cp = R('android/patches/IvaChiefPatch.java'), np97 = R('android/patches/IvaNotifyPatch.java'),
+      rp97 = R('android/patches/IvaRentPatch.java'), pk97 = R('android/patches/IvaPickupPatch.java'), dev = R('docs/README-DEV.md');
+    const fn97 = (src, name) => { const m = new RegExp('static [\\w.<>\\[\\]]+ ' + name + '\\(').exec(src); assert.ok(m, 'нет ' + name);
+      return src.slice(m.index, src.indexOf('\n    }\n', m.index)); };
+    const sp = fn97(cp, 'subPage');
+    assert.ok(sp.includes('Page p = page(a, title, null, false);') && sp.includes('((ViewGroup) vp).removeView(content);')
+      && sp.includes('p.list.addView(content, new LinearLayout.LayoutParams(-1, -2));') && sp.includes('if (has) try { onFocus.run(); } catch (Throwable ignore) {}'),
+      'настройки 10.97: IvaChiefPatch.subPage — отдельная страница как «Пункт выдачи», содержимое переносится целиком (повторное открытие работает)');
+    // все пункты «Настроек»: строка в openSettings + строки, которые вставляют IvaPickupPatch.settingsRow и IvaRentPatch.settingsSection
+    const os97 = fn97(np97, 'openSettings'), rows = [os97, fn97(rp97, 'settingsSection'), fn97(pk97, 'settingsRow')];
+    for (const r of rows) assert.ok(!/setVisibility\(\s*open\b|\.setRotation\(open|rotation\(open|развернуть|свернуть/.test(r),
+      'настройки 10.97: в «Настройках» ничего не раскрывается и не сворачивается на месте');
+    assert.ok(/IvaChiefPatch\.subPage\(a, NOTIF_TITLE, body,/.test(os97) && /IvaChiefPatch\.subPage\(a, HEAD_TITLE, body,/.test(rows[1])
+      && rows[2].includes('openPage(a)') && fn97(pk97, 'openPage').includes('IvaChiefPatch.page(a, ROW_TITLE, PAGE_SUB, false)'),
+      'настройки 10.97: «Уведомления», «Пункт выдачи», «Срок аренды» — каждый открывается своей страницей');
+    // новый пункт в «Настройках» — только строкой, открывающей страницу: всё, что вставляется в page, — это head/строки пунктов
+    const pageAdds = (os97.match(/page\.addView\((\w+)/g) || []).map(x => x.replace('page.addView(', ''));
+    assert.ok(pageAdds.length === 1 && pageAdds[0] === 'head' && (os97.match(/\(a, page, cText, cGray, cOrange\)/g) || []).length === 2,
+      'настройки 10.97: в «Настройки» вставляются только строки пунктов (новый пункт — строкой со своей страницей)');
+    assert.ok(dev.includes('Каждый пункт «Настроек» — отдельной страницей (правило владельца 16.10.2026, приложение с 10.97)'),
+      'настройки 10.97: правило записано в README-DEV');
+  }
+  // 10.75 (просьба владельца 14.10.2026): в «Настройках» — кнопка «Уведомления» (с 10.97 — открывает отдельную страницу);
   // внутри сверху «Открыть настройки уведомлений Android», потом какие присылать, потом расписание, потом всё остальное
   {
     const np = R('android/patches/IvaNotifyPatch.java'), tp = R('android/patches/test/IvaPatchTest.java');
     const mm = /static \w+ openSettings\(/.exec(np); assert.ok(mm, 'IvaNotifyPatch: нет openSettings');
     const os = np.slice(mm.index, np.indexOf('\n    }\n', mm.index));
     const at = (t) => { const i = os.indexOf(t); assert.ok(i > 0, `openSettings: нет ${t}`); return i; };
-    assert.ok(at('page.addView(head, hl);') < at('page.addView(body, new LinearLayout.LayoutParams(-1, -2));') && os.includes('body.setVisibility(View.GONE);'),
-      'настройки 10.75: список «Уведомления» под кнопкой и по умолчанию свёрнут');
-    assert.ok(os.includes('boolean open = body.getVisibility() != View.VISIBLE;') && os.includes('body.setVisibility(open ? View.VISIBLE : View.GONE);'),
-      'настройки 10.75: нажатие на кнопку раскрывает и сворачивает список');
+    assert.ok(at('page.addView(head, hl);') > 0 && !os.includes('page.addView(body') && !os.includes('body.setVisibility('),
+      'настройки 10.75/10.97: в «Настройках» — только кнопка «Уведомления», список на месте не раскрывается');
+    assert.ok(os.includes('try { IvaChiefPatch.subPage(a, NOTIF_TITLE, body, onPage[0]); } catch (Throwable ignore) {}') && os.includes('onPage[0] = refresh;'),
+      'настройки 10.75/10.97: нажатие на кнопку открывает отдельную страницу «Уведомления» (возврат из Android — обновляет её)');
     assert.ok((os.match(/Открыть настройки уведомлений Android/g) || []).length === 1 && (np.match(/Открыть настройки уведомлений Android/g) || []).length === 1,
       'настройки 10.75: кнопка Android — одна, в других местах её нет');
     const sys = at('linkButton(a, body, "Открыть настройки уведомлений Android"');
@@ -1600,8 +1624,8 @@ try {
       'настройки 10.75: порядок — Android, какие присылать, расписание, остальное');
     const os75 = os.replace('IvaRentPatch.settingsSection(a, page, cText, cGray, cOrange)', '')   // 10.77: «Аренда» — отдельная кнопка ниже
       .replace('IvaPickupPatch.settingsRow(a, page, cText, cGray, cOrange)', '');   // 10.95: «Пункт выдачи» — тоже отдельная кнопка
-    assert.ok(!/(?:page|root)\.addView\((?:status|test|note|push|card|sc|sys)\b/.test(os75) && (os75.match(/page\.addView\(/g) || []).length === 2
-      && (os75.match(/\bpage\b/g) || []).length === 7 && !/\(a, page\b/.test(os75),
+    assert.ok(!/(?:page|root)\.addView\((?:status|test|note|push|card|sc|sys|body)\b/.test(os75) && (os75.match(/page\.addView\(/g) || []).length === 1
+      && (os75.match(/\bpage\b/g) || []).length === 5 && !/\(a, page\b/.test(os75),
       'настройки 10.75: всё про уведомления — внутри списка, снаружи только кнопка');
     assert.ok(os.includes('hsub.setText(headSummary(master, ok, schedSw[0] != null && schedSw[0].isChecked()));'), 'настройки 10.75: под кнопкой — коротко о состоянии');
     assert.ok(os.includes('drawable(a, "bg_card")') && os.includes('bellIcon(cOrange)') && !/#[0-9A-Fa-f]{6}|0xff(?!101217|f2f4f8|9aa1b0|ff8f1f)[0-9a-f]{6}/i.test(os),
