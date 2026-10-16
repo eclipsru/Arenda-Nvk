@@ -8,7 +8,7 @@
 <meta name="description" content="Ива — площадка аренды инструмента: электроинструмент, стройоборудование, садовая техника. Цена за сутки, возвратный залог, доставка по городу.">
 <meta name="theme-color" content="#101217">
 <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
-<link rel="stylesheet" href="assets/theme.css?v=20261005-rel">
+<link rel="stylesheet" href="assets/theme.css?v=20261016-cattiles">
 <link rel="stylesheet" href="assets/partners.css?v=20260923-info-spacing">
 <link rel="stylesheet" href="assets/geo.css?v=20260923-photon">
 </head>
@@ -109,9 +109,26 @@
   var LEVEL = '';
 
   /* ---------- Плитки ---------- */
+  /* Картинки категорий (предмет без фона, 16.10.2026): ключ → [ширина, высота] файла assets/cat/<ключ>-cut.webp.
+     Категории без картинки показываются обычной плиткой с иконкой. */
+  var CAT_ART = {
+    power:[442,608], construction:[455,640], garden:[529,640], auto:[348,640], welding:[405,627],
+    measuring:[331,640], generators:[589,494], cleaning:[442,624], moving:[341,640]
+  };
+  /* Подпись на плитке: «Клининговое оборудование» по просьбе владельца — «Уборка и мойка»;
+     длинные слова получают мягкие переносы, чтобы влезать в узкую плитку. */
+  var TILE_TITLE = { cleaning:'Уборка и мойка' };
+  var SOFT = { 'Электроинструмент':'Электро&shy;инструмент', 'Стройоборудование':'Строй&shy;обору&shy;дование',
+    'оборудование':'обору&shy;дование', 'Измерительные':'Измери&shy;тельные', 'электропитание':'электро&shy;питание',
+    'инструмент':'инстру&shy;мент' };
+  function tileTitle(c){
+    return esc(TILE_TITLE[c.key] || c.title).split(' ').map(function(w){ return SOFT[w] || w; }).join(' ');
+  }
+
   function renderCats(){
     var box = $('cats');
     var h = '';
+    box.className = 'cats' + (!LEVEL ? ' pop' : '');
 
     if (!LEVEL){
       /* Верхний уровень: все категории */
@@ -122,6 +139,15 @@
         var n = ADS.filter(function(a){
           return a.status === 'active' && (!F.city || cityMatches(a.city,F.city)) && a.cat === c.key;
         }).length;
+        var art = CAT_ART[c.key];
+        if (art){
+          /* Плитка с предметом без фона: предмет слева выходит вверх за плитку, название — справа внизу */
+          return '<button type="button" class="cat pop' + (F.cat === c.key ? ' on' : '') +
+                   '" data-cat="' + esc(c.key) + '" title="' + esc(c.title) + ' — ' + n + ' ' + plural(n,'объявление','объявления','объявлений') + '">' +
+                   '<img src="assets/cat/' + c.key + '-cut.webp?v=20261016" width="' + art[0] + '" height="' + art[1] + '" alt="" decoding="async">' +
+                   '<b>' + tileTitle(c) + '</b>' +
+                 '</button>';
+        }
         return '<button type="button" class="cat' + (F.cat === c.key ? ' on' : '') +
                  '" data-cat="' + esc(c.key) + '">' +
                  '<span class="ico">' + (ICONS[c.key] || ICONS.power) + '</span>' +
