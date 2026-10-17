@@ -668,7 +668,7 @@ public class IvaRentPatch {
     }
 
     // 10.95: «Срок аренды» ↔ «Пункт выдачи»
-    static final String LINK_HINT = "Время закрытия — из графика первого пункта выдачи; меняется в «Настройки → Настройка проката → Пункты выдачи». "
+    static final String LINK_HINT = "Время закрытия — из графика первого пункта выдачи; меняется в «Кабинет → Настройка проката → Пункты выдачи». "
         + "Выходной день: если срок выпадает на него, вернуть можно до закрытия следующего рабочего дня.";
     static volatile java.lang.ref.WeakReference<Runnable> relinkRef = new java.lang.ref.WeakReference<Runnable>(null);
 

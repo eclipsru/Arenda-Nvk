@@ -1548,6 +1548,7 @@ public final class IvaClientPatch {
         try { IvaAvatarPatch.onProfile(a); } catch (Throwable ignore) {}   // 10.98: фото кругом без краёв, крупнее, просмотр
         try { installClientNav(a); } catch (Throwable ignore) {}
         try { IvaLogoPatch.cabinet(a); } catch (Throwable ignore) {}   // 10.113: строка «Мои инструменты проката» — есть / нет
+        try { IvaShopPatch.cabinet(a); } catch (Throwable ignore) {}   // 10.116: «Настройка проката» — первой строкой кабинета (админу)
         try { if (hubVisible && IvaLogoPatch.target(a) == IvaLogoPatch.NATIVE) callNativeTab(a, "home"); } catch (Throwable ignore) {}   // выход из аккаунта
     }
 

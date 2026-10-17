@@ -52,7 +52,8 @@ import java.util.regex.Pattern;
  * Без SQL работает всё, кроме новых полей (они показываются с подсказкой и не сохраняются).
  * «ФИО» в «Мои данные» — три поля; в admins.full_name уходит «Фамилия Имя Отчество» (как одно поле раньше).
  *
- * Новых вставок в smali нет: строка — из IvaNotifyPatch.openSettings, «Мои данные» — из IvaPatch.onTab("adminData").
+ * Новых вставок в smali нет: строка — первой в «Кабинете» (10.116: cabinet из IvaNotifyPatch.onShowTab и IvaClientPatch.onProfile;
+ * до 10.116 — в «Настройках»), «Мои данные» — из IvaPatch.onTab("adminData").
  */
 public class IvaShopPatch {
     static final String ROW_TITLE = "Настройка проката", ROW_SUB = "Данные проката, пункты выдачи, сотрудники, срок аренды";
@@ -60,7 +61,7 @@ public class IvaShopPatch {
     static final String L_NAME = "Название проката", L_ADDR = "Адрес организации", L_IP = "ИП организации",
         L_TEL = "Номер телефона (для связи с начальником)", L_TIME = "Время работы", L_DAYS = "Рабочие дни";
     static final String NO_DB = "«ИП», телефон, рабочие дни и аватарка проката заработают после обновления базы (SQL 10.98)";
-    static final String MOVED = "Название проката, адрес организации и время работы — в «Настройки → Настройка проката → Данные проката»";
+    static final String MOVED = "Название проката, адрес организации и время работы — в «Кабинет → Настройка проката → Данные проката»";
     static final String COLS_OLD = "company,org_address,work_hours";
     static final String COLS_NEW = "org_ip,org_tel,work_days,org_avatar";
     static final int FROM_DEF = 9 * 60, TO_DEF = 18 * 60, ALL_DAYS = 127;
@@ -299,13 +300,92 @@ public class IvaShopPatch {
         return head;
     }
 
-    /** «Настройки» → «Настройка проката» (только админам: openSettings зовёт при admin). */
-    static void settingsRow(final Activity a, LinearLayout page, final int cText, final int cGray, final int cOrange) {
-        float den = a.getResources().getDisplayMetrics().density;
-        LinearLayout head = row(a, page, new Icon(Icon.SHOP, cOrange, den), ROW_TITLE, ROW_SUB, cText, cGray);
-        head.setOnClickListener(new View.OnClickListener() {
-            @Override public void onClick(View v) { try { openPage(a, cText, cGray, cOrange); } catch (Throwable ignore) {} }
-        });
+    // ───────────── 10.116: строка «Настройка проката» — первой в «Кабинете» админа (просьба владельца 17.10.2026) ─────────────
+    // Раньше — в «Настройках». Теперь в кабинете сразу под шапкой (и карточкой комиссии), перед «Панелью владельца» и
+    // остальными строками. Ждёт одобрения инструмент сотрудника — подпись оранжевая «На одобрении: N» (обновляется сразу,
+    // IvaStaffToolsPatch.live). Сотруднику и клиенту строки нет; сняли админа — строка уходит вместе с кабинетом.
+
+    static final String CAB_TAG = "iva_shop_cab_row";
+    static final long CAB_COUNT_EVERY_MS = 20000L;
+    static volatile int cabPending = -1;                 // -1 — неизвестно (нет SQL 10.105 или ещё не спросили)
+    static volatile long cabAt;
+    static volatile boolean cabBusy;
+    static java.lang.ref.WeakReference<LinearLayout> cabRow;
+
+    /** Строка в кабинете: вошедший админ (создатель тоже). */
+    static boolean cabWant(boolean logged, boolean admin) { return logged && admin; }
+
+    static String cabSub(int pending) { return pending > 0 ? "На одобрении: " + pending + " — откройте" : ROW_SUB; }
+
+    /** Куда вставить: перед «Панелью владельца» (chiefBox) — сразу под шапкой и карточкой комиссии. */
+    static void cabinet(final Activity a) {
+        int id = a.getResources().getIdentifier("chiefBox", "id", a.getPackageName());
+        View anchor = id == 0 ? null : a.findViewById(id);
+        if (anchor == null || !(anchor.getParent() instanceof LinearLayout)) return;
+        LinearLayout box = (LinearLayout) anchor.getParent();
+        View old = box.findViewWithTag(CAB_TAG);
+        boolean logged = IvaNotifyPatch.loggedIn(a);
+        if (!cabWant(logged, logged && IvaNotifyPatch.isAdmin(a))) {
+            if (old != null) box.removeView(old);
+            cabRow = null;
+            return;
+        }
+        final int cText = color(a, "text", 0xfff2f4f8), cGray = color(a, "gray", 0xff9aa1b0), cOrange = color(a, "orange", 0xffff8f1f);
+        LinearLayout row;
+        if (old instanceof LinearLayout) row = (LinearLayout) old;
+        else {
+            float den = a.getResources().getDisplayMetrics().density;
+            row = row(a, box, new Icon(Icon.SHOP, cOrange, den), ROW_TITLE, ROW_SUB, cText, cGray);
+            ViewGroup.LayoutParams lp = row.getLayoutParams();
+            box.removeView(row);                                  // row() кладёт в конец — переносим наверх
+            row.setTag(CAB_TAG);
+            row.setOnClickListener(new View.OnClickListener() {
+                @Override public void onClick(View v) { try { openPage(a, cText, cGray, cOrange); } catch (Throwable ignore) {} }
+            });
+            int at = box.indexOfChild(anchor);
+            if (at < 0) return;
+            box.addView(row, at, lp);
+        }
+        cabRow = new java.lang.ref.WeakReference<LinearLayout>(row);
+        paintCab(a, row);
+        countLater(a);
+    }
+
+    static void paintCab(Activity a, LinearLayout row) {
+        TextView sub = IvaStaffToolsPatch.sub(row);
+        if (sub == null) return;
+        int n = cabPending;
+        sub.setText(cabSub(n));
+        sub.setTextColor(n > 0 ? color(a, "orange", 0xffff8f1f) : color(a, "gray", 0xff9aa1b0));
+    }
+
+    /** Новое число «на одобрении» (IvaStaffToolsPatch.live, главный поток). */
+    static void cabinetCount(Activity a, int n) {
+        cabPending = n;
+        cabAt = System.currentTimeMillis();
+        LinearLayout row = cabRow == null ? null : cabRow.get();
+        if (row != null) paintCab(a, row);
+    }
+
+    /** Кабинет открыли — число не чаще раза в 20 с (без SQL 10.105 — молча, подпись обычная). */
+    static void countLater(final Activity a) {
+        long now = System.currentTimeMillis();
+        if (cabBusy || now - cabAt < CAB_COUNT_EVERY_MS) return;
+        cabBusy = true;
+        cabAt = now;
+        new Thread(new Runnable() {
+            @Override public void run() {
+                int n = -1;
+                try { n = IvaStaffToolsPatch.pendingCount(a); } catch (Throwable ignore) {}
+                final int fn = n;
+                a.runOnUiThread(new Runnable() {
+                    @Override public void run() {
+                        cabBusy = false;
+                        if (fn >= 0) try { cabinetCount(a, fn); } catch (Throwable ignore) {}
+                    }
+                });
+            }
+        }).start();
     }
 
     /** Страница «Настройка проката»: «Данные проката», «Пункты выдачи», «Срок аренды» — каждый своей страницей. */

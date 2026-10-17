@@ -233,6 +233,7 @@ public final class IvaAccessPatch {
         final String me = me(a);
         if (me.isEmpty()) return;
         ownerDue = true;
+        try { IvaStaffToolsPatch.live(a); } catch (Throwable ignore) {}   // 10.116: «на одобрение» — уведомление и счётчик сразу
         if (IvaReviewPatch.chief(a)) {                                    // 10.115: создатель — только его сотрудники
             new Thread(new Runnable() {
                 @Override public void run() { try { IvaStaffPatch.ownerPoke(a); } catch (Throwable ignore) {} }

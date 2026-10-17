@@ -2298,7 +2298,7 @@ public class IvaPatchTest {
             eq("прокат 10.98: названия", IvaShopPatch.ROW_TITLE + "|" + IvaShopPatch.DATA_TITLE + "|" + IvaPickupPatch.ROW_TITLE + "|" + IvaShopPatch.L_NAME + "|"
                 + IvaShopPatch.L_ADDR + "|" + IvaShopPatch.L_IP + "|" + IvaShopPatch.L_TEL + "|" + IvaShopPatch.L_TIME + "|" + IvaShopPatch.L_DAYS,
                 "Настройка проката|Данные проката|Пункты выдачи|Название проката|Адрес организации|ИП организации|Номер телефона (для связи с начальником)|Время работы|Рабочие дни");
-            eq("прокат 10.98: подсказка «Срока аренды»", IvaRentPatch.LINK_HINT.contains("«Настройки → Настройка проката → Пункты выдачи»") + "", "true");
+            eq("прокат 10.98: подсказка «Срока аренды»", IvaRentPatch.LINK_HINT.contains("«Кабинет → Настройка проката → Пункты выдачи»") + "", "true");
         }
         {   // 10.99: телефон пункта выдачи; изменение — в карточке
             eq("пункт 10.99: телефон пункта — необязателен, 10–15 цифр", IvaPickupPatch.telErr("") + "|" + IvaPickupPatch.telErr(" +7 (383) 123-45-67 ") + "|"
@@ -2568,6 +2568,7 @@ public class IvaPatchTest {
         logo113();                                                    // 10.113: вид раздела с логотипом, выключатель у пункта
         points114();                                                  // 10.114: оба набора прав, выбор пункта в «Добавить»
         live115();                                                    // 10.115: правки доступа сразу, «Сотрудники»
+        live116();                                                    // 10.116: причина отказа сотруднику, «на одобрение», переходы
         if (fail > 0) { System.out.println("ошибок: " + fail); System.exit(1); }
         System.out.println("все проверки IvaPatch пройдены");
     }
@@ -3147,5 +3148,50 @@ public class IvaPatchTest {
         eq("тариф 10.115: подсказка только когда поменялся (и раньше знали)",
             IvaAccessPatch.feeHint("5|0", "7,5|5000") + "|" + IvaAccessPatch.feeHint("7|5000", "7|0") + "|" + IvaAccessPatch.feeHint("", "7|0") + "|" + IvaAccessPatch.feeHint("7|0", "7|0"),
             "Создатель площадки изменил ваш тариф: комиссия 7,5 %, лимит задолженности 5000 ₽|Создатель площадки изменил ваш тариф: комиссия 7 %, без лимита задолженности||");
+    }
+
+    static void live116() {
+        String rls = "Ошибка: new row violates row-level security policy for table \"tools\"";
+        eq("сотрудник 10.116: без окна (нет Activity) — прежний текст отказа", IvaPatch.publishError(rls).startsWith("нет прав на публикацию. Учётная запись"), true);
+        eq("сотрудник 10.116: короткий текст сотруднику — тот же префикс, без «арендодателя»",
+            IvaPatch.STAFF_REFUSED.startsWith("нет прав на публикацию") && !IvaPatch.STAFF_REFUSED.contains("арендодател"), true);
+        eq("сотрудник 10.116: шаг отказа — запись / фото / неизвестно",
+            IvaStaffToolsPatch.refusalStep(rls) + "|" + IvaStaffToolsPatch.refusalStep("new row violates row-level security policy") + "|"
+            + IvaStaffToolsPatch.refusalStep("42501") + "|" + IvaStaffToolsPatch.refusalStep(null), "2|1|0|0");
+        eq("сотрудник 10.116: без SQL 10.116 — причина по iva_staff_catalog",
+            (IvaStaffToolsPatch.catWhy("404", "") == IvaStaffToolsPatch.WHY_NO_SQL) + "|" + (IvaStaffToolsPatch.catWhy("200", "false") == IvaStaffToolsPatch.WHY_NO_RIGHT)
+            + "|" + (IvaStaffToolsPatch.catWhy("200", "true") == IvaStaffToolsPatch.WHY_UNKNOWN) + "|" + IvaStaffToolsPatch.catWhy("", "").contains("нет связи")
+            + "|" + IvaStaffToolsPatch.catWhy("500", "x").contains("500"), "true|true|true|true|true");
+        eq("сотрудник 10.116: «нет SQL» называет файлы владельцу",
+            IvaStaffToolsPatch.WHY_NO_SQL.contains("20261030_staff_tools.sql") && IvaStaffToolsPatch.WHY_NO_SQL.contains("20261107_staff_publish_check.sql"), true);
+        eq("сотрудник 10.116: окно — шаг и причина; пустая причина — общая",
+            IvaStaffToolsPatch.refusalText(2, "Нет пункта").startsWith("Объявление не сохранилось") + "|" + IvaStaffToolsPatch.refusalText(2, "Нет пункта").endsWith("\n\nНет пункта")
+            + "|" + IvaStaffToolsPatch.refusalText(1, "x").startsWith("Фото не загрузилось") + "|" + IvaStaffToolsPatch.refusalText(0, "").endsWith(IvaStaffToolsPatch.WHY_UNKNOWN),
+            "true|true|true|true");
+        eq("сотрудник 10.116: ответ базы не разобран — пусто (тогда спросим iva_staff_catalog)",
+            IvaStaffToolsPatch.whyOf("not json") + "|" + IvaStaffToolsPatch.whyOf(null) + "|" + IvaStaffToolsPatch.whyOf(""), "||");
+        eq("одобрение 10.116: свой переключатель и своя категория уведомлений",
+            !IvaNotifyPatch.K_REV.equals(IvaNotifyPatch.K_ORD) && IvaNotifyPatch.defOn(IvaNotifyPatch.K_REV)
+            && IvaNotifyPatch.allowed(true, true, IvaNotifyPatch.K_REV, true) && !IvaNotifyPatch.allowed(true, false, IvaNotifyPatch.K_REV, true)
+            && !IvaNotifyPatch.allowed(false, true, IvaNotifyPatch.K_REV, true) && !IvaNotifyPatch.allowed(true, true, IvaNotifyPatch.K_REV, false), true);
+        eq("одобрение 10.116: имя категории Android", IvaNotifyPatch.channelName(IvaNotifyPatch.CH_REV), "Инструменты на одобрение");
+        eq("кабинет 10.116: «Настройка проката» — только вошедшему админу",
+            IvaShopPatch.cabWant(true, true) + "|" + IvaShopPatch.cabWant(true, false) + "|" + IvaShopPatch.cabWant(false, true), "true|false|false");
+        eq("кабинет 10.116: подпись — «На одобрении: N» или обычная",
+            IvaShopPatch.cabSub(3) + "|" + (IvaShopPatch.cabSub(0) == IvaShopPatch.ROW_SUB) + "|" + (IvaShopPatch.cabSub(-1) == IvaShopPatch.ROW_SUB),
+            "На одобрении: 3 — откройте|true|true");
+        eq("кабинет 10.116: подсказки ведут в «Кабинет», не в «Настройки»",
+            IvaShopPatch.MOVED.contains("«Кабинет → Настройка проката") && !IvaShopPatch.MOVED.contains("Настройки →")
+            && IvaRentPatch.LINK_HINT.contains("«Кабинет → Настройка проката") && !IvaRentPatch.LINK_HINT.contains("Настройки →"), true);
+        eq("переход 10.116: что ждать до перехода",
+            IvaNotifyPatch.routeNeed("orders") + "" + IvaNotifyPatch.routeNeed(IvaStaffToolsPatch.OPEN) + IvaNotifyPatch.routeNeed(IvaStaffOrdersPatch.OPEN)
+            + IvaNotifyPatch.routeNeed(IvaStaffChatPatch.OPEN) + IvaNotifyPatch.routeNeed("chat") + IvaNotifyPatch.routeNeed("rent")
+            + IvaNotifyPatch.routeNeed("test") + IvaNotifyPatch.routeNeed("update") + IvaNotifyPatch.routeNeed("???"), "223311100");
+        eq("переход 10.116: готовность",
+            IvaNotifyPatch.routeReady(0, false, false, false) + "|" + IvaNotifyPatch.routeReady(1, false, false, false) + "|" + IvaNotifyPatch.routeReady(1, true, false, false)
+            + "|" + IvaNotifyPatch.routeReady(2, true, false, true) + "|" + IvaNotifyPatch.routeReady(2, true, true, false)
+            + "|" + IvaNotifyPatch.routeReady(3, true, true, false) + "|" + IvaNotifyPatch.routeReady(3, true, false, true) + "|" + IvaNotifyPatch.routeReady(3, false, false, true),
+            "true|false|true|false|true|false|true|false");
+        eq("переход 10.116: ждём роль не дольше 20 с", IvaNotifyPatch.ROUTE_READY_MS, 20000L);
     }
 }

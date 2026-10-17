@@ -9,6 +9,8 @@ const fs = require('node:fs'), path = require('node:path'), os = require('node:o
 const { execFileSync } = require('node:child_process');
 const ROOT = path.join(__dirname, '..');
 const R = p => fs.readFileSync(path.join(ROOT, p), 'utf8');
+// 10.116: строка «Настройка проката» — не в «Настройках» (openSettings), а первой в «Кабинете» (onShowTab → IvaShopPatch.cabinet)
+const shopMoved116 = np => np.includes('try { IvaShopPatch.cabinet(a); } catch (Throwable ignore) {}') && !np.includes('IvaShopPatch.settingsRow(');
 try {
   const f = '.github/workflows/build-apk.yml';
   const code = R(f).replace(/^\s*#.*$/gm, '');
@@ -94,7 +96,7 @@ try {
   assert.match(jpc, /t = IvaLogoPatch\.target\(a\);[\s\S]{0,120}if \(t == IvaLogoPatch\.CLIENT_HUB && openHub\(a, 0\)\) return;\n\s*if \(t == IvaLogoPatch\.STAFF_HUB && openHub\(a, 1\)\) return;\n\s*callNative\(a, "onPlus"\);/, 'IvaClientPatch: логотип у админа и гостя должен вести в штатный onPlus');
   assert.match(jpc, /View plus = a\.findViewById\(id\(a, "navPlus"\)\);/, 'IvaClientPatch: обработчик логотипа не ставится на navPlus');
   assert.match(jpc, /if \(toHub && openClientHub\(a\)\) return;\n\s*callNativeTab\(a, "home"\);/, 'IvaClientPatch: «Назад» в карточке инструмента должна вести на главную, как штатная');
-  assert.match(jpc, /try \{ installClientNav\(a\); \} catch \(Throwable ignore\) \{\}\n\s*try \{ IvaLogoPatch\.cabinet\(a\); \} catch \(Throwable ignore\) \{\}[^\n]*\n\s*try \{ if \(hubVisible && IvaLogoPatch\.target\(a\) == IvaLogoPatch\.NATIVE\) callNativeTab\(a, "home"\); \}/, 'IvaClientPatch: onProfile не ставит логотип клиента или не прячет раздел при выходе');
+  assert.match(jpc, /try \{ installClientNav\(a\); \} catch \(Throwable ignore\) \{\}\n\s*try \{ IvaLogoPatch\.cabinet\(a\); \} catch \(Throwable ignore\) \{\}[^\n]*(?:\n\s*try \{ IvaShopPatch\.cabinet\(a\); \} catch \(Throwable ignore\) \{\}[^\n]*)?\n\s*try \{ if \(hubVisible && IvaLogoPatch\.target\(a\) == IvaLogoPatch\.NATIVE\) callNativeTab\(a, "home"\); \}/, 'IvaClientPatch: onProfile не ставит логотип клиента или не прячет раздел при выходе');
   assert.match(jp, /try \{ IvaClientPatch\.onShowTab\(a, tab\); \} catch \(Throwable ignore\) \{\}\n(?:\s*\/\/[^\n]*\n)?\s*try \{ IvaSearchPatch\.onShowTab\(a, tab\); \} catch \(Throwable ignore\) \{\}\n(?:\s*\/\/[^\n]*\n)?\s*try \{ IvaChatPatch\.onShowTab\(a, tab\); \} catch \(Throwable ignore\) \{\}\n(?:\s*\/\/[^\n]*\n)?\s*try \{ IvaOrderPatch\.onShowTab\(a, tab\); \} catch \(Throwable ignore\) \{\}\n(?:\s*\/\/[^\n]*\n)?\s*try \{ IvaNotifyPatch\.onShowTab\(a, tab\); \} catch \(Throwable ignore\) \{\}\n    \}/, 'IvaPatch.onTab: штатный переход должен прятать раздел клиента, включать/прятать поиск 10.45, чат 10.54, заявку 10.55 и уведомления 10.56');
   assert.match(jpc, /if \(hubVisible\) \{\n\s*detailFromHub = "detail"\.equals\(t\);\n\s*hideClientHub\(a\);/, 'IvaClientPatch: раздел клиента не прячется при штатном переходе');
   assert.match(jpc, /hubStyling = true;\n\s*try \{ IvaPatch\.onTab\(a, HUB_PAGE\); \}[^\n]*finally \{ hubStyling = false; \}/, 'IvaClientPatch: подсветка логотипа не должна прятать сам раздел');
@@ -384,7 +386,7 @@ try {
     assert.ok(!/com\.google\.firebase|FirebaseMessaging|com\.google\.android\.gms|AlarmManager|ALARM_SERVICE|androidx\.work|WorkManager/.test(np), 'IvaNotifyPatch: без Firebase, AlarmManager и WorkManager (решение владельца 13.10)');
     assert.ok(!/customer_profiles|passport|phone|surname/.test(np), 'IvaNotifyPatch: лишние персональные данные');
     assert.ok(np.includes('static boolean pref(Context c, String k) { return prefs(c).getBoolean(k, true); }'), 'уведомления 10.56: по умолчанию всё включено');
-    assert.ok(np.includes('if (!all || !own) return false;\n        return !K_ORD.equals(kind) || admin;')
+    assert.ok(/if \(!all \|\| !own\) return false;\n        return !(?:K_ORD\.equals\(kind\)|\(K_ORD\.equals\(kind\) \|\| K_REV\.equals\(kind\)\)) \|\| admin;/.test(np)   // 10.116: + «на одобрение»
       && np.includes('if (admin) kids.add(switchRow(a, card, "Новые заявки"') && np.includes('if (logged && admin && !email.isEmpty()) checkOrders(a, email);'),
       'уведомления 10.56: «Новые заявки» — только админам, общий переключатель выключает всё');
     assert.ok(np.includes('static final String CH_MSG = "iva_msg", CH_ORD = "iva_orders", CH_UPD = "iva_update";')
@@ -873,7 +875,7 @@ try {
       && np94.includes('if (logged && !email.isEmpty()) try { IvaTestPatch.check(a, email, admin); } catch (Throwable ignore) {}')
       && np94.includes('if (logged) try { IvaTestPatch.check(c, email, admin); } catch (Throwable ignore) {}')
       && fn94(tsp, 'check').includes('if (!isTester(email) || !IvaNotifyPatch.on(c, K_TEST, admin) || IvaNotifyPatch.quiet(c, admin)) return;')
-      && np94.includes('String[] ids = {CH_MSG, CH_ORD, CH_UPD, CH_RENT, IvaTestPatch.CH_TEST};')
+      && /String\[\] ids = \{CH_MSG, CH_ORD, CH_UPD, CH_RENT, IvaTestPatch\.CH_TEST(?:, CH_REV)?\};/.test(np94)   // 10.116: + «на одобрение»
       && np94.includes('static final long UPDATE_NOTE_EVERY_MS = 5L * 60 * 1000;') && fn94(np94, 'updateDue').includes('UPDATE_NOTE_EVERY_MS'),
       'уведомления 10.94: «Уведомления пробной версии» — только у eclips и eclipsik, выключаются; о выпущенной — у всех, проверка раз в 5 минут');
     const sq94 = R('supabase/migrations/20261022_app_releases_tester.sql');
@@ -886,7 +888,7 @@ try {
     const pk = R('android/patches/IvaPickupPatch.java'), rp95 = R('android/patches/IvaRentPatch.java'), np95 = R('android/patches/IvaNotifyPatch.java');
     // 10.98: строки «Пункты выдачи» и «Срок аренды» переехали на страницу «Настройка проката» (тоже только у админов)
     const sh95 = R('android/patches/IvaShopPatch.java');
-    assert.ok(np95.includes('if (admin) try { IvaShopPatch.settingsRow(a, page, cText, cGray, cOrange); } catch (Throwable ignore) {}')
+    assert.ok(shopMoved116(np95)
       && sh95.includes('try { IvaPickupPatch.settingsRow(a, list, cText, cGray, cOrange); } catch (Throwable ignore) {}')
       && sh95.indexOf('IvaPickupPatch.settingsRow(') < sh95.indexOf('IvaRentPatch.settingsSection(a, list,')
       && pk.includes('u.page = IvaChiefPatch.page(a, ROW_TITLE, PAGE_SUB, false);') && pk.includes('b.setBackground(IvaPatch.accentBg(a, cOrange, 12));')
@@ -1490,8 +1492,7 @@ try {
     // настройки: только админам, «Срок аренды» под «Уведомлениями» (с 10.97 — отдельной страницей), сбой не ломает настройки
     // 10.98: «Срок аренды» — на странице «Настройка проката» (строка — только у админов, под «Уведомлениями»)
     const os = fnx(np, 'openSettings'), shp = R('android/patches/IvaShopPatch.java');
-    assert.ok(os.includes('if (admin) try { IvaShopPatch.settingsRow(a, page, cText, cGray, cOrange); } catch (Throwable ignore) {}')
-      && os.indexOf('IvaShopPatch.settingsRow') > os.indexOf('page.addView(head, hl);') && !os.includes('IvaRentPatch.settingsSection')
+    assert.ok(shopMoved116(np) && !os.includes('IvaRentPatch.settingsSection')
       && fnx(shp, 'openPage').includes('try { IvaRentPatch.settingsSection(a, list, cText, cGray, cOrange); } catch (Throwable ignore) {}'),
       'аренда 10.77: «Аренда» — только у админов, под «Уведомлениями» (10.98 — в «Настройка проката»)');
     const ss = fnx(rp, 'settingsSection');
@@ -1602,7 +1603,7 @@ try {
     // 10.98: + «Настройка проката» (IvaShopPatch: строка, её страница и «Данные проката»)
     const sh97 = R('android/patches/IvaShopPatch.java');
     const os97 = fn97(np97, 'openSettings'), rows = [os97, fn97(rp97, 'settingsSection'), fn97(pk97, 'settingsRow'),
-      fn97(sh97, 'settingsRow'), fn97(sh97, 'openPage'), fn97(sh97, 'openData')];
+      fn97(sh97, 'cabinet'), fn97(sh97, 'openPage'), fn97(sh97, 'openData')];   // 10.116: строка — в «Кабинете»
     for (const r of rows) assert.ok(!/setVisibility\(\s*open\b|\.setRotation\(open|rotation\(open|развернуть|свернуть/.test(r),
       'настройки 10.97: в «Настройках» ничего не раскрывается и не сворачивается на месте');
     assert.ok(/IvaChiefPatch\.subPage\(a, NOTIF_TITLE, body,/.test(os97) && /IvaChiefPatch\.subPage\(a, HEAD_TITLE, body,/.test(rows[1])
@@ -1612,7 +1613,7 @@ try {
       'настройки 10.97: «Уведомления», «Пункт выдачи», «Срок аренды» — каждый открывается своей страницей');
     // новый пункт в «Настройках» — только строкой, открывающей страницу: всё, что вставляется в page, — это head/строки пунктов
     const pageAdds = (os97.match(/page\.addView\((\w+)/g) || []).map(x => x.replace('page.addView(', ''));
-    assert.ok(pageAdds.length === 1 && pageAdds[0] === 'head' && (os97.match(/\(a, page, cText, cGray, cOrange\)/g) || []).length === 1,   // 10.98: одна строка «Настройка проката» вместо двух
+    assert.ok(pageAdds.length === 1 && pageAdds[0] === 'head' && (os97.match(/\(a, page, cText, cGray, cOrange\)/g) || []).length === 0,   // 10.98: одна строка «Настройка проката» вместо двух; 10.116: и та — в «Кабинете»
       'настройки 10.97: в «Настройки» вставляются только строки пунктов (новый пункт — строкой со своей страницей)');
     assert.ok(dev.includes('Каждый пункт «Настроек» — отдельной страницей (правило владельца 16.10.2026, приложение с 10.97)'),
       'настройки 10.97: правило записано в README-DEV');
@@ -1635,12 +1636,12 @@ try {
       'прокат 10.98: новых вставок в smali нет (onTab, onProfile, openSettings)');
     // «Настройка проката» — только админам; внутри три пункта, каждый своей страницей; «Пункты выдачи» переименован
     const os = fn(np, 'openSettings'), op = fn(sh, 'openPage');
-    assert.ok(os.includes('if (admin) try { IvaShopPatch.settingsRow(a, page, cText, cGray, cOrange); } catch (Throwable ignore) {}')
+    assert.ok(shopMoved116(np)
       && !os.includes('IvaPickupPatch.settingsRow') && !os.includes('IvaRentPatch.settingsSection')
       && op.indexOf('openData(a)') > 0 && op.indexOf('openData(a)') < op.indexOf('IvaPickupPatch.settingsRow(a, list,')
       && op.indexOf('IvaPickupPatch.settingsRow(a, list,') < op.indexOf('IvaRentPatch.settingsSection(a, list,')
       && sh.includes('static final String ROW_TITLE = "Настройка проката"') && sh.includes('DATA_TITLE = "Данные проката"')
-      && pk.includes('static final String ROW_TITLE = "Пункты выдачи"') && rp.includes('«Настройки → Настройка проката → Пункты выдачи»'),
+      && pk.includes('static final String ROW_TITLE = "Пункты выдачи"') && rp.includes('«Кабинет → Настройка проката → Пункты выдачи»'),   // 10.116: строка — в «Кабинете»
       'прокат 10.98: «Настройка проката» только у админов — «Данные проката», «Пункты выдачи», «Срок аренды»');
     // «Данные проката»: аватарка вверху, поля с названиями над полями в порядке владельца
     const od = fn(sh, 'openData');
@@ -1867,7 +1868,7 @@ try {
     assert.ok(/new Thread\(new Runnable\(\)[\s\S]*if \(logged && !admin && !email\.isEmpty\(\)\) try \{ IvaStaffOrdersPatch\.check\(a, email\); \} catch \(Throwable ignore\) \{\}/.test(tk)
       && bg.includes('if (logged && !admin) try { IvaStaffOrdersPatch.check(c, email); } catch (Throwable ignore) {}')
       && np.includes('else if (IvaStaffOrdersPatch.OPEN.equals(open)) IvaStaffOrdersPatch.openFromNote(a);')
-      && (np.match(/IvaStaffOrdersPatch\./g) || []).length === 4
+      && (np.match(/IvaStaffOrdersPatch\./g) || []).length === 5   // 10.116: + routeNeed (переход ждёт роль)
       && sp.includes('if (IvaStaffOrdersPatch.want(m.status, m.r)) {') && (sp.match(/IvaStaffOrdersPatch\./g) || []).length === 3,
       'заявки пункта 10.104: подключение — опрос (не владельцу, в потоке окна и в фоне), нажатие на уведомление, кнопка на «Мой пункт»');
     assert.ok(!/customer_profiles|passport|phone|surname|select=|"PATCH"|"DELETE"|"GET"|\/rest\/v1\/(?!rpc\/iva_staff_)/.test(code)
@@ -1907,16 +1908,16 @@ try {
     assert.ok(/new Thread\(new Runnable\(\)[\s\S]*if \(logged && admin && !email\.isEmpty\(\)\) try \{ IvaStaffToolsPatch\.check\(a, email\); \} catch \(Throwable ignore\) \{\}/.test(tk)
       && bg.includes('if (logged && admin) try { IvaStaffToolsPatch.check(c, email); } catch (Throwable ignore) {}')
       && np.includes('else if (IvaStaffToolsPatch.OPEN.equals(open)) IvaStaffToolsPatch.openFromNote(a);')
-      && (np.match(/IvaStaffToolsPatch\./g) || []).length === 4
+      && (np.match(/IvaStaffToolsPatch\./g) || []).length === 6   // 10.116: + routeNeed и staffKnown (переход ждёт роль)
       && sp.includes('if (IvaStaffToolsPatch.want(m.status, m.r)) {') && (sp.match(/IvaStaffToolsPatch\./g) || []).length === 5 /* 10.113: + строка «Вид раздела с логотипом» */
       && sh.includes('try { IvaStaffToolsPatch.settingsSection(a, list, cText, cGray, cOrange); } catch (Throwable ignore) {}')
       && ip.includes('try { IvaStaffToolsPatch.onTab(a, tab); } catch (Throwable ignore) {}')
       && ip.includes('try { if (IvaStaffToolsPatch.onBack(a, ct instanceof String ? (String) ct : "")) return; } catch (Throwable ignore) {}')
-      && (ip.match(/IvaStaffToolsPatch\./g) || []).length === 2,
+      && (ip.match(/IvaStaffToolsPatch\./g) || []).length === 4,   // 10.116: + publishError (сотруднику — причина окном)
       'инструменты пункта 10.105: подключение — onTab/onBack, «Мой пункт», «Настройка проката», опрос владельца (окно и фон), нажатие на уведомление');
-    assert.ok(!/customer_profiles|passport|phone|surname|select=|"PATCH"|"DELETE"|"GET"|\/rest\/v1\/(?!rpc\/iva_(staff_tools|tools_pending|tool_review|staff_publish))/.test(code)
-      && (code.match(/IvaClientPatch\.apiCall\(/g) || []).length === 6 && (code.match(/IvaNotifyPatch\.api\(/g) || []).length === 1
-      && (code.match(/new Thread\(new Runnable\(\)/g) || []).length === 5
+    assert.ok(!/customer_profiles|passport|phone|surname|select=|"PATCH"|"DELETE"|"GET"|\/rest\/v1\/(?!rpc\/iva_(staff_tools|tools_pending|tool_review|staff_publish|staff_catalog))/.test(code)   // 10.116: + причина отказа
+      && (code.match(/IvaClientPatch\.apiCall\(/g) || []).length === 9 && (code.match(/IvaNotifyPatch\.api\(/g) || []).length === 1   // 10.116: + why, catalog, счётчик
+      && (code.match(/new Thread\(new Runnable\(\)/g) || []).length === 7   // 10.116: + live, explainRefusal
       && code.includes('if (!IvaNotifyPatch.loggedIn(a) || IvaNotifyPatch.isAdmin(a)) return false;')
       && code.includes('if (IvaNotifyPatch.isAdmin(a)) openReview(a, null);'),
       'инструменты пункта 10.105: только функции базы (таблицу инструментов напрямую не пишем — это делает штатная форма), сеть — в потоках, владелец сотрудником не считается');
@@ -1957,7 +1958,7 @@ try {
     assert.ok(/new Thread\(new Runnable\(\)[\s\S]*if \(logged && !admin && !email\.isEmpty\(\)\) try \{ IvaStaffChatPatch\.check\(a, email\); \} catch \(Throwable ignore\) \{\}/.test(tk)
       && bg.includes('if (logged && !admin) try { IvaStaffChatPatch.check(c, email); } catch (Throwable ignore) {}')
       && np.includes('else if (IvaStaffChatPatch.OPEN.equals(open)) IvaStaffChatPatch.openFromNote(a, target);')
-      && (np.match(/IvaStaffChatPatch\./g) || []).length === 4
+      && (np.match(/IvaStaffChatPatch\./g) || []).length === 5   // 10.116: + routeNeed (переход ждёт роль)
       && sp.includes('if (IvaStaffChatPatch.want(m.status, m.r)) {') && (sp.match(/IvaStaffChatPatch\./g) || []).length === 3,
       'чат пункта 10.106: подключение — «Мой пункт», опрос сотрудника (окно и фон, не владельцу), нажатие на уведомление');
     assert.ok(!/customer_profiles|passport|phone|surname|select=|from_email|to_email|app_messages|"PATCH"|"DELETE"|"GET"|\/rest\/v1\/(?!rpc\/iva_staff_chat(s|_read|_send)?")/.test(code)

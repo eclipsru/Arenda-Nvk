@@ -74,6 +74,9 @@ public final class IvaNotifyPatch {
 
     static final String PREFS = "iva_notify";
     static final String K_ALL = "all", K_MSG = "msg", K_ORD = "orders", K_UPD = "update";
+    static final String K_REV = "review";                       // 10.116: «Инструменты на одобрение» — свой переключатель (владельцу)
+    static final String CH_REV = "iva_review";
+    static final String REV_TITLE = "Инструменты на одобрение", REV_SUB = "Сотрудник добавил инструмент — нужно ваше одобрение";
     static final String ROW_TAG = "iva_settings_row";
     static final String ROW_TITLE = "Настройки";
     static final String CH_MSG = "iva_msg", CH_ORD = "iva_orders", CH_UPD = "iva_update";
@@ -85,6 +88,7 @@ public final class IvaNotifyPatch {
     static final String EXTRA_TARGET = "iva_target";  // 10.59: что именно открыть — id сообщения / id заявки / «код|версия»
     static final long ROUTE_WAIT_MS = 15000;          // сколько ждать загрузки раздела после нажатия
     static final long ROUTE_STEP_MS = 250;
+    static final long ROUTE_READY_MS = 20000;         // 10.116: холодный запуск — ждём вход и роль (админ / сотрудник), потом переходим
     static final String UPDATE_BTN_TAG = "iva_selfupdate_btn";   // штатная кнопка SelfUpdate «Обновить до версии …»
     static final int MAX_SEEN = 300;
 
@@ -135,10 +139,10 @@ public final class IvaNotifyPatch {
 
     // ───────────────────────── чистая модель (проверяется в IvaPatchTest) ─────────────────────────
 
-    /** Показывать ли вид уведомления: общий переключатель и свой; «Заявки» — только админам. */
+    /** Показывать ли вид уведомления: общий переключатель и свой; «Заявки» и «на одобрение» (10.116) — только админам. */
     static boolean allowed(boolean all, boolean own, String kind, boolean admin) {
         if (!all || !own) return false;
-        return !K_ORD.equals(kind) || admin;
+        return !(K_ORD.equals(kind) || K_REV.equals(kind)) || admin;
     }
 
     // ── 10.73: расписание уведомлений у админов (решения владельца 14.10.2026) ──
@@ -450,6 +454,7 @@ public final class IvaNotifyPatch {
         try { scheduleBg(a.getApplicationContext()); } catch (Throwable ignore) {}   // 10.65: этап 2 — когда приложение закрыто
         try { openFromNotification(a); } catch (Throwable ignore) {}
         try { ensureRow(a); } catch (Throwable ignore) {}
+        try { IvaShopPatch.cabinet(a); } catch (Throwable ignore) {}   // 10.116: «Настройка проката» — первой строкой кабинета
         try { cabinet(a, tab); } catch (Throwable ignore) {}   // 10.78: «Чат поддержки» и «Обновить до версии …»
         try { IvaCensorPatch.onTab(a, tab); } catch (Throwable ignore) {}   // 10.92: «Цензура» у создателя, слова создателя
         try { IvaChiefPatch.onTab(a, tab); } catch (Throwable ignore) {}    // 10.93: «Управление», «Мои отзывы»; без «Ваш доход с админов»
@@ -704,14 +709,15 @@ public final class IvaNotifyPatch {
 
     static String channelName(String ch) {
         return CH_MSG.equals(ch) ? "Новые сообщения" : CH_ORD.equals(ch) ? "Новые заявки" : CH_UPD.equals(ch) ? "Обновления приложения"
-            : CH_RENT.equals(ch) ? "Окончание аренды" : IvaTestPatch.CH_TEST.equals(ch) ? "Пробная версия" : "Ива";
+            : CH_RENT.equals(ch) ? "Окончание аренды" : IvaTestPatch.CH_TEST.equals(ch) ? "Пробная версия"
+            : CH_REV.equals(ch) ? REV_TITLE : "Ива";
     }
 
     static void ensureChannels(Context c) {
         if (Build.VERSION.SDK_INT < 26) return;
         NotificationManager nm = (NotificationManager) c.getSystemService(Context.NOTIFICATION_SERVICE);
         if (nm == null) return;
-        String[] ids = {CH_MSG, CH_ORD, CH_UPD, CH_RENT, IvaTestPatch.CH_TEST};
+        String[] ids = {CH_MSG, CH_ORD, CH_UPD, CH_RENT, IvaTestPatch.CH_TEST, CH_REV};
         // 10.100: свой звук — категории с новыми id (+"_s1") и звуком владельца; старые удаляются (звук у созданной
         // категории Android менять не даёт). Выключенная человеком категория остаётся выключенной.
         boolean snd = IvaSoundPatch.ready(c);
@@ -724,6 +730,7 @@ public final class IvaNotifyPatch {
             NotificationChannel ch = new NotificationChannel(sid, channelName(id), imp);
             ch.setDescription(CH_MSG.equals(id) ? "Когда вам пишут в чат" : CH_ORD.equals(id) ? "Заявки на ваши инструменты"
                 : CH_RENT.equals(id) ? "Скоро закончится срок аренды" : IvaTestPatch.CH_TEST.equals(id) ? IvaTestPatch.NOTE_SUB
+                : CH_REV.equals(id) ? REV_SUB
                 : "Когда вышла новая версия приложения");
             if (snd) IvaSoundPatch.apply(ch);
             nm.createNotificationChannel(ch);
@@ -936,26 +943,77 @@ public final class IvaNotifyPatch {
         route(a, it);
     }
 
+    // ── 10.116 (просьба владельца 17.10.2026): нажатие на ЛЮБОЕ уведомление — с любого экрана, приложение открыто или
+    // закрыто, у любой роли — открывает тот раздел, о котором уведомление. Раньше переход шёл сразу: при холодном
+    // запуске роль (админ / сотрудник) ещё не известна — «На одобрении» и «Заявки» не открывались; открытая поверх
+    // страница (настройки, «Сотрудники», карточка заявки) закрывала собой нужный раздел. Теперь: ждём вход и роль
+    // (до 20 с), закрываем всё, что открыто поверх, и только потом переходим.
+
+    /** Что нужно знать до перехода: 0 — ничего, 1 — вход, 2 — вход и админ, 3 — вход и сотрудник (из кэша «Мой пункт»). */
+    static int routeNeed(String open) {
+        if ("orders".equals(open) || IvaStaffToolsPatch.OPEN.equals(open)) return 2;
+        if (IvaStaffOrdersPatch.OPEN.equals(open) || IvaStaffChatPatch.OPEN.equals(open)) return 3;
+        if ("chat".equals(open) || "rent".equals(open) || "test".equals(open)) return 1;
+        return 0;
+    }
+
+    static boolean routeReady(int need, boolean logged, boolean admin, boolean staff) {
+        if (need <= 0) return true;
+        if (!logged) return false;
+        return need == 1 || (need == 2 ? admin : staff);
+    }
+
     static void route(final Activity a, Intent it) {
         final String open = it.getStringExtra(EXTRA_OPEN);
         String t = it.getStringExtra(EXTRA_TARGET);
         final String target = t == null ? "" : t.trim();
         it.removeExtra(EXTRA_OPEN);          // второй раз (поворот, возврат) не переходим
         it.removeExtra(EXTRA_TARGET);
-        new Handler(Looper.getMainLooper()).post(new Runnable() {
+        final int need = routeNeed(open);
+        final long until = System.currentTimeMillis() + ROUTE_READY_MS;
+        final Handler h = new Handler(Looper.getMainLooper());
+        h.post(new Runnable() {
             @Override public void run() {
                 try {
-                    if ("chat".equals(open)) IvaChatPatch.openFromNote(a, target);
-                    else if ("orders".equals(open)) openOrder(a, target);
-                    else if ("update".equals(open)) openUpdate(a, target);
-                    else if ("rent".equals(open)) IvaOrderPatch.openById(a, target);     // 10.76: эта заявка
-                    else if ("test".equals(open)) IvaTestPatch.openFromNote(a);          // 10.94: жёлтая кнопка в «Профиле»
-                    else if (IvaStaffOrdersPatch.OPEN.equals(open)) IvaStaffOrdersPatch.openFromNote(a);   // 10.104: «Заявки пункта»
-                    else if (IvaStaffToolsPatch.OPEN.equals(open)) IvaStaffToolsPatch.openFromNote(a);     // 10.105: «На одобрении»
-                    else if (IvaStaffChatPatch.OPEN.equals(open)) IvaStaffChatPatch.openFromNote(a, target);   // 10.106: «Чат пункта»
+                    if (a.isFinishing()) return;
+                    boolean logged = loggedIn(a);
+                    if (!routeReady(need, logged, logged && isAdmin(a), logged && staffKnown(a))
+                        && System.currentTimeMillis() < until) { h.postDelayed(this, ROUTE_STEP_MS); return; }
+                    closeOverlays(a);
+                    go(a, open, target);
                 } catch (Throwable ignore) {}
             }
         });
+    }
+
+    /** Сотрудник (принял приглашение) — по кэшу «Мой пункт»: при запуске он есть сразу, база не нужна. */
+    static boolean staffKnown(Activity a) {
+        IvaStaffPatch.Me m = IvaStaffToolsPatch.cached(a);
+        return m != null && "active".equals(m.status);
+    }
+
+    /** Закрыть всё, что открыто поверх разделов: страницы (настройки, «Сотрудники», «На одобрении», карточки заявок). */
+    static void closeOverlays(Activity a) {
+        try { IvaAccessPatch.closePages(); } catch (Throwable ignore) {}
+        try { if (settings != null && settings.isShowing()) settings.dismiss(); } catch (Throwable ignore) {}
+        try { if (IvaOrderPatch.ordDialog != null && IvaOrderPatch.ordDialog.isShowing()) IvaOrderPatch.ordDialog.dismiss(); } catch (Throwable ignore) {}   // иначе другая заявка не откроется
+        try { if (IvaOrderPatch.archDialog != null && IvaOrderPatch.archDialog.isShowing()) IvaOrderPatch.archDialog.dismiss(); } catch (Throwable ignore) {}
+        try {
+            IvaClientPatch.ProfileScreen ps = IvaClientPatch.clientScreen;
+            if (ps != null && ps.dialog != null && ps.dialog.isShowing()) ps.dialog.dismiss();
+        } catch (Throwable ignore) {}
+    }
+
+    static void go(Activity a, String open, String target) {
+        if ("chat".equals(open)) IvaChatPatch.openFromNote(a, target);
+        else if ("orders".equals(open)) openOrder(a, target);
+        else if ("update".equals(open)) openUpdate(a, target);
+        else if ("rent".equals(open)) IvaOrderPatch.openById(a, target);     // 10.76: эта заявка
+        else if ("test".equals(open)) IvaTestPatch.openFromNote(a);          // 10.94: жёлтая кнопка в «Профиле»
+        else if (IvaStaffOrdersPatch.OPEN.equals(open)) IvaStaffOrdersPatch.openFromNote(a);   // 10.104: «Заявки пункта»
+        else if (IvaStaffToolsPatch.OPEN.equals(open)) IvaStaffToolsPatch.openFromNote(a);     // 10.105: «На одобрении»
+        else if (IvaStaffChatPatch.OPEN.equals(open)) IvaStaffChatPatch.openFromNote(a, target);   // 10.106: «Чат пункта»
+        else tab(a, "profile");                                                  // неизвестное — хотя бы «Кабинет»
     }
 
     static void tab(Activity a, String t) {
@@ -1682,9 +1740,7 @@ public final class IvaNotifyPatch {
             final LinearLayout body = new LinearLayout(a);
             body.setOrientation(LinearLayout.VERTICAL);
             final Runnable[] onPage = new Runnable[1];
-            // 10.98 (просьба владельца 16.10.2026): «Пункты выдачи» (10.95) и «Срок аренды» (10.77) перенесены
-            // в «Настройка проката» — только админам, отдельная страница; там же «Данные проката».
-            if (admin) try { IvaShopPatch.settingsRow(a, page, cText, cGray, cOrange); } catch (Throwable ignore) {}
+            // 10.116 (просьба владельца 17.10.2026): «Настройка проката» — не здесь, а первой строкой «Кабинета» (IvaShopPatch.cabinet)
             head.setContentDescription(NOTIF_TITLE + ", открыть");
             head.setOnClickListener(new View.OnClickListener() {
                 @Override public void onClick(View v) {
@@ -1711,6 +1767,7 @@ public final class IvaNotifyPatch {
             final List<Switch> kids = new ArrayList<Switch>();
             kids.add(switchRow(a, card, "Новые сообщения", "Когда вам пишут в чат", K_MSG, cText, cGray, cOrange));
             if (admin) kids.add(switchRow(a, card, "Новые заявки", "Заявки на ваши инструменты", K_ORD, cText, cGray, cOrange));
+            if (admin) kids.add(switchRow(a, card, REV_TITLE, REV_SUB, K_REV, cText, cGray, cOrange));   // 10.116
             kids.add(switchRow(a, card, "Обновления приложения", UPD_SUB, K_UPD, cText, cGray, cOrange));
             // 10.94: только eclips и eclipsik — новая жёлтая (пробная) версия; можно выключить
             if (loggedIn(a) && IvaTestPatch.isTester(String.valueOf(get(a, "userEmail"))))

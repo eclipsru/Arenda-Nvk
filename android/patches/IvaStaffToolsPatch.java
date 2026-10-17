@@ -487,6 +487,7 @@ public class IvaStaffToolsPatch {
         final LinearLayout revRow = IvaShopPatch.row(a, list, new IvaShopPatch.Icon(IvaShopPatch.Icon.SHOP, cOrange, den), REVIEW_TITLE, "Загружаем…", cText, cGray);
         final String[] mode = {""};
         final Runnable refresh = new Runnable() { @Override public void run() { loadSection(a, modeRow, revRow, mode); } };
+        sectionRefresh = new WeakReference<Runnable>(refresh);                 // 10.116: «на одобрение» пришло — счётчик сразу
         if (modeRow != null) modeRow.setOnClickListener(new View.OnClickListener() {
             @Override public void onClick(View v) {
                 IvaClientPatch.styledChoice(a, MODE_TITLE, "Как публиковать новые инструменты, которые добавили сотрудники. Правки — всегда сразу.",
@@ -579,8 +580,12 @@ public class IvaStaffToolsPatch {
         int cText, cGray, cOrange;
     }
 
+    static WeakReference<Rev> openRev;                    // 10.116: открытая «На одобрении» — обновить сразу
+    static WeakReference<Runnable> sectionRefresh;
+
     static void openReview(final Activity a, Runnable changed) {
         final Rev u = new Rev();
+        openRev = new WeakReference<Rev>(u);
         u.a = a;
         u.changed = changed;
         u.cText = IvaStaffPatch.color(a, "text", 0xfff2f4f8);
@@ -700,15 +705,19 @@ public class IvaStaffToolsPatch {
 
     // ───────────── уведомление «Инструмент на одобрение» (IvaNotifyPatch.tick и bgRun, владельцу, не главный поток) ─────────────
 
-    static void check(Context c, String email) throws Exception {
+    static final Object CHECK_LOCK = new Object();         // 10.116: опрос, фон и Realtime — не показать одно и то же дважды
+
+    /** Сколько ждёт одобрения (-1 — неизвестно). Новые — уведомление (свой переключатель «Инструменты на одобрение»). */
+    static int check(Context c, String email) throws Exception {
+        synchronized (CHECK_LOCK) {
         SharedPreferences sp = c.getSharedPreferences("iva_staff", 0);
         long now = System.currentTimeMillis();
-        if (now < sp.getLong("review_nodb_" + email, 0L)) return;
+        if (now < sp.getLong("review_nodb_" + email, 0L)) return -1;
         String[] r = IvaNotifyPatch.api(c, PENDING_RPC, "POST", "{}");
-        if (r == null) return;
+        if (r == null) return -1;
         if (!r[0].startsWith("2")) {
             if (NO_DB.equals(dbError(r[0], r.length > 1 ? r[1] : ""))) sp.edit().putLong("review_nodb_" + email, now + NO_DB_PAUSE_MS).apply();
-            return;
+            return -1;
         }
         List<Pending> ps = parsePending(r.length > 1 ? r[1] : "");
         List<String> ids = new ArrayList<String>();
@@ -718,7 +727,7 @@ public class IvaStaffToolsPatch {
         Set<String> seen = IvaNotifyPatch.splitSet(p.getString(k, null));
         List<String> nw = IvaNotifyPatch.fresh(seen, ids);                                // первый раз — молча запоминаем
         p.edit().putString(k, IvaNotifyPatch.joinSet(IvaNotifyPatch.remember(seen, ids))).apply();
-        if (nw.isEmpty() || !IvaNotifyPatch.on(c, IvaNotifyPatch.K_ORD, true)) return;
+        if (nw.isEmpty() || !IvaNotifyPatch.on(c, IvaNotifyPatch.K_REV, true)) return ps.size();
         String name = "", who = "";
         for (Pending x : ps) if (x.id.equals(nw.get(0))) { name = x.name; who = x.staff; break; }
         if (c instanceof Activity) {
@@ -727,7 +736,112 @@ public class IvaStaffToolsPatch {
                 @Override public void run() { try { Toast.makeText(a, "Инструмент на одобрение!", Toast.LENGTH_LONG).show(); } catch (Throwable ignore) {} }
             });
         }
-        IvaNotifyPatch.showNote(c, IvaNotifyPatch.CH_ORD, ID_NOTE, noteTitle(nw.size()), noteText(nw.size(), name, who), OPEN, nw.get(0));
+        IvaNotifyPatch.showNote(c, IvaNotifyPatch.CH_REV, ID_NOTE, noteTitle(nw.size()), noteText(nw.size(), name, who), OPEN, nw.get(0));
+        return ps.size();
+        }
+    }
+
+    /** 10.116: сколько ждёт одобрения — для строки «Настройка проката» в кабинете (-1 — неизвестно; фоновый поток). */
+    static int pendingCount(Activity a) throws Exception {
+        String[] r = IvaClientPatch.apiCall(a, PENDING_RPC, "POST", "{}", true);
+        if (r == null || !r[0].startsWith("2")) return -1;
+        return parsePending(r.length > 1 ? r[1] : "").size();
+    }
+
+    /** 10.116: база отметила «на одобрение» (Realtime → IvaAccessPatch.poke): уведомление, «На одобрении» и счётчики — сразу. */
+    static void live(final Activity a) {
+        if (a == null || a.isFinishing() || !IvaNotifyPatch.loggedIn(a) || !IvaNotifyPatch.isAdmin(a)) return;
+        final String email = IvaPickupPatch.me(a);
+        if (email.isEmpty()) return;
+        a.getSharedPreferences("iva_staff", 0).edit().remove("review_nodb_" + email).apply();   // SQL могли только что применить
+        new Thread(new Runnable() {
+            @Override public void run() {
+                int n = -1;
+                try { n = check(a, email); } catch (Throwable ignore) {}
+                final int fn = n;
+                a.runOnUiThread(new Runnable() {
+                    @Override public void run() {
+                        try { if (fn >= 0) IvaShopPatch.cabinetCount(a, fn); } catch (Throwable ignore) {}
+                        Rev u = openRev == null ? null : openRev.get();
+                        try { if (u != null && u.page.open()) reloadReview(u); } catch (Throwable ignore) {}
+                        Runnable rf = sectionRefresh == null ? null : sectionRefresh.get();
+                        try { if (rf != null) rf.run(); } catch (Throwable ignore) {}
+                    }
+                });
+            }
+        }).start();
+    }
+
+    // ───────────── 10.116: сотруднику отказали в публикации — причина словами (IvaPatch.publishError) ─────────────
+    // Владелец 17.10.2026: у сотрудника «Опубликовать» → «Не опубликовано: нет прав на публикацию. Учётная запись а…»
+    // (обрезано, и про арендодателя — не про сотрудника). Теперь коротко во всплывающей строке, а причина — окном:
+    // база сама говорит, чего не хватает (20261107: iva_staff_publish_why), без SQL 10.116 — по iva_staff_catalog.
+
+    static final String WHY_RPC = "/rest/v1/rpc/iva_staff_publish_why", CAT_RPC = "/rest/v1/rpc/iva_staff_catalog";
+    static final String REFUSED_TITLE = "Не опубликовано";
+    static final String WHY_NO_SQL = "В базе ещё нет обновления «сотрудник выкладывает инструмент». Владельцу: выполнить в Supabase "
+        + "файлы 20261029_staff_orders.sql и 20261030_staff_tools.sql, затем 20261107_staff_publish_check.sql.";
+    static final String WHY_NO_RIGHT = "База не видит у вас права «Выкладывает инструмент»: приглашение не принято, право выключено "
+        + "или прокат владельца приостановлен. Владелец проверяет: «Кабинет» → «Настройка проката» → «Сотрудники».";
+    static final String WHY_UNKNOWN = "Права сотрудника в базе есть, но запись не прошла. Точную причину покажет обновление базы — "
+        + "владельцу: выполнить в Supabase 20261107_staff_publish_check.sql (внизу будет причина по каждому сотруднику).";
+    static volatile long whyAt;
+
+    /** Какой шаг не прошёл: 2 — запись инструмента (в ответе таблица tools), 1 — фото (хранилище), 0 — неизвестно. */
+    static int refusalStep(String msg) {
+        String m = msg == null ? "" : msg.toLowerCase(java.util.Locale.ROOT);
+        if (m.contains("\"tools\"") || m.contains("table tools")) return 2;
+        if (m.contains("row-level security")) return 1;
+        return 0;
+    }
+
+    /** Ответ iva_staff_publish_why: {"code","text"} → фраза ("" — не разобрали). */
+    static String whyOf(String body) {
+        try {
+            String b = body == null ? "" : body.trim();
+            if (b.startsWith("[")) b = new org.json.JSONArray(b).optString(0, "");
+            JSONObject o = new JSONObject(b);
+            return str(o, "text");
+        } catch (Throwable e) { return ""; }
+    }
+
+    /** Без SQL 10.116: ответ iva_staff_catalog → фраза. */
+    static String catWhy(String code, String body) {
+        String c = code == null ? "" : code, b = body == null ? "" : body.trim();
+        if (NO_DB.equals(dbError(c, b))) return WHY_NO_SQL;
+        if (c.startsWith("2")) return b.contains("true") ? WHY_UNKNOWN : WHY_NO_RIGHT;
+        return c.isEmpty() ? "Не удалось узнать причину — нет связи с сервером." : "Не удалось узнать причину (ответ " + c + ").";
+    }
+
+    static String refusalText(int step, String why) {
+        String head = step == 2 ? "Объявление не сохранилось: база не пустила запись." : step == 1 ? "Фото не загрузилось: хранилище не пустило."
+            : "База не пустила публикацию.";
+        return head + "\n\n" + (why == null || why.isEmpty() ? WHY_UNKNOWN : why);
+    }
+
+    /** Из IvaPatch.publishError (главный поток): спросить базу в фоне и показать окно. */
+    static void explainRefusal(final Activity a, String msg) {
+        long now = System.currentTimeMillis();
+        if (a == null || a.isFinishing() || now - whyAt < 3000) return;
+        whyAt = now;
+        final int step = refusalStep(msg);
+        new Thread(new Runnable() {
+            @Override public void run() {
+                String why = "";
+                try {
+                    String[] r = IvaClientPatch.apiCall(a, WHY_RPC, "POST", "{}", true);
+                    if (r != null && r[0].startsWith("2")) why = whyOf(r.length > 1 ? r[1] : "");
+                    if (why.isEmpty()) {
+                        String[] c = IvaClientPatch.apiCall(a, CAT_RPC, "POST", "{}", true);
+                        why = c == null ? catWhy("", "") : catWhy(c[0], c.length > 1 ? c[1] : "");
+                    }
+                } catch (Throwable e) { why = catWhy("", ""); }
+                final String text = refusalText(step, why);
+                a.runOnUiThread(new Runnable() {
+                    @Override public void run() { try { IvaAccessPatch.info(a, REFUSED_TITLE, text); } catch (Throwable ignore) {} }
+                });
+            }
+        }).start();
     }
 
     /** Нажали на уведомление: кабинет → «На одобрении». */
