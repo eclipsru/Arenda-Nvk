@@ -556,7 +556,7 @@ public class IvaPickupPatch {
             @Override public void run() {
                 List<Point> ps = null;
                 String err = "";
-                try { ps = load(u.a, new String[1]); } catch (Throwable e) {
+                try { ps = load(u.a, new String[1]); IvaStaffPatch.fetch(u.a); } catch (Throwable e) {
                     String m = e.getMessage();
                     err = m == null || m.isEmpty() ? "Не загрузилось — нет связи с сервером" : m;
                 }
@@ -624,6 +624,18 @@ public class IvaPickupPatch {
             btns.addView(ed, el);
             btns.addView(del, new LinearLayout.LayoutParams(-2, -2));
             info.addView(btns);
+            // 10.103: «Сотрудники» пункта — отдельной строкой (три кнопки в ряд не помещаются на узком экране)
+            TextView staff = IvaSearchPatch.chip(a, IvaStaffPatch.chipText(IvaStaffPatch.count(p.id)), false, false);
+            staff.setOnClickListener(new View.OnClickListener() {
+                @Override public void onClick(View v) {
+                    try {
+                        IvaStaffPatch.openPoint(a, p, u.points, new Runnable() { @Override public void run() { try { drawList(u); } catch (Throwable ignore) {} } });
+                    } catch (Throwable ignore) {}
+                }
+            });
+            LinearLayout.LayoutParams sl = new LinearLayout.LayoutParams(-2, -2);
+            sl.topMargin = dp(a, 8);
+            info.addView(staff, sl);
             c.addView(info);
             LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2);
             lp.topMargin = dp(a, 10);
@@ -640,8 +652,9 @@ public class IvaPickupPatch {
 
     static void askDelete(final Ui u, final Point p) {
         IvaClientPatch.styledChoice(u.a, "Удалить пункт «" + p.name + "»?",
-            u.points.size() > 1 && u.points.get(0).id.equals(p.id)
-                ? "Это первый пункт — «Срок аренды» станет считаться по графику следующего." : "",
+            ((u.points.size() > 1 && u.points.get(0).id.equals(p.id)
+                ? "Это первый пункт — «Срок аренды» станет считаться по графику следующего." : "")
+                + (IvaStaffPatch.count(p.id) > 0 ? " Сотрудники этого пункта потеряют к нему доступ." : "")).trim(),
             new String[]{"Удалить"}, new IvaClientPatch.Choice() {
                 @Override public void pick(int i) { if (i == 0) write(u, "DELETE", idPath(p.id), null, "Пункт удалён"); }
             });

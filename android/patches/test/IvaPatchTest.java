@@ -2453,6 +2453,69 @@ public class IvaPatchTest {
                 "Прокат;Контактное лицо;Телефон;Адрес выдачи;Часы работы;|Прокат;Контактное лицо;Телефон;");
             eq("заявки 10.102: подпись набора частей", IvaOrderPointPatch.sig(java.util.Arrays.asList("x", null)) + "|" + IvaOrderPointPatch.sig(null), "?,?,|");
         }
+        {   // 10.103: сотрудники пунктов выдачи (этап 3а «Сотрудники и пункты»)
+            String u1 = "0b6f9c2e-1d2a-4c3b-9e8f-112233445566", u2 = "AB6F9C2E-1D2A-4C3B-9E8F-112233445577";
+            eq("сотрудники 10.103: наборы прав", java.util.Arrays.toString(IvaStaffPatch.preset("Выдача")) + "|" + java.util.Arrays.toString(IvaStaffPatch.preset("Каталог"))
+                + "|" + java.util.Arrays.toString(IvaStaffPatch.preset("другое")),
+                "[true, false, true, true]|[false, true, false, false]|[false, false, false, false]");
+            eq("сотрудники 10.103: какой набор выбран", IvaStaffPatch.presetOf(new boolean[]{true, false, true, true}) + "|" + IvaStaffPatch.presetOf(new boolean[]{false, true, false, false})
+                + "|" + IvaStaffPatch.presetOf(new boolean[]{true, true, false, false}) + "|" + IvaStaffPatch.presetOf(null), "Выдача|Каталог||");
+            eq("сотрудники 10.103: права текстом", IvaStaffPatch.rightsText(new boolean[]{true, false, true, false}) + "|" + IvaStaffPatch.rightsText(new boolean[4])
+                + "|" + IvaStaffPatch.rightsText(new boolean[]{false, true, false, true}),
+                "Выдаёт и принимает · Отвечает в чате|Без прав|Выкладывает инструмент · Получает уведомления");
+            eq("сотрудники 10.103: состояние", IvaStaffPatch.statusText("invited") + "|" + IvaStaffPatch.statusText("active") + "|" + IvaStaffPatch.statusText("declined")
+                + "|" + IvaStaffPatch.statusText(null), "Ждёт ответа|Работает|Отказался|Ждёт ответа");
+            eq("сотрудники 10.103: кнопка у пункта", IvaStaffPatch.chipText(0) + "|" + IvaStaffPatch.chipText(3), "Сотрудники|Сотрудники · 3");
+            boolean[] ok = {true, false, false, false}, none = new boolean[4];
+            eq("сотрудники 10.103: проверка формы — как в базе",
+                IvaStaffPatch.formErr(true, "", "a@x.ru", "Иван", "", 1, ok) + "|" + IvaStaffPatch.formErr(true, "ivan", "a@x.ru", "Иван", "", 1, ok) + "|"
+                + IvaStaffPatch.formErr(true, " A@X.ru ", "a@x.ru", "Иван", "", 1, ok) + "|" + IvaStaffPatch.formErr(true, "i@x.ru", "a@x.ru", "  ", "", 1, ok) + "|"
+                + IvaStaffPatch.formErr(true, "i@x.ru", "a@x.ru", "Иван", "12-34", 1, ok) + "|" + IvaStaffPatch.formErr(true, "i@x.ru", "a@x.ru", "Иван", "", 0, ok) + "|"
+                + IvaStaffPatch.formErr(true, "i@x.ru", "a@x.ru", "Иван", "", 1, none) + "|" + IvaStaffPatch.formErr(true, "i@x.ru", "a@x.ru", "Иван", "+7 900 123-45-67", 1, ok) + "|"
+                + IvaStaffPatch.formErr(false, "", "a@x.ru", "Иван", "", 1, ok),
+                "Введите почту, под которой сотрудник входит в приложение|Похоже, в email ошибка (пример: ivan@mail.ru)|"
+                + "Это ваша почта — владельца проката добавлять не нужно|Введите имя сотрудника|Проверьте номер: 10–15 цифр, например +7 900 123-45-67|"
+                + "Отметьте хотя бы один пункт выдачи|Отметьте хотя бы одно право||");
+            StringBuilder longName = new StringBuilder();
+            for (int i = 0; i < 81; i++) longName.append('я');
+            eq("сотрудники 10.103: имя не длиннее 80", IvaStaffPatch.formErr(false, "", "", longName.toString(), "", 1, ok), "Имя — не длиннее 80 символов");
+            eq("сотрудники 10.103: запрос «Пригласить» — почта строчными, только настоящие id пунктов, кавычки экранированы",
+                IvaStaffPatch.saveBody(null, " Ivan@X.ru ", "  Иван  \"Ваня\"  ", " +7 900 ", java.util.Arrays.asList(u1, "x", null, u2), new boolean[]{true, false, true, true}, false),
+                "{\"p_id\":null,\"p_email\":\"ivan@x.ru\",\"p_name\":\"Иван \\\"Ваня\\\"\",\"p_tel\":\"+7 900\",\"p_points\":[\"" + u1
+                + "\",\"ab6f9c2e-1d2a-4c3b-9e8f-112233445577\"],\"p_issue\":true,\"p_catalog\":false,\"p_chat\":true,\"p_notify\":true,\"p_self\":false}");
+            eq("сотрудники 10.103: запрос «Сохранить» — с id; плохой id — как новый",
+                IvaStaffPatch.saveBody(u2, "", "И", "", null, null, true) + "|" + IvaStaffPatch.saveBody("1; drop", "", "И", "", null, null, true).startsWith("{\"p_id\":null,"),
+                "{\"p_id\":\"ab6f9c2e-1d2a-4c3b-9e8f-112233445577\",\"p_email\":\"\",\"p_name\":\"И\",\"p_tel\":\"\",\"p_points\":[],\"p_issue\":false,\"p_catalog\":false,"
+                + "\"p_chat\":false,\"p_notify\":false,\"p_self\":true}|true");
+            eq("сотрудники 10.103: «Убрать» и «Принять / Отказаться» — только настоящий id",
+                IvaStaffPatch.idBody(u1) + "|" + IvaStaffPatch.idBody("x") + "|" + IvaStaffPatch.answerBody(u2, true) + "|" + IvaStaffPatch.answerBody(u1, false) + "|" + IvaStaffPatch.answerBody(null, true),
+                "{\"p_id\":\"" + u1 + "\"}|null|{\"p_id\":\"ab6f9c2e-1d2a-4c3b-9e8f-112233445577\",\"p_accept\":true}|{\"p_id\":\"" + u1 + "\",\"p_accept\":false}|null");
+            eq("сотрудники 10.103: ответы базы",
+                IvaStaffPatch.dbError("204", "") + "|"
+                + IvaStaffPatch.dbError("400", "{\"code\":\"P0001\",\"message\":\"Этот человек уже сотрудник другого проката (или приглашён им)\"}") + "|"
+                + IvaStaffPatch.dbError("409", "{\"code\":\"23505\",\"message\":\"duplicate key value violates unique constraint \\\"iva_staff_one_owner\\\"\"}") + "|"
+                + IvaStaffPatch.dbError("404", "{\"code\":\"PGRST202\",\"message\":\"Could not find the function public.iva_staff_list\"}") + "|"
+                + IvaStaffPatch.dbError("403", "{\"code\":\"42501\"}") + "|" + IvaStaffPatch.dbError("", "") + "|" + IvaStaffPatch.dbError("500", "x"),
+                "|Этот человек уже сотрудник другого проката (или приглашён им)|Этот человек уже сотрудник другого проката (или приглашён им)|"
+                + "Сотрудники заработают после обновления базы (SQL 10.103)|Нет права — войдите заново|Не получилось — нет связи с сервером|Не получилось (ответ 500)");
+            eq("сотрудники 10.103: текст приглашения", IvaStaffPatch.inviteText("Ива-Прокат", java.util.Arrays.asList("Склад")) + "|"
+                + IvaStaffPatch.inviteText(" ", java.util.Arrays.asList("Склад", "Бердск")) + "|" + IvaStaffPatch.inviteText("Ива", null),
+                "«Ива-Прокат» приглашает вас сотрудником пункта «Склад»|«Прокат» приглашает вас сотрудником пунктов «Склад», «Бердск»|«Ива» приглашает вас сотрудником");
+            eq("сотрудники 10.103: строка «Мой пункт»", IvaStaffPatch.mineSub("Ива", java.util.Arrays.asList("Склад")) + "|"
+                + IvaStaffPatch.mineSub("Ива", java.util.Arrays.asList("Склад", "Бердск")) + "|" + IvaStaffPatch.mineSub("", null),
+                "Склад · Ива|" + IvaPickupPatch.countText(2) + " · Ива|Прокат");
+            IvaStaffPatch.Staff s1 = new IvaStaffPatch.Staff(), s2 = new IvaStaffPatch.Staff();
+            s1.name = "Иван"; s1.points.add(u1); s2.name = "Ольга"; s2.points.add(u1); s2.points.add(u2.toLowerCase());
+            java.util.List<IvaStaffPatch.Staff> all = java.util.Arrays.asList(s1, s2);
+            StringBuilder of = new StringBuilder();
+            for (IvaStaffPatch.Staff x : IvaStaffPatch.ofPoint(all, u2)) of.append(x.name);
+            eq("сотрудники 10.103: сотрудники пункта", IvaStaffPatch.ofPoint(all, u1).size() + "|" + of + "|" + IvaStaffPatch.ofPoint(null, u1).size() + "|" + IvaStaffPatch.ofPoint(all, null).size(),
+                "2|Ольга|0|0");
+            IvaPickupPatch.Point a1 = new IvaPickupPatch.Point(), a2 = new IvaPickupPatch.Point();
+            a1.id = u1; a1.name = "Склад"; a2.id = u2; a2.name = "Бердск";
+            eq("сотрудники 10.103: «Ещё пункты»", IvaStaffPatch.pointNames(java.util.Arrays.asList(a1, a2), s2.points, u1) + "|"
+                + IvaStaffPatch.pointNames(java.util.Arrays.asList(a1, a2), s2.points, "") + "|" + IvaStaffPatch.pointNames(null, s2.points, ""), "[Бердск]|[Склад, Бердск]|[]");
+        }
         if (fail > 0) { System.out.println("ошибок: " + fail); System.exit(1); }
         System.out.println("все проверки IvaPatch пройдены");
     }

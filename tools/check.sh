@@ -360,6 +360,17 @@ else
   skip "стенд «Заявки по пунктам выдачи»: нет pgserver (PG_PY=<python с pgserver> bash tools/check.sh)"
 fi
 
+head_ "4.5.12. Стенд «Сотрудники пунктов выдачи» (локальный PostgreSQL, SQL 10.103)"
+if "$PG_PY" -c "import pgserver" >/dev/null 2>&1; then
+  if "$PG_PY" tools/staff-stand.py >/tmp/iva-test-staff.log 2>&1; then
+    ok "сотрудники: $(grep -c '✔' /tmp/iva-test-staff.log) проверок SQL на PostgreSQL (приглашение, права, кто что видит, «Принять / Отказаться», убрать, удаление пункта, откат)"
+  else
+    bad "стенд «Сотрудники пунктов выдачи»"; grep -E '✘|Error|ERROR' /tmp/iva-test-staff.log | head -8 | sed 's/^/      /'
+  fi
+else
+  skip "стенд «Сотрудники пунктов выдачи»: нет pgserver (PG_PY=<python с pgserver> bash tools/check.sh)"
+fi
+
 head_ "Итог"
 printf '  пройдено: %s, ошибок: %s, пропущено: %s\n' "$PASS" "$FAIL" "$SKIP"
 if [ "$FAIL" -eq 0 ]; then echo "  Можно продолжать."; exit 0; else echo "  Сначала исправляем замечания выше."; exit 1; fi

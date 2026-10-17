@@ -1171,6 +1171,7 @@ public final class IvaNotifyPatch {
     static void cabinet(Activity a, String tab) {
         ensureSupport(a);
         if ("profile".equals(tab)) releaseCheck(a, false);
+        try { IvaStaffPatch.onShowTab(a, tab); } catch (Throwable ignore) {}   // 10.103: приглашение в сотрудники / «Мой пункт»
     }
 
     /** Сразу — по последнему известному релизу; затем (не чаще раза в минуту, force — сейчас) спрашиваем базу в фоне. */
