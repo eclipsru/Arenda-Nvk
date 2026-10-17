@@ -245,6 +245,7 @@ public final class IvaChiefPatch {
         }
         back.setOnClickListener(new View.OnClickListener() { @Override public void onClick(View v) { d.dismiss(); } });
         p.d = d;
+        IvaAccessPatch.track(d);   // 10.110: сняли админа / сотрудника — закрыть открытые страницы
         d.show();
         return p;
     }

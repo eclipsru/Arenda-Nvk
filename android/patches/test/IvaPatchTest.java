@@ -2562,6 +2562,7 @@ public class IvaPatchTest {
         staffJournal107();                                            // 10.107: журнал, сводка, имена в чате
         adminManage108();                                             // 10.108: приостановить / удалить админа, порядок в панели
         avatarEdit109();                                              // 10.109: редактировать аватарку, галерея вместо проводника
+        access110();                                                  // 10.110: убрали админа / сотрудника — сразу клиент
         if (fail > 0) { System.out.println("ошибок: " + fail); System.exit(1); }
         System.out.println("все проверки IvaPatch пройдены");
     }
@@ -2621,6 +2622,55 @@ public class IvaPatchTest {
     }
 
     /** 10.107: «кто выдал / кто принял», «Сводка по пунктам», имя сотрудника в чате владельца (этап 4). */
+    static void access110() {
+        java.util.List<String[]> rows = new java.util.ArrayList<String[]>();
+        String pre = String.valueOf(IvaAccessPatch.adminFromPairs(rows, "a@b.ru"));
+        rows.add(new String[]{"Other@b.ru", null});
+        rows.add(new String[]{" A@B.ru ", null});
+        String live = String.valueOf(IvaAccessPatch.adminFromPairs(rows, "a@b.ru"));
+        rows.set(1, new String[]{"a@b.ru", "2026-10-17T10:00:00+00:00"});
+        String gone = String.valueOf(IvaAccessPatch.adminFromPairs(rows, "a@b.ru"));
+        java.util.List<String[]> old = new java.util.ArrayList<String[]>();
+        old.add(new String[]{"a@b.ru"});                              // нет столбца removed_at — запасной запрос
+        eq("доступ 10.110: строка admins — админ; удалён или нет строки — клиент; почта без регистра",
+            pre + "," + live + "," + gone + "," + IvaAccessPatch.adminFromPairs(old, "a@b.ru") + ","
+            + IvaAccessPatch.adminFromPairs(rows, "") + "," + IvaAccessPatch.adminFromPairs(null, "a@b.ru") + ","
+            + IvaAccessPatch.adminFromRows("{\"code\":\"401\"}", "a@b.ru") + "," + IvaAccessPatch.removedEmpty("null") + "," + IvaAccessPatch.removedEmpty(" "),
+            "false,true,false,true,null,null,null,true,true");
+        eq("доступ 10.110: снять / вернуть — только по ответу базы, создателя не трогаем",
+            IvaAccessPatch.adminChange(false, true, Boolean.FALSE) + "," + IvaAccessPatch.adminChange(false, false, Boolean.TRUE) + ","
+            + IvaAccessPatch.adminChange(false, true, Boolean.TRUE) + "," + IvaAccessPatch.adminChange(false, false, Boolean.FALSE) + ","
+            + IvaAccessPatch.adminChange(false, true, null) + "," + IvaAccessPatch.adminChange(true, true, Boolean.FALSE),
+            "-1,1,0,0,0,0");
+        eq("доступ 10.110: нет столбца removed_at (SQL 20261102 не применён) — спросить без него; прочие ошибки — нет",
+            IvaAccessPatch.missingColumn("400", "{\"code\":\"42703\",\"message\":\"column admins.removed_at does not exist\"}") + ","
+            + IvaAccessPatch.missingColumn("401", "{\"code\":\"PGRST301\"}") + "," + IvaAccessPatch.missingColumn("500", "removed_at 42703") + ","
+            + IvaAccessPatch.missingColumn(null, null),
+            "true,false,false,false");
+        eq("доступ 10.110: со страниц админа — в профиль, профиль / заявки / чат — перерисовать, остальное — на месте",
+            IvaAccessPatch.adminTab("addtool") + "," + IvaAccessPatch.adminTab("admList") + "," + IvaAccessPatch.adminTab("admPays") + ","
+            + IvaAccessPatch.adminTab("orders") + "," + IvaAccessPatch.adminTab("home") + "," + IvaAccessPatch.adminTab(null) + "|"
+            + IvaAccessPatch.redrawTab("orders") + "," + IvaAccessPatch.redrawTab("chat") + "," + IvaAccessPatch.redrawTab("profile") + ","
+            + IvaAccessPatch.redrawTab("detail") + "|" + IvaAccessPatch.staffTab("tooledit") + "," + IvaAccessPatch.staffTab("orders"),
+            "true,true,true,false,false,false|true,true,true,false|true,false");
+        eq("доступ 10.110: сотрудник — убрали / отозвали приглашение / новое / без изменений",
+            IvaAccessPatch.staffChange("active", "") + "," + IvaAccessPatch.staffChange("active", "declined") + ","
+            + IvaAccessPatch.staffChange("invited", "") + "," + IvaAccessPatch.staffChange("", "invited") + ","
+            + IvaAccessPatch.staffChange("invited", "active") + "," + IvaAccessPatch.staffChange("active", "active") + ","
+            + IvaAccessPatch.staffChange("", "") + "," + IvaAccessPatch.staffChange(null, null),
+            "1,1,2,3,3,0,0,0");
+        eq("доступ 10.110: сотрудника спрашиваем каждые 30 с, клиента — раз в минуту",
+            IvaAccessPatch.staffDue("active", 1000, 2000) + "," + IvaAccessPatch.staffDue("invited", 1000, 2000) + ","
+            + IvaAccessPatch.staffDue("", 1000, 2000) + "," + IvaAccessPatch.staffDue("", 1000, 61000) + "," + IvaAccessPatch.staffDue("", 0, 5),
+            "true,true,false,true,true");
+        String g = IvaAccessPatch.staffGoneText("Прокат «Сила»"), g0 = IvaAccessPatch.staffGoneText(" ");
+        eq("доступ 10.110: тексты — понятно, что осталось клиенту",
+            g.contains("к прокату «Прокат «Сила»» закрыт") && g.contains("возможности клиента") && g0.startsWith("Доступ сотрудника закрыт —")
+            && IvaAccessPatch.ADMIN_GONE_TEXT.contains("возможности клиента") && "Понятно".equals(IvaAccessPatch.OK)
+            && IvaAccessPatch.ADMIN_PATH.contains("select=email,removed_at&email=ilike.") && !IvaAccessPatch.ADMIN_PATH.contains("*")
+            && IvaAccessPatch.TAB_EVERY_MS == 8000L && IvaAccessPatch.STAFF_IDLE_MS == 60000L, true);
+    }
+
     static void avatarEdit109() {
         eq("аватар 10.109: окно выбора — системный выбор фото, галерея; проводник — только запасной",
             String.join(",", IvaPhotoPatch.galleryActions(true)) + "|" + String.join(",", IvaPhotoPatch.galleryActions(false)) + "|" + IvaPhotoPatch.REQ_EDIT_NATIVE,

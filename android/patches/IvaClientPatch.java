@@ -1537,6 +1537,7 @@ public final class IvaClientPatch {
 
     /** 9) Профиль подмешивается в native после штатного renderProfile. */
     public static void onProfile(Activity a) {
+        try { if (IvaAccessPatch.onProfile(a)) return; } catch (Throwable ignore) {}   // 10.110: удалённый админ — клиент (renderProfile заново)
         try {
             ensureClientProfile();
             installClientProfile(a);

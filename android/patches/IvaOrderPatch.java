@@ -2053,6 +2053,7 @@ public final class IvaOrderPatch {
         sc.addView(list, new FrameLayout.LayoutParams(-1, -2));
         root.addView(sc, new LinearLayout.LayoutParams(-1, 0, 1f));
         final Dialog d = new Dialog(a, android.R.style.Theme_Material_NoActionBar);
+        IvaAccessPatch.track(d);   // 10.110: сняли админа — закрыть
         d.setContentView(root, new ViewGroup.LayoutParams(-1, -1));
         d.setCancelable(true);
         android.view.Window w = d.getWindow();
@@ -2172,6 +2173,7 @@ public final class IvaOrderPatch {
         }
 
         final Dialog d = new Dialog(a, android.R.style.Theme_Material_NoActionBar);
+        IvaAccessPatch.track(d);   // 10.110: сняли админа — закрыть
         // 10.76: активная заявка — «Написать» и «Позвонить»: клиенту — прокату, админу — клиенту (первым может любой)
         if (ordActive(r, archived)) try { ordContactRow(a, sh, d, r, owners, adm); } catch (Throwable ignore) {}
         if (!adm && !r.containsKey(ORD_PARTIAL) && (archived || ordClosed(r))) {   // «В архив» — только у закрытых; в архиве — «Вернуть» (у админа — штатная «В архив →» на карточке)

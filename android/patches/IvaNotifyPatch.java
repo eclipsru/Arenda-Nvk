@@ -455,6 +455,7 @@ public final class IvaNotifyPatch {
         try { IvaChiefPatch.onTab(a, tab); } catch (Throwable ignore) {}    // 10.93: «Управление», «Мои отзывы»; без «Ваш доход с админов»
         try { IvaTestPatch.onTab(a, tab); } catch (Throwable ignore) {}     // 10.94: жёлтая «Обновить до версии N» у eclips и eclipsik
         try { IvaAdminsPatch.onTab(a, tab); } catch (Throwable ignore) {}   // 10.108: приостановить / удалить админа, «Добавить админа» в списке
+        try { IvaAccessPatch.onTab(a, tab); } catch (Throwable ignore) {}   // 10.110: убрали админа / сотрудника — сразу клиент
     }
 
     static Object get(Object o, String f) { return IvaClientPatch.get(o, f); }
@@ -517,6 +518,7 @@ public final class IvaNotifyPatch {
         final String openWith = "chat".equals(ct) && a.hasWindowFocus() ? (cw instanceof String ? ((String) cw).trim() : "") : null;
         new Thread(new Runnable() {
             @Override public void run() {
+                if (logged && !email.isEmpty()) try { IvaAccessPatch.check(a, IvaPickupPatch.me(a)); } catch (Throwable ignore) {}   // 10.110
                 try {
                     if (logged && admin && !email.isEmpty()) checkOrders(a, email);
                     if (logged && !email.isEmpty()) checkMessages(a, email, admin, openWith);
