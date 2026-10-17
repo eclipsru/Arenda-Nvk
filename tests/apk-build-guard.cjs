@@ -2396,9 +2396,78 @@ try {
       && sq.includes("where s.id = p_id and s.owner_email = me") && !/TRUNCATE|DROP COLUMN|customer_profiles|passport/i.test(sq.replace(/--[^\n]*/g, '')),
       'SQL 10.115: отметки — тариф, ответ сотрудника, правка пункта; в пункт / из пункта — только свой сотрудник и свой пункт');
     assert.ok(chk.includes('tools/staff-live-stand.py') && st.includes("SQL = rd('supabase/migrations/20261106_staff_live.sql')"), 'SQL 10.115: стенд PostgreSQL в check.sh');
-    assert.ok(wf.includes("NEW_NAME: '10.115'") && wf.includes("NEW_CODE: '189'"), 'сборка 10.115 (189)');
+    assert.ok(Number((/NEW_CODE: '(\d+)'/.exec(wf) || [])[1]) >= 189, 'сборка 10.115 (189) или новее');
     assert.ok((tp.match(/eq\("сотрудник 10\.115: /g) || []).length >= 5 && (tp.match(/eq\("сотрудники 10\.115: /g) || []).length >= 6
       && (tp.match(/eq\("тариф 10\.115: /g) || []).length >= 2, 'IvaPatchTest: проверки 10.115');
+  }
+  // 10.116 (просьба владельца 17.10.2026): 1) сотрудник «Опубликовать» → «нет прав… Учётная запись а…» (обрезано, про
+  // арендодателя) — теперь коротко и окно с причиной от базы (SQL 20261107 iva_staff_publish_why, без него — iva_staff_catalog);
+  // «на одобрение» — у владельца сразу (база отмечает → Realtime → live), с уведомлением и своим переключателем;
+  // 2) «Настройка проката» — первой строкой «Кабинета» админа, не в «Настройках»; 3) нажатие на любое уведомление
+  // открывает свой раздел: ждём вход и роль, закрываем окна поверх, потом переходим
+  {
+    const ip = R('android/patches/IvaPatch.java'), st = R('android/patches/IvaStaffToolsPatch.java'), np = R('android/patches/IvaNotifyPatch.java'),
+      ac = R('android/patches/IvaAccessPatch.java'), sh = R('android/patches/IvaShopPatch.java'), cl = R('android/patches/IvaClientPatch.java'),
+      tp = R('android/patches/test/IvaPatchTest.java'), wf = R('.github/workflows/build-apk.yml'), chk = R('tools/check.sh'),
+      sq = R('supabase/migrations/20261107_staff_publish_check.sql'), sd = R('tools/staff-publish-stand.py');
+    const strip = (x) => x.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '');
+    const fn = (src, name) => { const m = new RegExp('static [\\w.<>\\[\\]]+ ' + name + '\\(').exec(src); assert.ok(m, 'нет ' + name);
+      return src.slice(m.index, src.indexOf('\n    }\n', m.index)); };
+    const ipc = strip(ip), stc = strip(st), npc = strip(np), shc = strip(sh);
+    // 1а. причина отказа: сотруднику — коротко (тот же префикс) + окно; админу — прежний текст
+    const pe = fn(ipc, 'publishError');
+    assert.ok(/if \(a != null && IvaStaffToolsPatch\.staff\(a\)\) \{\s*IvaStaffToolsPatch\.explainRefusal\(a, msg\);\s*return STAFF_REFUSED;/.test(pe)
+      && pe.indexOf('STAFF_REFUSED') < pe.indexOf('\\u0423\\u0447\\u0451\\u0442\\u043d\\u0430\\u044f')   /* «Учётная» — прежний текст админу */ && ip.includes('STAFF_REFUSED = "нет прав на публикацию')
+      && !/IvaStaffToolsPatch|explainRefusal/.test(R('android/patches/apply.py')),
+      'публикация 10.116: сотруднику — «нет прав на публикацию — причина в окне», админу — прежний текст; вставок в smali нет');
+    const er = fn(stc, 'explainRefusal');
+    assert.ok(er.includes('now - whyAt < 3000') && er.includes('new Thread(new Runnable() {') && er.includes('IvaClientPatch.apiCall(a, WHY_RPC, "POST", "{}", true);')
+      && er.indexOf('WHY_RPC') < er.indexOf('CAT_RPC') && er.includes('a.runOnUiThread(') && er.includes('IvaAccessPatch.info(a, REFUSED_TITLE, text)')
+      && st.includes('WHY_RPC = "/rest/v1/rpc/iva_staff_publish_why", CAT_RPC = "/rest/v1/rpc/iva_staff_catalog"'),
+      'публикация 10.116: причина — от базы в фоне (why, без SQL 10.116 — catalog), окно в главном потоке, не чаще раза в 3 с');
+    // 1б. «на одобрение»: свой переключатель и канал, сразу по отметке базы
+    const ck = fn(stc, 'check');
+    assert.ok(ck.includes('synchronized (CHECK_LOCK) {') && ck.includes('IvaNotifyPatch.on(c, IvaNotifyPatch.K_REV, true)')
+      && ck.includes('IvaNotifyPatch.showNote(c, IvaNotifyPatch.CH_REV, ID_NOTE,') && !ck.includes('K_ORD') && !ck.includes('CH_ORD'),
+      'одобрение 10.116: уведомление «на одобрение» — свой переключатель K_REV и своя категория CH_REV');
+    const os = fn(npc, 'openSettings');
+    assert.ok(os.indexOf('"Новые заявки"') > 0 && os.indexOf('"Новые заявки"') < os.indexOf('if (admin) kids.add(switchRow(a, card, REV_TITLE, REV_SUB, K_REV,')
+      && /String\[\] ids = \{CH_MSG, CH_ORD, CH_UPD, CH_RENT, IvaTestPatch\.CH_TEST, CH_REV\};/.test(npc) && np.includes('static final String K_REV = "review";'),
+      'одобрение 10.116: переключатель «Инструменты на одобрение» — под «Новые заявки», только админам; категория создаётся');
+    const lv = fn(stc, 'live'), pk = fn(strip(ac), 'poke');
+    assert.ok(pk.includes('try { IvaStaffToolsPatch.live(a); } catch (Throwable ignore) {}') && pk.indexOf('IvaStaffToolsPatch.live(a)') < pk.indexOf('IvaReviewPatch.chief(a)')
+      && lv.includes('!IvaNotifyPatch.isAdmin(a)) return;') && lv.includes('new Thread(new Runnable() {') && lv.includes('n = check(a, email);')
+      && lv.includes('a.runOnUiThread(') && lv.includes('reloadReview(u)') && lv.includes('rf.run()') && lv.includes('IvaShopPatch.cabinetCount(a, fn)')
+      && st.includes('openRev = new WeakReference<Rev>(u);') && st.includes('sectionRefresh = new WeakReference<Runnable>(refresh);'),
+      'одобрение 10.116: отметка базы (Realtime) → у админа сразу уведомление, «На одобрении», раздел и счётчик в кабинете');
+    assert.ok(sq.includes('trg_iva_tool_review_ping') && sq.includes("execute 'select public.iva_push_enqueue($1, $2)' using 'o', em;") && sq.includes('iva_staff_publish_why')
+      && chk.includes('tools/staff-publish-stand.py') && sd.includes('20261107_staff_publish_check.sql'),
+      'SQL 10.116: причина отказа, отметка владельцу «на одобрение» — стенд PostgreSQL в check.sh');
+    // 2. «Настройка проката» — в «Кабинете» первой строкой
+    const cb = fn(shc, 'cabinet');
+    assert.ok(cb.includes('getIdentifier("chiefBox", "id"') && cb.includes('int at = box.indexOfChild(anchor);') && cb.includes('box.addView(row, at, lp);')
+      && cb.includes('if (!cabWant(logged, logged && IvaNotifyPatch.isAdmin(a))) {') && cb.includes('box.removeView(old);')
+      && cb.includes('openPage(a, cText, cGray, cOrange)') && cb.includes('row.setTag(CAB_TAG);')
+      && npc.includes('try { IvaShopPatch.cabinet(a); } catch (Throwable ignore) {}') && cl.includes('try { IvaShopPatch.cabinet(a); } catch (Throwable ignore) {}')
+      && !np.includes('IvaShopPatch.settingsRow(') && !/static \w+ settingsRow\(/.test(sh) && !/"POST"|"PATCH"/.test(fn(shc, 'countLater')),
+      'кабинет 10.116: «Настройка проката» — первой в кабинете (перед «Панелью владельца»), только админу; из «Настроек» убрана');
+    // 3. переход по уведомлению
+    const rt = fn(npc, 'route'), co = fn(npc, 'closeOverlays');
+    assert.ok(rt.includes('final int need = routeNeed(open);') && rt.includes('routeReady(need, logged, logged && isAdmin(a), logged && staffKnown(a))')
+      && rt.includes('System.currentTimeMillis() < until') && /closeOverlays\(a\);\s*go\(a, open, target\);/.test(rt)
+      && rt.includes('it.removeExtra(EXTRA_OPEN);') && np.includes('static final long ROUTE_READY_MS = 20000;'),
+      'переход 10.116: ждём вход и роль (до 20 с), закрываем окна поверх, потом переходим; второй раз не переходим');
+    assert.ok(co.includes('IvaAccessPatch.closePages();') && co.includes('settings.dismiss()') && co.includes('IvaOrderPatch.ordDialog.dismiss()')
+      && co.includes('ps.dialog.dismiss()'),
+      'переход 10.116: закрываются страницы, «Настройки», карточка заявки и «Мои данные»');
+    const go = fn(npc, 'go');
+    for (const k of ['IvaChatPatch.openFromNote(a, target)', 'openOrder(a, target)', 'openUpdate(a, target)', 'IvaOrderPatch.openById(a, target)',
+      'IvaTestPatch.openFromNote(a)', 'IvaStaffOrdersPatch.openFromNote(a)', 'IvaStaffToolsPatch.openFromNote(a)', 'IvaStaffChatPatch.openFromNote(a, target)'])
+      assert.ok(go.includes(k), 'переход 10.116: нет ' + k);
+    assert.ok(!/customer_profiles|passport|phone|surname|select=\*/.test(stc + shc), 'публикация 10.116: без личных данных клиентов');
+    assert.ok(wf.includes("NEW_NAME: '10.116'") && wf.includes("NEW_CODE: '190'"), 'сборка 10.116 (190)');
+    assert.ok((tp.match(/eq\("сотрудник 10\.116: /g) || []).length >= 6 && (tp.match(/eq\("переход 10\.116: /g) || []).length >= 3
+      && (tp.match(/eq\("кабинет 10\.116: /g) || []).length >= 3 && (tp.match(/eq\("одобрение 10\.116: /g) || []).length >= 2, 'IvaPatchTest: проверки 10.116');
   }
   // 10.75 (просьба владельца 14.10.2026): в «Настройках» — кнопка «Уведомления» (с 10.97 — открывает отдельную страницу);
   // внутри сверху «Открыть настройки уведомлений Android», потом какие присылать, потом расписание, потом всё остальное
