@@ -62,11 +62,11 @@ concurrency:
 env:
   SRC_APK: ProkatInstrumenta-10.14.apk
   OLD_NAME: '10.14'
-  NEW_NAME: '10.100'
-  NEW_CODE: '174'
+  NEW_NAME: '10.101'
+  NEW_CODE: '175'
   APKTOOL_VER: '2.10.0'
   # Тестовый канал (жёлтая карточка владельца на сайте): описание сборки для app-test.json
-  TEST_NOTES: 'Тестовая сборка 10.100. Свой звук у всех уведомлений приложения (заявки, сообщения, срок аренды, обновления, пробные сборки) — звук владельца из android/sounds. Категории уведомлений пересоздаются: если вы меняли в настройках телефона звук или вибрацию для «Ивы» — они вернутся к обычным; выключенные категории останутся выключенными. Беззвучный режим и «Не беспокоить» работают как раньше. Остальное — как в 10.99. Ставится поверх 10.99.'
+  TEST_NOTES: 'Тестовая сборка 10.101. Инструмент закреплён за пунктом выдачи: в форме «Добавить инструмент» и в правке — «Пункт выдачи» (видно, когда пунктов два и больше); адрес и город инструмента берутся из пункта. В карточке инструмента — пункт, адрес, время работы по дням и телефон пункта. Пункт, в котором есть инструмент, удалить нельзя. Нужен SQL 20261026_tool_points.sql; без него — как 10.100. Ставится поверх 10.100.'
   TEST_REINSTALL: 'false'  # 10.15–10.57 подписаны одним ключом №6 — ставится поверх, удалять не нужно
   # Эталон ключа №6 (решение №22, 05.10.2026) — тот же, что в keystore-check.yml и docs/КЛЮЧ-ПОДПИСИ.md
   EXPECTED: 5D2B9F8BB54AD0B816A779B5991746957EBD6FA056D8A63D1D1635077BED5DDE
@@ -128,7 +128,7 @@ jobs:
           mkdir -p "$C"
           # Ошибки компилятора и проваленные проверки дублируются в аннотации задачи.
           fail() { grep -E "$2" "$1" 2>/dev/null | while IFS= read -r l; do echo "::error title=$3::$l"; done; exit 1; }
-          if ! javac -encoding UTF-8 -source 8 -target 8 -nowarn -bootclasspath "$ANDROID_JAR" -d "$C" android/patches/IvaPatch.java android/patches/IvaClientPatch.java android/patches/IvaSearchPatch.java android/patches/IvaChatPatch.java android/patches/IvaOrderPatch.java android/patches/IvaNotifyPatch.java android/patches/IvaReviewPatch.java android/patches/IvaPushPatch.java android/patches/IvaRentPatch.java android/patches/IvaKindPatch.java android/patches/IvaModelPatch.java android/patches/IvaFormPatch.java android/patches/IvaPhotoPatch.java android/patches/IvaCensorPatch.java android/patches/IvaChiefPatch.java android/patches/IvaTestPatch.java android/patches/IvaPickupPatch.java android/patches/IvaAvatarPatch.java android/patches/IvaShopPatch.java android/patches/IvaSoundPatch.java 2>&1 | tee "$RUNNER_TEMP/j1.log"; then
+          if ! javac -encoding UTF-8 -source 8 -target 8 -nowarn -bootclasspath "$ANDROID_JAR" -d "$C" android/patches/IvaPatch.java android/patches/IvaClientPatch.java android/patches/IvaSearchPatch.java android/patches/IvaChatPatch.java android/patches/IvaOrderPatch.java android/patches/IvaNotifyPatch.java android/patches/IvaReviewPatch.java android/patches/IvaPushPatch.java android/patches/IvaRentPatch.java android/patches/IvaKindPatch.java android/patches/IvaModelPatch.java android/patches/IvaFormPatch.java android/patches/IvaPhotoPatch.java android/patches/IvaCensorPatch.java android/patches/IvaChiefPatch.java android/patches/IvaTestPatch.java android/patches/IvaPickupPatch.java android/patches/IvaAvatarPatch.java android/patches/IvaShopPatch.java android/patches/IvaSoundPatch.java android/patches/IvaToolPointPatch.java 2>&1 | tee "$RUNNER_TEMP/j1.log"; then
             fail "$RUNNER_TEMP/j1.log" 'error:|ошибка:' 'Компиляция IvaPatch'
           fi
           T="$RUNNER_TEMP/tcls"

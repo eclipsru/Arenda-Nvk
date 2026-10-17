@@ -338,6 +338,17 @@ else
   fi
 fi
 
+head_ "4.5.10. Стенд «Инструмент ↔ пункт выдачи» (локальный PostgreSQL, SQL 10.101)"
+if "$PG_PY" -c "import pgserver" >/dev/null 2>&1; then
+  if "$PG_PY" tools/tool-points-stand.py >/tmp/iva-test-tool-points.log 2>&1; then
+    ok "инструмент ↔ пункт: $(grep -c '✔' /tmp/iva-test-tool-points.log) проверок SQL на PostgreSQL (переход данных, свой пункт, адрес из пункта, удаление, карточка, откат)"
+  else
+    bad "стенд «Инструмент ↔ пункт выдачи»"; grep -E '✘|Error|ERROR' /tmp/iva-test-tool-points.log | head -8 | sed 's/^/      /'
+  fi
+else
+  skip "стенд «Инструмент ↔ пункт выдачи»: нет pgserver (PG_PY=<python с pgserver> bash tools/check.sh)"
+fi
+
 head_ "Итог"
 printf '  пройдено: %s, ошибок: %s, пропущено: %s\n' "$PASS" "$FAIL" "$SKIP"
 if [ "$FAIL" -eq 0 ]; then echo "  Можно продолжать."; exit 0; else echo "  Сначала исправляем замечания выше."; exit 1; fi

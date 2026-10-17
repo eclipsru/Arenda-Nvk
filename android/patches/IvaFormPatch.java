@@ -99,7 +99,7 @@ final class IvaFormPatch {
         SEC + "2", IvaModelPatch.SPECS, IvaModelPatch.KIT, IvaPatch.COND_ROW_TAG + ":atTerms",
         SEC + "3", IvaModelPatch.HELP + ":price", IvaKindPatch.LBL + "atPrice", "atPrice", ERR + "atPrice",
         IvaKindPatch.LBL + "atDep", "atDep",
-        SEC + "4", IvaKindPatch.LBL + "atTerms", "atTerms", TERMS, ERR + "atTerms", IvaPatch.DEL_ROW_TAG + ":atDelToggle", "atDelToggle", "atDelPrice",
+        SEC + "4", IvaToolPointPatch.TAG + ":0", IvaKindPatch.LBL + "atTerms", "atTerms", TERMS, ERR + "atTerms", IvaPatch.DEL_ROW_TAG + ":atDelToggle", "atDelToggle", "atDelPrice",
         SEC + "5", "atDescr", IvaModelPatch.HELP, ERR + "atDescr",
         "atSave",
     };
@@ -359,6 +359,7 @@ final class IvaFormPatch {
         paintErrors(a, form, false);
         paintTop(a, form);
         paintTerms(a, form);
+        try { IvaToolPointPatch.ensure(a, form); } catch (Throwable ignore) {}   // 10.101: «Пункт выдачи» (2+ пункта)
         layout(a, form);
         resolveModel(a);
         scheduleSave(a);

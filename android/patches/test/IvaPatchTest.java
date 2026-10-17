@@ -2345,6 +2345,57 @@ public class IvaPatchTest {
             } catch (Exception e) { snd = "нет файла: " + e; }
             eq("звук 10.100: файл звука — MP3 без тегов, до 1 МБ", snd, "true|false|false|true");
         }
+        {   // 10.101: инструмент закреплён за пунктом выдачи (этап 1 «Сотрудники и пункты»)
+            String u1 = "0b6f9c2e-1d2a-4c3b-9e8f-112233445566", u2 = "AB6F9C2E-1D2A-4C3B-9E8F-112233445577";
+            eq("пункт 10.101: тело записи — только настоящий id", IvaToolPointPatch.body(u1) + "|" + IvaToolPointPatch.body(u2) + "|" + IvaToolPointPatch.body("")
+                + "|" + IvaToolPointPatch.body("1; drop") + "|" + IvaToolPointPatch.body("\"},{\"owner_email\":\"x\"") + "|" + IvaToolPointPatch.body(null),
+                "{\"point_id\":\"" + u1 + "\"}|{\"point_id\":\"ab6f9c2e-1d2a-4c3b-9e8f-112233445577\"}|null|null|null|null");
+            eq("пункт 10.101: когда видно поле", IvaToolPointPatch.show(0, 2, true, true) + "|" + IvaToolPointPatch.show(0, 1, true, true) + "|"
+                + IvaToolPointPatch.show(0, 0, true, true) + "|" + IvaToolPointPatch.show(1, 1, true, true) + "|" + IvaToolPointPatch.show(1, 1, true, false) + "|"
+                + IvaToolPointPatch.show(1, 3, true, false) + "|" + IvaToolPointPatch.show(0, 5, false, true) + "|" + IvaToolPointPatch.show(1, 1, false, true),
+                "true|false|false|true|false|true|false|false");
+            eq("пункт 10.101: когда писать после успеха", IvaToolPointPatch.needWrite(0, u1, u1, "") + "|" + IvaToolPointPatch.needWrite(0, u2, u1, "") + "|"
+                + IvaToolPointPatch.needWrite(1, u1, "", u1) + "|" + IvaToolPointPatch.needWrite(1, u1, "", "") + "|" + IvaToolPointPatch.needWrite(1, "", "", u1) + "|"
+                + IvaToolPointPatch.needWrite(1, u1, "", u1.toUpperCase()) + "|" + IvaToolPointPatch.needWrite(0, "x", u1, ""),
+                "false|true|false|true|false|false|false");
+            java.util.List<IvaPickupPatch.Point> ps = new java.util.ArrayList<IvaPickupPatch.Point>();
+            eq("пункт 10.101: выбранный без пунктов", IvaToolPointPatch.current(u1, ps) + "|" + IvaToolPointPatch.current(u1, null), "|");
+            IvaPickupPatch.Point a1 = new IvaPickupPatch.Point(), a2 = new IvaPickupPatch.Point();
+            a1.id = u1; a1.name = "Склад"; a1.city = "Новосибирск"; a1.address = "Новосибирск, улица Ленина, д. 5"; a1.tel = " +7 383 111-22-33 ";
+            a2.id = u2; a2.name = "Бердск центр"; a2.city = "Бердск"; a2.address = ""; a2.tel = "";
+            a2.open = new int[]{540, 540, 540, 540, 540, 600, -1}; a2.close = new int[]{1140, 1140, 1140, 1140, 1140, 960, -1};
+            ps.add(a1); ps.add(a2);
+            eq("пункт 10.101: выбранный — свой, иначе первый", IvaToolPointPatch.current("", ps) + "|" + IvaToolPointPatch.current(u2, ps).equals(u2) + "|"
+                + IvaToolPointPatch.current("чужой", ps), u1 + "|true|" + u1);
+            eq("пункт 10.101: подписи кнопок", IvaToolPointPatch.chipText(a1) + "|" + IvaToolPointPatch.chipText(a2), "Склад · Новосибирск|Бердск центр");
+            eq("пункт 10.101: карточка инструмента", IvaToolPointPatch.cardText(a1),
+                "Пункт выдачи: Склад\nАдрес: Новосибирск, улица Ленина, д. 5\nВремя работы: Пн–Вс 09:00–19:00\nТелефон: +7 383 111-22-33");
+            eq("пункт 10.101: карточка без адреса и телефона", IvaToolPointPatch.cardText(a2) + "|" + IvaToolPointPatch.cardText(null),
+                "Пункт выдачи: Бердск центр\nВремя работы: Пн–Пт 09:00–19:00 · Сб 10:00–16:00 · Вс выходной|");
+            eq("пункт 10.101: под кнопками — адрес и график", IvaToolPointPatch.subText(a1) + "|" + IvaToolPointPatch.subText(a2),
+                "Новосибирск, улица Ленина, д. 5\nПн–Вс 09:00–19:00|Пн–Пт 09:00–19:00 · Сб 10:00–16:00 · Вс выходной");
+            java.util.List<String> ids = new java.util.ArrayList<String>(java.util.Arrays.asList(u1, u2, u1, "x", null, u2.toLowerCase()));
+            eq("пункт 10.101: запрос пунктов для карточек", IvaToolPointPatch.rpcBody(ids) + "|" + IvaToolPointPatch.rpcBody(null),
+                "{\"p_ids\":[\"" + u1 + "\",\"ab6f9c2e-1d2a-4c3b-9e8f-112233445577\"]}|{\"p_ids\":[]}");
+            java.util.List<String> many = new java.util.ArrayList<String>();
+            for (int i = 0; i < 250; i++) many.add(String.format("00000000-0000-0000-0000-%012d", i));
+            eq("пункт 10.101: не больше 200 id", (IvaToolPointPatch.rpcBody(many).split(",").length) + "", "200");
+            eq("пункт 10.101: ответы базы", IvaToolPointPatch.writeError("204", "") + "|"
+                + IvaToolPointPatch.writeError("400", "{\"code\":\"P0001\",\"message\":\"Пункт выдачи не найден у владельца инструмента\"}") + "|"
+                + IvaToolPointPatch.writeError("400", "{\"code\":\"PGRST204\",\"message\":\"Could not find the 'point_id' column of 'tools'\"}") + "|"
+                + IvaToolPointPatch.writeError("403", "{\"code\":\"42501\"}") + "|" + IvaToolPointPatch.writeError("", "") + "|" + IvaToolPointPatch.writeError("500", "x"),
+                "|Пункт выдачи не сохранился: это пункт другого проката|Пункт выдачи заработает после обновления базы (SQL 10.101)|Пункт выдачи не сохранился: нет права|"
+                + "Пункт выдачи не сохранился — нет связи с сервером|Пункт выдачи не сохранился (ответ 500)");
+            eq("пункт 10.101: нет столбца — только про point_id", IvaToolPointPatch.noColumn("400", "{\"code\":\"42703\",\"message\":\"column tools.point_id does not exist\"}") + "|"
+                + IvaToolPointPatch.noColumn("400", "{\"code\":\"42703\",\"message\":\"column tools.kind does not exist\"}"), "true|false");
+            eq("пункт 10.101: пункт с инструментом не удаляется — понятная фраза",
+                IvaPickupPatch.dbError("409", "{\"code\":\"23503\",\"message\":\"update or delete on table \\\"iva_pickup_points\\\" violates foreign key constraint \\\"tools_point_fk\\\" on table \\\"tools\\\"\"}"),
+                "В этом пункте есть инструмент — сначала перенесите его в другой пункт (правка инструмента → «Пункт выдачи»)");
+            boolean ord = false;
+            for (int i = 0; i + 1 < IvaFormPatch.ORDER.length; i++)
+                if ((IvaFormPatch.SEC + "4").equals(IvaFormPatch.ORDER[i]) && (IvaToolPointPatch.TAG + ":0").equals(IvaFormPatch.ORDER[i + 1])) ord = true;
+            eq("пункт 10.101: в форме «Добавить» — первым в «Условиях и доставке»", ord + "", "true");
+        }
         if (fail > 0) { System.out.println("ошибок: " + fail); System.exit(1); }
         System.out.println("все проверки IvaPatch пройдены");
     }

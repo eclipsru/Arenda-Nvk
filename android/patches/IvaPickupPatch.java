@@ -73,6 +73,7 @@ public class IvaPickupPatch {
     static final String PAGE_SUB = "Где вы выдаёте инструмент. По графику первого пункта считается «Срок аренды → До закрытия пункта».";
     static final String ADD = "Добавить";
     static final String NO_DB = "Заработает после обновления базы (SQL 10.95)";
+    static final String POINT_BUSY = "В этом пункте есть инструмент — сначала перенесите его в другой пункт (правка инструмента → «Пункт выдачи»)";
     static final int MAX = 20, OPEN_DEF = 9 * 60, CLOSE_DEF = 19 * 60;
     static final long SUGGEST_DELAY_MS = 450;
 
@@ -224,6 +225,7 @@ public class IvaPickupPatch {
         String c = code == null ? "" : code, b = body == null ? "" : body;
         if (c.startsWith("2")) return "";
         if (b.contains("Не больше 20")) return "Не больше 20 пунктов выдачи";
+        if (b.contains("tools_point_fk")) return POINT_BUSY;                // 10.101: за пунктом есть инструмент
         if (noTel(c, b)) return NO_TEL;
         if (b.contains("iva_pickup_tel")) return "Проверьте телефон: 10–15 цифр";
         if (b.contains("PGRST205") || b.contains("42P01") || "404".equals(c)) return NO_DB;
@@ -466,6 +468,7 @@ public class IvaPickupPatch {
         TextView s = subRef.get();
         if (s != null) s.setText(rowSub(a));
         try { IvaRentPatch.relink(); } catch (Throwable ignore) {}   // «Срок аренды» — по графику первого пункта
+        IvaToolPointPatch.mineAt = 0;                                // 10.101: «Пункт выдачи» в формах перечитает пункты
     }
 
     /** Значок «метка на карте» (цвет приложения). */

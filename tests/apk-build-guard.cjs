@@ -794,7 +794,7 @@ try {
       'форма 10.88: «Опубликовать» находится по id разметки и стоит последней (штатный отступ под ней остаётся)');
     assert.ok(has(arsc14, 'atSave') && has(arsc14, 'teSave'), 'APK 10.14: нет id atSave / teSave — кнопку публикации не найти');
     // 10.89 (просьба владельца 15.10): частые условия — одна строка с выпадающим списком; выбранное — в поле и из списка
-    assert.ok(fp.includes('SEC + "4", IvaKindPatch.LBL + "atTerms", "atTerms", TERMS, ERR + "atTerms", IvaPatch.DEL_ROW_TAG') && fp.includes('static String termToggle(String terms, String p) {')
+    assert.ok(/SEC \+ "4", (IvaToolPointPatch\.TAG \+ ":0", )?IvaKindPatch\.LBL \+ "atTerms", "atTerms", TERMS, ERR \+ "atTerms", IvaPatch\.DEL_ROW_TAG/.test(fp) && fp.includes('static String termToggle(String terms, String p) {')
       && fp.includes('static List<String> termLeft(String src, String terms) {') && fp.includes('if ("atTerms".equals(field) && tv.getParent() instanceof LinearLayout) paintTerms(')
       && !fp.includes('ownTerms') && !fp.includes('"Наличные или перевод"') && fp.includes('TERMS_PICK = "Выбрать из частых условий"')
       && (fp.match(/static final String\[\] TERMS_BASE = \{[^}]*\}/) || [''])[0].split('",').length >= 10,
@@ -1196,7 +1196,7 @@ try {
       && mf.includes("if (e.target.closest('[data-msug]')) e.preventDefault();") && !/<link[^>]*theme\.css/.test(cab),
       'модели 10.82: сайт — общие модули; кабинет без theme.css');
     // 5. приложение: без новых вставок в smali — только из IvaKindPatch; файл в сборке; личных данных не читаем
-    assert.ok(!/IvaModelPatch|model/i.test(ap) && /IvaKindPatch\.java android\/patches\/IvaModelPatch\.java (android\/patches\/IvaFormPatch\.java )?(android\/patches\/IvaPhotoPatch\.java )?(android\/patches\/IvaCensorPatch\.java )?(android\/patches\/IvaChiefPatch\.java )?(android\/patches\/IvaTestPatch\.java )?(android\/patches\/IvaPickupPatch\.java )?(android\/patches\/IvaAvatarPatch\.java )?(android\/patches\/IvaShopPatch\.java )?(android\/patches\/IvaSoundPatch\.java )?2>&1/.test(wf)
+    assert.ok(!/IvaModelPatch|model/i.test(ap) && /IvaKindPatch\.java android\/patches\/IvaModelPatch\.java (android\/patches\/IvaFormPatch\.java )?(android\/patches\/IvaPhotoPatch\.java )?(android\/patches\/IvaCensorPatch\.java )?(android\/patches\/IvaChiefPatch\.java )?(android\/patches\/IvaTestPatch\.java )?(android\/patches\/IvaPickupPatch\.java )?(android\/patches\/IvaAvatarPatch\.java )?(android\/patches\/IvaShopPatch\.java )?(android\/patches\/IvaSoundPatch\.java )?(android\/patches\/IvaToolPointPatch\.java )?2>&1/.test(wf)
       && kp.includes('if (k == 0) IvaModelPatch.refresh(a);') && kp.includes('try { IvaModelPatch.onTab(a, tab); } catch (Throwable ignore) {}')
       && !/customer_profiles|passport|phone|surname/.test(mp),
       'модели 10.82: новых вставок в smali нет; личных данных не читаем');
@@ -1251,7 +1251,7 @@ try {
     assert.ok(kp.includes('static final String SUB_HINT = "Подкатегория (необязательно)";') && has(dex14, 'Подкатегория (необязательно)')
       && has(dex14, 'atCatSug') && has(dex14, 'atSubSug') && has(dex14, 'atName'),
       'автоподбор 10.81: штатные поля и текст пустой подкатегории есть в 10.14');
-    assert.ok(!/IvaKindPatch|kind/i.test(ap) && /IvaRentPatch\.java android\/patches\/IvaKindPatch\.java (android\/patches\/IvaModelPatch\.java )?(android\/patches\/IvaFormPatch\.java )?(android\/patches\/IvaPhotoPatch\.java )?(android\/patches\/IvaCensorPatch\.java )?(android\/patches\/IvaChiefPatch\.java )?(android\/patches\/IvaTestPatch\.java )?(android\/patches\/IvaPickupPatch\.java )?(android\/patches\/IvaAvatarPatch\.java )?(android\/patches\/IvaShopPatch\.java )?(android\/patches\/IvaSoundPatch\.java )?2>&1/.test(wf),
+    assert.ok(!/IvaKindPatch|kind/i.test(ap) && /IvaRentPatch\.java android\/patches\/IvaKindPatch\.java (android\/patches\/IvaModelPatch\.java )?(android\/patches\/IvaFormPatch\.java )?(android\/patches\/IvaPhotoPatch\.java )?(android\/patches\/IvaCensorPatch\.java )?(android\/patches\/IvaChiefPatch\.java )?(android\/patches\/IvaTestPatch\.java )?(android\/patches\/IvaPickupPatch\.java )?(android\/patches\/IvaAvatarPatch\.java )?(android\/patches\/IvaShopPatch\.java )?(android\/patches\/IvaSoundPatch\.java )?(android\/patches\/IvaToolPointPatch\.java )?2>&1/.test(wf),
       'автоподбор 10.81: новых вставок в smali и новых файлов нет');
     // 5. сайт: один модуль, вид пишется только когда справочник видов есть в базе
     assert.ok(nw.includes('<script src="assets/kind-guess.js?v=20261016-kind"></script>') && cab.includes('<script src="assets/kind-guess.js?v=20261016-kind"></script>')
@@ -1328,7 +1328,7 @@ try {
     const sql = R('supabase/migrations/20261015_category_tree.sql'), mv = R('supabase/migrations/20261015_category_tree_move.sql');
     const fnx = (src, name) => { const mm = new RegExp(`static (?:final )?[\\w.<>, \\[\\]]+ ${name}\\(`).exec(src); assert.ok(mm, `нет ${name}`); return src.slice(mm.index, src.indexOf('\n    }\n', mm.index)); };
     // 1. сборка и проверка компилируют IvaKindPatch; вставок в smali нет
-    assert.ok(/IvaRentPatch\.java android\/patches\/IvaKindPatch\.java (android\/patches\/IvaModelPatch\.java )?(android\/patches\/IvaFormPatch\.java )?(android\/patches\/IvaPhotoPatch\.java )?(android\/patches\/IvaCensorPatch\.java )?(android\/patches\/IvaChiefPatch\.java )?(android\/patches\/IvaTestPatch\.java )?(android\/patches\/IvaPickupPatch\.java )?(android\/patches\/IvaAvatarPatch\.java )?(android\/patches\/IvaShopPatch\.java )?(android\/patches\/IvaSoundPatch\.java )?2>&1/.test(wf) && ck.includes('android/patches/IvaKindPatch.java'),
+    assert.ok(/IvaRentPatch\.java android\/patches\/IvaKindPatch\.java (android\/patches\/IvaModelPatch\.java )?(android\/patches\/IvaFormPatch\.java )?(android\/patches\/IvaPhotoPatch\.java )?(android\/patches\/IvaCensorPatch\.java )?(android\/patches\/IvaChiefPatch\.java )?(android\/patches\/IvaTestPatch\.java )?(android\/patches\/IvaPickupPatch\.java )?(android\/patches\/IvaAvatarPatch\.java )?(android\/patches\/IvaShopPatch\.java )?(android\/patches\/IvaSoundPatch\.java )?(android\/patches\/IvaToolPointPatch\.java )?2>&1/.test(wf) && ck.includes('android/patches/IvaKindPatch.java'),
       'вид 10.79: IvaKindPatch компилируется в сборку и в проверку');
     assert.ok(!/IvaKindPatch|kind/i.test(ap), 'вид 10.79: новых вставок в smali нет');
     // 2. точки входа: onTab (справочник, форма, запись), onHub (только форма — запомненный выбор не трогает), касание сохранения
@@ -1743,6 +1743,41 @@ try {
       && chk.includes('python3 android/patches/axml_sound.py /tmp/iva-sound/AndroidManifest.xml'),
       'звук 10.100: IvaSoundPatch.java — в списках javac, без новых вставок в smali; check.sh проверяет провайдер на манифесте 10.14');
     assert.ok((tp.match(/eq\("звук 10\.100: /g) || []).length >= 6, 'IvaPatchTest: проверки 10.100');
+  }
+  // 10.101 (решения владельца 16–17.10.2026, этап 1 «Сотрудники и пункты»): инструмент закреплён за пунктом выдачи
+  {
+    const tq = R('android/patches/IvaToolPointPatch.java'), kp = R('android/patches/IvaKindPatch.java'), fp = R('android/patches/IvaFormPatch.java'),
+      pp = R('android/patches/IvaPickupPatch.java'), tp = R('android/patches/test/IvaPatchTest.java'), wf = R('.github/workflows/build-apk.yml'),
+      ck = R('.github/workflows/check.yml'), ap = R('android/patches/apply.py'), chk = R('tools/check.sh'),
+      sq = R('supabase/migrations/20261026_tool_points.sql'), st = R('tools/tool-points-stand.py');
+    const code = tq.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '');
+    assert.ok(wf.includes('android/patches/IvaToolPointPatch.java') && ck.includes('android/patches/IvaToolPointPatch.java') && !/IvaToolPointPatch/.test(ap),
+      'пункт 10.101: IvaToolPointPatch.java — в списках javac, без новых вставок в smali');
+    assert.ok(kp.includes('try { IvaToolPointPatch.onSaveTouch(a, k); } catch (Throwable ignore) {}') && kp.includes('try { IvaToolPointPatch.onTab(a, tab); } catch (Throwable ignore) {}')
+      && kp.includes('try { IvaToolPointPatch.refresh(a); } catch (Throwable ignore) {}') && fp.includes('try { IvaToolPointPatch.ensure(a, form); } catch (Throwable ignore) {}')
+      && fp.includes('SEC + "4", IvaToolPointPatch.TAG + ":0", IvaKindPatch.LBL + "atTerms"'),
+      'пункт 10.101: подключение — через IvaKindPatch (onSaveTouch / onTab / refreshRows) и IvaFormPatch.setup, место в форме — начало «Условий и доставки»');
+    assert.ok(!/customer_profiles|passport|phone|surname|select=\*|"DELETE"/.test(code) && (code.match(/"PATCH"/g) || []).length === 1
+      && (code.match(/"POST"/g) || []).length === 1 && code.includes('IvaClientPatch.apiCall(a, RPC, "POST", rpcBody(ids), true)')
+      && code.includes('IvaClientPatch.apiCall(a, IvaKindPatch.patchPath(target), "PATCH", body, true)') && code.includes('static String body(String id) { return uuid(id) ?'),
+      'пункт 10.101: пишется только point_id (проверенный id) одной записью; читается iva_tool_points; без личных данных и select=*');
+    const net = (code.match(/IvaClientPatch\.apiCall\(|IvaPickupPatch\.load\(/g) || []).length, thr = (code.match(/new Thread\(new Runnable\(\)/g) || []).length;
+    assert.ok(net === 6 && thr === 4, 'пункт 10.101: все обращения к серверу — в своих потоках (6 вызовов в 4 потоках), не в главном: ' + net + '/' + thr);
+    assert.ok(code.includes('if (!uuid(pid)) return;') && code.includes('if (IvaClientPatch.get(a, "detItem") != it) return;') && code.includes('Boolean.TRUE.equals(IvaClientPatch.get(a, "detIsSrv"))'),
+      'пункт 10.101: карточка — только у инструмента с пунктом, ответ не попадает в другую открытую карточку');
+    assert.ok(code.includes('!editOwner.equals(IvaPickupPatch.me(a))') && (code.match(/editOwner\.equals\(IvaPickupPatch\.me\(a\)\)/g) || []).length === 2,
+      'пункт 10.101: чужой инструмент (правка создателем) — без поля и без записи');
+    assert.ok(pp.includes('if (b.contains("tools_point_fk")) return POINT_BUSY;') && pp.includes('IvaToolPointPatch.mineAt = 0;'),
+      'пункт 10.101: удалить пункт с инструментом — понятная фраза; пункты поменялись — формы перечитают');
+    const sc = sq.replace(/^--.*$/gm, '');
+    assert.ok(sq.includes('--      ALTER TABLE public.tools DROP COLUMN IF EXISTS point_id;') && sq.includes('--      DROP TRIGGER IF EXISTS trg_iva_tool_point ON public.tools;')
+      && sc.includes('FOREIGN KEY (point_id) REFERENCES public.iva_pickup_points(id) ON DELETE RESTRICT') && sc.includes('GRANT EXECUTE ON FUNCTION public.iva_tool_points(uuid[]) TO anon, authenticated;')
+      && sc.includes("RAISE EXCEPTION 'Сначала примените 20261025_pickup_tel.sql") && !/DROP TABLE|TRUNCATE|DELETE FROM|POLICY|ALTER TABLE public\.iva_pickup_points|GRANT (SELECT|UPDATE|INSERT|DELETE)/i.test(sc)
+      && (sc.match(/REVOKE ALL ON FUNCTION/g) || []).length === 6 && !/p\.email|owner_email\s*\)?\s*,?\s*\n?\s*from public\.iva_pickup_points p\s*\n\s*where p\.id = any/.test(sc.slice(sc.indexOf('iva_tool_points(p_ids'))),
+      'SQL 10.101: откат в шапке; пункт с инструментом не удаляется; служебные функции закрыты; карточке — без email; политики пунктов не трогаются');
+    assert.ok(st.includes("SQL = rd('supabase/migrations/20261026_tool_points.sql')") && chk.includes('tools/tool-points-stand.py'),
+      'SQL 10.101: стенд PostgreSQL в check.sh');
+    assert.ok((tp.match(/eq\("пункт 10\.101: /g) || []).length >= 12, 'IvaPatchTest: проверки 10.101');
   }
   // 10.75 (просьба владельца 14.10.2026): в «Настройках» — кнопка «Уведомления» (с 10.97 — открывает отдельную страницу);
   // внутри сверху «Открыть настройки уведомлений Android», потом какие присылать, потом расписание, потом всё остальное

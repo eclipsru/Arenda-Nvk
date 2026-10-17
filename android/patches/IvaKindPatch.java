@@ -378,6 +378,7 @@ final class IvaKindPatch {
         try { IvaModelPatch.onTab(a, tab); } catch (Throwable ignore) {}   // 10.82: опубликовали — модель и характеристики заново
         try { IvaFormPatch.onTab(a, tab); } catch (Throwable ignore) {}    // 10.87: опубликовали — черновик не нужен
         try { consumePending(a, tab); } catch (Throwable ignore) {}
+        try { IvaToolPointPatch.onTab(a, tab); } catch (Throwable ignore) {}   // 10.101: пункт выдачи — правка, запись, карточка
     }
 
     /** Кабинет переключил «Добавить» / «Мои» (showAdmHub): только поле в форме. Запомненный выбор не трогаем — штатный
@@ -424,6 +425,7 @@ final class IvaKindPatch {
             try { refreshRow(a, k); } catch (Throwable ignore) {}
         }
         try { arrange(a); } catch (Throwable ignore) {}               // 10.86: подписи и порядок пунктов формы «Добавить»
+        try { IvaToolPointPatch.refresh(a); } catch (Throwable ignore) {}   // 10.101: «Пункт выдачи» в правке инструмента
     }
 
     static void refreshRow(final Activity a, final int k) {
@@ -680,6 +682,7 @@ final class IvaKindPatch {
 
     /** Нажали «Опубликовать» (k=0) / «Сохранить» (k=1): запоминаем, что записать, если штатное сохранение удастся. */
     static void onSaveTouch(Activity a, int k) {
+        try { IvaToolPointPatch.onSaveTouch(a, k); } catch (Throwable ignore) {}   // 10.101: пункт выдачи — после штатного успеха
         try {
             pendingAt = 0;
             pendingExtra = "";
