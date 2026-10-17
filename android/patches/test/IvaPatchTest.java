@@ -2561,6 +2561,7 @@ public class IvaPatchTest {
         staffChat106();                                               // 10.106: чат пункта
         staffJournal107();                                            // 10.107: журнал, сводка, имена в чате
         adminManage108();                                             // 10.108: приостановить / удалить админа, порядок в панели
+        avatarEdit109();                                              // 10.109: редактировать аватарку, галерея вместо проводника
         if (fail > 0) { System.out.println("ошибок: " + fail); System.exit(1); }
         System.out.println("все проверки IvaPatch пройдены");
     }
@@ -2620,6 +2621,46 @@ public class IvaPatchTest {
     }
 
     /** 10.107: «кто выдал / кто принял», «Сводка по пунктам», имя сотрудника в чате владельца (этап 4). */
+    static void avatarEdit109() {
+        eq("аватар 10.109: окно выбора — системный выбор фото, галерея; проводник — только запасной",
+            String.join(",", IvaPhotoPatch.galleryActions(true)) + "|" + String.join(",", IvaPhotoPatch.galleryActions(false)) + "|" + IvaPhotoPatch.REQ_EDIT_NATIVE,
+            "android.provider.action.PICK_IMAGES,android.intent.action.PICK,android.intent.action.GET_CONTENT|android.intent.action.PICK,android.intent.action.GET_CONTENT|5402");
+        int[] r0 = {10, 20, 30}, r1 = IvaAvatarPatch.rotRect90(r0, 100, 80), r2 = IvaAvatarPatch.rotRect90(r1, 80, 100),
+            r3 = IvaAvatarPatch.rotRect90(r2, 100, 80), r4 = IvaAvatarPatch.rotRect90(r3, 80, 100);
+        eq("аватар 10.109: «Повернуть» — круг остаётся на той же части фото, 4 поворота — как было",
+            java.util.Arrays.toString(r1) + "|" + java.util.Arrays.toString(r4) + "|" + IvaAvatarPatch.rotRect90(null, 1, 1) + "|"
+            + IvaAvatarPatch.nextRot(0) + "," + IvaAvatarPatch.nextRot(90) + "," + IvaAvatarPatch.nextRot(180) + "," + IvaAvatarPatch.nextRot(270),
+            "[30, 10, 30]|[10, 20, 30]|null|90,180,270,0");
+        float[] c = IvaAvatarPatch.circleOf(new int[]{10, 20, 30}, 5, 6, 2f);
+        int[] back = IvaAvatarPatch.srcRect(c[0], c[1], c[2], 5, 6, 2f, 100, 80);
+        eq("аватар 10.109: «Редактировать» — круг там же, где был (и сохраняется тот же квадрат)",
+            Math.round(c[0]) + "," + Math.round(c[1]) + "," + Math.round(c[2]) + "|" + java.util.Arrays.toString(back), "55,76,30|[10, 20, 30]");
+        eq("аватар 10.109: исходник — свой у каждого аккаунта и вида аватарки",
+            IvaAvatarPatch.slot("me", " Ivan@Mail.RU ") + "|" + IvaAvatarPatch.slot("shop", "ivan@mail.ru") + "|" + IvaAvatarPatch.slot("me", "")
+            + "|" + IvaAvatarPatch.slot("me", null) + "|" + IvaAvatarPatch.slot("me", "null"),
+            "me:ivan@mail.ru|shop:ivan@mail.ru|||");
+        long[] u = IvaAvatarPatch.unpackSaved(IvaAvatarPatch.packSaved(270, new int[]{12, 0, 640}, 0x8000000000000001L));
+        eq("аватар 10.109: запись об исходнике — туда и обратно, испорченная — не берётся",
+            java.util.Arrays.toString(u) + "|" + IvaAvatarPatch.unpackSaved("45|1,2,3|ff") + "|" + IvaAvatarPatch.unpackSaved("90|1,2,0|ff") + "|"
+            + IvaAvatarPatch.unpackSaved("90|1,2|ff") + "|" + IvaAvatarPatch.unpackSaved("") + "|" + IvaAvatarPatch.unpackSaved(null) + "|"
+            + IvaAvatarPatch.unpackSaved("x|1,2,3|ff"),
+            "[270, 12, 0, 640, -9223372036854775807]|null|null|null|null|null|null");
+        int[] g = new int[64], g2 = new int[64], inv = new int[64];
+        for (int i = 0; i < 64; i++) {
+            int v = (i % 8) * 30 + (i / 8) * 4, v2 = Math.min(255, v + ((i * 7) % 5)), w = 255 - v;
+            g[i] = 0xff000000 | v << 16 | v << 8 | v;
+            g2[i] = 0xff000000 | v2 << 16 | v2 << 8 | v2;
+            inv[i] = 0xff000000 | w << 16 | w << 8 | w;
+        }
+        long h = IvaAvatarPatch.fingerprint(g);
+        eq("аватар 10.109: отпечаток — та же картинка после сжатия совпадает, другая — нет",
+            (h != 0L) + "|" + IvaAvatarPatch.samePhoto(h, IvaAvatarPatch.fingerprint(g2)) + "|" + IvaAvatarPatch.samePhoto(h, IvaAvatarPatch.fingerprint(inv))
+            + "|" + IvaAvatarPatch.fingerprint(null) + "|" + IvaAvatarPatch.fingerprint(new int[3]),
+            "true|true|false|0|0");
+        eq("аватар 10.109: кнопки и размеры", IvaAvatarPatch.EDIT_THIS + "|" + IvaAvatarPatch.PICK_OTHER + "|" + IvaAvatarPatch.ROTATE + "|"
+            + IvaAvatarPatch.KEEP_PX + "|" + IvaAvatarPatch.SAME_BITS, "Редактировать|Выбрать другое фото|Повернуть|1600|10");
+    }
+
     static void adminManage108() {
         eq("админы 10.108: почта нового админа — как проверяет база",
             IvaAdminsPatch.emailErr(" Ivan@Mail.ru ", "eclips.ru@mail.ru").isEmpty() + "|" + IvaAdminsPatch.emailErr("", "x") + "|"

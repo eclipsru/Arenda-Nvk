@@ -39,6 +39,8 @@ import java.util.WeakHashMap;
  *  Данные — штатный список atPics (byte[]): штатные «Опубликовать», черновик и renderAtPhotos не меняются; штатная
  *  лента (HorizontalScrollView) скрыта и рисуется как прежде. Результат выбора принимает невидимый Picker
  *  (как AvatarPicker профиля) — onActivityResult MainActivity не трогаем.
+ * 10.109 · Окно выбора — общее для всех картинок приложения (galleryIntents / startGallery): аватарки и «+» штатной
+ *  правки инструмента тоже открывают галерею, а не проводник (просьба владельца 17.10.2026).
  */
 public final class IvaPhotoPatch {
     private IvaPhotoPatch() {}
@@ -408,29 +410,93 @@ public final class IvaPhotoPatch {
         catch (Throwable e) { return false; }
     }
 
-    static void gallery(Activity a) {
+    static void gallery(final Activity a) {
         int n = left(pics(a).size());
         if (n <= 0) return;
+        boolean ok = startGallery(n, new Starter() {
+            @Override public void start(Intent i) { picker(a).startActivityForResult(i, REQ_GAL); }
+        });
+        if (!ok) Toast.makeText(a, ERR_GAL, Toast.LENGTH_SHORT).show();
+    }
+
+    // ══════════ 10.109: одна галерея для всех картинок приложения (аватарки, форма, правка инструмента) ══════════
+
+    /** Кто открывает окно выбора: невидимый Picker или сама MainActivity (штатный код результата). */
+    interface Starter { void start(Intent i) throws Throwable; }
+
+    static final String ACT_PHOTO_PICKER = "android.provider.action.PICK_IMAGES", ACT_GALLERY = "android.intent.action.PICK",
+        ACT_FILES = "android.intent.action.GET_CONTENT";
+
+    /** Порядок окон выбора: системный выбор фото (Android 11+ с обновлением), приложение-галерея; проводник —
+     *  только запасной, если на телефоне нет ни того, ни другого (раньше аватарки и правка открывали сразу проводник). */
+    static String[] galleryActions(boolean photoPicker) {
+        return photoPicker ? new String[]{ACT_PHOTO_PICKER, ACT_GALLERY, ACT_FILES} : new String[]{ACT_GALLERY, ACT_FILES};
+    }
+
+    /** Окна выбора по порядку galleryActions; n — сколько фото можно выбрать сразу. */
+    static List<Intent> galleryIntents(int n) {
         List<Intent> tries = new ArrayList<Intent>();
-        if (photoPicker()) {                                          // системный выбор фото (как галерея)
-            Intent p = new Intent("android.provider.action.PICK_IMAGES");
-            p.setType("image/*");
-            if (n > 1) p.putExtra("android.provider.extra.PICK_IMAGES_MAX", n);
-            tries.add(p);
+        for (String act : galleryActions(photoPicker())) {
+            if (ACT_PHOTO_PICKER.equals(act)) {                      // системный выбор фото (как галерея)
+                Intent p = new Intent("android.provider.action.PICK_IMAGES");
+                p.setType("image/*");
+                if (n > 1) p.putExtra("android.provider.extra.PICK_IMAGES_MAX", n);
+                tries.add(p);
+            } else if (ACT_GALLERY.equals(act)) {                    // приложение-галерея
+                Intent g = new Intent(Intent.ACTION_PICK);
+                g.setDataAndType(android.provider.MediaStore.Images.Media.EXTERNAL_CONTENT_URI, "image/*");
+                if (n > 1) g.putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true);
+                tries.add(g);
+            } else {                                                 // запасной путь — если галереи нет
+                Intent c = new Intent(Intent.ACTION_GET_CONTENT);
+                c.setType("image/*");
+                c.addCategory(Intent.CATEGORY_OPENABLE);
+                if (n > 1) c.putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true);
+                tries.add(c);
+            }
         }
-        Intent g = new Intent(Intent.ACTION_PICK);                    // приложение-галерея
-        g.setDataAndType(android.provider.MediaStore.Images.Media.EXTERNAL_CONTENT_URI, "image/*");
-        if (n > 1) g.putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true);
-        tries.add(g);
-        Intent c = new Intent(Intent.ACTION_GET_CONTENT);             // запасной путь — если галереи нет
-        c.setType("image/*");
-        c.addCategory(Intent.CATEGORY_OPENABLE);
-        if (n > 1) c.putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true);
-        tries.add(c);
-        for (Intent i : tries) {
-            try { picker(a).startActivityForResult(i, REQ_GAL); return; } catch (Throwable ignore) {}
+        return tries;
+    }
+
+    /** Открыть первое окно выбора, которое есть на телефоне. false — не открылось ни одно. */
+    static boolean startGallery(int n, Starter s) {
+        for (Intent i : galleryIntents(n)) {
+            try { s.start(i); return true; } catch (Throwable ignore) {}
         }
-        Toast.makeText(a, ERR_GAL, Toast.LENGTH_SHORT).show();
+        return false;
+    }
+
+    /** Штатная правка инструмента: «+» под фото открывал проводник (GET_CONTENT, код 5402). Теперь — галерея,
+     *  результат по-прежнему принимает штатный onActivityResult (тот же код, тот же getData()). */
+    static final int REQ_EDIT_NATIVE = 5402;
+    static java.lang.ref.WeakReference<View> editLane = new java.lang.ref.WeakReference<View>(null);
+
+    /** IvaPatch.onTab: на штатную ленту фото правки (tePhotos) — слушатель, который подменяет нажатие «+». */
+    static void onTab(final Activity a) {
+        Object o = IvaClientPatch.get(a, "tePhotos");
+        if (!(o instanceof android.view.ViewGroup)) return;
+        final android.view.ViewGroup lane = (android.view.ViewGroup) o;
+        if (editLane.get() != lane) {
+            lane.setOnHierarchyChangeListener(new android.view.ViewGroup.OnHierarchyChangeListener() {
+                @Override public void onChildViewAdded(View parent, View child) { try { editPlus(a, child); } catch (Throwable ignore) {} }
+                @Override public void onChildViewRemoved(View parent, View child) {}
+            });
+            editLane = new java.lang.ref.WeakReference<View>(lane);
+        }
+        for (int i = 0; i < lane.getChildCount(); i++) editPlus(a, lane.getChildAt(i));
+    }
+
+    /** «+» штатной правки — LinearLayout (фото — FrameLayout с «×»). */
+    static void editPlus(final Activity a, View child) {
+        if (!(child instanceof LinearLayout)) return;
+        child.setOnClickListener(new View.OnClickListener() {
+            @Override public void onClick(View v) {
+                boolean ok = startGallery(1, new Starter() {
+                    @Override public void start(Intent i) { a.startActivityForResult(i, REQ_EDIT_NATIVE); }
+                });
+                if (!ok) Toast.makeText(a, ERR_GAL, Toast.LENGTH_SHORT).show();
+            }
+        });
     }
 
     static void onResult(final Activity a, int request, int result, Intent data) {

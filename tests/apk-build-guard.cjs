@@ -110,7 +110,7 @@ try {
   assert.match(jpc, /profileHead/, 'IvaClientPatch: строка «Клиент» не подключена к профилю');
   assert.match(jpc, /installClientProfileHead\(a\)/, 'IvaClientPatch: обработчик строки «Клиент» не устанавливается');
   assert.match(jpc, /depth < 3/, 'IvaClientPatch: оболочки строки «Клиент» не подключены');
-  for (const k of ['avatarImage', 'Изменить фото', 'CLIENT_AVATAR_REQUEST', 'image/*', 'CATEGORY_OPENABLE', 'BitmapFactory.decodeByteArray',
+  for (const k of ['avatarImage', 'Изменить фото', 'CLIENT_AVATAR_REQUEST', 'IvaPhotoPatch.startGallery(1', 'BitmapFactory.decodeByteArray',
     'prepareAvatar(byte[]', 'uploadClientAvatar(Activity', 'downloadClientAvatar(Activity', 'customer-avatars'])
     assert.ok(jpc.includes(k), `IvaClientPatch.java: нет функции аватарки ${k}`);
   for (const k of ['onPrice(String', 'onSummary(final Activity', 'onHub(Activity', 'publishError(String', 'netError(String',
@@ -1661,7 +1661,7 @@ try {
       && fn(sh, 'syncNative').includes('"adCompany"'),
       'прокат 10.98: «Мои данные» — только Фамилия, Имя, Отчество, телефон, мессенджеры (данные проката — в скрытых штатных полях)');
     // аватарка: выбор области кругом, просмотр, круг без краёв, крупнее
-    assert.ok(av.includes('public static final class Picker extends android.app.Fragment') && av.includes('f.startActivityForResult(Intent.createChooser(i, "Выберите фото"), REQ);')
+    assert.ok(av.includes('public static final class Picker extends android.app.Fragment') && av.includes('@Override public void start(Intent i) { ff.startActivityForResult(i, REQ); }')
       && av.includes('hole.setFillType(Path.FillType.EVEN_ODD);') && av.includes('static final int OUT_PX = 512')
       && av.includes('if (hasPhoto(photo.get())) return;') && av.includes('HEAD_DP = 72, PAGE_DP = 120')
       && fn(av, 'onProfile').includes('frame.setBackground(hole(a, iv));') && fn(av, 'dataPage').includes('av.setBackground(hole(a, av));')
@@ -2054,6 +2054,52 @@ try {
       'SQL 10.108: действия — только создателю, владельца площадки и себя нельзя, «скрыт паузой» ставит только база, ничего не удаляется, откат в шапке');
     assert.ok(st.includes("SQL = rd('supabase/migrations/20261102_admin_manage.sql')") && chk.includes('tools/admin-manage-stand.py'), 'SQL 10.108: стенд PostgreSQL в check.sh');
     assert.ok((tp.match(/eq\("админы 10\.108: /g) || []).length >= 6, 'IvaPatchTest: проверки 10.108');
+  }
+  // 10.109 (просьба владельца 17.10.2026): уже выбранную аватарку можно редактировать (область, поворот; исходник — только
+  // на телефоне); все картинки приложения выбираются из галереи, а не из проводника
+  {
+    const av = R('android/patches/IvaAvatarPatch.java'), ph = R('android/patches/IvaPhotoPatch.java'), cl = R('android/patches/IvaClientPatch.java'),
+      sh = R('android/patches/IvaShopPatch.java'), ip = R('android/patches/IvaPatch.java'), ap = R('android/patches/apply.py'),
+      tp = R('android/patches/test/IvaPatchTest.java'), wf = R('.github/workflows/build-apk.yml');
+    // комментарии: «/* » / «/** » и «// » (а не "image/*" и не адреса https://)
+    const strip = (x) => x.replace(/\/\*[\s*][\s\S]*?\*\//g, '').replace(/\/\/ [^\n]*/g, '');
+    const fn = (src, name) => { const m = new RegExp('static [\\w.<>\\[\\]]+ ' + name + '\\(').exec(src); assert.ok(m, 'нет ' + name);
+      return src.slice(m.index, src.indexOf('\n    }\n', m.index)); };
+    // проводник (GET_CONTENT) — только запасным в общем окне выбора; во всех остальных файлах его нет
+    const fs = require('fs'), path = require('path'), dir = path.join(__dirname, '..', 'android', 'patches');
+    for (const f of fs.readdirSync(dir).filter((x) => /^Iva\w+\.java$/.test(x))) {
+      const code = strip(fs.readFileSync(path.join(dir, f), 'utf8'));
+      const n = (code.match(/ACTION_GET_CONTENT|"android\.intent\.action\.GET_CONTENT"|OPEN_DOCUMENT|createChooser\(/g) || []).length;
+      assert.ok(f === 'IvaPhotoPatch.java' ? n === 2 : n === 0, 'галерея 10.109: проводник не открывается напрямую — ' + f + ' (' + n + ')');
+    }
+    const gi = fn(ph, 'galleryIntents'), ga = fn(ph, 'galleryActions');
+    assert.ok(ga.includes('photoPicker ? new String[]{ACT_PHOTO_PICKER, ACT_GALLERY, ACT_FILES} : new String[]{ACT_GALLERY, ACT_FILES}')
+      && gi.includes('new Intent("android.provider.action.PICK_IMAGES")') && gi.includes('new Intent(Intent.ACTION_PICK)')
+      && gi.includes('g.setDataAndType(android.provider.MediaStore.Images.Media.EXTERNAL_CONTENT_URI, "image/*");')
+      && fn(ph, 'gallery').includes('startGallery(n, new Starter()') && fn(av, 'pick').includes('IvaPhotoPatch.startGallery(1,')
+      && cl.includes('boolean ok = IvaPhotoPatch.startGallery(1, new IvaPhotoPatch.Starter() {'),
+      'галерея 10.109: форма, аватарки и запасной выбор клиента — одно окно: выбор фото / галерея, проводник — последним');
+    // «+» штатной правки инструмента: тот же код 5402 — результат по-прежнему принимает штатный onActivityResult
+    assert.ok(ip.includes('try { IvaPhotoPatch.onTab(a); } catch (Throwable ignore) {}') && !/IvaPhotoPatch/.test(ap)
+      && ph.includes('static final int REQ_EDIT_NATIVE = 5402;') && fn(ph, 'editPlus').includes('a.startActivityForResult(i, REQ_EDIT_NATIVE);')
+      && fn(ph, 'editPlus').includes('if (!(child instanceof LinearLayout)) return;') && fn(ph, 'onTab').includes('IvaClientPatch.get(a, "tePhotos")'),
+      'галерея 10.109: «+» в правке инструмента — галерея с кодом 5402, без новых вставок в smali');
+    // «Редактировать»: во всех четырёх просмотрах; сохранение — как у нового фото; исходник — только в папке приложения
+    assert.ok(av.includes('EDIT_THIS = "Редактировать", PICK_OTHER = "Выбрать другое фото", ROTATE = "Повернуть"')
+      && fn(av, 'headTap').includes('viewer(a, b, hi, editExisting(a, b, hi), edit);') && fn(av, 'dataTap').includes('viewer(a, b, hi, editExisting(a, b, hi), edit);')
+      && cl.includes('IvaAvatarPatch.edit(a, IvaAvatarPatch.meSlot(a), b, hi, avatarDone());')
+      && sh.includes('IvaAvatarPatch.edit(u.a, IvaAvatarPatch.slot("shop", me(u.a)), b, hi, avatarDone(u));'),
+      'аватар 10.109: «Редактировать» — в строке «Кабинета», «Мои данные», «Настройках профиля» и у аватарки проката');
+    assert.ok(fn(av, 'saveAdminPhoto').includes('saved(a, meSlot(a));') && fn(av, 'saveClientPhoto').includes('saved(a, meSlot(a));')
+      && cl.includes('IvaAvatarPatch.saved(a, IvaAvatarPatch.meSlot(a));') && sh.includes('IvaAvatarPatch.saved(a, IvaAvatarPatch.slot("shop", me(a)));')
+      && fn(av, 'srcFile').includes('new java.io.File(a.getFilesDir(), SRC_DIR)')
+      && !/apiCall|upload|http|Storage|MediaStore|getExternal/.test(fn(av, 'saved') + fn(av, 'edit') + fn(av, 'srcFile')),
+      'аватар 10.109: исходник запоминается после сохранения — только в папке приложения, на сервер не уходит');
+    assert.ok(fn(av, 'edit').includes('samePhoto(shownHash, st[4])') && fn(av, 'crop').includes('cv.rotate();')
+      && fn(av, 'crop').includes('jpeg = cut(shown, rect);') && /new Thread\(new Runnable\(\) \{/.test(fn(av, 'edit')) && /new Thread\(new Runnable\(\) \{/.test(fn(av, 'saved')),
+      'аватар 10.109: исходник — только от показанной аватарки; поворот; чтение и запись файла — в фоне');
+    assert.ok(wf.includes("NEW_NAME: '10.109'") && wf.includes("NEW_CODE: '183'"), 'сборка 10.109 (183)');
+    assert.ok((tp.match(/eq\("аватар 10\.109: /g) || []).length >= 7, 'IvaPatchTest: проверки 10.109');
   }
   // 10.75 (просьба владельца 14.10.2026): в «Настройках» — кнопка «Уведомления» (с 10.97 — открывает отдельную страницу);
   // внутри сверху «Открыть настройки уведомлений Android», потом какие присылать, потом расписание, потом всё остальное

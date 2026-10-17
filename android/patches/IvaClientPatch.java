@@ -1355,24 +1355,35 @@ public final class IvaClientPatch {
         }
 
         // ── фото профиля ──
-        /** 10.98: фото есть — просмотр (с «Изменить фото»), нет — сразу выбор. */
+        /** 10.98: фото есть — просмотр, нет — сразу выбор. 10.109: в просмотре «Редактировать» и «Выбрать другое фото». */
         void tapAvatar() {
-            Bitmap b = IvaAvatarPatch.photoOf(avatarImage);
+            final Bitmap b = IvaAvatarPatch.photoOf(avatarImage);
             if (b == null || uploading) { pickAvatar(); return; }
             final String path = clientAvatarPath == null ? "" : clientAvatarPath.trim();
-            IvaAvatarPatch.viewer(a, b, path.isEmpty() ? null : new IvaAvatarPatch.Loader() {
+            final IvaAvatarPatch.Loader hi = path.isEmpty() ? null : new IvaAvatarPatch.Loader() {
                 @Override public Bitmap load() throws Exception { return decodeAvatar(downloadClientAvatar(a, path), IvaAvatarPatch.VIEW_PX); }
-            }, true, new Runnable() { @Override public void run() { pickAvatar(); } });
+            };
+            IvaAvatarPatch.viewer(a, b, hi, new Runnable() {
+                @Override public void run() {
+                    if (!loaded || uploading || saving) return;
+                    IvaAvatarPatch.edit(a, IvaAvatarPatch.meSlot(a), b, hi, avatarDone());
+                }
+            }, new Runnable() { @Override public void run() { pickAvatar(); } });
+        }
+
+        /** Готовый квадрат → хранилище (только пока это окно открыто). */
+        IvaAvatarPatch.Done avatarDone() {
+            return new IvaAvatarPatch.Done() {
+                @Override public void done(byte[] jpeg, Bitmap preview) {
+                    if (clientScreen == ProfileScreen.this && isShowing()) uploadJpeg(jpeg, preview);
+                }
+            };
         }
 
         /** 10.98: галерея → выбор области кругом (IvaAvatarPatch) → загрузка готового квадрата. */
         void pickAvatar() {
             if (!loaded || uploading || saving) return;
-            boolean ok = IvaAvatarPatch.pick(a, new IvaAvatarPatch.Done() {
-                @Override public void done(byte[] jpeg, Bitmap preview) {
-                    if (clientScreen == ProfileScreen.this && isShowing()) uploadJpeg(jpeg, preview);
-                }
-            });
+            boolean ok = IvaAvatarPatch.pick(a, avatarDone());
             if (!ok) pickAvatarPlain();
         }
 
@@ -1386,10 +1397,11 @@ public final class IvaClientPatch {
                     fm.beginTransaction().add(f, AVATAR_PICKER_TAG).commitAllowingStateLoss();
                     fm.executePendingTransactions();
                 }
-                Intent i = new Intent(Intent.ACTION_GET_CONTENT);
-                i.setType("image/*");
-                i.addCategory(Intent.CATEGORY_OPENABLE);
-                f.startActivityForResult(Intent.createChooser(i, "Фото профиля"), CLIENT_AVATAR_REQUEST);
+                final android.app.Fragment ff = f;
+                boolean ok = IvaPhotoPatch.startGallery(1, new IvaPhotoPatch.Starter() {   // 10.109: галерея, не проводник
+                    @Override public void start(Intent i) { ff.startActivityForResult(i, CLIENT_AVATAR_REQUEST); }
+                });
+                if (!ok) Toast.makeText(a, "Не удалось открыть галерею", Toast.LENGTH_SHORT).show();
             } catch (Throwable t) {
                 Toast.makeText(a, "Не удалось открыть выбор фото", Toast.LENGTH_SHORT).show();
             }
@@ -1415,6 +1427,7 @@ public final class IvaClientPatch {
                         if (version == avatarVersion && preview != null) showAvatar(preview);
                         rememberClientAvatar(avatarCacheKey(clientProfileEmail, path), preview);
                         showClientAvatar(a);
+                        IvaAvatarPatch.saved(a, IvaAvatarPatch.meSlot(a));   // 10.109: исходник — для «Редактировать»
                         avatarChanged = !path.equals(before);
                         avatarStatus.setTextColor(cGray);
                         avatarStatus.setText(avatarChanged ? "Фото загружено — нажмите «Сохранить»" : "Фото обновлено");

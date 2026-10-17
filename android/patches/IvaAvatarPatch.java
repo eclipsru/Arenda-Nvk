@@ -55,6 +55,13 @@ import java.net.URLEncoder;
  * (как AvatarPicker 10.39: результат приходит ему, минуя MainActivity.onActivityResult).
  * Фото админа — как штатно: файл через штатный uploadPhoto, адрес — в admins.avatar (то же поле, что пишет «Сохранить»
  * в «Мои данные»). Фото клиента — как в «Настройках профиля»: приватное хранилище customer-avatars.
+ *
+ * 10.109 (просьба владельца 17.10.2026): уже выбранную аватарку можно редактировать — в просмотре «Редактировать»
+ *    (тот же выбор области на том же фото + «Повернуть» на 90°) и «Выбрать другое фото». Полное исходное фото хранится
+ *    только на этом телефоне (папка приложения, по файлу на аккаунт и вид аватарки), на сервер, как и раньше, уходит
+ *    квадрат под кругом. Исходник берётся, только если он — от той аватарки, что сейчас показана (отпечаток 8×8);
+ *    иначе (другой телефон, старое фото, сменили на сайте) редактируется сохранённое фото. Выбор — из галереи
+ *    (IvaPhotoPatch.startGallery), а не из проводника.
  */
 public class IvaAvatarPatch {
     static final int REQ = 6405;
@@ -65,6 +72,10 @@ public class IvaAvatarPatch {
     static final String CROP_TITLE = "Выберите область";
     static final String CROP_HINT = "Двигайте круг пальцем. Размер круга — двумя пальцами или за точку на краю";
     static final String EDIT = "Изменить фото", CLOSE = "Закрыть", DONE = "Готово", CANCEL = "Отмена";
+    static final String EDIT_THIS = "Редактировать", PICK_OTHER = "Выбрать другое фото", ROTATE = "Повернуть";
+    static final String SRC_PREFS = "iva_avatar_src", SRC_DIR = "iva_avatar";
+    static final int KEEP_PX = 1600;                              // исходник для выбора области и «Редактировать» — до 1600 px
+    static final int SAME_BITS = 10;                              // отпечатки 8×8 отличаются не больше чем на 10 из 64
     static final String TAG_HEAD = "iva_avatar_head_10_98", TAG_DATA = "iva_avatar_data_10_98";
 
     /** Результат выбора: готовый JPEG (квадрат под кругом) и картинка для показа. */
@@ -125,6 +136,66 @@ public class IvaAvatarPatch {
         return u.startsWith("https://") || u.startsWith("http://");
     }
 
+    // 10.109 — редактирование уже выбранной аватарки
+
+    /** Квадрат {x, y, size} на картинке w×h → тот же квадрат на картинке, повёрнутой на 90° по часовой (h×w). */
+    static int[] rotRect90(int[] r, int w, int h) {
+        if (r == null || r.length < 3) return null;
+        return new int[]{Math.max(0, h - (r[1] + r[2])), Math.max(0, r[0]), r[2]};
+    }
+
+    /** Квадрат картинки {x, y, size} → круг на экране {cx, cy, r} (картинка на экране — left, top, scale). */
+    static float[] circleOf(int[] r, float left, float top, float scale) {
+        float half = r[2] / 2f;
+        return new float[]{left + (r[0] + half) * scale, top + (r[1] + half) * scale, half * scale};
+    }
+
+    /** Поворот (0/90/180/270) после ещё одного нажатия «Повернуть». */
+    static int nextRot(int rot) { return ((rot / 90 + 1) % 4) * 90; }
+
+    /** Ключ исходника: вид аватарки (me — своя, shop — проката) и почта без регистра; без почты — "". */
+    static String slot(String kind, String email) {
+        String e = email == null ? "" : email.trim().toLowerCase(java.util.Locale.ROOT);
+        return e.isEmpty() || "null".equals(e) ? "" : kind + ":" + e;
+    }
+
+    /** Что запомнить об исходнике: поворот, квадрат под кругом, отпечаток готовой аватарки. */
+    static String packSaved(int rot, int[] rect, long hash) {
+        return rot + "|" + rect[0] + "," + rect[1] + "," + rect[2] + "|" + Long.toHexString(hash);
+    }
+
+    /** {rot, x, y, size} и отпечаток — или null, если запись испорчена. */
+    static long[] unpackSaved(String s) {
+        try {
+            String[] p = s.split("\\|");
+            String[] r = p[1].split(",");
+            int rot = Integer.parseInt(p[0]);
+            long x = Long.parseLong(r[0]), y = Long.parseLong(r[1]), z = Long.parseLong(r[2]);
+            if (rot % 90 != 0 || rot < 0 || rot > 270 || x < 0 || y < 0 || z <= 0) return null;
+            return new long[]{rot, x, y, z, new java.math.BigInteger(p[2], 16).longValue()};
+        } catch (Throwable e) {
+            return null;
+        }
+    }
+
+    /** Отпечаток 8×8 (64 точки ARGB): бит — точка светлее средней. Одинаков у той же картинки в любом размере и сжатии. */
+    static long fingerprint(int[] px) {
+        if (px == null || px.length < 64) return 0L;
+        int[] g = new int[64];
+        long sum = 0;
+        for (int i = 0; i < 64; i++) {
+            int c = px[i];
+            g[i] = (((c >> 16) & 0xff) * 299 + ((c >> 8) & 0xff) * 587 + (c & 0xff) * 114) / 1000;
+            sum += g[i];
+        }
+        long mean = sum / 64, bits = 0L;
+        for (int i = 0; i < 64; i++) if (g[i] > mean) bits |= 1L << i;
+        return bits;
+    }
+
+    /** Та же картинка: отпечатки отличаются не больше чем на SAME_BITS. */
+    static boolean samePhoto(long a, long b) { return Long.bitCount(a ^ b) <= SAME_BITS; }
+
     // ───────────── выбор из галереи → выбор области ─────────────
 
     static int dp(Activity a, float v) { return Math.round(v * a.getResources().getDisplayMetrics().density); }
@@ -145,11 +216,12 @@ public class IvaAvatarPatch {
                 fm.beginTransaction().add(f, PICKER_TAG).commitAllowingStateLoss();
                 fm.executePendingTransactions();
             }
-            Intent i = new Intent(Intent.ACTION_GET_CONTENT);
-            i.setType("image/*");
-            i.addCategory(Intent.CATEGORY_OPENABLE);
-            f.startActivityForResult(Intent.createChooser(i, "Выберите фото"), REQ);
-            return true;
+            final android.app.Fragment ff = f;
+            boolean ok = IvaPhotoPatch.startGallery(1, new IvaPhotoPatch.Starter() {   // 10.109: галерея, не проводник
+                @Override public void start(Intent i) { ff.startActivityForResult(i, REQ); }
+            });
+            if (!ok) pending = null;
+            return ok;
         } catch (Throwable t) {
             pending = null;
             return false;
@@ -176,7 +248,7 @@ public class IvaAvatarPatch {
             @Override public void run() {
                 Bitmap b = null;
                 String err = "";
-                try { b = decode(IvaClientPatch.readUri(a, uri), SRC_MAX); }
+                try { b = fitMax(decode(IvaClientPatch.readUri(a, uri), SRC_MAX), KEEP_PX); }
                 catch (Throwable e) { err = IvaClientPatch.brief(e.getMessage()); }
                 final Bitmap fb = b;
                 final String ferr = err;
@@ -184,7 +256,7 @@ public class IvaAvatarPatch {
                     @Override public void run() {
                         if (a.isFinishing()) return;
                         if (fb == null) { toast(a, "Не удалось открыть фото" + (ferr.isEmpty() ? "" : ": " + ferr)); return; }
-                        try { crop(a, fb, cb); } catch (Throwable t) { toast(a, "Не удалось открыть выбор области"); }
+                        try { crop(a, fb, 0, null, false, cb); } catch (Throwable t) { toast(a, "Не удалось открыть выбор области"); }
                     }
                 });
             }
@@ -223,8 +295,46 @@ public class IvaAvatarPatch {
         return bytes.toByteArray();
     }
 
-    /** Окно выбора области: фото целиком, круг поверх (вне круга — затемнено), «Отмена» / «Готово». */
-    static void crop(final Activity a, final Bitmap src, final Done cb) {
+    /** Не больше max по длинной стороне (поворот и хранение исходника — без лишней памяти). */
+    static Bitmap fitMax(Bitmap b, int max) {
+        if (b == null || Math.max(b.getWidth(), b.getHeight()) <= max) return b;
+        float f = (float) max / Math.max(b.getWidth(), b.getHeight());
+        Bitmap r = Bitmap.createScaledBitmap(b, Math.max(1, Math.round(b.getWidth() * f)), Math.max(1, Math.round(b.getHeight() * f)), true);
+        if (r != b) b.recycle();
+        return r;
+    }
+
+    /** Повёрнутая копия (0 — та же картинка). */
+    static Bitmap rotated(Bitmap src, int deg) {
+        if (deg % 360 == 0) return src;
+        Matrix m = new Matrix();
+        m.postRotate(deg);
+        return Bitmap.createBitmap(src, 0, 0, src.getWidth(), src.getHeight(), m, true);
+    }
+
+    /** Отпечаток картинки: середина (квадрат внутри круга — без прозрачных углов), сжатая до 8×8. */
+    static long hashOf(Bitmap b) {
+        if (b == null || b.isRecycled() || b.getWidth() < 4 || b.getHeight() < 4) return 0L;
+        int side = Math.min(b.getWidth(), b.getHeight()), in = Math.max(2, Math.round(side * 0.68f));
+        Bitmap mid = Bitmap.createBitmap(b, (b.getWidth() - in) / 2, (b.getHeight() - in) / 2, in, in);
+        Bitmap s8 = Bitmap.createScaledBitmap(mid, 8, 8, true);
+        int[] px = new int[64];
+        s8.getPixels(px, 0, 8, 0, 0, 8, 8);
+        if (s8 != mid && s8 != b) s8.recycle();
+        if (mid != b) mid.recycle();
+        return fingerprint(px);
+    }
+
+    /** Последний выбор области — чтобы после сохранения запомнить исходник (saved). */
+    static Bitmap lastSrc;
+    static int lastRot;
+    static int[] lastRect;
+    static long lastHash;
+    static boolean lastFromFile;
+
+    /** Окно выбора области: фото целиком, круг поверх (вне круга — затемнено), «Отмена» / «Повернуть» / «Готово».
+     *  rot и rect — с чего начать (редактирование уже выбранной аватарки), иначе круг по центру. */
+    static void crop(final Activity a, final Bitmap src, int rot, int[] rect, final boolean fromFile, final Done cb) {
         final int cText = color(a, "text", 0xfff2f4f8), cGray = color(a, "gray", 0xff9aa1b0), cOrange = color(a, "orange", 0xffff8f1f);
         final Dialog d = new Dialog(a, android.R.style.Theme_Black_NoTitleBar_Fullscreen);
         LinearLayout root = new LinearLayout(a);
@@ -236,7 +346,7 @@ public class IvaAvatarPatch {
         TextView h = IvaChiefPatch.text(a, CROP_HINT, 13f, cGray, false);
         h.setPadding(dp(a, 16), 0, dp(a, 16), dp(a, 8));
         root.addView(h);
-        final CropView cv = new CropView(a, src, cOrange);
+        final CropView cv = new CropView(a, src, cOrange, rot, rect);
         root.addView(cv, new LinearLayout.LayoutParams(-1, 0, 1f));
         LinearLayout btns = new LinearLayout(a);
         btns.setOrientation(LinearLayout.HORIZONTAL);
@@ -251,6 +361,17 @@ public class IvaAvatarPatch {
         done.setGravity(Gravity.CENTER);
         done.setPadding(dp(a, 12), dp(a, 13), dp(a, 12), dp(a, 13));
         btns.addView(cancel, new LinearLayout.LayoutParams(-2, -2));
+        TextView turn = IvaChiefPatch.text(a, ROTATE, 15f, cText, true);   // 10.109: на 90° по часовой
+        turn.setGravity(Gravity.CENTER);
+        turn.setPadding(dp(a, 14), dp(a, 13), dp(a, 14), dp(a, 13));
+        turn.setContentDescription("Повернуть фото на 90 градусов");
+        btns.addView(turn, new LinearLayout.LayoutParams(-2, -2));
+        turn.setOnClickListener(new View.OnClickListener() {
+            @Override public void onClick(View v) {
+                if (!done.isEnabled()) return;                   // уже готовим фото
+                try { cv.rotate(); } catch (Throwable t) { toast(a, "Не удалось повернуть фото"); }
+            }
+        });
         LinearLayout.LayoutParams dl = new LinearLayout.LayoutParams(0, -2, 1f);
         dl.leftMargin = dp(a, 8);
         btns.addView(done, dl);
@@ -264,13 +385,17 @@ public class IvaAvatarPatch {
                 done.setEnabled(false);
                 done.setText("Готовим…");
                 final int[] rect = cv.rect();
+                final Bitmap shown = cv.bmp;
+                final int rotNow = cv.rot;
                 new Thread(new Runnable() {
                     @Override public void run() {
                         byte[] jpeg = null;
                         Bitmap preview = null;
                         try {
-                            jpeg = cut(src, rect);
+                            jpeg = cut(shown, rect);
                             preview = BitmapFactory.decodeByteArray(jpeg, 0, jpeg.length);
+                            lastSrc = src; lastRot = rotNow; lastRect = rect; lastFromFile = fromFile;
+                            lastHash = hashOf(preview);
                         } catch (Throwable ignore) {}
                         final byte[] fj = jpeg;
                         final Bitmap fp = preview;
@@ -290,7 +415,10 @@ public class IvaAvatarPatch {
 
     /** Фото и круг выбора: палец внутри — сдвиг, на краю (или на точке) — размер, два пальца — размер и сдвиг. */
     static final class CropView extends View {
-        final Bitmap bmp;
+        final Bitmap src;
+        Bitmap bmp;               // src, повёрнутая на rot
+        int rot;
+        int[] initRect;           // с чего начать (квадрат на bmp), null — круг по центру
         final Paint img = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.FILTER_BITMAP_FLAG);
         final Paint dim = new Paint(Paint.ANTI_ALIAS_FLAG), ring = new Paint(Paint.ANTI_ALIAS_FLAG),
             dot = new Paint(Paint.ANTI_ALIAS_FLAG), dotRing = new Paint(Paint.ANTI_ALIAS_FLAG);
@@ -302,9 +430,12 @@ public class IvaAvatarPatch {
         float lx, ly, d0, r0, mx0, my0;
         boolean placed;
 
-        CropView(Activity a, Bitmap b, int accent) {
+        CropView(Activity a, Bitmap b, int accent, int rot0, int[] rect0) {
             super(a);
-            bmp = b;
+            src = b;
+            rot = rot0 % 360 == 0 ? 0 : rot0;
+            bmp = rotated(b, rot);
+            initRect = rect0;
             density = a.getResources().getDisplayMetrics().density;
             dim.setColor(0xb0000000);
             dim.setStyle(Paint.Style.FILL);
@@ -322,10 +453,19 @@ public class IvaAvatarPatch {
 
         @Override protected void onSizeChanged(int w, int h, int ow, int oh) {
             super.onSizeChanged(w, h, ow, oh);
+            place(w, h);
+        }
+
+        void place(int w, int h) {
+            if (w <= 0 || h <= 0) return;
             float[] f = fit(w, h, bmp.getWidth(), bmp.getHeight(), 16f * density);
             float oldScale = scale, oldLeft = left, oldTop = top;
             left = f[0]; top = f[1]; scale = f[2];
-            if (!placed) {
+            if (!placed && initRect != null && initRect.length >= 3 && initRect[2] > 0) {   // 10.109: где круг был в прошлый раз
+                float[] c = circleOf(initRect, left, top, scale);
+                cx = c[0]; cy = c[1]; r = c[2];
+                placed = true;
+            } else if (!placed) {
                 float iw = bmp.getWidth() * scale, ih = bmp.getHeight() * scale;
                 cx = left + iw / 2f; cy = top + ih / 2f; r = Math.min(iw, ih) * 0.42f;
                 placed = true;
@@ -343,6 +483,20 @@ public class IvaAvatarPatch {
         }
 
         int[] rect() { return srcRect(cx, cy, r, left, top, scale, bmp.getWidth(), bmp.getHeight()); }
+
+        /** «Повернуть»: фото на 90° по часовой, круг остаётся на той же части фото. */
+        void rotate() {
+            int[] now = placed ? rect() : null;
+            int w = bmp.getWidth(), h = bmp.getHeight();
+            Bitmap next = rotated(src, nextRot(rot));
+            if (bmp != src) bmp.recycle();
+            bmp = next;
+            rot = nextRot(rot);
+            initRect = now == null ? null : rotRect90(now, w, h);
+            placed = false;
+            place(getWidth(), getHeight());
+            invalidate();
+        }
 
         @Override protected void onDraw(Canvas c) {
             if (scale <= 0f) return;
@@ -411,6 +565,12 @@ public class IvaAvatarPatch {
 
     /** Фото во весь экран (кругом). editable — с «Изменить фото». hi — картинка покрупнее (в фоне), можно null. */
     static void viewer(final Activity a, Bitmap first, final Loader hi, boolean editable, final Runnable onEdit) {
+        viewer(a, first, hi, null, editable ? onEdit : null);
+    }
+
+    /** 10.109: просмотр своей аватарки — «Редактировать» (onEdit: область и поворот на том же фото)
+     *  и «Выбрать другое фото» (onNew: галерея). null — кнопки нет. */
+    static void viewer(final Activity a, Bitmap first, final Loader hi, final Runnable onEdit, final Runnable onNew) {
         final int cGray = color(a, "gray", 0xff9aa1b0);
         final Dialog d = new Dialog(a, android.R.style.Theme_Black_NoTitleBar_Fullscreen);
         LinearLayout root = new LinearLayout(a);
@@ -424,18 +584,22 @@ public class IvaAvatarPatch {
         Bitmap r0 = first == null ? null : IvaClientPatch.circle(first, size, 0);
         if (r0 != null) iv.setImageBitmap(r0);
         root.addView(iv, new LinearLayout.LayoutParams(size, size));
-        if (editable && onEdit != null) {
+        String[] labels = onEdit != null ? new String[]{EDIT_THIS, PICK_OTHER} : new String[]{EDIT};
+        final Runnable[] acts = onEdit != null ? new Runnable[]{onEdit, onNew} : new Runnable[]{onNew};
+        for (int k = 0; k < labels.length; k++) {
+            if (acts[k] == null) continue;
+            final Runnable act = acts[k];
             TextView edit = new TextView(a);
-            edit.setText(EDIT);
+            edit.setText(labels[k]);
             edit.setTextSize(15f);
             IvaPatch.accentButton(a, edit);
             edit.setGravity(Gravity.CENTER);
             edit.setPadding(dp(a, 24), dp(a, 13), dp(a, 24), dp(a, 13));
-            LinearLayout.LayoutParams el = new LinearLayout.LayoutParams(-2, -2);
-            el.topMargin = dp(a, 24);
+            LinearLayout.LayoutParams el = new LinearLayout.LayoutParams(Math.min(size, dp(a, 280)), -2);
+            el.topMargin = dp(a, k == 0 ? 24 : 10);
             root.addView(edit, el);
             edit.setOnClickListener(new View.OnClickListener() {
-                @Override public void onClick(View v) { d.dismiss(); try { onEdit.run(); } catch (Throwable ignore) {} }
+                @Override public void onClick(View v) { d.dismiss(); try { act.run(); } catch (Throwable ignore) {} }
             });
         }
         TextView close = IvaChiefPatch.text(a, CLOSE, 15f, cGray, true);
@@ -490,6 +654,96 @@ public class IvaAvatarPatch {
         } finally {
             try { in.close(); } catch (Throwable ignore) {}
         }
+    }
+
+    // ───────────── 10.109: редактировать уже выбранную аватарку ─────────────
+
+    static String meSlot(Activity a) { return slot("me", myEmail(a)); }
+
+    static java.io.File srcFile(Activity a, String slot) {
+        String name;
+        try {
+            byte[] h = java.security.MessageDigest.getInstance("MD5").digest(slot.getBytes("UTF-8"));
+            StringBuilder b = new StringBuilder();
+            for (byte x : h) b.append(String.format(java.util.Locale.ROOT, "%02x", x & 0xff));
+            name = b.toString();
+        } catch (Throwable e) {
+            name = Integer.toHexString(slot.hashCode());
+        }
+        return new java.io.File(new java.io.File(a.getFilesDir(), SRC_DIR), "a_" + name + ".jpg");
+    }
+
+    /** «Редактировать»: исходник с этого телефона (если он от показанной аватарки) — с прошлым кругом и поворотом;
+     *  иначе само сохранённое фото (hi — покрупнее, first — то, что на экране). Дальше — тот же выбор области и cb. */
+    static void edit(final Activity a, final String slot, final Bitmap first, final Loader hi, final Done cb) {
+        final long shownHash = hashOf(first);
+        new Thread(new Runnable() {
+            @Override public void run() {
+                Bitmap src = null;
+                int rot = 0;
+                int[] rect = null;
+                boolean fromFile = false;
+                try {
+                    String saved = slot.isEmpty() ? null : a.getSharedPreferences(SRC_PREFS, 0).getString(slot, null);
+                    long[] st = saved == null ? null : unpackSaved(saved);
+                    java.io.File f = st == null ? null : srcFile(a, slot);
+                    if (st != null && f.isFile() && shownHash != 0L && samePhoto(shownHash, st[4])) {
+                        src = BitmapFactory.decodeFile(f.getAbsolutePath());
+                        if (src != null) {
+                            rot = (int) st[0];
+                            rect = new int[]{(int) st[1], (int) st[2], (int) st[3]};
+                            fromFile = true;
+                        }
+                    }
+                } catch (Throwable ignore) { src = null; }
+                if (src == null && hi != null) {
+                    try { src = hi.load(); } catch (Throwable ignore) {}
+                }
+                if (src == null) src = first;
+                if (src != null && !fromFile) rect = centerSquare(src.getWidth(), src.getHeight());   // круг — во всё фото
+                final Bitmap fs = src;
+                final int frot = rot;
+                final int[] frect = rect;
+                final boolean ff = fromFile;
+                a.runOnUiThread(new Runnable() {
+                    @Override public void run() {
+                        if (a.isFinishing()) return;
+                        if (fs == null) { toast(a, "Не удалось открыть фото"); return; }
+                        try { crop(a, fs, frot, frect, ff, cb); } catch (Throwable t) { toast(a, "Не удалось открыть выбор области"); }
+                    }
+                });
+            }
+        }).start();
+    }
+
+    /** Аватарка сохранена на сервере — запомнить её исходник на этом телефоне (только здесь, в папке приложения):
+     *  одно фото на аккаунт и вид аватарки, прежнее заменяется. */
+    static void saved(final Activity a, final String slot) {
+        final Bitmap src = lastSrc;
+        final int rot = lastRot;
+        final int[] rect = lastRect;
+        final long hash = lastHash;
+        final boolean fromFile = lastFromFile;
+        lastSrc = null; lastRect = null;
+        if (slot == null || slot.isEmpty() || src == null || rect == null || hash == 0L) return;
+        new Thread(new Runnable() {
+            @Override public void run() {
+                try {
+                    java.io.File f = srcFile(a, slot);
+                    if (!fromFile || !f.isFile()) {
+                        java.io.File dir = f.getParentFile();
+                        if (dir != null && !dir.isDirectory() && !dir.mkdirs()) return;
+                        java.io.File tmp = new java.io.File(f.getPath() + ".tmp");
+                        java.io.FileOutputStream out = new java.io.FileOutputStream(tmp);
+                        try { src.compress(Bitmap.CompressFormat.JPEG, JPEG_Q, out); } finally { out.close(); }
+                        if (!tmp.renameTo(f)) { f.delete(); if (!tmp.renameTo(f)) { tmp.delete(); return; } }
+                    }
+                    a.getSharedPreferences(SRC_PREFS, 0).edit().putString(slot, packSaved(rot, rect, hash)).commit();
+                } catch (Throwable ignore) {
+                    // не запомнили — в следующий раз редактируется сохранённое фото
+                }
+            }
+        }).start();
     }
 
     // ───────────── круг без лишних краёв ─────────────
@@ -608,7 +862,7 @@ public class IvaAvatarPatch {
         final boolean client = IvaClientPatch.isClient(a);
         Runnable edit = new Runnable() { @Override public void run() { editProfilePhoto(a); } };
         if (b == null) { edit.run(); return; }
-        Loader hi = client
+        final Loader hi = client
             ? new Loader() {
                 @Override public Bitmap load() throws Exception {
                     String path = IvaClientPatch.savedAvatarPath();
@@ -616,19 +870,35 @@ public class IvaAvatarPatch {
                 }
             }
             : new Loader() { @Override public Bitmap load() throws Exception { return urlBitmap(adminAvatarUrl(a), VIEW_PX); } };
-        viewer(a, b, hi, true, edit);
+        viewer(a, b, hi, editExisting(a, b, hi), edit);
+    }
+
+    /** 10.109: «Редактировать» своей аватарки (строка «Кабинета», «Мои данные») — тот же выбор области, сохранение как у нового. */
+    static Runnable editExisting(final Activity a, final Bitmap b, final Loader hi) {
+        return new Runnable() {
+            @Override public void run() {
+                if (IvaClientPatch.isClient(a) && !IvaClientPatch.clientProfileLoaded) { toast(a, "Профиль ещё загружается — попробуйте через пару секунд"); return; }
+                edit(a, meSlot(a), b, hi, profileDone(a));
+            }
+        };
+    }
+
+    /** Готовый квадрат своей аватарки → сервер (админ — admins.avatar, клиент — его запись). */
+    static Done profileDone(final Activity a) {
+        final boolean client = IvaClientPatch.isClient(a);
+        return new Done() {
+            @Override public void done(byte[] jpeg, Bitmap preview) {
+                if (client) saveClientPhoto(a, jpeg, preview);
+                else saveAdminPhoto(a, jpeg, preview);
+            }
+        };
     }
 
     /** «Изменить фото» профиля: выбор области и сохранение сразу (админ — admins.avatar, клиент — его запись). */
     static void editProfilePhoto(final Activity a) {
         final boolean client = IvaClientPatch.isClient(a);
         if (client && !IvaClientPatch.clientProfileLoaded) { toast(a, "Профиль ещё загружается — попробуйте через пару секунд"); return; }
-        boolean ok = pick(a, new Done() {
-            @Override public void done(byte[] jpeg, Bitmap preview) {
-                if (client) saveClientPhoto(a, jpeg, preview);
-                else saveAdminPhoto(a, jpeg, preview);
-            }
-        });
+        boolean ok = pick(a, profileDone(a));
         if (!ok) toast(a, "Не удалось открыть выбор фото");
     }
 
@@ -686,6 +956,7 @@ public class IvaAvatarPatch {
                             if (av instanceof ImageView) showOn((ImageView) av, preview);
                         } catch (Throwable ignore) {}
                         try { IvaClientPatch.applyAvatar(a, furl); } catch (Throwable ignore) {}   // нижнее меню
+                        saved(a, meSlot(a));                         // 10.109: исходник — для «Редактировать»
                         toast(a, "Фото сохранено");
                     }
                 });
@@ -714,6 +985,7 @@ public class IvaAvatarPatch {
                         if (!ferr.isEmpty()) { toast(a, "Фото не сохранено: " + ferr); return; }
                         IvaClientPatch.rememberClientAvatar(IvaClientPatch.avatarCacheKey(IvaClientPatch.clientProfileEmail, fpath), preview);
                         IvaClientPatch.showClientAvatar(a);
+                        saved(a, meSlot(a));                         // 10.109: исходник — для «Редактировать»
                         toast(a, "Фото сохранено");
                     }
                 });
@@ -774,7 +1046,8 @@ public class IvaAvatarPatch {
         Bitmap b = photoOf(av);
         Runnable edit = new Runnable() { @Override public void run() { editProfilePhoto(a); } };
         if (b == null) { edit.run(); return; }
-        viewer(a, b, new Loader() { @Override public Bitmap load() throws Exception { return urlBitmap(adminAvatarUrl(a), VIEW_PX); } }, true, edit);
+        Loader hi = new Loader() { @Override public Bitmap load() throws Exception { return urlBitmap(adminAvatarUrl(a), VIEW_PX); } };
+        viewer(a, b, hi, editExisting(a, b, hi), edit);
     }
 
     // ───────────── общий кружок фото для своих страниц ─────────────

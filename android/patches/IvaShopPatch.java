@@ -734,19 +734,29 @@ public class IvaShopPatch {
     static void avatarTap(final Ui u) {
         if (!u.loaded) return;
         if (!u.d.full) { toast(u.a, NO_DB); return; }
-        Bitmap b = IvaAvatarPatch.photoOf((ImageView) u.avatar[1]);
+        final Bitmap b = IvaAvatarPatch.photoOf((ImageView) u.avatar[1]);
         Runnable edit = new Runnable() { @Override public void run() { editAvatar(u); } };
         if (b == null) { edit.run(); return; }
         final String url = u.d.avatar;
-        IvaAvatarPatch.viewer(u.a, b, new IvaAvatarPatch.Loader() {
+        final IvaAvatarPatch.Loader hi = new IvaAvatarPatch.Loader() {
             @Override public Bitmap load() throws Exception { return IvaAvatarPatch.urlBitmap(url, IvaAvatarPatch.VIEW_PX); }
-        }, true, edit);
+        };
+        // 10.109: «Редактировать» — та же аватарка проката: область и поворот; «Выбрать другое фото» — галерея
+        IvaAvatarPatch.viewer(u.a, b, hi, new Runnable() {
+            @Override public void run() { IvaAvatarPatch.edit(u.a, IvaAvatarPatch.slot("shop", me(u.a)), b, hi, avatarDone(u)); }
+        }, edit);
     }
 
     /** Галерея → область кругом → файл (штатная загрузка фото) → admins.org_avatar. Сохраняется сразу. */
     static void editAvatar(final Ui u) {
+        boolean ok = IvaAvatarPatch.pick(u.a, avatarDone(u));
+        if (!ok) toast(u.a, "Не удалось открыть выбор фото");
+    }
+
+    /** Готовый квадрат аватарки проката → файл → admins.org_avatar. */
+    static IvaAvatarPatch.Done avatarDone(final Ui u) {
         final Activity a = u.a;
-        boolean ok = IvaAvatarPatch.pick(a, new IvaAvatarPatch.Done() {
+        return new IvaAvatarPatch.Done() {
             @Override public void done(byte[] jpeg, final Bitmap preview) {
                 if (!u.page.open()) return;
                 u.avatarHint.setText("Сохраняем аватарку…");
@@ -771,14 +781,14 @@ public class IvaShopPatch {
                                 }
                                 u.d.avatar = furl;
                                 showAvatar(u, preview);
+                                IvaAvatarPatch.saved(a, IvaAvatarPatch.slot("shop", me(a)));   // 10.109: исходник — для «Редактировать»
                                 toast(a, "Аватарка проката сохранена");
                             }
                         });
                     }
                 }).start();
             }
-        });
-        if (!ok) toast(a, "Не удалось открыть выбор фото");
+        };
     }
 
     // ───────────── «Мои данные»: только Фамилия, Имя, Отчество, Номер телефона и мессенджеры ─────────────
