@@ -393,6 +393,17 @@ else
   skip "стенд «Инструменты пункта у сотрудника»: нет pgserver (PG_PY=<python с pgserver> bash tools/check.sh)"
 fi
 
+head_ "4.5.15. Стенд «Чат пункта у сотрудника» (локальный PostgreSQL, SQL 10.106)"
+if "$PG_PY" -c "import pgserver" >/dev/null 2>&1; then
+  if "$PG_PY" tools/staff-chat-stand.py >/tmp/iva-test-staff-chat.log 2>&1; then
+    ok "чат пункта: $(grep -c '✔' /tmp/iva-test-staff-chat.log) проверок SQL на PostgreSQL (только свои пункты, без почты клиента, ответ от проката, мат, «прочитано», доступ пропадает, откат)"
+  else
+    bad "стенд «Чат пункта у сотрудника»"; grep -E '✘|Error|ERROR' /tmp/iva-test-staff-chat.log | head -8 | sed 's/^/      /'
+  fi
+else
+  skip "стенд «Чат пункта у сотрудника»: нет pgserver (PG_PY=<python с pgserver> bash tools/check.sh)"
+fi
+
 head_ "Итог"
 printf '  пройдено: %s, ошибок: %s, пропущено: %s\n' "$PASS" "$FAIL" "$SKIP"
 if [ "$FAIL" -eq 0 ]; then echo "  Можно продолжать."; exit 0; else echo "  Сначала исправляем замечания выше."; exit 1; fi

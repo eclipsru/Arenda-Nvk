@@ -769,6 +769,16 @@ public class IvaStaffPatch {
             ol.bottomMargin = dp(a, 10);
             pg.list.addView(ord, ol);
         }
+        if (IvaStaffChatPatch.want(m.status, m.r)) {                     // 10.106: чат пункта — ответы клиентам
+            final Activity fa = a;
+            final String co = m.company;
+            TextView ch = IvaPickupPatch.addButton(a, color(a, "orange", 0xffff8f1f));
+            ch.setText(IvaStaffChatPatch.TITLE);
+            ch.setOnClickListener(new View.OnClickListener() { @Override public void onClick(View v) { try { IvaStaffChatPatch.open(fa, co); } catch (Throwable ignore) {} } });
+            LinearLayout.LayoutParams chl = new LinearLayout.LayoutParams(-1, -2);
+            chl.bottomMargin = dp(a, 10);
+            pg.list.addView(ch, chl);
+        }
         for (IvaPickupPatch.Point p : m.points) {
             LinearLayout c = IvaChiefPatch.card(a);
             c.addView(IvaChiefPatch.text(a, IvaToolPointPatch.chipText(p), 16f, cText, true));

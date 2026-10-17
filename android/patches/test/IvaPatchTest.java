@@ -2558,11 +2558,65 @@ public class IvaPatchTest {
                 && IvaStaffOrdersPatch.ID_NOTE != IvaNotifyPatch.ID_UPD && IvaStaffOrdersPatch.ID_NOTE != IvaNotifyPatch.ID_MSG, true);
         }
         staffTools105();                                              // 10.105: отдельно — main у предела 64 КБ
+        staffChat106();                                               // 10.106: чат пункта
         if (fail > 0) { System.out.println("ошибок: " + fail); System.exit(1); }
         System.out.println("все проверки IvaPatch пройдены");
     }
 
     /** 10.105: инструменты пункта у сотрудника и одобрение владельцем (этап 3в «Сотрудники и пункты»). */
+    static void staffChat106() {
+        String u = "0F8FAD5B-D9CB-469F-A165-70867728950E", h = "5d41402abc4b2a76b9719d911017c592";
+        eq("чат пункта 10.106: кому — принятый сотрудник с правом «Отвечает в чате»",
+            IvaStaffChatPatch.want("active", new boolean[]{false, false, true, false}) + "|" + IvaStaffChatPatch.want("active", new boolean[]{true, true, false, true}) + "|"
+            + IvaStaffChatPatch.want("invited", new boolean[]{true, true, true, true}) + "|" + IvaStaffChatPatch.want("active", null) + "|"
+            + IvaStaffChatPatch.want("active", new boolean[]{true, true}), "true|false|false|false|false");
+        eq("чат пункта 10.106: тело запроса — только uuid инструмента и md5-метка клиента",
+            IvaStaffChatPatch.threadBody(u, h), "{\"p_tool\":\"0f8fad5b-d9cb-469f-a165-70867728950e\",\"p_peer\":\"" + h + "\"}");
+        eq("чат пункта 10.106: почта, кавычки и чужое вместо метки — не отправляются",
+            IvaStaffChatPatch.threadBody(u, "client@x.ru") + "|" + IvaStaffChatPatch.threadBody(u, h + "\"") + "|" + IvaStaffChatPatch.threadBody("1", h) + "|"
+            + IvaStaffChatPatch.threadBody(null, null) + "|" + IvaStaffChatPatch.threadBody(u, h.toUpperCase()), "null|null|null|null|null");
+        eq("чат пункта 10.106: ответ — текст экранирован, пробелы по краям убраны",
+            IvaStaffChatPatch.sendBody(u, h, "  Приходите \"к 10\"\nдо свидания \\ "),
+            "{\"p_tool\":\"0f8fad5b-d9cb-469f-a165-70867728950e\",\"p_peer\":\"" + h + "\",\"p_text\":\"Приходите \\\"к 10\\\"\\u000aдо свидания \\\\\"}");
+        StringBuilder big = new StringBuilder();
+        for (int i = 0; i < 2001; i++) big.append('а');
+        eq("чат пункта 10.106: пустое и длиннее 2000 — не отправляем, подсказка как у базы",
+            IvaStaffChatPatch.sendBody(u, h, "  ") + "|" + IvaStaffChatPatch.sendBody(u, h, big.toString()) + "|" + IvaStaffChatPatch.textError(" ") + "|"
+            + IvaStaffChatPatch.textError(big.toString()) + "|" + IvaStaffChatPatch.textError(big.substring(1)).isEmpty(),
+            "null|null|Напишите сообщение|Сообщение длиннее 2000 знаков — разбейте на части|true");
+        eq("чат пункта 10.106: подписи — «Прокат:» в списке, «Вы» / «Прокат» над ответами, у клиента пусто",
+            IvaStaffChatPatch.preview("Да,\n свободна", true) + "|" + IvaStaffChatPatch.preview("Есть?", false) + "|" + IvaStaffChatPatch.whoText(true, true) + "|"
+            + IvaStaffChatPatch.whoText(true, false) + "|" + IvaStaffChatPatch.whoText(false, true), "Прокат: Да, свободна|Есть?|Вы|Прокат|");
+        eq("чат пункта 10.106: счётчик, заголовок переписки, голосовое",
+            IvaStaffChatPatch.unreadText(0) + "|" + IvaStaffChatPatch.unreadText(3) + "|" + IvaStaffChatPatch.unreadText(150) + "|"
+            + IvaStaffChatPatch.subTitle("Дрель", "Склад") + "|" + IvaStaffChatPatch.subTitle("", "Склад") + "|" + IvaStaffChatPatch.voiceText(72) + "|" + IvaStaffChatPatch.voiceText(0),
+            "|3|99+|Дрель · Склад|Склад|🎤 Голосовое · 1:12 — нажмите, чтобы послушать|🎤 Голосовое — нажмите, чтобы послушать");
+        String[] pt = IvaStaffChatPatch.parseTarget(IvaStaffChatPatch.target(u, h));
+        eq("чат пункта 10.106: цель уведомления — туда и обратно, мусор — null",
+            pt[0] + "|" + pt[1] + "|" + IvaStaffChatPatch.parseTarget("x|y") + "|" + IvaStaffChatPatch.parseTarget(null) + "|" + IvaStaffChatPatch.target(u, "a@b"),
+            u + "|" + h + "|null|null|");
+        IvaStaffChatPatch.Chat c1 = new IvaStaffChatPatch.Chat(), c2 = new IvaStaffChatPatch.Chat(), c3 = new IvaStaffChatPatch.Chat();
+        c1.unread = 2; c1.lastClient = "15";
+        c2.unread = 1; c2.lastMine = true; c2.lastClient = "9";
+        c3.unread = 0; c3.lastClient = "7";
+        java.util.List<IvaStaffChatPatch.Chat> cs = new java.util.ArrayList<IvaStaffChatPatch.Chat>();
+        cs.add(c1); cs.add(c2); cs.add(c3);
+        eq("чат пункта 10.106: уведомлять — только где клиент написал последним и не прочитано",
+            IvaStaffChatPatch.notifyIds(cs) + "|" + IvaStaffChatPatch.notifyIds(null), "[15]|[]");
+        eq("чат пункта 10.106: текст уведомления",
+            IvaStaffChatPatch.noteTitle(1, "Дрель Makita") + "|" + IvaStaffChatPatch.noteTitle(3, "x") + "|" + IvaStaffChatPatch.noteTitle(1, "") + "|"
+            + IvaStaffChatPatch.noteText(1, "Анна", "Свободна\nли?") + "|" + IvaStaffChatPatch.noteText(1, "", "Да") + "|" + IvaStaffChatPatch.noteText(2, "Анна", "x"),
+            "Новое сообщение · Дрель Makita|Новые сообщения: 3|Новое сообщение|Анна: Свободна ли?|Клиент: Да|Откройте «Чат пункта»");
+        eq("чат пункта 10.106: ошибки базы — фразами, мат — фразой «Цензуры», без SQL — подсказка",
+            IvaStaffChatPatch.dbError("400", "{\"message\":\"Переписка не найдена в вашем пункте\"}") + "|"
+            + IvaStaffChatPatch.dbError("400", "{\"message\":\"В сообщении есть нецензурные слова. Уберите их, пожалуйста.\"}") + "|"
+            + IvaStaffChatPatch.dbError("404", "{\"code\":\"PGRST202\"}") + "|" + IvaStaffChatPatch.dbError("200", "[]") + "|" + IvaStaffChatPatch.dbError("", ""),
+            "Переписка не найдена в вашем пункте|В сообщении есть нецензурные слова. Уберите их, пожалуйста.|" + IvaStaffChatPatch.NO_DB + "||Не получилось — нет связи с сервером");
+        eq("чат пункта 10.106: id уведомления и ключи — свои (не пересекаются с 10.104 / 10.105)",
+            IvaStaffChatPatch.ID_NOTE + "|" + (IvaStaffChatPatch.ID_NOTE != IvaStaffOrdersPatch.ID_NOTE && IvaStaffChatPatch.ID_NOTE != IvaStaffToolsPatch.ID_NOTE) + "|"
+            + (!IvaStaffChatPatch.OPEN.equals(IvaStaffOrdersPatch.OPEN) && !IvaStaffChatPatch.OPEN.equals(IvaStaffToolsPatch.OPEN)), "7207|true|true");
+    }
+
     static void staffTools105() {
         String u = "0F8FAD5B-D9CB-469F-A165-70867728950E";
         eq("инструменты пункта 10.105: кому показывать — принятый сотрудник с правом «Выкладывает инструмент»",

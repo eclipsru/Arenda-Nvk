@@ -524,6 +524,7 @@ public final class IvaNotifyPatch {
                 }
                 if (logged && !admin && !email.isEmpty()) try { checkRent(a, email, admin); } catch (Throwable ignore) {}   // 10.76
                 if (logged && !admin && !email.isEmpty()) try { IvaStaffOrdersPatch.check(a, email); } catch (Throwable ignore) {}   // 10.104: сотруднику
+                if (logged && !admin && !email.isEmpty()) try { IvaStaffChatPatch.check(a, email); } catch (Throwable ignore) {}     // 10.106: чат пункта
                 if (logged && admin && !email.isEmpty()) try { IvaStaffToolsPatch.check(a, email); } catch (Throwable ignore) {}   // 10.105: на одобрение
                 if (logged && !email.isEmpty()) try { IvaTestPatch.check(a, email, admin); } catch (Throwable ignore) {}   // 10.94
                 try { IvaPushPatch.sync(a, email, logged, admin); } catch (Throwable ignore) {   // 10.74: мгновенные (админам)
@@ -946,6 +947,7 @@ public final class IvaNotifyPatch {
                     else if ("test".equals(open)) IvaTestPatch.openFromNote(a);          // 10.94: жёлтая кнопка в «Профиле»
                     else if (IvaStaffOrdersPatch.OPEN.equals(open)) IvaStaffOrdersPatch.openFromNote(a);   // 10.104: «Заявки пункта»
                     else if (IvaStaffToolsPatch.OPEN.equals(open)) IvaStaffToolsPatch.openFromNote(a);     // 10.105: «На одобрении»
+                    else if (IvaStaffChatPatch.OPEN.equals(open)) IvaStaffChatPatch.openFromNote(a, target);   // 10.106: «Чат пункта»
                 } catch (Throwable ignore) {}
             }
         });
@@ -2330,6 +2332,7 @@ public final class IvaNotifyPatch {
         try { checkUpdate(c, admin); } catch (Throwable ignore) {}
         if (logged && !admin) try { checkRent(c, email, admin); } catch (Throwable ignore) {}   // 10.76
         if (logged && !admin) try { IvaStaffOrdersPatch.check(c, email); } catch (Throwable ignore) {}   // 10.104: сотруднику
+        if (logged && !admin) try { IvaStaffChatPatch.check(c, email); } catch (Throwable ignore) {}     // 10.106: чат пункта
         if (logged && admin) try { IvaStaffToolsPatch.check(c, email); } catch (Throwable ignore) {}    // 10.105: на одобрение
         if (logged) try { IvaTestPatch.check(c, email, admin); } catch (Throwable ignore) {}    // 10.94: пробная версия
     }
