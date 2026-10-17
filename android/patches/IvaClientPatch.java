@@ -1546,7 +1546,8 @@ public final class IvaClientPatch {
         try { showClientAvatar(a); } catch (Throwable ignore) {}
         try { IvaAvatarPatch.onProfile(a); } catch (Throwable ignore) {}   // 10.98: фото кругом без краёв, крупнее, просмотр
         try { installClientNav(a); } catch (Throwable ignore) {}
-        try { if (hubVisible && !isClient(a)) callNativeTab(a, "home"); } catch (Throwable ignore) {}   // выход из аккаунта
+        try { IvaLogoPatch.cabinet(a); } catch (Throwable ignore) {}   // 10.113: строка «Мои инструменты проката» — есть / нет
+        try { if (hubVisible && IvaLogoPatch.target(a) == IvaLogoPatch.NATIVE) callNativeTab(a, "home"); } catch (Throwable ignore) {}   // выход из аккаунта
     }
 
     // ── 16.4. Имя клиента в строке «Клиент» (10.42) ──
@@ -1677,9 +1678,11 @@ public final class IvaClientPatch {
             if (plus != null && (hubNavPlus == null || hubNavPlus.get() != plus)) {
                 plus.setOnClickListener(new View.OnClickListener() {
                     @Override public void onClick(View v) {
-                        boolean client = false;
-                        try { client = isClient(a); } catch (Throwable ignore) {}
-                        if (client && openClientHub(a)) return;
+                        // 10.113: «Вид раздела с логотипом» — админ может выбрать раздел клиента, сотрудник — как у админа
+                        int t = IvaLogoPatch.NATIVE;
+                        try { t = IvaLogoPatch.target(a); } catch (Throwable ignore) {}
+                        if (t == IvaLogoPatch.CLIENT_HUB && openHub(a, 0)) return;
+                        if (t == IvaLogoPatch.STAFF_HUB && openHub(a, 1)) return;
                         callNative(a, "onPlus");
                     }
                 });
@@ -1690,7 +1693,7 @@ public final class IvaClientPatch {
                 back.setOnClickListener(new View.OnClickListener() {
                     @Override public void onClick(View v) {
                         boolean toHub = false;
-                        try { toHub = detailFromHub && isClient(a); } catch (Throwable ignore) {}
+                        try { toHub = detailFromHub && IvaLogoPatch.target(a) == IvaLogoPatch.CLIENT_HUB; } catch (Throwable ignore) {}
                         detailFromHub = false;
                         if (toHub && openClientHub(a)) return;
                         callNativeTab(a, "home");   // как штатная кнопка: на главную
@@ -1908,15 +1911,24 @@ public final class IvaClientPatch {
     }
 
     /** Открыть раздел на месте страниц (нижнее меню остаётся). false — не вышло, пусть сработает штатный onPlus. */
-    static boolean openClientHub(final Activity a) {
+    static boolean openClientHub(final Activity a) { return openHub(a, 0); }
+
+    /** 10.113: какой раздел на месте страниц — 0 «Избранное / Мои инструменты» (клиент), 1 «Мой инструмент / Добавить
+     *  инструмент» (сотрудник с видом «как у админов», IvaLogoPatch). */
+    static int hubKind = 0, hubBuiltKind = -1;
+
+    static boolean openHub(final Activity a, int kind) {
         try {
             ViewGroup pages = hubPages(a);
             if (pages == null) return false;
             View hub = pages.findViewWithTag(HUB_TAG);
+            if (hub != null && hubBuiltKind != kind) { pages.removeView(hub); hub = null; }   // другие вкладки — собрать заново
+            hubKind = kind;
             if (hub == null) {
                 hub = buildClientHub(a);
                 hub.setTag(HUB_TAG);
                 pages.addView(hub, new FrameLayout.LayoutParams(-1, -1));
+                hubBuiltKind = kind;
             }
             for (int i = 0; i < pages.getChildCount(); i++) {
                 View c = pages.getChildAt(i);
@@ -1964,8 +1976,9 @@ public final class IvaClientPatch {
         LinearLayout tabs = new LinearLayout(a);
         tabs.setOrientation(LinearLayout.HORIZONTAL);
         tabs.setBackground(tabCard(a));
-        tabs.addView(hubTabButton(a, "Избранное", HUB_TAB_FAV_TAG, 0), new LinearLayout.LayoutParams(0, -2, 1f));
-        tabs.addView(hubTabButton(a, "Мои инструменты", HUB_TAB_MINE_TAG, 1), new LinearLayout.LayoutParams(0, -2, 1f));
+        String[] names = IvaLogoPatch.TABS[hubKind == 1 ? 1 : 0];   // 10.113: у сотрудника «как у админов» — свои вкладки
+        tabs.addView(hubTabButton(a, names[0], HUB_TAB_FAV_TAG, 0), new LinearLayout.LayoutParams(0, -2, 1f));
+        tabs.addView(hubTabButton(a, names[1], HUB_TAB_MINE_TAG, 1), new LinearLayout.LayoutParams(0, -2, 1f));
         LinearLayout.LayoutParams tl = new LinearLayout.LayoutParams(-1, -2);
         tl.setMargins(hubDp(a, 16), hubDp(a, 16), hubDp(a, 16), hubDp(a, 12));   // как у админа: поля страницы 16dp, снизу 12dp
         root.addView(tabs, tl);
@@ -1988,6 +2001,10 @@ public final class IvaClientPatch {
     static LinearLayout hubTabButton(final Activity a, String text, String tag, final int index) {
         return tabButton(a, text, tag, new View.OnClickListener() {
             @Override public void onClick(View v) {
+                if (hubKind == 1) {                                 // 10.113: сотрудник — «Добавить инструмент» — штатная форма
+                    if (index == 1) { try { IvaStaffToolsPatch.openAddHub(a); } catch (Throwable ignore) {} }
+                    return;
+                }
                 if (hubTab == index) return;
                 hubTab = index;
                 hubCatalogWaits = 0;
@@ -2047,7 +2064,7 @@ public final class IvaClientPatch {
 
     /** Как штатный showAdmHub: выбранная — оранжевая жирная и линия, другая — серая обычная, линии нет. */
     static void styleHubTabs(Activity a, View hub) {
-        styleTabs(a, hub, new String[]{HUB_TAB_FAV_TAG, HUB_TAB_MINE_TAG}, hubTab);
+        styleTabs(a, hub, new String[]{HUB_TAB_FAV_TAG, HUB_TAB_MINE_TAG}, hubKind == 1 ? 0 : hubTab);
     }
 
     static void styleTabs(Activity a, View root, String[] tags, int selected) {
@@ -2068,6 +2085,9 @@ public final class IvaClientPatch {
         }
     }
 
+    /** 10.113: раздел сотрудника ещё на экране и это та же отрисовка (ответ сети не устарел). */
+    static boolean hubAlive(int gen) { return hubVisible && hubKind == 1 && gen == hubGen; }
+
     static void renderClientHub(final Activity a) {
         try {
             ViewGroup pages = hubPages(a);
@@ -2079,6 +2099,7 @@ public final class IvaClientPatch {
             LinearLayout content = (LinearLayout) cv;
             content.removeAllViews();
             final int gen = ++hubGen;
+            if (hubKind == 1) { IvaStaffToolsPatch.renderHub(a, content, gen); return; }   // 10.113: инструменты пунктов
             ArrayList tools = hubTools(a);
             if (tools.isEmpty()) {
                 // каталог (а с ним и избранное) ещё грузится штатным loadCatalog

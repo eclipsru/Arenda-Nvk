@@ -51,7 +51,8 @@ import java.util.Map;
  * текст); нажатие — сразу под ней форма целиком (решение владельца): «Название», «Адрес» (полный, с подсказками —
  * тот же Photon / OpenStreetMap, что на сайте), «График» (часы открытия и закрытия на каждый день недели или выходной),
  * «Email проката» (пустое поле, проверяется). Пунктов может быть несколько (до 20): у каждого «Изменить» и «Удалить».
- * Позже появится роль «Прокат» — email пункта пригодится ей.
+ * 10.113: поля «Email проката» больше нет (решение владельца); вместо него — выключатель «Инструменты сотрудников»
+ * этого пункта (сразу / после одобрения владельца), он же строкой на карточке пункта.
  *
  * Решение владельца: «Срок аренды → До закрытия пункта» берёт время закрытия из графика ПЕРВОГО пункта — это делает
  * база (SQL 20261023_pickup_points.sql); в «Сроке аренды» дни тогда только показываются (меняются здесь).
@@ -69,7 +70,16 @@ public class IvaPickupPatch {
     /** В базе есть колонка tel (последняя загрузка). Без SQL 10.99 — пункты без телефона, как в 10.95. */
     static volatile boolean telDb = true;
     static final String PHOTON = "https://photon.komoot.io/api/";
-    static final String ROW_TITLE = "Пункты выдачи", ROW_SUB = "Адрес, график и email проката";
+    static final String ROW_TITLE = "Пункты выдачи", ROW_SUB = "Адрес, график, телефон и сотрудники";
+    // 10.113 (просьба владельца 17.10.2026): «Инструменты сотрудников» — у каждого пункта своим выключателем
+    // (SQL 20261104_point_staff_publish.sql); поля «Email проката» в форме больше нет.
+    static final String PUB_TITLE = "Инструменты сотрудников — после моего одобрения";
+    static final String PUB_SUB = "Включено: новый инструмент, который добавит сотрудник этого пункта, клиенты увидят только "
+        + "после вашего одобрения («Настройка проката» → «На одобрении»). Выключено: сразу, без одобрения. "
+        + "Правки уже опубликованных — всегда сразу.";
+    static final String NO_PUB = "Выключатель «Инструменты сотрудников» заработает после обновления базы (SQL 10.113)";
+    /** В базе есть колонка staff_publish (последняя загрузка). Без SQL 10.113 — как в 10.112 (email вписываем свой). */
+    static volatile boolean pubDb = true;
     static final String PAGE_SUB = "Где вы выдаёте инструмент. По графику первого пункта считается «Срок аренды → До закрытия пункта».";
     static final String ADD = "Добавить";
     static final String NO_DB = "Заработает после обновления базы (SQL 10.95)";
@@ -80,6 +90,7 @@ public class IvaPickupPatch {
     /** Пункт выдачи (как строка базы). open/close — минуты Пн…Вс; выходной — -1 и -1. */
     static final class Point {
         String id = "", name = "", address = "", city = "", email = "", tel = "";
+        String publish = "approve";       // 10.113: «now» — инструменты сотрудников сразу, иначе после одобрения
         Double lat, lng;
         int[] open = fill(OPEN_DEF), close = fill(CLOSE_DEF);
     }
@@ -118,6 +129,13 @@ public class IvaPickupPatch {
         String t = tel == null ? "" : tel.trim();
         return "Телефон: " + (t.isEmpty() ? "не указан" : t);
     }
+
+    /** 10.113: строка на карточке пункта. */
+    static String publishLine(String mode) {
+        return "Инструменты сотрудников: " + ("now".equals(mode) ? "сразу, без одобрения" : "после вашего одобрения");
+    }
+
+    static String publishOf(String v) { return "now".equals(v == null ? "" : v.trim()) ? "now" : "approve"; }
 
     static String emailErr(String s) {
         String t = s == null ? "" : s.trim();
@@ -189,8 +207,11 @@ public class IvaPickupPatch {
 
     static String listPath(String email) { return listPath(email, false); }
 
-    static String listPath(String email, boolean tel) {
-        return TABLE + "?select=" + (tel ? COLS_TEL : COLS) + "&owner_email=eq." + enc(email == null ? "" : email.trim().toLowerCase(Locale.ROOT))
+    static String listPath(String email, boolean tel) { return listPath(email, tel, false); }
+
+    /** 10.113: + staff_publish (выключатель «Инструменты сотрудников» у пункта). */
+    static String listPath(String email, boolean tel, boolean pub) {
+        return TABLE + "?select=" + (tel ? COLS_TEL : COLS) + (pub ? ",staff_publish" : "") + "&owner_email=eq." + enc(email == null ? "" : email.trim().toLowerCase(Locale.ROOT))
             + "&order=created_at.asc,id.asc";
     }
 
@@ -214,6 +235,25 @@ public class IvaPickupPatch {
         return b.substring(0, b.length() - 1) + ",\"tel\":" + IvaNotifyPatch.jsonStr(p.tel == null ? "" : p.tel.trim()) + "}";
     }
 
+    /** 10.113: запись с выключателем и без email (поле убрано). Без SQL 10.113 — прежняя запись с email. */
+    static String body(Point p, boolean tel, boolean pub) {
+        if (!pub) return body(p, tel);
+        return "{\"name\":" + IvaNotifyPatch.jsonStr(p.name.trim().replaceAll("\\s+", " "))
+            + ",\"address\":" + IvaNotifyPatch.jsonStr(p.address.trim().replaceAll("\\s+", " "))
+            + ",\"city\":" + IvaNotifyPatch.jsonStr(p.city == null ? "" : p.city.trim())
+            + ",\"lat\":" + (p.lat == null || p.lng == null ? "null" : String.valueOf(p.lat))
+            + ",\"lng\":" + (p.lat == null || p.lng == null ? "null" : String.valueOf(p.lng))
+            + ",\"open_min\":" + arrJson(p.open) + ",\"close_min\":" + arrJson(p.close)
+            + (tel ? ",\"tel\":" + IvaNotifyPatch.jsonStr(p.tel == null ? "" : p.tel.trim()) : "")
+            + ",\"staff_publish\":\"" + publishOf(p.publish) + "\"}";
+    }
+
+    /** 10.113: ответ «колонки staff_publish нет» — SQL 10.113 не применён. */
+    static boolean noPub(String code, String body) {
+        String b = body == null ? "" : body;
+        return b.contains("staff_publish") && (b.contains("42703") || b.contains("PGRST204") || b.contains("does not exist") || b.contains("Could not find"));
+    }
+
     /** Ответ «такой колонки нет» — SQL 10.99 не применён. */
     static boolean noTel(String code, String body) {
         String b = body == null ? "" : body;
@@ -226,6 +266,7 @@ public class IvaPickupPatch {
         if (c.startsWith("2")) return "";
         if (b.contains("Не больше 20")) return "Не больше 20 пунктов выдачи";
         if (b.contains("tools_point_fk")) return POINT_BUSY;                // 10.101: за пунктом есть инструмент
+        if (noPub(c, b)) return NO_PUB;
         if (noTel(c, b)) return NO_TEL;
         if (b.contains("iva_pickup_tel")) return "Проверьте телефон: 10–15 цифр";
         if (b.contains("PGRST205") || b.contains("42P01") || "404".equals(c)) return NO_DB;
@@ -327,7 +368,8 @@ public class IvaPickupPatch {
             p.name = o.optString("name", "");
             p.address = o.optString("address", "");
             p.city = o.isNull("city") ? "" : o.optString("city", "");
-            p.email = o.optString("email", "");
+            p.email = o.isNull("email") ? "" : o.optString("email", "");
+            p.publish = publishOf(o.isNull("staff_publish") ? "" : o.optString("staff_publish", ""));
             p.tel = o.isNull("tel") ? "" : o.optString("tel", "");
             if (!o.isNull("lat") && !o.isNull("lng")) { p.lat = o.optDouble("lat"); p.lng = o.optDouble("lng"); }
             int[] op = arr(String.valueOf(o.opt("open_min"))), cl = arr(String.valueOf(o.opt("close_min")));
@@ -339,13 +381,18 @@ public class IvaPickupPatch {
 
     /** Список своих пунктов из базы; [0] — код ответа, ошибка — исключение. */
     static List<Point> load(Activity a, String[] code) throws Exception {
-        String[] r = IvaClientPatch.apiCall(a, listPath(me(a), true), "GET", null, true);
-        boolean tel = true;
-        if (r != null && !r[0].startsWith("2") && noTel(r[0], r.length > 1 ? r[1] : "")) {   // без SQL 10.99 — как раньше
-            tel = false;
-            r = IvaClientPatch.apiCall(a, listPath(me(a)), "GET", null, true);
+        // 10.113: сначала с выключателем и телефоном; нет колонки — без неё (без SQL 10.113 / 10.99 — как раньше)
+        boolean pub = true, tel = true;
+        String[] r = null;
+        for (int i = 0; i < 4; i++) {
+            pub = i < 2;
+            tel = i % 2 == 0;
+            r = IvaClientPatch.apiCall(a, listPath(me(a), tel, pub), "GET", null, true);
+            if (r == null || r[0].startsWith("2")) break;
+            String b = r.length > 1 ? r[1] : "";
+            if (!noPub(r[0], b) && !noTel(r[0], b)) break;
         }
-        if (r != null && r[0].startsWith("2")) telDb = tel;
+        if (r != null && r[0].startsWith("2")) { telDb = tel; pubDb = pub; }
         code[0] = r == null ? "" : r[0];
         if (r == null || !r[0].startsWith("2")) throw new Exception(dbError(code[0], r != null && r.length > 1 ? r[1] : ""));
         return parse(r.length > 1 ? r[1] : "");
@@ -605,9 +652,11 @@ public class IvaPickupPatch {
             TextView hr = IvaChiefPatch.text(a, hoursText(p.open, p.close), 13f, u.cGray, false);
             hr.setPadding(0, dp(a, 4), 0, 0);
             info.addView(hr);
-            TextView em = IvaChiefPatch.text(a, "Email проката: " + p.email, 13f, u.cGray, false);
-            em.setPadding(0, dp(a, 4), 0, 0);
-            info.addView(em);
+            if (pubDb) {   // 10.113: «Инструменты сотрудников» пункта (вместо «Email проката»)
+                TextView pb = IvaChiefPatch.text(a, publishLine(p.publish), 13f, u.cGray, false);
+                pb.setPadding(0, dp(a, 4), 0, 0);
+                info.addView(pb);
+            }
             LinearLayout btns = new LinearLayout(a);
             btns.setOrientation(LinearLayout.HORIZONTAL);
             btns.setPadding(0, dp(a, 10), 0, 0);
@@ -645,7 +694,7 @@ public class IvaPickupPatch {
 
     static Point copy(Point s) {
         Point p = new Point();
-        p.id = s.id; p.name = s.name; p.address = s.address; p.city = s.city; p.email = s.email; p.tel = s.tel; p.lat = s.lat; p.lng = s.lng;
+        p.id = s.id; p.name = s.name; p.address = s.address; p.city = s.city; p.email = s.email; p.tel = s.tel; p.publish = s.publish; p.lat = s.lat; p.lng = s.lng;
         p.open = s.open.clone(); p.close = s.close.clone();
         return p;
     }
@@ -830,7 +879,8 @@ public class IvaPickupPatch {
 
     static final String EDIT_TAG = "iva_pickup_edit_10_99";
 
-    /** Поля пункта в box: Название, Адрес (подсказки), Телефон пункта выдачи, График, Email проката; «Сохранить» / «Отмена». */
+    /** Поля пункта в box: Название, Адрес (подсказки), Телефон пункта выдачи, График, «Инструменты сотрудников» (10.113);
+     *  «Сохранить» / «Отмена». */
     static EditText buildForm(final Ui u, final Point p, final boolean isNew, final LinearLayout box, final Runnable onCancel) {
         final Activity a = u.a;
 
@@ -890,13 +940,17 @@ public class IvaPickupPatch {
         final TextView daysE = err(u);
         box.addView(daysE);
 
-        // Email проката
-        box.addView(label(u, "Email проката"));
-        final EditText mail = field(u, "prokat@mail.ru", p.email);
-        mail.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_EMAIL_ADDRESS);
-        box.addView(mail, new LinearLayout.LayoutParams(-1, -2));
-        final TextView mailE = err(u);
-        box.addView(mailE);
+        // 10.113: «Инструменты сотрудников» этого пункта — выключатель с пояснением (поля «Email проката» больше нет)
+        box.addView(label(u, "Инструменты сотрудников"));
+        final android.widget.Switch pubSw = IvaStaffPatch.sw(a, box, PUB_TITLE, PUB_SUB, !"now".equals(p.publish), u.cText, u.cGray, u.cOrange);
+        if (!pubDb) {
+            pubSw.setEnabled(false);
+            ((View) pubSw.getParent()).setEnabled(false);
+            TextView pubE = err(u);
+            pubE.setTextColor(u.cOrange);
+            box.addView(pubE);
+            setErr(pubE, NO_PUB);
+        }
 
         // Сохранить / Отмена
         LinearLayout btns = new LinearLayout(a);
@@ -924,24 +978,25 @@ public class IvaPickupPatch {
             @Override public void onClick(View v) {
                 p.name = String.valueOf(name.getText());
                 p.address = String.valueOf(addr.getText());
-                p.email = String.valueOf(mail.getText()).trim();
+                if (pubDb) p.publish = pubSw.isChecked() ? "approve" : "now";
+                else if (isNew || p.email.trim().isEmpty()) p.email = me(a);   // без SQL 10.113 база требует email — свой вход
                 if (telDb) p.tel = String.valueOf(tel.getText()).trim();
-                String ne = nameErr(p.name), ae = addrErr(p.address), me = emailErr(p.email), te = telDb ? telErr(p.tel) : "";
+                String ne = nameErr(p.name), ae = addrErr(p.address), te = telDb ? telErr(p.tel) : "";
                 if (ne.isEmpty()) try { ne = IvaCensorPatch.fieldError(p.name); } catch (Throwable ignore) {}
                 if (ae.isEmpty()) try { ae = IvaCensorPatch.fieldError(p.address); } catch (Throwable ignore) {}
                 String de = hoursOk(p.open, p.close) ? "" : "Нужен хотя бы один рабочий день; закрытие — позже открытия";
-                setErr(nameE, ne); setErr(addrE, ae); setErr(mailE, me); setErr(daysE, de);
+                setErr(nameE, ne); setErr(addrE, ae); setErr(daysE, de);
                 if (telDb) { telE.setTextColor(u.cRed); setErr(telE, te); }
-                if (!ne.isEmpty() || !ae.isEmpty() || !me.isEmpty() || !de.isEmpty() || !te.isEmpty()) return;
+                if (!ne.isEmpty() || !ae.isEmpty() || !de.isEmpty() || !te.isEmpty()) return;
                 hideKb(a, name);
-                if (isNew) write(u, "POST", TABLE, body(p, telDb), "Пункт «" + p.name.trim() + "» добавлен");
-                else write(u, "PATCH", idPath(p.id), body(p, telDb), "Пункт сохранён");
+                if (isNew) write(u, "POST", TABLE, body(p, telDb, pubDb), "Пункт «" + p.name.trim() + "» добавлен");
+                else write(u, "PATCH", idPath(p.id), body(p, telDb, pubDb), "Пункт сохранён");
             }
         });
         return name;
     }
 
-    // ── форма: Название, Адрес (подсказки), Телефон пункта, График, Email проката ──
+    // ── форма: Название, Адрес (подсказки), Телефон пункта, График, «Инструменты сотрудников» ──
 
     static TextView label(Ui u, String s) {
         TextView t = IvaChiefPatch.text(u.a, s, 13f, u.cGray, true);

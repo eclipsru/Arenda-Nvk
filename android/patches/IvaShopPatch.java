@@ -321,6 +321,7 @@ public class IvaShopPatch {
         try { IvaRentPatch.settingsSection(a, list, cText, cGray, cOrange); } catch (Throwable ignore) {}
         try { IvaStaffToolsPatch.settingsSection(a, list, cText, cGray, cOrange); } catch (Throwable ignore) {}   // 10.105
         try { IvaStaffJournalPatch.settingsRow(a, list, cText, cGray, cOrange); } catch (Throwable ignore) {}    // 10.107: «Сводка по пунктам»
+        try { IvaLogoPatch.settingsRow(a, list, cText, cGray, cOrange); } catch (Throwable ignore) {}            // 10.113: в самом низу
     }
 
     /** Значки строк (цвет приложения, линией 2dp): витрина проката и карточка данных. */

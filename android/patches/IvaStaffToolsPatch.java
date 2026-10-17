@@ -248,7 +248,9 @@ public class IvaStaffToolsPatch {
         String t = tab == null ? "" : tab;
         boolean form = "addtool".equals(t) || "admhub".equals(t) || "tooledit".equals(t);
         boolean st = form && staff(a);
-        hubTabs(a, st);
+        boolean hm = st && hubMode(a);                       // 10.113: вид «как у админов» — вкладки кабинета видны
+        hubTabs(a, st && !hm);
+        if (hm) installTabs(a);
         if (redirect(t, st, false)) {
             new Handler(Looper.getMainLooper()).post(new Runnable() {
                 @Override public void run() { try { backToList(a); } catch (Throwable ignore) {} }
@@ -264,6 +266,7 @@ public class IvaStaffToolsPatch {
     }
 
     static void backToList(Activity a) {
+        if (hubMode(a) && IvaClientPatch.openHub(a, 1)) return;   // 10.113: вид «как у админов» — в «Мой инструмент»
         IvaNotifyPatch.tab(a, "profile");
         IvaStaffPatch.Me m = cached(a);
         if (m != null && want(m.status, m.r)) open(a, m.company);
@@ -310,10 +313,70 @@ public class IvaStaffToolsPatch {
         } catch (Throwable e) { IvaStaffPatch.toast(a, "Не получилось открыть инструмент"); }
     }
 
+    // ───────────── 10.113: вид «как у админов» (IvaLogoPatch) — «Мой инструмент» / «Добавить инструмент» ─────────────
+
+    /** Сотрудник «Каталог» выбрал «Вид раздела с логотипом → как у админов». */
+    static boolean hubMode(Activity a) {
+        try { return staff(a) && IvaLogoPatch.ADMIN.equals(IvaLogoPatch.view(a)); } catch (Throwable e) { return false; }
+    }
+
+    /** «Мой инструмент» в разделе логотипа: инструменты пунктов сотрудника (тот же список, что «Инструменты пункта»). */
+    static void renderHub(Activity a, LinearLayout content, int gen) {
+        final Ui u = new Ui();
+        u.a = a;
+        u.hubGen = gen;
+        u.cText = IvaStaffPatch.color(a, "text", 0xfff2f4f8);
+        u.cGray = IvaStaffPatch.color(a, "gray", 0xff9aa1b0);
+        u.cOrange = IvaStaffPatch.color(a, "orange", 0xffff8f1f);
+        u.status = IvaChiefPatch.text(a, "Загружаем…", 13f, u.cGray, false);
+        u.status.setPadding(dp(a, 4), dp(a, 8), 0, 0);
+        content.addView(u.status, new LinearLayout.LayoutParams(-1, -2));
+        u.items = new LinearLayout(a);
+        u.items.setOrientation(LinearLayout.VERTICAL);
+        content.addView(u.items, new LinearLayout.LayoutParams(-1, -2));
+        reload(u);
+    }
+
+    /** «Добавить инструмент» из раздела логотипа: штатная форма, вкладки кабинета видны («Мой инструмент» — наш раздел). */
+    static void openAddHub(Activity a) {
+        close(toolsPage);
+        close(minePage);
+        IvaNotifyPatch.tab(a, "addtool");
+        try {
+            Method m = a.getClass().getDeclaredMethod("showAdmHub", int.class);
+            m.setAccessible(true);
+            m.invoke(a, 1);
+        } catch (Throwable ignore) {}
+        hubTabs(a, false);
+        installTabs(a);
+    }
+
+    static WeakReference<View> tabMy;
+
+    /** Вкладка «Мой инструмент» кабинета: у сотрудника с видом «как у админов» — наш раздел, у всех остальных — как
+     *  штатная (showAdmHub(0), то же, что делает штатный обработчик). «Добавить инструмент» остаётся штатной. */
+    static void installTabs(final Activity a) {
+        int id = a.getResources().getIdentifier("hubTabMy", "id", a.getPackageName());
+        View my = id == 0 ? null : a.findViewById(id);
+        if (my == null || (tabMy != null && tabMy.get() == my)) return;
+        my.setOnClickListener(new View.OnClickListener() {
+            @Override public void onClick(View v) {
+                if (hubMode(a) && IvaClientPatch.openHub(a, 1)) return;
+                try {
+                    Method m = a.getClass().getDeclaredMethod("showAdmHub", int.class);
+                    m.setAccessible(true);
+                    m.invoke(a, 0);
+                } catch (Throwable ignore) {}
+            }
+        });
+        tabMy = new WeakReference<View>(my);
+    }
+
     // ───────────── страница «Инструменты пункта» (сотрудник) ─────────────
 
     static final class Ui {
         Activity a;
+        int hubGen = -1;            // 10.113: список в разделе логотипа (страницы нет) — поколение отрисовки
         IvaChiefPatch.Page page;
         LinearLayout items;
         TextView status;
@@ -364,7 +427,7 @@ public class IvaStaffToolsPatch {
                     @Override public void run() {
                         try {
                             u.busy = false;
-                            if (!u.page.open()) return;
+                            if (u.page != null ? !u.page.open() : !IvaClientPatch.hubAlive(u.hubGen)) return;
                             if (ft == null) { u.status.setText(fe); u.status.setTextColor(u.cOrange); return; }
                             draw(u, ft);
                         } catch (Throwable ignore) {}
@@ -413,14 +476,18 @@ public class IvaStaffToolsPatch {
 
     // ───────────── владелец: «Настройка проката» → режим и «На одобрении» ─────────────
 
-    /** Из IvaShopPatch.openPage: две строки — «Инструменты сотрудников» (режим) и «На одобрении · N». */
+    /** 10.113 (просьба владельца 17.10.2026): общей строки «Инструменты сотрудников» больше нет — выключатель у каждого
+     *  пункта (IvaPickupPatch, форма пункта). Остаётся строка «На одобрении · N». */
+    static final boolean MODE_ROW = false;
+
+    /** Из IvaShopPatch.openPage: «На одобрении · N» (до 10.113 — ещё и «Инструменты сотрудников»). */
     static void settingsSection(final Activity a, LinearLayout list, final int cText, final int cGray, final int cOrange) {
         float den = a.getResources().getDisplayMetrics().density;
-        final LinearLayout modeRow = IvaShopPatch.row(a, list, new IvaShopPatch.Icon(IvaShopPatch.Icon.CARD, cOrange, den), MODE_TITLE, "Загружаем…", cText, cGray);
+        final LinearLayout modeRow = MODE_ROW ? IvaShopPatch.row(a, list, new IvaShopPatch.Icon(IvaShopPatch.Icon.CARD, cOrange, den), MODE_TITLE, "Загружаем…", cText, cGray) : null;
         final LinearLayout revRow = IvaShopPatch.row(a, list, new IvaShopPatch.Icon(IvaShopPatch.Icon.SHOP, cOrange, den), REVIEW_TITLE, "Загружаем…", cText, cGray);
         final String[] mode = {""};
         final Runnable refresh = new Runnable() { @Override public void run() { loadSection(a, modeRow, revRow, mode); } };
-        modeRow.setOnClickListener(new View.OnClickListener() {
+        if (modeRow != null) modeRow.setOnClickListener(new View.OnClickListener() {
             @Override public void onClick(View v) {
                 IvaClientPatch.styledChoice(a, MODE_TITLE, "Как публиковать новые инструменты, которые добавили сотрудники. Правки — всегда сразу.",
                     MODE_TEXT, new IvaClientPatch.Choice() {
@@ -453,7 +520,8 @@ public class IvaStaffToolsPatch {
             @Override public void run() {
                 String m = "", e1, e2;
                 int n = -1;
-                try {
+                if (modeRow == null) e1 = "";                       // 10.113: строки режима нет — не спрашиваем
+                else try {
                     String[] r = IvaClientPatch.apiCall(a, MODE_RPC, "POST", "{}", true);
                     e1 = r == null ? dbError("", "") : dbError(r[0], r.length > 1 ? r[1] : "");
                     if (e1.isEmpty()) m = modeOf(r.length > 1 ? r[1] : "");

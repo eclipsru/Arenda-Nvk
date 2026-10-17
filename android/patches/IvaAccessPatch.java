@@ -334,6 +334,9 @@ public final class IvaAccessPatch {
     static String inviteKey(String id) { return "invite_" + (id == null ? "" : id); }
     static boolean inviteShown(Activity a, String id) { return prefs(a).getBoolean(inviteKey(id), false); }
 
+    /** 10.113: открыт раздел логотипа сотрудника «как у админов» («Мой инструмент»). */
+    static boolean staffHub() { return IvaClientPatch.hubVisible && IvaClientPatch.hubKind == 1; }
+
     static void applyStaff(Activity a, String me, int ch, IvaStaffPatch.Me m, String company, boolean rights) {
         if (!me.equals(me(a)) || !IvaNotifyPatch.loggedIn(a) || IvaNotifyPatch.isAdmin(a)) return;
         Object t = IvaClientPatch.get(a, "curTab");
@@ -342,14 +345,16 @@ public final class IvaAccessPatch {
             IvaStaffToolsPatch.close(IvaStaffToolsPatch.toolsPage);
             IvaStaffToolsPatch.close(IvaStaffToolsPatch.minePage);
             closePages();
-            if (staffTab(tab)) { IvaNotifyPatch.tab(a, "profile"); tab = "profile"; }
+            if (staffTab(tab) || staffHub()) { IvaNotifyPatch.tab(a, "profile"); tab = "profile"; }
         }
         if (rights) {                                                     // 10.112: страницы пункта — с новыми правами
             boolean open = isOpen(IvaStaffToolsPatch.toolsPage) || isOpen(IvaStaffToolsPatch.minePage);
             IvaStaffToolsPatch.close(IvaStaffToolsPatch.toolsPage);
             IvaStaffToolsPatch.close(IvaStaffToolsPatch.minePage);
             closePages();
-            if (staffTab(tab) && !IvaStaffToolsPatch.want(m.status, m.r)) { IvaNotifyPatch.tab(a, "profile"); tab = "profile"; }
+            boolean can = IvaStaffToolsPatch.want(m.status, m.r);
+            if ((staffTab(tab) || staffHub()) && !can) { IvaNotifyPatch.tab(a, "profile"); tab = "profile"; }
+            else if (staffHub()) IvaClientPatch.renderClientHub(a);        // 10.113: «Мой инструмент» — заново
             IvaStaffPatch.toast(a, open ? RIGHTS_TOAST + " — откройте «Мой пункт» заново" : RIGHTS_TOAST);
         }
         if ("profile".equals(tab)) IvaStaffPatch.drawMe(a, m);

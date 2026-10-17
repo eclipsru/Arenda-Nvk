@@ -587,6 +587,7 @@ public class IvaStaffPatch {
     /** Из IvaNotifyPatch.cabinet (смена раздела): в кабинете — приглашение / «Мой пункт»; владельцу и гостю — ничего. */
     static void onShowTab(final Activity a, String tab) {
         if (!"profile".equals(tab)) return;
+        try { IvaLogoPatch.cabinet(a); } catch (Throwable ignore) {}       // 10.113: «Мои инструменты проката» у админа
         final String me = IvaPickupPatch.me(a);
         boolean want = IvaNotifyPatch.loggedIn(a) && !me.isEmpty() && !IvaNotifyPatch.isAdmin(a);
         if (!want) { drawMe(a, null); return; }
@@ -800,5 +801,8 @@ public class IvaStaffPatch {
         s.setPadding(0, dp(a, 8), 0, 0);
         r.addView(s);
         pg.list.addView(r);
+        if (IvaStaffToolsPatch.want(m.status, m.r)) {                   // 10.113: «Вид раздела с логотипом» — в самом низу
+            try { IvaLogoPatch.settingsRow(a, pg.list, cText, cGray, color(a, "orange", 0xffff8f1f)); } catch (Throwable ignore) {}
+        }
     }
 }
