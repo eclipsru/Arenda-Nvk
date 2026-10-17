@@ -459,6 +459,17 @@ else
   skip "стенд «Сотрудник на двух пунктах — пункт из формы»: нет pgserver (PG_PY=<python с pgserver> bash tools/check.sh)"
 fi
 
+head_ "4.5.21. Стенд «Правки доступа — сразу; сотрудник в пункт / из пункта» (локальный PostgreSQL, SQL 10.115)"
+if "$PG_PY" -c "import pgserver" >/dev/null 2>&1; then
+  if "$PG_PY" tools/staff-live-stand.py >/tmp/iva-test-staff-live.log 2>&1; then
+    ok "правки доступа: $(grep -c '✔' /tmp/iva-test-staff-live.log) проверок SQL на PostgreSQL (тариф — админу, ответ сотрудника — владельцу, правка пункта — его сотрудникам; в пункт / из пункта / из последнего; чужое — нельзя; откат)"
+  else
+    bad "стенд «Правки доступа — сразу»"; grep -E '✘|Error|ERROR' /tmp/iva-test-staff-live.log | head -8 | sed 's/^/      /'
+  fi
+else
+  skip "стенд «Правки доступа — сразу»: нет pgserver (PG_PY=<python с pgserver> bash tools/check.sh)"
+fi
+
 head_ "Итог"
 printf '  пройдено: %s, ошибок: %s, пропущено: %s\n' "$PASS" "$FAIL" "$SKIP"
 if [ "$FAIL" -eq 0 ]; then echo "  Можно продолжать."; exit 0; else echo "  Сначала исправляем замечания выше."; exit 1; fi

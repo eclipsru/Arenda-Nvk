@@ -2332,8 +2332,72 @@ try {
       && !/DELETE FROM|TRUNCATE|DROP COLUMN/i.test(sq.replace(/--[^\n]*/g, '')),
       'SQL 10.114: выбор пункта — только свои пункты «Каталог», таблица закрыта, выбор действует час, данные не удаляются');
     assert.ok(chk.includes('tools/staff-pick-stand.py') && st.includes("SQL = rd('supabase/migrations/20261105_staff_pick_point.sql')"), 'SQL 10.114: стенд PostgreSQL в check.sh');
-    assert.ok(wf.includes("NEW_NAME: '10.114'") && wf.includes("NEW_CODE: '188'"), 'сборка 10.114 (188)');
+    assert.ok(Number((wf.match(/NEW_CODE: '(\d+)'/) || [])[1]) >= 188, 'сборка 10.114 (188) или новее');
     assert.ok((tp.match(/eq\("сотрудник 10\.114: /g) || []).length >= 4 && (tp.match(/eq\("пункт 10\.114: /g) || []).length >= 5, 'IvaPatchTest: проверки 10.114');
+  }
+  // 10.115 (просьба владельца 17.10.2026): 1) все правки доступа — сразу, без действий, с короткой подсказкой (убрали /
+  // добавили пункт, данные пункта, права; тариф админа; сотрудник ответил — владельцу, и у создателя); 2) «Настройка проката» →
+  // «Сотрудники» третьим: «Добавить» и карточки (ФИО, телефон, почта, пункты, права), нажать — правка; 3) пункт → «Сотрудники»:
+  // только «Добавить» (свой сотрудник или новый) и «Убрать из пункта», карточки не нажимаются. Ответы владельца: «доступ и
+  // пункты», «выбор из своих + новый», «только из этого пункта», «ФИО»
+  {
+    const sp = R('android/patches/IvaStaffPatch.java'), ac = R('android/patches/IvaAccessPatch.java'), rt = R('android/patches/IvaRealtimePatch.java'),
+      sh = R('android/patches/IvaShopPatch.java'), tp = R('android/patches/test/IvaPatchTest.java'), wf = R('.github/workflows/build-apk.yml'),
+      chk = R('tools/check.sh'), sq = R('supabase/migrations/20261106_staff_live.sql'), st = R('tools/staff-live-stand.py');
+    const strip = (x) => x.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '');
+    const fn = (src, name) => { const m = new RegExp('static [\\w.<>\\[\\]]+ ' + name + '\\(').exec(src); assert.ok(m, 'нет ' + name);
+      return src.slice(m.index, src.indexOf('\n    }\n', m.index)); };
+    const acc = strip(ac), spc = strip(sp);
+    // 1. сразу и с подсказкой
+    const cs = fn(acc, 'checkStaff'), as = fn(acc, 'applyStaff');
+    assert.ok(cs.includes('final boolean moved = live && IvaStaffPatch.pointsMoved(was.points, m.points);')
+      && cs.includes('final String hint = live ? IvaStaffPatch.staffHint(was.r, was.self, was.points, m.r, m.self, m.points) : "";')
+      && cs.includes('applyStaff(a, me, ch, fm, company, rights || moved, hint);'),
+      'доступ 10.115: убрали / добавили пункт, поменяли данные пункта — сотруднику сразу (как права)');
+    assert.ok(as.includes('if (rights || !h.isEmpty()) {') && as.includes('if (mine) try { IvaStaffPatch.openMine(a, m); }')
+      && as.includes('IvaToolPointPatch.mineAt = 0; IvaToolPointPatch.ensureMine(a);') && as.includes('IvaStaffPatch.toast(a, h.isEmpty() ? RIGHTS_TOAST : h);')
+      && !as.includes('откройте «Мой пункт» заново'),
+      'доступ 10.115: «Мой пункт» открывается заново уже новым, выбор пункта в форме обновляется, короткая подсказка');
+    const pk = fn(acc, 'poke'), ck = fn(acc, 'check');
+    assert.ok(pk.includes('ownerDue = true;') && /if \(IvaReviewPatch\.chief\(a\)\) \{\s*new Thread\(new Runnable\(\) \{\s*@Override public void run\(\) \{ try \{ IvaStaffPatch\.ownerPoke\(a\); \}/.test(pk)
+      && ck.includes('else if (ownerDue) {') && ck.includes('checkFee(a, me);') && ck.includes('IvaStaffPatch.ownerPoke(a);')
+      && fn(strip(rt), 'ensure').includes('boolean want = IvaNotifyPatch.loggedIn(a);'),
+      'доступ 10.115: по отметке — тариф админа и ответы сотрудников владельцу (и создателю: роль его не трогается)');
+    assert.ok(ac.includes('FEE_PATH = "/rest/v1/admins?select=fee_pct,debt_limit&email=ilike."') && fn(acc, 'checkFee').includes('feeHint(was, key)')
+      && fn(acc, 'checkFee').includes('a.runOnUiThread(') && (acc.match(/"POST"/g) || []).length === 1,
+      'доступ 10.115: тариф — чтение своей строки admins в фоне, подсказка в главном потоке');
+    const op = fn(spc, 'ownerPoke');
+    assert.ok(op.includes('if (was == null || ownerBusy) return;') && op.includes('final String hint = ownerHint(was, now);') && op.includes('draw(u, now);')
+      && op.includes('a.runOnUiThread(new Runnable() {'),
+      'сотрудники 10.115: ответ на приглашение — открытые страницы «Сотрудники» перерисовываются, владельцу подсказка');
+    // 2. страница «Сотрудники»
+    const sr = sh.slice(sh.indexOf('static void openPage('), sh.indexOf('static final class Icon'));
+    assert.ok(sr.indexOf('IvaPickupPatch.settingsRow(') < sr.indexOf('IvaStaffPatch.settingsRow(') && sr.indexOf('IvaStaffPatch.settingsRow(') < sr.indexOf('IvaRentPatch.settingsSection(')
+      && sr.indexOf('DATA_TITLE') < sr.indexOf('IvaPickupPatch.settingsRow(') && sh.includes('static final int SHOP = 1, CARD = 2, PEOPLE = 3;'),
+      'сотрудники 10.115: «Сотрудники» — третьей строкой «Настройка проката» (после «Данные проката» и «Пункты выдачи»)');
+    const dr = fn(spc, 'draw'), card = fn(spc, 'staffCard');
+    assert.ok(card.indexOf('s.name') < card.indexOf('s.tel') && card.indexOf('s.tel') < card.indexOf('s.email') && card.indexOf('s.email') < card.indexOf('pointsLine(')
+      && card.indexOf('pointsLine(') < card.indexOf('rightsText(s.r)'),
+      'сотрудники 10.115: карточка — ФИО, телефон, почта, пункт выдачи, права');
+    assert.ok(/if \(whole\) \{\s*c\.setClickable\(true\);\s*c\.setOnClickListener\(new View\.OnClickListener\(\) \{ @Override public void onClick\(View v\) \{ openStaff\(u, s\); \} \}\);\s*\} else \{/.test(dr)
+      && (dr.match(/openStaff\(/g) || []).length === 1 && dr.includes('askUnlink(u, s, rm);') && sp.includes('label(a, "ФИО", u.cGray)'),
+      'сотрудники 10.115: правка — только со страницы «Сотрудники»; у пункта карточки не нажимаются, только «Убрать из пункта»; поле «ФИО»');
+    // 3. у пункта: добавить своего или нового, убрать только из этого пункта
+    const oa = fn(spc, 'openAdd'), ln = fn(spc, 'link');
+    assert.ok(oa.includes('if (!s.points.contains(u.point.id.toLowerCase(Locale.ROOT))) free.add(s);') && oa.includes('link(u, s, true, v, pg,')
+      && oa.includes('nw.setText(NEW_STAFF);') && fn(spc, 'askUnlink').includes('lastPoint(s.points, u.point.id)')
+      && ln.includes('IvaClientPatch.apiCall(u.a, LINK_RPC, "POST", body, true);') && ln.includes('if (NO_DB.equals(e)) {') && ln.includes('new Thread(new Runnable() {'),
+      'сотрудники 10.115: «Добавить» у пункта — свой сотрудник или новый; «Убрать из пункта» — только из этого (последний — предупреждение); без SQL — как раньше');
+    // SQL
+    assert.ok(sq.includes("(o ->> 'fee_pct') is distinct from (n ->> 'fee_pct')") && sq.includes("(to_jsonb(old) ->> 'status') is distinct from (to_jsonb(new) ->> 'status')")
+      && sq.includes("(to_jsonb(old) - 'updated_at') is not distinct from (to_jsonb(new) - 'updated_at')") && sq.includes('AFTER UPDATE ON public.iva_pickup_points')
+      && sq.includes('REVOKE ALL ON FUNCTION public.iva_staff_link(uuid, uuid, boolean) FROM public, anon;') && sq.includes('--  ОТКАТ (')
+      && sq.includes("where s.id = p_id and s.owner_email = me") && !/TRUNCATE|DROP COLUMN|customer_profiles|passport/i.test(sq.replace(/--[^\n]*/g, '')),
+      'SQL 10.115: отметки — тариф, ответ сотрудника, правка пункта; в пункт / из пункта — только свой сотрудник и свой пункт');
+    assert.ok(chk.includes('tools/staff-live-stand.py') && st.includes("SQL = rd('supabase/migrations/20261106_staff_live.sql')"), 'SQL 10.115: стенд PostgreSQL в check.sh');
+    assert.ok(wf.includes("NEW_NAME: '10.115'") && wf.includes("NEW_CODE: '189'"), 'сборка 10.115 (189)');
+    assert.ok((tp.match(/eq\("сотрудник 10\.115: /g) || []).length >= 5 && (tp.match(/eq\("сотрудники 10\.115: /g) || []).length >= 6
+      && (tp.match(/eq\("тариф 10\.115: /g) || []).length >= 2, 'IvaPatchTest: проверки 10.115');
   }
   // 10.75 (просьба владельца 14.10.2026): в «Настройках» — кнопка «Уведомления» (с 10.97 — открывает отдельную страницу);
   // внутри сверху «Открыть настройки уведомлений Android», потом какие присылать, потом расписание, потом всё остальное
