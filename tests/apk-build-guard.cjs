@@ -2210,8 +2210,75 @@ try {
       && !/customer_profiles|passport|phone|surname/.test(sql),
       'SQL 10.112: отметка — почта и время, читает только сам человек, пишет только база, Realtime, откат в шапке');
     assert.ok(chk.includes('tools/role-ping-stand.py') && st.includes("SQL = rd('supabase/migrations/20261103_role_ping.sql')"), 'SQL 10.112: стенд PostgreSQL в check.sh');
-    assert.ok(wf.includes("NEW_NAME: '10.112'") && wf.includes("NEW_CODE: '186'"), 'сборка 10.112 (186)');
+    assert.ok(Number((wf.match(/NEW_CODE: '(\d+)'/) || [])[1]) >= 186, 'сборка 10.112 (186) или новее');
     assert.ok((tp.match(/eq\("realtime 10\.112: /g) || []).length >= 9, 'IvaPatchTest: проверки 10.112');
+  }
+  // 10.113 (просьба владельца 17.10.2026): «Вид раздела с логотипом» (админ — внизу «Настройки проката», сотрудник — внизу
+  // «Мой пункт»); «Инструменты сотрудников» — выключателем у каждого пункта, общей строки нет; поля «Email проката» нет
+  {
+    const lg = R('android/patches/IvaLogoPatch.java'), jc = R('android/patches/IvaClientPatch.java'), pk = R('android/patches/IvaPickupPatch.java'),
+      stp = R('android/patches/IvaStaffToolsPatch.java'), sp = R('android/patches/IvaStaffPatch.java'), sh = R('android/patches/IvaShopPatch.java'),
+      ac = R('android/patches/IvaAccessPatch.java'), tp = R('android/patches/test/IvaPatchTest.java'), wf = R('.github/workflows/build-apk.yml'),
+      ck = R('.github/workflows/check.yml'), ap = R('android/patches/apply.py'), chk = R('tools/check.sh'),
+      sq = R('supabase/migrations/20261104_point_staff_publish.sql'), st = R('tools/point-publish-stand.py');
+    const strip = (x) => x.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '');
+    const code = strip(lg);
+    for (const s2 of [wf, ck]) assert.ok(s2.includes('android/patches/IvaLogoPatch.java'), 'IvaLogoPatch.java — в списке javac сборки и проверки');
+    assert.ok(!/IvaLogoPatch/.test(ap) && !/customer_profiles|passport|phone|surname|apiCall|HttpURLConnection/.test(code),
+      'логотип 10.113: без новых вставок в smali, без сети и личных данных (выбор — на телефоне)');
+    // 1. строки настроек — в самом низу
+    const op = sh.slice(sh.indexOf('static void openPage('), sh.indexOf('static final class Icon'));
+    assert.ok(/try \{ IvaLogoPatch\.settingsRow\(a, list, cText, cGray, cOrange\); \} catch \(Throwable ignore\) \{\}[^\n]*\n    \}\n/.test(op)
+      && (op.match(/settingsRow\(|settingsSection\(/g) || []).length >= 4 && op.lastIndexOf('IvaLogoPatch.settingsRow(') > op.lastIndexOf('IvaStaffJournalPatch.settingsRow('),
+      'логотип 10.113: «Вид раздела с логотипом» — последней строкой «Настройки проката»');
+    const om = sp.slice(sp.indexOf('static void openMine('));
+    assert.ok(om.indexOf('IvaLogoPatch.settingsRow(a, pg.list,') > om.lastIndexOf('pg.list.addView(r);')
+      && /if \(IvaStaffToolsPatch\.want\(m\.status, m\.r\)\) \{[^\n]*\n\s*try \{ IvaLogoPatch\.settingsRow\(a, pg\.list,/.test(om),
+      'логотип 10.113: у сотрудника «Каталог» — последней строкой «Мой пункт»');
+    // 2. страница: два образца, выбор сохраняется, строка «Кабинета»
+    assert.ok(lg.includes('static final String[][] TABS = {{"Избранное", "Мои инструменты"}, {"Мой инструмент", "Добавить инструмент"}};')
+      && lg.includes('shot.setBackground(new Shot(a, k));') && lg.includes('save(a, k == 1 ? ADMIN : CLIENT);') && lg.includes('cabinet(a);')
+      && lg.includes('return admin ? ADMIN : CLIENT;') && lg.includes('prefs(a).edit().putString("v_" + me, norm(v, admin(a))).apply();'),
+      'логотип 10.113: страница с двумя образцами; по умолчанию как было; выбор — на телефоне');
+    assert.ok(lg.includes('static boolean cabinetRow(boolean loggedIn, boolean admin, String view) { return loggedIn && admin && CLIENT.equals(view); }')
+      && lg.includes('if (!want) { if (old != null) box.removeView(old); return; }') && lg.includes('IvaNotifyPatch.tab(a, "admhub");')
+      && sp.includes('try { IvaLogoPatch.cabinet(a); } catch (Throwable ignore) {}') && jc.includes('try { IvaLogoPatch.cabinet(a); } catch (Throwable ignore) {}'),
+      'логотип 10.113: админ «как у клиентов» — строка «Мои инструменты проката» в «Кабинете», выбрал обратно — пропадает');
+    // 3. логотип: раздел клиента / сотрудника
+    assert.ok(lg.includes('if (!loggedIn) return NATIVE;') && lg.includes('if (admin) return CLIENT.equals(view) ? CLIENT_HUB : NATIVE;')
+      && lg.includes('return staffCatalog && ADMIN.equals(view) ? STAFF_HUB : CLIENT_HUB;')
+      && jc.includes('if (hub != null && hubBuiltKind != kind) { pages.removeView(hub); hub = null; }')
+      && jc.includes('if (hubKind == 1) { IvaStaffToolsPatch.renderHub(a, content, gen); return; }')
+      && jc.includes('if (index == 1) { try { IvaStaffToolsPatch.openAddHub(a); } catch (Throwable ignore) {} }'),
+      'логотип 10.113: гость — штатно; админ и сотрудник — по выбору; вкладки раздела пересобираются');
+    assert.ok(stp.includes('if (u.page != null ? !u.page.open() : !IvaClientPatch.hubAlive(u.hubGen)) return;')
+      && stp.includes('if (hubMode(a) && IvaClientPatch.openHub(a, 1)) return;') && stp.includes('hubTabs(a, st && !hm);')
+      && /if \(hubMode\(a\) && IvaClientPatch\.openHub\(a, 1\)\) return;\n\s*try \{\n\s*Method m = a\.getClass\(\)\.getDeclaredMethod\("showAdmHub", int\.class\);\n\s*m\.setAccessible\(true\);\n\s*m\.invoke\(a, 0\);/.test(stp)
+      && stp.includes('if (hm) installTabs(a);')
+      && ac.includes('static boolean staffHub() { return IvaClientPatch.hubVisible && IvaClientPatch.hubKind == 1; }'),
+      'логотип 10.113: сотрудник «как у админов» — «Мой инструмент» = инструменты пунктов, у остальных вкладка как штатная; права убрали — раздел закрывается');
+    // 4. пункт: выключатель, без email, общей строки нет
+    const bf = pk.slice(pk.indexOf('static EditText buildForm('), pk.indexOf('static TextView label(Ui u'));
+    assert.ok(!bf.includes('"Email проката"') && !bf.includes('emailErr(') && bf.includes('IvaStaffPatch.sw(a, box, PUB_TITLE, PUB_SUB, !"now".equals(p.publish)')
+      && bf.indexOf('label(u, "График")') < bf.indexOf('label(u, "Инструменты сотрудников")')
+      && bf.includes('if (pubDb) p.publish = pubSw.isChecked() ? "approve" : "now";') && bf.includes('else if (isNew || p.email.trim().isEmpty()) p.email = me(a);'),
+      'пункт 10.113: в форме — выключатель «Инструменты сотрудников» с пояснением вместо «Email проката» (без SQL — свой email, как раньше)');
+    const dl = pk.slice(pk.indexOf('static void drawList('), pk.indexOf('static Point copy('));
+    assert.ok(!strip(dl).includes('Email') && !strip(dl).includes('p.email') && dl.includes('publishLine(p.publish)') && pk.includes('p.publish = s.publish;')
+      && pk.includes('p.email = o.isNull("email") ? "" : o.optString("email", "");'),
+      'пункт 10.113: на карточке пункта — «Инструменты сотрудников: …», email не показывается');
+    assert.ok(stp.includes('static final boolean MODE_ROW = false;') && stp.includes('final LinearLayout modeRow = MODE_ROW ?')
+      && stp.includes('if (modeRow == null) e1 = "";'), 'пункт 10.113: общей строки «Инструменты сотрудников» в «Настройке проката» нет');
+    // 5. SQL
+    assert.ok(sq.includes('ALTER TABLE public.iva_pickup_points ADD COLUMN staff_publish text NOT NULL DEFAULT \'approve\';')
+      && sq.includes('ALTER TABLE public.iva_pickup_points ALTER COLUMN email DROP NOT NULL;')
+      && sq.includes('select pp.staff_publish into mode\n      from public.iva_pickup_points pp where pp.id = new.point_id;')
+      && sq.includes('GRANT INSERT (staff_publish), UPDATE (staff_publish) ON public.iva_pickup_points TO authenticated;')
+      && sq.includes('--  ОТКАТ (') && !/DROP TABLE|DELETE FROM|TRUNCATE|DROP COLUMN/i.test(sq.replace(/--[^\n]*/g, '')),
+      'SQL 10.113: выключатель у пункта, триггер берёт режим пункта, email необязателен, данные не удаляются');
+    assert.ok(chk.includes('tools/point-publish-stand.py') && st.includes("SQL = rd('supabase/migrations/20261104_point_staff_publish.sql')"), 'SQL 10.113: стенд PostgreSQL в check.sh');
+    assert.ok(wf.includes("NEW_NAME: '10.113'") && wf.includes("NEW_CODE: '187'"), 'сборка 10.113 (187)');
+    assert.ok((tp.match(/eq\("логотип 10\.113: /g) || []).length >= 4 && (tp.match(/eq\("пункт 10\.113: /g) || []).length >= 5, 'IvaPatchTest: проверки 10.113');
   }
   // 10.75 (просьба владельца 14.10.2026): в «Настройках» — кнопка «Уведомления» (с 10.97 — открывает отдельную страницу);
   // внутри сверху «Открыть настройки уведомлений Android», потом какие присылать, потом расписание, потом всё остальное
