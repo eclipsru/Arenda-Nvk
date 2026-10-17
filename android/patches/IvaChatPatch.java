@@ -1279,6 +1279,7 @@ final class IvaChatPatch {
                 }
             }
         }
+        if (adm) try { IvaStaffJournalPatch.chatLoad(a, asc, my); } catch (Throwable ignore) {}   // 10.107: кто из сотрудников ответил
         // Инструменты переписок (название и картинка)
         HashSet<String> need = new HashSet<String>();
         Map<String, String> tools = assignTools(asc, my, adminEmails(), sup, localTags);
@@ -1357,7 +1358,8 @@ final class IvaChatPatch {
         s.append(loggedIn(a)).append('|').append(openPartner).append('|').append(openTool).append('|')
             .append(ready(str(IvaClientPatch.get(a, "userEmail")))).append('|').append(lastError).append('|').append(toolCache.size()).append('|')
             .append(admins.size()).append('|').append(clientNames.size()).append('|').append(peerBitmaps.size())
-            .append('|').append(localTags.size()).append('|').append(hiddenVer).append('|');
+            .append('|').append(localTags.size()).append('|').append(IvaStaffJournalPatch.chatVer)   // 10.107: имена сотрудников под ответами
+            .append('|').append(hiddenVer).append('|');
         for (Msg m : msgs) s.append(m.id).append(m.read ? '+' : '-').append(m.tool).append(',');
         return s.toString();
     }
@@ -1565,6 +1567,7 @@ final class IvaChatPatch {
         }
         String time = hm(m.at, tz);
         if (mine) time = time + (m.read ? "  ✓✓" : "  ✓");
+        if (mine) try { String sw = IvaStaffJournalPatch.who(m.id); if (!sw.isEmpty()) time = sw + " · " + time; } catch (Throwable ignore) {}   // 10.107: ответил сотрудник
         LinearLayout meta = new LinearLayout(a);
         meta.setOrientation(LinearLayout.HORIZONTAL);
         meta.setGravity(Gravity.CENTER_VERTICAL);

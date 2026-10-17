@@ -2149,6 +2149,7 @@ public final class IvaOrderPatch {
         for (String[] f : adm ? admFields(r, nice) : ordFields(r, nice)) ordFieldView(a, body, f, "Статус".equals(f[0]));
         try { IvaRentPatch.sheet(a, body, r, adm, archived); } catch (Throwable ignore) {}   // 10.77: «До конца аренды» — живой таймер
         try { IvaOrderPointPatch.sheet(a, body, r, adm); } catch (Throwable ignore) {}       // 10.102: пункт выдачи части / частей
+        try { IvaStaffJournalPatch.sheet(a, body, r, adm); } catch (Throwable ignore) {}     // 10.107: «Выдал» / «Принял» (админу)
         ordNoAddr = false;
         try { ordNoAddr = !adm && IvaOrderPointPatch.clientHas(ordVal(r.get("id"))); } catch (Throwable ignore) {}
         if (adm) admClientBlock(a, body, r);

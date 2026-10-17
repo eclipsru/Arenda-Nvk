@@ -2559,6 +2559,7 @@ public class IvaPatchTest {
         }
         staffTools105();                                              // 10.105: отдельно — main у предела 64 КБ
         staffChat106();                                               // 10.106: чат пункта
+        staffJournal107();                                            // 10.107: журнал, сводка, имена в чате
         if (fail > 0) { System.out.println("ошибок: " + fail); System.exit(1); }
         System.out.println("все проверки IvaPatch пройдены");
     }
@@ -2615,6 +2616,60 @@ public class IvaPatchTest {
         eq("чат пункта 10.106: id уведомления и ключи — свои (не пересекаются с 10.104 / 10.105)",
             IvaStaffChatPatch.ID_NOTE + "|" + (IvaStaffChatPatch.ID_NOTE != IvaStaffOrdersPatch.ID_NOTE && IvaStaffChatPatch.ID_NOTE != IvaStaffToolsPatch.ID_NOTE) + "|"
             + (!IvaStaffChatPatch.OPEN.equals(IvaStaffOrdersPatch.OPEN) && !IvaStaffChatPatch.OPEN.equals(IvaStaffToolsPatch.OPEN)), "7207|true|true");
+    }
+
+    /** 10.107: «кто выдал / кто принял», «Сводка по пунктам», имя сотрудника в чате владельца (этап 4). */
+    static void staffJournal107() {
+        java.util.TimeZone nsk = java.util.TimeZone.getTimeZone("Asia/Novosibirsk");
+        eq("журнал 10.107: когда показывать — выданная и закрытая часть с номером",
+            IvaStaffJournalPatch.want("15", "rented") + "|" + IvaStaffJournalPatch.want(" 15 ", "closed") + "|" + IvaStaffJournalPatch.want("15", "new") + "|"
+            + IvaStaffJournalPatch.want("", "closed") + "|" + IvaStaffJournalPatch.want("15;drop", "closed") + "|" + IvaStaffJournalPatch.want(null, null),
+            "true|true|false|false|false|false");
+        eq("журнал 10.107: время — в поясе телефона, «17.10.2026, 14:05»",
+            IvaStaffJournalPatch.when("2026-10-17T07:05:31.123456+00:00", nsk) + "|" + IvaStaffJournalPatch.when("", nsk) + "|" + IvaStaffJournalPatch.when("abc", nsk),
+            "17.10.2026, 14:05||");
+        java.util.List<String[]> r1 = IvaStaffJournalPatch.rows("closed", "Иван", "2026-10-17T07:05:00+00:00", "Вы", "2026-10-18T03:00:00+00:00", nsk);
+        java.util.List<String[]> r2 = IvaStaffJournalPatch.rows("closed", "", "", "Вы", "2026-10-18T03:00:00+00:00", nsk);
+        java.util.List<String[]> r3 = IvaStaffJournalPatch.rows("rented", "ivan@x.ru", "2026-10-17T07:05:00+00:00", "", "", nsk);
+        java.util.List<String[]> r4 = IvaStaffJournalPatch.rows("closed", "", "", "", "", nsk);
+        java.util.List<String[]> r5 = IvaStaffJournalPatch.rows("rented", "", "2026-10-17T07:05:00+00:00", "Вы", "2026-10-18T03:00:00+00:00", nsk);
+        eq("журнал 10.107: «Выдал» / «Принял», без выдачи — «Закрыл», пустое — не показываем",
+            r1.size() + ":" + r1.get(0)[0] + "=" + r1.get(0)[1] + ";" + r1.get(1)[0] + "=" + r1.get(1)[1] + "|" + r2.size() + ":" + r2.get(0)[0] + "|"
+            + r3.size() + ":" + r3.get(0)[1] + "|" + r4.size() + "|" + r5.size() + ":" + r5.get(0)[1],
+            "2:Выдал=Иван · 17.10.2026, 14:05;Принял=Вы · 18.10.2026, 10:00|1:Закрыл|1:ivan@x.ru · 17.10.2026, 14:05|0|1:17.10.2026, 14:05");
+        java.util.List<String[]> ms = new java.util.ArrayList<String[]>();
+        ms.add(new String[]{"11", "Admin@X.ru"}); ms.add(new String[]{"12", "client@x.ru"}); ms.add(new String[]{"13", "admin@x.ru"});
+        ms.add(new String[]{"", "admin@x.ru"}); ms.add(new String[]{"14\"]}", "admin@x.ru"}); ms.add(new String[]{"11", "admin@x.ru"}); ms.add(null);
+        java.util.Set<String> asked = new java.util.HashSet<String>(java.util.Arrays.asList("13"));
+        java.util.List<String> need = IvaStaffJournalPatch.needIds(ms, " admin@x.ru ", asked);
+        eq("чат 10.107: спрашиваем только про свои новые сообщения, номера — без кавычек",
+            need + "|" + IvaStaffJournalPatch.idsBody(need) + "|" + IvaStaffJournalPatch.needIds(ms, "", asked) + "|" + IvaStaffJournalPatch.idsBody(new java.util.ArrayList<String>()),
+            "[11]|{\"p_ids\":[\"11\"]}|[]|{\"p_ids\":[]}");
+        java.util.List<String[]> many = new java.util.ArrayList<String[]>();
+        for (int i = 0; i < 350; i++) many.add(new String[]{String.valueOf(i + 1), "a@b.ru"});
+        eq("чат 10.107: за раз — не больше 300 (база больше не примет)",
+            IvaStaffJournalPatch.needIds(many, "a@b.ru", new java.util.HashSet<String>()).size() + "|" + IvaStaffJournalPatch.CHAT_BATCH, "300|300");
+        eq("чат 10.107: имени нет — пусто (ответил сам владелец)", IvaStaffJournalPatch.who("999999") + "|" + IvaStaffJournalPatch.who(null), "|");
+        eq("сводка 10.107: период — 7 / 30 дней / всё время, тело запроса",
+            IvaStaffJournalPatch.daysBody(7) + "|" + IvaStaffJournalPatch.daysBody(0) + "|" + IvaStaffJournalPatch.daysBody(-5) + "|" + java.util.Arrays.toString(IvaStaffJournalPatch.DAYS)
+            + "|" + String.join(",", IvaStaffJournalPatch.DAYS_TEXT),
+            "{\"p_days\":7}|{\"p_days\":0}|{\"p_days\":0}|[7, 30, 0]|7 дней,30 дней,Всё время");
+        eq("сводка 10.107: строки карточки пункта",
+            IvaStaffJournalPatch.pointTitle("Склад", "Новосибирск") + "|" + IvaStaffJournalPatch.pointTitle("Бердск", "Бердск") + "|" + IvaStaffJournalPatch.pointTitle("", "") + "|"
+            + IvaStaffJournalPatch.nowLine(2, 1) + "|" + IvaStaffJournalPatch.periodLine(30, 5, 3) + "|" + IvaStaffJournalPatch.periodLine(7, 1, 0) + "|"
+            + IvaStaffJournalPatch.periodLine(0, 9, 8) + "|" + IvaStaffJournalPatch.periodLine(1, 0, 0) + "|" + IvaStaffJournalPatch.periodLine(22, 0, 0),
+            "Склад · Новосибирск|Бердск|Пункт|Сейчас: новых 2 · выдано 1|За 30 дней: заявок 5 · закрыто 3|За 7 дней: заявок 1 · закрыто 0|"
+            + "За всё время: заявок 9 · закрыто 8|За 1 день: заявок 0 · закрыто 0|За 22 дня: заявок 0 · закрыто 0");
+        eq("сводка 10.107: деньги, инструменты, сотрудники, кто выдавал",
+            IvaStaffJournalPatch.moneyLine("1200", "60") + "|" + IvaStaffJournalPatch.moneyLine("", "") + "|" + IvaStaffJournalPatch.toolsLine(4, 3, 1) + "|"
+            + IvaStaffJournalPatch.toolsLine(2, 2, 0) + "|" + IvaStaffJournalPatch.staffLine(2, 1) + "|" + IvaStaffJournalPatch.staffLine(0, 0) + "|"
+            + IvaStaffJournalPatch.personLine("Иван", 3, 2) + "|" + IvaStaffJournalPatch.personLine("", 1, 0),
+            "Аренда: 1200 ₽ · комиссия: 60 ₽|Аренда: 0 ₽ · комиссия: 0 ₽|Инструменты: 4, клиенты видят 3, на одобрении 1|Инструменты: 2, клиенты видят 2|"
+            + "Сотрудники: 2 (ещё приглашены: 1)|Сотрудники: 0|Иван — выдал 3, принял 2|Без имени — выдал 1, принял 0");
+        eq("сводка 10.107: ошибки базы — понятным текстом",
+            IvaStaffJournalPatch.dbError("400", "{\"message\":\"Только владелец проката\"}") + "|" + IvaStaffJournalPatch.dbError("404", "{\"code\":\"PGRST202\"}") + "|"
+            + IvaStaffJournalPatch.dbError("401", "") + "|" + IvaStaffJournalPatch.dbError("200", "{}") + "|" + IvaStaffJournalPatch.dbError("", ""),
+            "Только владелец проката|" + IvaStaffJournalPatch.NO_DB + "|Нет права — войдите заново||Не получилось — нет связи с сервером");
     }
 
     static void staffTools105() {

@@ -404,6 +404,17 @@ else
   skip "стенд «Чат пункта у сотрудника»: нет pgserver (PG_PY=<python с pgserver> bash tools/check.sh)"
 fi
 
+head_ "4.5.16. Стенд «Журнал и сводка по пунктам» (локальный PostgreSQL, SQL 10.107)"
+if "$PG_PY" -c "import pgserver" >/dev/null 2>&1; then
+  if "$PG_PY" tools/staff-journal-stand.py >/tmp/iva-test-staff-journal.log 2>&1; then
+    ok "журнал и сводка: $(grep -c '✔' /tmp/iva-test-staff-journal.log) проверок SQL на PostgreSQL (кто выдал / принял — пишет база, только владельцу, сводка по пунктам, имена в чате, откат)"
+  else
+    bad "стенд «Журнал и сводка по пунктам»"; grep -E '✘|Error|ERROR' /tmp/iva-test-staff-journal.log | head -8 | sed 's/^/      /'
+  fi
+else
+  skip "стенд «Журнал и сводка по пунктам»: нет pgserver (PG_PY=<python с pgserver> bash tools/check.sh)"
+fi
+
 head_ "Итог"
 printf '  пройдено: %s, ошибок: %s, пропущено: %s\n' "$PASS" "$FAIL" "$SKIP"
 if [ "$FAIL" -eq 0 ]; then echo "  Можно продолжать."; exit 0; else echo "  Сначала исправляем замечания выше."; exit 1; fi
