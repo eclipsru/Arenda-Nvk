@@ -10,6 +10,7 @@ package ru.prokatnvsk.app;
 //   3. Из «Панели владельца» убрана карточка «Ваш доход с админов» (штатная, рисуется в chiefBox после
 //      загрузки статистики) — прячется сразу при появлении (OnHierarchyChangeListener на chiefBox).
 //      Остальная панель (статистика, заявки на оплату, админы) не тронута.
+//      10.108: почта над заголовком, статистика под ним и «Добавить админа» прячутся (IvaAdminsPatch.panelChanged).
 //
 // Пункты видит только создатель eclips.ru@mail.ru (как «Цензуру»). Новых вставок в smali нет:
 // вход — IvaNotifyPatch.onShowTab → IvaChiefPatch.onTab. Сеть — только в фоновых потоках. Персональные
@@ -86,7 +87,7 @@ public final class IvaChiefPatch {
         return isIncomeTitle(((TextView) g.getChildAt(0)).getText());
     }
 
-    static void hideIncome(Activity a) {
+    static void hideIncome(final Activity a) {
         Object o = IvaClientPatch.get(a, "chiefBox");
         if (!(o instanceof ViewGroup)) return;
         ViewGroup box = (ViewGroup) o;
@@ -99,6 +100,7 @@ public final class IvaChiefPatch {
         box.setOnHierarchyChangeListener(new ViewGroup.OnHierarchyChangeListener() {
             @Override public void onChildViewAdded(View parent, View child) {
                 try { if (isIncomeCard(child)) child.setVisibility(View.GONE); } catch (Throwable ignore) {}
+                try { IvaAdminsPatch.panelChanged(a, (ViewGroup) parent); } catch (Throwable ignore) {}   // 10.108: без почты, статистики и «Добавить админа»
             }
             @Override public void onChildViewRemoved(View parent, View child) {}
         });

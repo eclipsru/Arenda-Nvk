@@ -2560,6 +2560,7 @@ public class IvaPatchTest {
         staffTools105();                                              // 10.105: отдельно — main у предела 64 КБ
         staffChat106();                                               // 10.106: чат пункта
         staffJournal107();                                            // 10.107: журнал, сводка, имена в чате
+        adminManage108();                                             // 10.108: приостановить / удалить админа, порядок в панели
         if (fail > 0) { System.out.println("ошибок: " + fail); System.exit(1); }
         System.out.println("все проверки IvaPatch пройдены");
     }
@@ -2619,6 +2620,41 @@ public class IvaPatchTest {
     }
 
     /** 10.107: «кто выдал / кто принял», «Сводка по пунктам», имя сотрудника в чате владельца (этап 4). */
+    static void adminManage108() {
+        eq("админы 10.108: почта нового админа — как проверяет база",
+            IvaAdminsPatch.emailErr(" Ivan@Mail.ru ", "eclips.ru@mail.ru").isEmpty() + "|" + IvaAdminsPatch.emailErr("", "x") + "|"
+            + IvaAdminsPatch.emailErr("ivan.mail.ru", "x") + "|" + IvaAdminsPatch.emailErr("iv an@mail.ru", "x") + "|"
+            + IvaAdminsPatch.emailErr("ivan@mail.r", "x") + "|" + IvaAdminsPatch.emailErr("Eclips.RU@mail.ru ", " eclips.ru@mail.ru") + "|"
+            + IvaAdminsPatch.emailErr(null, null),
+            "true|Введите почту нового админа|Похоже, в email ошибка (пример: ivan@mail.ru)|Похоже, в email ошибка (пример: ivan@mail.ru)|"
+            + "Похоже, в email ошибка (пример: ivan@mail.ru)|Это ваша почта — вы уже владелец площадки|Введите почту нового админа");
+        eq("админы 10.108: ответ базы — фраза базы, без SQL 10.108 — «обновите базу», нет права, нет связи",
+            IvaAdminsPatch.msgOf("200", "{}") + "|" + IvaAdminsPatch.msgOf("404", "{\"code\":\"PGRST202\"}") + "|"
+            + IvaAdminsPatch.msgOf("400", "{\"code\":\"P0001\",\"message\":\"\\u042d\\u0442\\u043e\\u0442 \\u0447\\u0435\\u043b\\u043e\\u0432\\u0435\\u043a \\u0443\\u0436\\u0435 \\u0430\\u0434\\u043c\\u0438\\u043d\"}") + "|"
+            + IvaAdminsPatch.msgOf("400", "{\"message\":\"Админ не найден — возможно, его уже удалили\"}") + "|"
+            + IvaAdminsPatch.msgOf("403", "{\"code\":\"42501\",\"message\":\"permission denied\"}") + "|"
+            + IvaAdminsPatch.msgOf("", "") + "|" + IvaAdminsPatch.msgOf("500", "oops"),
+            "|Заработает после обновления базы (SQL 10.108)|Этот человек уже админ|Админ не найден — возможно, его уже удалили|"
+            + "Нет права — войдите заново|Не получилось — нет связи с сервером|Не получилось (ответ 500)");
+        eq("админы 10.108: панель — прячем почту над «ПАНЕЛЬ ВЛАДЕЛЬЦА» и строку под ним, остальное не трогаем",
+            java.util.Arrays.toString(IvaAdminsPatch.panelHide(new String[]{"eclips.ru@mail.ru", "ПАНЕЛЬ ВЛАДЕЛЬЦА", "Инструментов: 5 (забронировано 0, в аренде 1)\nЗаявки: новых 1", null, null}, "Eclips.ru@mail.ru"))
+            + "|" + java.util.Arrays.toString(IvaAdminsPatch.panelHide(new String[]{"Другой текст", "ПАНЕЛЬ ВЛАДЕЛЬЦА", null}, "eclips.ru@mail.ru"))
+            + "|" + java.util.Arrays.toString(IvaAdminsPatch.panelHide(new String[]{"eclips.ru@mail.ru", "Загружаю статистику…"}, "eclips.ru@mail.ru"))
+            + "|" + IvaAdminsPatch.panelHide(null, null).length,
+            "[true, false, true, false, false]|[false, false, false]|[false, false]|0");
+        eq("админы 10.108: список — «(отключён)» → «(приостановлен)», удалённые — по ответу базы",
+            IvaAdminsPatch.rowTitle("Иван (отключён)") + "|" + IvaAdminsPatch.rowTitle("Иван — владелец") + "|" + IvaAdminsPatch.rowTitle(null) + "|"
+            + new java.util.TreeSet<String>(IvaAdminsPatch.parseRemoved("[\"A@x.ru\", \"b@x.ru\"]")) + "|" + IvaAdminsPatch.parseRemoved("[]").size() + "|"
+            + IvaAdminsPatch.parseRemoved("{\"message\":\"x\"}").size() + "|" + IvaAdminsPatch.parseRemoved(null).size(),
+            "Иван (приостановлен)|Иван — владелец|null|[a@x.ru, b@x.ru]|0|0|0");
+        eq("админы 10.108: карточка «Доступ» — состояние",
+            IvaAdminsPatch.stateText(true, 0) + "|" + IvaAdminsPatch.stateText(false, 3) + "|" + IvaAdminsPatch.stateText(false, 0),
+            "Сейчас: активен|Сейчас: приостановлен · скрыто инструментов: 3|Сейчас: приостановлен");
+        eq("админы 10.108: адреса — только функции базы (и штатная вставка, если SQL 10.108 ещё нет)",
+            IvaAdminsPatch.RPC_ADD + "|" + IvaAdminsPatch.RPC_PAUSE + "|" + IvaAdminsPatch.RPC_REMOVE + "|" + IvaAdminsPatch.RPC_STATE + "|" + IvaAdminsPatch.RPC_REMOVED + "|" + IvaAdminsPatch.NATIVE_INSERT,
+            "/rest/v1/rpc/iva_admin_add|/rest/v1/rpc/iva_admin_pause|/rest/v1/rpc/iva_admin_remove|/rest/v1/rpc/iva_admin_state|/rest/v1/rpc/iva_admins_removed|/rest/v1/admins");
+    }
+
     static void staffJournal107() {
         java.util.TimeZone nsk = java.util.TimeZone.getTimeZone("Asia/Novosibirsk");
         eq("журнал 10.107: когда показывать — выданная и закрытая часть с номером",

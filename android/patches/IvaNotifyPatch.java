@@ -454,6 +454,7 @@ public final class IvaNotifyPatch {
         try { IvaCensorPatch.onTab(a, tab); } catch (Throwable ignore) {}   // 10.92: «Цензура» у создателя, слова создателя
         try { IvaChiefPatch.onTab(a, tab); } catch (Throwable ignore) {}    // 10.93: «Управление», «Мои отзывы»; без «Ваш доход с админов»
         try { IvaTestPatch.onTab(a, tab); } catch (Throwable ignore) {}     // 10.94: жёлтая «Обновить до версии N» у eclips и eclipsik
+        try { IvaAdminsPatch.onTab(a, tab); } catch (Throwable ignore) {}   // 10.108: приостановить / удалить админа, «Добавить админа» в списке
     }
 
     static Object get(Object o, String f) { return IvaClientPatch.get(o, f); }
