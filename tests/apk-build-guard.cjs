@@ -1197,7 +1197,7 @@ try {
       && mf.includes("if (e.target.closest('[data-msug]')) e.preventDefault();") && !/<link[^>]*theme\.css/.test(cab),
       'модели 10.82: сайт — общие модули; кабинет без theme.css');
     // 5. приложение: без новых вставок в smali — только из IvaKindPatch; файл в сборке; личных данных не читаем
-    assert.ok(!/IvaModelPatch|model/i.test(ap) && /IvaKindPatch\.java android\/patches\/IvaModelPatch\.java (android\/patches\/IvaFormPatch\.java )?(android\/patches\/IvaPhotoPatch\.java )?(android\/patches\/IvaCensorPatch\.java )?(android\/patches\/IvaChiefPatch\.java )?(android\/patches\/IvaTestPatch\.java )?(android\/patches\/IvaPickupPatch\.java )?(android\/patches\/IvaAvatarPatch\.java )?(android\/patches\/IvaShopPatch\.java )?(android\/patches\/IvaSoundPatch\.java )?(android\/patches\/IvaToolPointPatch\.java )?(android\/patches\/IvaOrderPointPatch\.java )?(android\/patches\/IvaStaffPatch\.java )?2>&1/.test(wf)
+    assert.ok(!/IvaModelPatch|model/i.test(ap) && /IvaKindPatch\.java android\/patches\/IvaModelPatch\.java (android\/patches\/IvaFormPatch\.java )?(android\/patches\/IvaPhotoPatch\.java )?(android\/patches\/IvaCensorPatch\.java )?(android\/patches\/IvaChiefPatch\.java )?(android\/patches\/IvaTestPatch\.java )?(android\/patches\/IvaPickupPatch\.java )?(android\/patches\/IvaAvatarPatch\.java )?(android\/patches\/IvaShopPatch\.java )?(android\/patches\/IvaSoundPatch\.java )?(android\/patches\/IvaToolPointPatch\.java )?(android\/patches\/IvaOrderPointPatch\.java )?(android\/patches\/IvaStaffPatch\.java )?(android\/patches\/IvaStaffOrdersPatch\.java )?2>&1/.test(wf)
       && kp.includes('if (k == 0) IvaModelPatch.refresh(a);') && kp.includes('try { IvaModelPatch.onTab(a, tab); } catch (Throwable ignore) {}')
       && !/customer_profiles|passport|phone|surname/.test(mp),
       'модели 10.82: новых вставок в smali нет; личных данных не читаем');
@@ -1252,7 +1252,7 @@ try {
     assert.ok(kp.includes('static final String SUB_HINT = "Подкатегория (необязательно)";') && has(dex14, 'Подкатегория (необязательно)')
       && has(dex14, 'atCatSug') && has(dex14, 'atSubSug') && has(dex14, 'atName'),
       'автоподбор 10.81: штатные поля и текст пустой подкатегории есть в 10.14');
-    assert.ok(!/IvaKindPatch|kind/i.test(ap) && /IvaRentPatch\.java android\/patches\/IvaKindPatch\.java (android\/patches\/IvaModelPatch\.java )?(android\/patches\/IvaFormPatch\.java )?(android\/patches\/IvaPhotoPatch\.java )?(android\/patches\/IvaCensorPatch\.java )?(android\/patches\/IvaChiefPatch\.java )?(android\/patches\/IvaTestPatch\.java )?(android\/patches\/IvaPickupPatch\.java )?(android\/patches\/IvaAvatarPatch\.java )?(android\/patches\/IvaShopPatch\.java )?(android\/patches\/IvaSoundPatch\.java )?(android\/patches\/IvaToolPointPatch\.java )?(android\/patches\/IvaOrderPointPatch\.java )?(android\/patches\/IvaStaffPatch\.java )?2>&1/.test(wf),
+    assert.ok(!/IvaKindPatch|kind/i.test(ap) && /IvaRentPatch\.java android\/patches\/IvaKindPatch\.java (android\/patches\/IvaModelPatch\.java )?(android\/patches\/IvaFormPatch\.java )?(android\/patches\/IvaPhotoPatch\.java )?(android\/patches\/IvaCensorPatch\.java )?(android\/patches\/IvaChiefPatch\.java )?(android\/patches\/IvaTestPatch\.java )?(android\/patches\/IvaPickupPatch\.java )?(android\/patches\/IvaAvatarPatch\.java )?(android\/patches\/IvaShopPatch\.java )?(android\/patches\/IvaSoundPatch\.java )?(android\/patches\/IvaToolPointPatch\.java )?(android\/patches\/IvaOrderPointPatch\.java )?(android\/patches\/IvaStaffPatch\.java )?(android\/patches\/IvaStaffOrdersPatch\.java )?2>&1/.test(wf),
       'автоподбор 10.81: новых вставок в smali и новых файлов нет');
     // 5. сайт: один модуль, вид пишется только когда справочник видов есть в базе
     assert.ok(nw.includes('<script src="assets/kind-guess.js?v=20261016-kind"></script>') && cab.includes('<script src="assets/kind-guess.js?v=20261016-kind"></script>')
@@ -1329,7 +1329,7 @@ try {
     const sql = R('supabase/migrations/20261015_category_tree.sql'), mv = R('supabase/migrations/20261015_category_tree_move.sql');
     const fnx = (src, name) => { const mm = new RegExp(`static (?:final )?[\\w.<>, \\[\\]]+ ${name}\\(`).exec(src); assert.ok(mm, `нет ${name}`); return src.slice(mm.index, src.indexOf('\n    }\n', mm.index)); };
     // 1. сборка и проверка компилируют IvaKindPatch; вставок в smali нет
-    assert.ok(/IvaRentPatch\.java android\/patches\/IvaKindPatch\.java (android\/patches\/IvaModelPatch\.java )?(android\/patches\/IvaFormPatch\.java )?(android\/patches\/IvaPhotoPatch\.java )?(android\/patches\/IvaCensorPatch\.java )?(android\/patches\/IvaChiefPatch\.java )?(android\/patches\/IvaTestPatch\.java )?(android\/patches\/IvaPickupPatch\.java )?(android\/patches\/IvaAvatarPatch\.java )?(android\/patches\/IvaShopPatch\.java )?(android\/patches\/IvaSoundPatch\.java )?(android\/patches\/IvaToolPointPatch\.java )?(android\/patches\/IvaOrderPointPatch\.java )?(android\/patches\/IvaStaffPatch\.java )?2>&1/.test(wf) && ck.includes('android/patches/IvaKindPatch.java'),
+    assert.ok(/IvaRentPatch\.java android\/patches\/IvaKindPatch\.java (android\/patches\/IvaModelPatch\.java )?(android\/patches\/IvaFormPatch\.java )?(android\/patches\/IvaPhotoPatch\.java )?(android\/patches\/IvaCensorPatch\.java )?(android\/patches\/IvaChiefPatch\.java )?(android\/patches\/IvaTestPatch\.java )?(android\/patches\/IvaPickupPatch\.java )?(android\/patches\/IvaAvatarPatch\.java )?(android\/patches\/IvaShopPatch\.java )?(android\/patches\/IvaSoundPatch\.java )?(android\/patches\/IvaToolPointPatch\.java )?(android\/patches\/IvaOrderPointPatch\.java )?(android\/patches\/IvaStaffPatch\.java )?(android\/patches\/IvaStaffOrdersPatch\.java )?2>&1/.test(wf) && ck.includes('android/patches/IvaKindPatch.java'),
       'вид 10.79: IvaKindPatch компилируется в сборку и в проверку');
     assert.ok(!/IvaKindPatch|kind/i.test(ap), 'вид 10.79: новых вставок в smali нет');
     // 2. точки входа: onTab (справочник, форма, запись), onHub (только форма — запомненный выбор не трогает), касание сохранения
@@ -1848,6 +1848,44 @@ try {
       'SQL 10.103: только новые таблицы и функции (существующее не трогает), писать напрямую нельзя, один человек — у одного проката, откат в шапке');
     assert.ok(st.includes("SQL = rd('supabase/migrations/20261028_staff.sql')") && chk.includes('tools/staff-stand.py'), 'SQL 10.103: стенд PostgreSQL в check.sh');
     assert.ok((tp.match(/eq\("сотрудники 10\.103: /g) || []).length >= 14, 'IvaPatchTest: проверки 10.103');
+  }
+  // 10.104 (решения владельца 16–17.10.2026, этап 3б «Сотрудники и пункты»): заявки пункта у сотрудника
+  {
+    const so = R('android/patches/IvaStaffOrdersPatch.java'), sp = R('android/patches/IvaStaffPatch.java'), np = R('android/patches/IvaNotifyPatch.java'),
+      tp = R('android/patches/test/IvaPatchTest.java'), wf = R('.github/workflows/build-apk.yml'), ck = R('.github/workflows/check.yml'),
+      ap = R('android/patches/apply.py'), chk = R('tools/check.sh'), sq = R('supabase/migrations/20261029_staff_orders.sql'), st = R('tools/staff-orders-stand.py');
+    const code = so.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '');
+    assert.ok(wf.includes('android/patches/IvaStaffPatch.java android/patches/IvaStaffOrdersPatch.java 2>&1') && ck.includes('android/patches/IvaStaffOrdersPatch.java')
+      && !/IvaStaffOrdersPatch/.test(ap), 'заявки пункта 10.104: IvaStaffOrdersPatch.java — в списках javac, без новых вставок в smali');
+    const tk = np.slice(np.indexOf('static void tick() {'), np.indexOf('static JSONArray getArr('));
+    const bg = np.slice(np.indexOf('static void bgRun(Context app) {'));
+    assert.ok(/new Thread\(new Runnable\(\)[\s\S]*if \(logged && !admin && !email\.isEmpty\(\)\) try \{ IvaStaffOrdersPatch\.check\(a, email\); \} catch \(Throwable ignore\) \{\}/.test(tk)
+      && bg.includes('if (logged && !admin) try { IvaStaffOrdersPatch.check(c, email); } catch (Throwable ignore) {}')
+      && np.includes('else if (IvaStaffOrdersPatch.OPEN.equals(open)) IvaStaffOrdersPatch.openFromNote(a);')
+      && (np.match(/IvaStaffOrdersPatch\./g) || []).length === 4
+      && sp.includes('if (IvaStaffOrdersPatch.want(m.status, m.r)) {') && (sp.match(/IvaStaffOrdersPatch\./g) || []).length === 3,
+      'заявки пункта 10.104: подключение — опрос (не владельцу, в потоке окна и в фоне), нажатие на уведомление, кнопка на «Мой пункт»');
+    assert.ok(!/customer_profiles|passport|phone|surname|select=|"PATCH"|"DELETE"|"GET"|\/rest\/v1\/(?!rpc\/iva_staff_)/.test(code)
+      && (code.match(/IvaClientPatch\.apiCall\(/g) || []).length === 2 && (code.match(/IvaNotifyPatch\.api\(/g) || []).length === 1
+      && (code.match(/"POST"/g) || []).length === 3 && (code.match(/new Thread\(new Runnable\(\)/g) || []).length === 2
+      && code.includes('if (m == null || !want(m.status, m.r)) return;'),
+      'заявки пункта 10.104: только функции базы iva_staff_* (таблицы заявок напрямую — нет), сеть — в потоках, не сотрудник — в базу не ходим');
+    const phrases = (code.match(/DB_PHRASES = \{([\s\S]*?)\};/) || ['', ''])[1].match(/"([^"]+)"/g) || [];
+    const lost = phrases.map(x => x.slice(1, -1)).filter(x => !sq.includes("raise exception '" + x + "'"));
+    assert.ok(phrases.length === 4 && lost.length === 0, 'заявки пункта 10.104: фразы ошибок приложения = RAISE EXCEPTION в 20261029_staff_orders.sql: ' + lost.join(' | '));
+    const sc = sq.replace(/^--.*$/gm, '');
+    const ret = (sc.match(/FUNCTION public\.iva_staff_parts\(\)\s+RETURNS TABLE \(([\s\S]*?)\)\s+LANGUAGE/) || ['', ''])[1];
+    assert.ok(ret.includes('client_tel text') && !/fee|sum|price|email|passport/i.test(ret)
+      && !/DROP TABLE|TRUNCATE|DELETE FROM|ALTER TABLE|POLICY|CREATE TABLE|GRANT (SELECT|INSERT|UPDATE|DELETE|ALL)|\bTRIGGER\b/i.test(sc)
+      && sc.includes("RAISE EXCEPTION 'Сначала примените 20261028_staff.sql") && sc.includes("RAISE EXCEPTION 'Сначала примените 20261027_order_points.sql")
+      && sc.includes('REVOKE ALL ON FUNCTION public.iva_staff_right(uuid, text) FROM public, anon, authenticated;')
+      && sc.includes('REVOKE ALL ON FUNCTION public.iva_staff_parts() FROM public, anon;')
+      && sc.includes('REVOKE ALL ON FUNCTION public.iva_staff_set_status(bigint, text) FROM public, anon;')
+      && sc.includes("if pt.client = me and not coalesce(slf, false) then") && sc.includes("not public.iva_staff_right(pt.point_id, 'issue')")
+      && sq.includes('--      DROP FUNCTION IF EXISTS public.iva_staff_set_status(bigint, text);') && !/'admin@|@mail\.ru'/.test(sc),
+      'SQL 10.104: только функции (таблицы и правила доступа не меняются), без денег и почты клиента, право и «самому себе» проверяет база, откат в шапке');
+    assert.ok(st.includes("SQL = rd('supabase/migrations/20261029_staff_orders.sql')") && chk.includes('tools/staff-orders-stand.py'), 'SQL 10.104: стенд PostgreSQL в check.sh');
+    assert.ok((tp.match(/eq\("заявки пункта 10\.104: /g) || []).length >= 12, 'IvaPatchTest: проверки 10.104');
   }
   // 10.75 (просьба владельца 14.10.2026): в «Настройках» — кнопка «Уведомления» (с 10.97 — открывает отдельную страницу);
   // внутри сверху «Открыть настройки уведомлений Android», потом какие присылать, потом расписание, потом всё остальное

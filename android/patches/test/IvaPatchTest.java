@@ -2516,6 +2516,47 @@ public class IvaPatchTest {
             eq("сотрудники 10.103: «Ещё пункты»", IvaStaffPatch.pointNames(java.util.Arrays.asList(a1, a2), s2.points, u1) + "|"
                 + IvaStaffPatch.pointNames(java.util.Arrays.asList(a1, a2), s2.points, "") + "|" + IvaStaffPatch.pointNames(null, s2.points, ""), "[Бердск]|[Склад, Бердск]|[]");
         }
+        {   // 10.104: заявки пункта у сотрудника (этап 3б «Сотрудники и пункты»)
+            eq("заявки пункта 10.104: запрос «Выдал» / «Вернули» — только номер из цифр и два состояния",
+                IvaStaffOrdersPatch.markBody(" 123 ", "rented") + "|" + IvaStaffOrdersPatch.markBody("7", "closed") + "|" + IvaStaffOrdersPatch.markBody("7", "new") + "|"
+                + IvaStaffOrdersPatch.markBody("1; drop", "rented") + "|" + IvaStaffOrdersPatch.markBody(null, "rented") + "|" + IvaStaffOrdersPatch.markBody("", "closed"),
+                "{\"p_part\":123,\"p_status\":\"rented\"}|{\"p_part\":7,\"p_status\":\"closed\"}|null|null|null|null");
+            eq("заявки пункта 10.104: кнопка и следующее состояние",
+                IvaStaffOrdersPatch.actionText("new") + ">" + IvaStaffOrdersPatch.next("new") + "|" + IvaStaffOrdersPatch.actionText("rented") + ">" + IvaStaffOrdersPatch.next("rented")
+                + "|" + IvaStaffOrdersPatch.actionText("closed") + ">" + IvaStaffOrdersPatch.next("closed") + "|" + IvaStaffOrdersPatch.next(null), "Выдал>rented|Вернули>closed|>|");
+            eq("заявки пункта 10.104: состояние текстом", IvaStaffOrdersPatch.statusText("new") + "|" + IvaStaffOrdersPatch.statusText("rented") + "|"
+                + IvaStaffOrdersPatch.statusText("closed") + "|" + IvaStaffOrdersPatch.statusText(null), "Новая|Выдана|Закрыта|");
+            eq("заявки пункта 10.104: подтверждение", IvaStaffOrdersPatch.confirmTitle("new") + "|" + IvaStaffOrdersPatch.confirmTitle("rented") + "|"
+                + IvaStaffOrdersPatch.confirmText("new", "Дрель Makita") + "|" + IvaStaffOrdersPatch.confirmText("rented", ""),
+                "Отметить «Выдал»?|Отметить «Вернули»?|Дрель Makita\nСрок аренды начнётся сейчас.|Заявка закроется, инструмент снова свободен.");
+            int[] n = IvaStaffOrdersPatch.counts(java.util.Arrays.asList("new", "rented", "new", "closed", "x", null));
+            eq("заявки пункта 10.104: вкладки и счётчики", n[0] + "," + n[1] + "," + n[2] + "|" + IvaStaffOrdersPatch.tabText(0, n) + "|" + IvaStaffOrdersPatch.tabText(2, n)
+                + "|" + IvaStaffOrdersPatch.tabText(1, new int[3]) + "|" + IvaStaffOrdersPatch.counts(null)[0], "2,1,1|Новые · 2|Закрыты · 1|Выданы|0");
+            eq("заявки пункта 10.104: с какой вкладки открыть", IvaStaffOrdersPatch.firstTab(new int[]{1, 3, 0}) + "|" + IvaStaffOrdersPatch.firstTab(new int[]{0, 3, 0})
+                + "|" + IvaStaffOrdersPatch.firstTab(new int[]{0, 0, 5}) + "|" + IvaStaffOrdersPatch.firstTab(null), "0|1|0|0");
+            eq("заявки пункта 10.104: пусто", IvaStaffOrdersPatch.emptyText(0) + "|" + IvaStaffOrdersPatch.emptyText(1) + "|" + IvaStaffOrdersPatch.emptyText(2),
+                "Новых заявок нет|Выданных сейчас нет|Закрытых за 7 дней нет");
+            eq("заявки пункта 10.104: дни", IvaStaffOrdersPatch.daysText(1) + "|" + IvaStaffOrdersPatch.daysText(3) + "|" + IvaStaffOrdersPatch.daysText(5) + "|"
+                + IvaStaffOrdersPatch.daysText(11) + "|" + IvaStaffOrdersPatch.daysText(21) + "|" + IvaStaffOrdersPatch.daysText(112), "1 день|3 дня|5 дней|11 дней|21 день|112 дней");
+            eq("заявки пункта 10.104: уведомление — только новые и только с правом «Получает уведомления»",
+                IvaStaffOrdersPatch.notifyIds(java.util.Arrays.asList("5", "4", "3", "2"), java.util.Arrays.asList("new", "new", "rented", "new"),
+                    java.util.Arrays.asList(true, false, true, true)) + "|" + IvaStaffOrdersPatch.notifyIds(null, null, null), "[5, 2]|[]");
+            eq("заявки пункта 10.104: заголовок и текст уведомления", IvaStaffOrdersPatch.noteTitle(1, "Склад") + "|" + IvaStaffOrdersPatch.noteTitle(1, " ") + "|"
+                + IvaStaffOrdersPatch.noteTitle(3, "Склад") + "|" + IvaStaffOrdersPatch.noteText(1, "Пила") + "|" + IvaStaffOrdersPatch.noteText(2, "Пила"),
+                "Новая заявка · Склад|Новая заявка|Новые заявки: 3|Пила|Откройте «Заявки пункта»");
+            eq("заявки пункта 10.104: кому проверять заявки", IvaStaffOrdersPatch.want("active", new boolean[]{true, false, false, false}) + "|"
+                + IvaStaffOrdersPatch.want("active", new boolean[]{false, false, false, true}) + "|" + IvaStaffOrdersPatch.want("active", new boolean[]{false, true, true, false}) + "|"
+                + IvaStaffOrdersPatch.want("invited", new boolean[]{true, true, true, true}) + "|" + IvaStaffOrdersPatch.want("active", null), "true|true|false|false|false");
+            eq("заявки пункта 10.104: ответы базы",
+                IvaStaffOrdersPatch.dbError("200", "") + "|"
+                + IvaStaffOrdersPatch.dbError("400", "{\"code\":\"P0001\",\"message\":\"Свою заявку выдаёт и принимает другой сотрудник или владелец\"}") + "|"
+                + IvaStaffOrdersPatch.dbError("400", "{\"message\":\"Заявка уже в другом состоянии — обновите список\"}") + "|"
+                + IvaStaffOrdersPatch.dbError("404", "{\"code\":\"PGRST202\"}") + "|" + IvaStaffOrdersPatch.dbError("401", "") + "|" + IvaStaffOrdersPatch.dbError(null, null),
+                "|Свою заявку выдаёт и принимает другой сотрудник или владелец|Заявка уже в другом состоянии — обновите список|"
+                + "Заявки пункта заработают после обновления базы (SQL 10.104)|Нет права — войдите заново|Не получилось — нет связи с сервером");
+            eq("заявки пункта 10.104: id уведомления не совпадает с другими", IvaStaffOrdersPatch.ID_NOTE != IvaNotifyPatch.ID_ORD && IvaStaffOrdersPatch.ID_NOTE != IvaNotifyPatch.ID_TEST
+                && IvaStaffOrdersPatch.ID_NOTE != IvaNotifyPatch.ID_UPD && IvaStaffOrdersPatch.ID_NOTE != IvaNotifyPatch.ID_MSG, true);
+        }
         if (fail > 0) { System.out.println("ошибок: " + fail); System.exit(1); }
         System.out.println("все проверки IvaPatch пройдены");
     }

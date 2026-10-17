@@ -523,6 +523,7 @@ public final class IvaNotifyPatch {
                 } catch (Throwable ignore) {
                 }
                 if (logged && !admin && !email.isEmpty()) try { checkRent(a, email, admin); } catch (Throwable ignore) {}   // 10.76
+                if (logged && !admin && !email.isEmpty()) try { IvaStaffOrdersPatch.check(a, email); } catch (Throwable ignore) {}   // 10.104: сотруднику
                 if (logged && !email.isEmpty()) try { IvaTestPatch.check(a, email, admin); } catch (Throwable ignore) {}   // 10.94
                 try { IvaPushPatch.sync(a, email, logged, admin); } catch (Throwable ignore) {   // 10.74: мгновенные (админам)
                 } finally {
@@ -942,6 +943,7 @@ public final class IvaNotifyPatch {
                     else if ("update".equals(open)) openUpdate(a, target);
                     else if ("rent".equals(open)) IvaOrderPatch.openById(a, target);     // 10.76: эта заявка
                     else if ("test".equals(open)) IvaTestPatch.openFromNote(a);          // 10.94: жёлтая кнопка в «Профиле»
+                    else if (IvaStaffOrdersPatch.OPEN.equals(open)) IvaStaffOrdersPatch.openFromNote(a);   // 10.104: «Заявки пункта»
                 } catch (Throwable ignore) {}
             }
         });
@@ -2325,6 +2327,7 @@ public final class IvaNotifyPatch {
         if (logged) try { checkMessages(c, email, admin, null); } catch (Throwable ignore) {}
         try { checkUpdate(c, admin); } catch (Throwable ignore) {}
         if (logged && !admin) try { checkRent(c, email, admin); } catch (Throwable ignore) {}   // 10.76
+        if (logged && !admin) try { IvaStaffOrdersPatch.check(c, email); } catch (Throwable ignore) {}   // 10.104: сотруднику
         if (logged) try { IvaTestPatch.check(c, email, admin); } catch (Throwable ignore) {}    // 10.94: пробная версия
     }
 }

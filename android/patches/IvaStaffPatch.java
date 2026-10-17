@@ -32,7 +32,7 @@ import java.util.Locale;
  *
  * Сотрудник (вошёл под своей почтой, не владелец проката): в кабинете — «Приглашение в сотрудники» с «Принять» /
  * «Отказаться»; после «Принять» — строка «Мой пункт» → страница: пункт(ы), адрес, время работы, телефон пункта, права.
- * Заявки пункта, выдача, инструмент и чат сотрудника — следующие сборки (этапы 3б и 3в).
+ * 10.104 (этап 3б): на странице «Мой пункт» — кнопка «Заявки пункта» (IvaStaffOrdersPatch). Инструмент и чат — этап 3в.
  *
  * Всё — функциями базы (SQL 20261028_staff.sql): писать в таблицы напрямую нельзя никому, база сама проверяет, что
  * пункт свой, человек — не владелец проката и не сотрудник другого. Без SQL — «заработает после обновления базы».
@@ -748,6 +748,16 @@ public class IvaStaffPatch {
     static void openMine(Activity a, Me m) {
         int cText = color(a, "text", 0xfff2f4f8), cGray = color(a, "gray", 0xff9aa1b0);
         IvaChiefPatch.Page pg = IvaChiefPatch.page(a, "Мой пункт", "Вы сотрудник «" + m.company + "». Права меняет владелец проката.", false);
+        if (IvaStaffOrdersPatch.want(m.status, m.r)) {                   // 10.104: заявки пункта — «Выдал» / «Вернули»
+            final Activity fa = a;
+            final String co = m.company;
+            TextView ord = IvaPickupPatch.addButton(a, color(a, "orange", 0xffff8f1f));
+            ord.setText(IvaStaffOrdersPatch.TITLE);
+            ord.setOnClickListener(new View.OnClickListener() { @Override public void onClick(View v) { try { IvaStaffOrdersPatch.open(fa, co); } catch (Throwable ignore) {} } });
+            LinearLayout.LayoutParams ol = new LinearLayout.LayoutParams(-1, -2);
+            ol.bottomMargin = dp(a, 10);
+            pg.list.addView(ord, ol);
+        }
         for (IvaPickupPatch.Point p : m.points) {
             LinearLayout c = IvaChiefPatch.card(a);
             c.addView(IvaChiefPatch.text(a, IvaToolPointPatch.chipText(p), 16f, cText, true));
