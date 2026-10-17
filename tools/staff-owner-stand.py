@@ -7,6 +7,8 @@
 # «на одобрение» / «сразу» по пункту, правит своё; владелец, админ и клиент — как раньше; чужое в чужой прокат
 # не пишется; таблица в конце — порядок триггеров, текст fn_tool_owner, проба ✅; откат из шапки.
 # Стенд Б — без trg_tool_owner: файл ничего не меняет (как 10.116). Стенд В — без 20261108: понятная остановка.
+# Стенд Г — 20261110: как таблица 1109 из рабочей базы (ссылка tools_cat_fkey, у старых объявлений категория не из
+# справочника): проба отвечала 23503 — после 1110 проба ✅, сотрудник публикует; RLS проверяется раньше ссылок.
 #
 # Запуск: PG_PY=/путь/к/python-с-pgserver bash tools/check.sh   или   python tools/staff-owner-stand.py
 import ast
@@ -52,6 +54,7 @@ LIVE = rd('supabase/migrations/20261106_staff_live.sql')
 CHK = rd('supabase/migrations/20261107_staff_publish_check.sql')
 PROBE = rd('supabase/migrations/20261108_staff_publish_probe.sql')
 SQL = rd('supabase/migrations/20261109_staff_owner_final.sql')
+CATF = rd('supabase/migrations/20261110_staff_probe_cat.sql')
 BASELINE = const('tools/category-tree-stand.py', 'BASELINE')
 EXTRA = const('tools/tool-points-stand.py', 'EXTRA')
 PROD = const('tools/order-points-stand.py', 'PROD')
@@ -295,6 +298,76 @@ for s_ in (RENT, PICK, TEL, TP, OP, STAFF, SO, ST, ADM, MANAGE, PING, PUBL, PICK
 st, out = q(srv, SQL)
 check('без SQL 20261108 — понятная остановка', st == 'ERR' and '20261108_staff_publish_probe.sql' in out, out[-400:])
 check('и ничего не создано', val(srv, "select count(*) from pg_trigger where tgname = 'zz_iva_staff_owner'") == '0')
+srv.cleanup()
+
+# ═══════════════ Стенд Г: 20261110 — ссылка tools_cat_fkey (как в таблице 1109 из рабочей базы) ═══════════════
+def qc(srv):
+    st, out = q(srv, CATF)
+    return st, re.sub(r'[ \t]*\|[ \t]*', ' | ', out)
+
+
+FK = ("insert into public.cats(key, title, sort, active) values ('power', 'Электроинструмент', 1, true), "
+      "('construction', 'Стройоборудование', 2, true), ('garden', 'Садовый инструмент', 3, true) on conflict do nothing;\n"
+      "alter table public.tools add constraint tools_cat_fkey foreign key (cat) references public.cats(key) not valid;\n"
+      "create unique index subcats_key_u on public.subcats(key);\n"
+      "alter table public.tools add constraint tools_sub_fkey foreign key (sub) references public.subcats(key) not valid;\n")
+srv = mk()
+check('база как в рабочей: чужой trg_tool_owner, 20261109', base(srv) and q(srv, SQL)[0] == 'OK')
+SKLAD, BERDSK, PETR, IVAN = people(srv)
+check('старое объявление владельца с категорией не из справочника («drill»)', add(srv, 'admin@x.ru', 'Старая')[0] == 'OK')
+check('ссылки tools_cat_fkey / tools_sub_fkey (NOT VALID, как бывает в рабочей)', q(srv, FK)[0] == 'OK')
+check('проба до 1110 — как в таблице владельца: 23503 tools_cat_fkey', tcode(srv, 'petr@x.ru') == 'error'
+      and '23503' in ttext(srv, 'petr@x.ru') and 'tools_cat_fkey' in ttext(srv, 'petr@x.ru'), ttext(srv, 'petr@x.ru'))
+st, out = as_(srv, 'petr@x.ru', "insert into public.tools(name, active, cat, owner_email, price) values ('Без 1109 rls', true, 'drill', 'petr@x.ru', 1)")
+check('и это значит — правила доступа пустили: настоящая запись с той же категорией тоже 23503, не 42501', st == 'ERR'
+      and 'tools_cat_fkey' in out and 'row-level security' not in out, out[-300:])
+st, out = as_(srv, 'petr@x.ru', "insert into public.tools(name, active, cat, owner_email, price) values ('Дрель из формы', true, 'power', 'petr@x.ru', 400)")
+check('сотрудник публикует с категорией из справочника: прокат владельца, «Склад», на одобрение', st == 'OK'
+      and tool(srv, 'Дрель из формы') == 'admin@x.ru|Склад|false|pending', (tool(srv, 'Дрель из формы'), out[-300:]))
+st, out = qc(srv)
+check('20261110_staff_probe_cat.sql применяется без ошибок', st == 'OK', out[-900:])
+check('таблица 1110: установлено ✅, zz_iva_staff_owner ✅, ссылки показаны, проба Петра ✅ с категорией из справочника',
+      'установлена | ✅' in out and 'на месте | ✅' in out and 'tools_cat_fkey | FOREIGN KEY (cat) REFERENCES cats(key)' in out
+      and 'NOT VALID' in out and 'сотрудник petr@x.ru | ✅ проходит' in out and 'категория пробы: power' in out
+      and 'ivan@x.ru' not in out and '❌' not in out, out[-1500:])
+check('повторный запуск — без ошибок', qc(srv)[0] == 'OK')
+check('проба Петра — ok, категория из справочника', tcode(srv, 'petr@x.ru') == 'ok'
+      and uval(srv, 'petr@x.ru', "select public.iva_staff_publish_try() ->> 'cat'") == 'power')
+check('проба ничего не оставляет', val(srv, "select count(*) from public.tools where name = 'Проверка публикации'") == '0')
+check('iva_probe_fix_refs: только cat/sub/cat_label; лишние поля не трогает; anon — нет',
+      val(srv, """select public.iva_probe_fix_refs('{"cat":"zzz","sub":"","owner_email":"x@y","name":"n"}')::text""")
+      == '{"cat": "power", "name": "n", "owner_email": "x@y"}'
+      and val(srv, "select has_function_privilege('anon', 'public.iva_probe_fix_refs(jsonb)', 'EXECUTE')") == 'f')
+q(srv, "update public.tools set active = false")
+check('нет выложенных — категория всё равно из справочника', val(srv, """select public.iva_probe_fix_refs('{"cat":"drill"}') ->> 'cat'""")
+      in ('power', 'construction', 'garden') and val(srv, """select public.iva_probe_fix_refs('{"cat":"drill"}') ->> 'cat'""") != 'drill')
+q(srv, "update public.tools set active = true")
+# если правила доступа не пускают — проба по-прежнему говорит про правила, а не про ссылки
+q(srv, 'DROP TRIGGER IF EXISTS zz_iva_staff_owner ON public.tools;')
+check('без zz_iva_staff_owner проба снова называет trg_tool_owner (не «ссылки»)', tcode(srv, 'petr@x.ru') == 'policy'
+      and 'trg_tool_owner' in ttext(srv, 'petr@x.ru'), ttext(srv, 'petr@x.ru'))
+st, out = qc(srv)
+check('и таблица 1110 тогда честно показывает ❌ у триггера и у пробы', st == 'OK' and 'на месте | ❌' in out
+      and 'сотрудник petr@x.ru | ❌' in out, out[-900:])
+q(srv, SQL)
+# ссылка, которую проба исправить не может → честный код data
+q(srv, "create table public.iva_names(n text primary key); alter table public.tools add constraint tools_name_fkey foreign key (name) references public.iva_names(n) not valid;")
+check('отказ по ссылке, которую проба не правит — код data: «правила доступа пускают»', tcode(srv, 'petr@x.ru') == 'data'
+      and 'правила доступа запись сотрудника пускают' in ttext(srv, 'petr@x.ru').lower(), ttext(srv, 'petr@x.ru'))
+q(srv, "alter table public.tools drop constraint tools_name_fkey")
+# откат: 1108 заново, затем DROP
+st, out = q(srv, PROBE + "\nDROP FUNCTION IF EXISTS public.iva_probe_fix_refs(jsonb);\nNOTIFY pgrst, 'reload schema';")
+check('откат из шапки (1108 заново + DROP) — проба снова как в 1108', st == 'OK' and 'ОТКАТ' in CATF
+      and 'DROP FUNCTION IF EXISTS public.iva_probe_fix_refs(jsonb);' in CATF and tcode(srv, 'petr@x.ru') == 'error', out[-400:])
+check('после отката — повторное применение 1110 снова ✅', qc(srv)[0] == 'OK' and tcode(srv, 'petr@x.ru') == 'ok')
+srv.cleanup()
+
+# 1110 без 1109 — понятная остановка
+srv = mk()
+base(srv)
+st, out = q(srv, CATF)
+check('1110 без 20261109 — понятная остановка, ничего не создано', st == 'ERR' and '20261109_staff_owner_final.sql' in out
+      and val(srv, "select count(*) from pg_proc where proname = 'iva_probe_fix_refs'") == '0', out[-400:])
 srv.cleanup()
 
 print('Итог: %d ошибок' % fails)

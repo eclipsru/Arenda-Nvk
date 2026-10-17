@@ -2565,6 +2565,17 @@ try {
       && !/drop\s+trigger\s+(if\s+exists\s+)?trg_tool_owner|drop\s+function[^;]*fn_tool_owner|create\s+policy|drop\s+policy/i.test(fx.replace(/--[^\n]*/g, ''))
       && chk.includes('tools/staff-owner-stand.py') && fs.includes('20261109_staff_owner_final.sql') && sq.includes("'zz_iva_staff_owner', 'zzz_iva_probe'"),
       'SQL 20261109: владелец объявления сотрудника — последним триггером, только сотруднику; trg_tool_owner и правила доступа не трогаем; стенд в check.sh');
+    // таблица 20261109 из рабочей базы: проба ответила 23503 tools_cat_fkey — правила доступа уже пускают (RLS раньше ссылок),
+    // а категория пробы не из справочника. 20261110: категория пробы — из справочника, на который ссылается tools
+    const fc = R('supabase/migrations/20261110_staff_probe_cat.sql'), fcn = fc.replace(/--[^\n]*/g, '');
+    assert.ok(fc.includes('CREATE OR REPLACE FUNCTION public.iva_probe_fix_refs(p_body jsonb)') && fc.includes("a.attname in ('cat', 'sub', 'cat_label')")
+      && fc.includes('REVOKE ALL ON FUNCTION public.iva_probe_fix_refs(jsonb) FROM public, anon;')
+      && fc.includes('  body := public.iva_probe_fix_refs(body);') && fc.includes("elsif st2 = '23503' then\n    code := 'data';")
+      && !/SECURITY DEFINER/.test(fcn.split('CREATE OR REPLACE FUNCTION public.iva_staff_publish_try()')[1].split('$function$')[0])
+      && !/drop\s+trigger|create\s+trigger|create\s+policy|drop\s+policy|alter\s+table|delete\s+from|update\s+public\./i.test(fcn)
+      && /SELECT check_name, result FROM iva_probe_out ORDER BY ord, n, check_name;\s*$/.test(fc)
+      && fs.includes('20261110_staff_probe_cat.sql'),
+      'SQL 20261110: проба — категория из справочника, отказ по ссылке — код data; от имени вошедшего; таблицы и правила не трогает; стенд');
     assert.ok(/NEW_NAME: '10\.118'/.test(wf) && /NEW_CODE: '192'/.test(wf), 'сборка 10.118 (192)');
     assert.ok((tp.match(/eq\("проба 10\.118: /g) || []).length >= 8, 'IvaPatchTest: проверки 10.118');
   }
