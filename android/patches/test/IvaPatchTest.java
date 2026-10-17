@@ -2570,6 +2570,7 @@ public class IvaPatchTest {
         live115();                                                    // 10.115: правки доступа сразу, «Сотрудники»
         live116();                                                    // 10.116: причина отказа сотруднику, «на одобрение», переходы
         cab117();                                                     // 10.117: комиссия без скачков, роль и архив в кабинете
+        try118();                                                     // 10.118: пробная запись называет причину отказа
         if (fail > 0) { System.out.println("ошибок: " + fail); System.exit(1); }
         System.out.println("все проверки IvaPatch пройдены");
     }
@@ -3237,5 +3238,33 @@ public class IvaPatchTest {
             IvaClientPatch.authHealTab("profile") + "|" + IvaClientPatch.authHealTab("orders") + "|" + IvaClientPatch.authHealTab("home") + "|" + IvaClientPatch.authHealTab(""),
             "true|true|false|false");
         eq("ключ 10.117: первая проверка через 5 с после запуска", IvaClientPatch.AUTH_FIRST_MS, 5000L);
+    }
+
+    /** 10.118: сотруднику отказали в публикации — причина по пробной записи базы (iva_staff_publish_try). */
+    static void try118() {
+        String rls = "new row violates row-level security policy for table \"tools\"";
+        String why = IvaStaffToolsPatch.tryText("Не пускает ограничивающее правило: only_own.", "42501: " + rls);
+        eq("проба 10.118: фраза и ответ базы отдельной строкой", why,
+            "Не пускает ограничивающее правило: only_own.\n\nОтвет базы: 42501: " + rls);
+        eq("проба 10.118: запись проходит — только фраза; ответ уже в фразе — не повторяем",
+            IvaStaffToolsPatch.tryText(" Проходит. ", "") + "|" + IvaStaffToolsPatch.tryText("Стоп: x", "x") + "|" + IvaStaffToolsPatch.tryText("Нет права.", null),
+            "Проходит.|Стоп: x|Нет права.");
+        eq("проба 10.118: нет фразы — пусто (тогда как в 10.116)",
+            IvaStaffToolsPatch.tryText("", "42501: x") + "|" + IvaStaffToolsPatch.tryText(null, null) + "|" + IvaStaffToolsPatch.tryText("  ", ""), "||");
+        eq("проба 10.118: ответ не разобран — пусто", IvaStaffToolsPatch.tryOf("not json") + "|" + IvaStaffToolsPatch.tryOf(null) + "|" + IvaStaffToolsPatch.tryOf(""), "||");
+        StringBuilder big = new StringBuilder();
+        for (int i = 0; i < 50; i++) big.append("ошибка ");
+        String line = IvaStaffToolsPatch.rawLine(big.toString() + "\nконец");
+        eq("проба 10.118: ответ базы — одной строкой, не длиннее 240 знаков",
+            line.startsWith("Ответ базы: ошибка") + "|" + line.endsWith("…") + "|" + !line.contains("\n") + "|"
+            + (line.length() == "Ответ базы: ".length() + IvaStaffToolsPatch.RAW_MAX + 1), "true|true|true|true");
+        eq("проба 10.118: окно — причина и ответ на саму публикацию",
+            IvaStaffToolsPatch.refusalText(2, "Проходит.", rls), "Объявление не сохранилось: база не пустила запись.\n\nПроходит.\n\nОтвет базы: " + rls);
+        eq("проба 10.118: ответ базы уже в причине — второй раз не пишем",
+            IvaStaffToolsPatch.refusalText(2, why, rls).split("Ответ базы:", -1).length + "|"
+            + IvaStaffToolsPatch.refusalText(2, "x", "").endsWith("\n\nx") + "|" + IvaStaffToolsPatch.refusalText(2, "x", null).endsWith("\n\nx"), "2|true|true");
+        eq("проба 10.118: без причины — общая фраза называет 20261108",
+            IvaStaffToolsPatch.WHY_UNKNOWN.contains("20261108_staff_publish_probe.sql"), true);
+        eq("проба 10.118: адрес функции", IvaStaffToolsPatch.TRY_RPC, "/rest/v1/rpc/iva_staff_publish_try");
     }
 }

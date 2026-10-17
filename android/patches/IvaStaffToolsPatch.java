@@ -784,8 +784,38 @@ public class IvaStaffToolsPatch {
     static final String WHY_NO_RIGHT = "База не видит у вас права «Выкладывает инструмент»: приглашение не принято, право выключено "
         + "или прокат владельца приостановлен. Владелец проверяет: «Кабинет» → «Настройка проката» → «Сотрудники».";
     static final String WHY_UNKNOWN = "Права сотрудника в базе есть, но запись не прошла. Точную причину покажет обновление базы — "
-        + "владельцу: выполнить в Supabase 20261107_staff_publish_check.sql (внизу будет причина по каждому сотруднику).";
+        + "владельцу: выполнить в Supabase 20261108_staff_publish_probe.sql (внизу будет причина по каждому сотруднику).";
     static volatile long whyAt;
+
+    // 10.118 (снимок владельца 17.10.2026: «база не пустила запись», а 20261107 — «В базе всё в порядке»): 20261107 смотрит
+    // только, есть ли право и пункт, а база отказывает на самой записи — правилами доступа после всех триггеров.
+    // Теперь база делает пробную запись как из формы (всегда с откатом) и называет шаг: правило, триггер, владелец, пункт.
+    static final String TRY_RPC = "/rest/v1/rpc/iva_staff_publish_try";
+    static final int RAW_MAX = 240;
+
+    /** Ответ iva_staff_publish_try: {"code","text","raw"} → фраза (+ ответ базы); "" — не разобрали (тогда как в 10.116). */
+    static String tryOf(String body) {
+        try {
+            String b = body == null ? "" : body.trim();
+            if (b.startsWith("[")) b = new org.json.JSONArray(b).optString(0, "");
+            JSONObject o = new JSONObject(b);
+            return tryText(str(o, "text"), str(o, "raw"));
+        } catch (Throwable e) { return ""; }
+    }
+
+    /** Фраза пробы + ответ базы отдельной строкой (если его нет в фразе). */
+    static String tryText(String t, String raw) {
+        String x = t == null ? "" : t.trim(), r = raw == null ? "" : raw.trim();
+        if (x.isEmpty()) return "";
+        return r.isEmpty() || x.contains(r) ? x : x + "\n\n" + rawLine(r);
+    }
+
+    /** «Ответ базы: …» — коротко (для снимка владельцу). */
+    static String rawLine(String raw) {
+        String r = raw == null ? "" : raw.trim().replace('\n', ' ');
+        if (r.length() > RAW_MAX) r = r.substring(0, RAW_MAX) + "…";
+        return "Ответ базы: " + r;
+    }
 
     /** Какой шаг не прошёл: 2 — запись инструмента (в ответе таблица tools), 1 — фото (хранилище), 0 — неизвестно. */
     static int refusalStep(String msg) {
@@ -819,8 +849,14 @@ public class IvaStaffToolsPatch {
         return head + "\n\n" + (why == null || why.isEmpty() ? WHY_UNKNOWN : why);
     }
 
+    /** 10.118: и что база ответила самой публикации (если этого ещё нет в причине). */
+    static String refusalText(int step, String why, String msg) {
+        String t = refusalText(step, why), m = msg == null ? "" : msg.trim();
+        return m.isEmpty() || t.contains(m) || t.contains("Ответ базы:") ? t : t + "\n\n" + rawLine(m);
+    }
+
     /** Из IvaPatch.publishError (главный поток): спросить базу в фоне и показать окно. */
-    static void explainRefusal(final Activity a, String msg) {
+    static void explainRefusal(final Activity a, final String msg) {
         long now = System.currentTimeMillis();
         if (a == null || a.isFinishing() || now - whyAt < 3000) return;
         whyAt = now;
@@ -829,14 +865,18 @@ public class IvaStaffToolsPatch {
             @Override public void run() {
                 String why = "";
                 try {
-                    String[] r = IvaClientPatch.apiCall(a, WHY_RPC, "POST", "{}", true);
-                    if (r != null && r[0].startsWith("2")) why = whyOf(r.length > 1 ? r[1] : "");
+                    String[] t = IvaClientPatch.apiCall(a, TRY_RPC, "POST", "{}", true);      // 10.118: проба записи
+                    if (t != null && t[0].startsWith("2")) why = tryOf(t.length > 1 ? t[1] : "");
+                    if (why.isEmpty()) {
+                        String[] r = IvaClientPatch.apiCall(a, WHY_RPC, "POST", "{}", true);
+                        if (r != null && r[0].startsWith("2")) why = whyOf(r.length > 1 ? r[1] : "");
+                    }
                     if (why.isEmpty()) {
                         String[] c = IvaClientPatch.apiCall(a, CAT_RPC, "POST", "{}", true);
                         why = c == null ? catWhy("", "") : catWhy(c[0], c.length > 1 ? c[1] : "");
                     }
                 } catch (Throwable e) { why = catWhy("", ""); }
-                final String text = refusalText(step, why);
+                final String text = refusalText(step, why, msg);
                 a.runOnUiThread(new Runnable() {
                     @Override public void run() { try { IvaAccessPatch.info(a, REFUSED_TITLE, text); } catch (Throwable ignore) {} }
                 });
