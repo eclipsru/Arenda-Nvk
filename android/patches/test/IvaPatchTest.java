@@ -2565,6 +2565,7 @@ public class IvaPatchTest {
         access110();                                                  // 10.110: убрали админа / сотрудника — сразу клиент
         summary111();                                                 // 10.111: в «Сводке» нет раздела «Без пункта»
         realtime112();                                                // 10.112: роль и приглашение — моментально (Realtime)
+        logo113();                                                    // 10.113: вид раздела с логотипом, выключатель у пункта
         if (fail > 0) { System.out.println("ошибок: " + fail); System.exit(1); }
         System.out.println("все проверки IvaPatch пройдены");
     }
@@ -3005,5 +3006,50 @@ public class IvaPatchTest {
         StringBuilder b = new StringBuilder();
         for (String[] r : rows) b.append(r[0]).append('=').append(r[1]).append(';');
         return b.toString();
+    }
+
+    /** 10.113: «Вид раздела с логотипом»; «Инструменты сотрудников» — у каждого пункта; без email пункта. */
+    static void logo113() {
+        eq("логотип 10.113: вид по умолчанию — админ «как у админов», остальные «как у клиентов»; выбор сохраняется",
+            IvaLogoPatch.norm("", true) + "|" + IvaLogoPatch.norm(null, false) + "|" + IvaLogoPatch.norm(" client ", true) + "|"
+                + IvaLogoPatch.norm("admin", false) + "|" + IvaLogoPatch.norm("чужое", true),
+            "admin|client|client|admin|admin");
+        eq("логотип 10.113: что открывает — гость штатно, админ по выбору, сотрудник «Каталог» по выбору, клиент — раздел клиента",
+            IvaLogoPatch.target(false, false, false, "client") + "" + IvaLogoPatch.target(false, true, false, "client")
+                + IvaLogoPatch.target(true, true, false, "admin") + IvaLogoPatch.target(true, true, false, "client")
+                + IvaLogoPatch.target(true, true, true, "client") + IvaLogoPatch.target(true, false, true, "admin")
+                + IvaLogoPatch.target(true, false, true, "client") + IvaLogoPatch.target(true, false, false, "admin"),
+            "00011211");
+        eq("логотип 10.113: строка «Мои инструменты проката» — только админу с видом «как у клиентов»",
+            IvaLogoPatch.cabinetRow(true, true, "client") + "|" + IvaLogoPatch.cabinetRow(true, true, "admin") + "|"
+                + IvaLogoPatch.cabinetRow(true, false, "client") + "|" + IvaLogoPatch.cabinetRow(false, true, "client"),
+            "true|false|false|false");
+        eq("логотип 10.113: подписи — два образца и вкладки",
+            IvaLogoPatch.sub("client") + " / " + IvaLogoPatch.sub("admin") + " / " + IvaLogoPatch.TITLE,
+            "Как у клиентов: «Избранное» и «Мои инструменты» / Как у админов: «Мой инструмент» и «Добавить инструмент» / Вид раздела с логотипом");
+        IvaPickupPatch.Point p = new IvaPickupPatch.Point();
+        p.name = " Склад  на Ленина "; p.address = "Новосибирск, Ленина, 5"; p.email = "old@x.ru"; p.tel = "+7 900 123-45-67";
+        String b1 = IvaPickupPatch.body(p, true, true), b0 = IvaPickupPatch.body(p, false, true);
+        p.publish = "now";
+        String b2 = IvaPickupPatch.body(p, false, true);
+        eq("пункт 10.113: запись — без email, с выключателем (по умолчанию «после одобрения»), телефон — если есть в базе",
+            !b1.contains("email") + "|" + b1.contains(",\"tel\":\"+7 900 123-45-67\",\"staff_publish\":\"approve\"}") + "|" + b0.contains("tel")
+                + "|" + b2.endsWith(",\"staff_publish\":\"now\"}") + "|" + b1.startsWith("{\"name\":\"Склад на Ленина\""),
+            "true|true|false|true|true");
+        eq("пункт 10.113: без SQL 10.113 — прежняя запись (с email)", IvaPickupPatch.body(p, true, false).equals(IvaPickupPatch.body(p, true))
+            + "|" + IvaPickupPatch.body(p, false, false).contains("\"email\":\"old@x.ru\""), "true|true");
+        eq("пункт 10.113: столбцы и ответ «колонки нет»",
+            IvaPickupPatch.listPath("a@x.ru", true, true).contains("close_min,email,created_at,tel,staff_publish&") + "|"
+                + IvaPickupPatch.listPath("a@x.ru", true, false).equals(IvaPickupPatch.listPath("a@x.ru", true)) + "|"
+                + IvaPickupPatch.noPub("400", "{\"code\":\"42703\",\"message\":\"column iva_pickup_points.staff_publish does not exist\"}") + "|"
+                + IvaPickupPatch.noPub("400", "{\"code\":\"42703\",\"message\":\"column iva_pickup_points.tel does not exist\"}") + "|"
+                + IvaPickupPatch.dbError("400", "{\"code\":\"PGRST204\",\"message\":\"Could not find the 'staff_publish' column\"}"),
+            "true|true|true|false|" + IvaPickupPatch.NO_PUB);
+        eq("пункт 10.113: строка на карточке и разбор режима",
+            IvaPickupPatch.publishLine("now") + " / " + IvaPickupPatch.publishLine("approve") + " / " + IvaPickupPatch.publishOf(null)
+                + IvaPickupPatch.publishOf(" now ") + IvaPickupPatch.publishOf("x"),
+            "Инструменты сотрудников: сразу, без одобрения / Инструменты сотрудников: после вашего одобрения / approvenowapprove");
+        // разбор ответа (org.json) здесь — заглушки Android; пустой email и режим проверяет стенд и сторож
+        eq("пункт 10.113: общей строки «Инструменты сотрудников» в «Настройке проката» нет", IvaStaffToolsPatch.MODE_ROW, false);
     }
 }
