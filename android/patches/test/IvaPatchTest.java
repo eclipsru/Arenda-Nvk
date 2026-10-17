@@ -2564,6 +2564,7 @@ public class IvaPatchTest {
         avatarEdit109();                                              // 10.109: редактировать аватарку, галерея вместо проводника
         access110();                                                  // 10.110: убрали админа / сотрудника — сразу клиент
         summary111();                                                 // 10.111: в «Сводке» нет раздела «Без пункта»
+        realtime112();                                                // 10.112: роль и приглашение — моментально (Realtime)
         if (fail > 0) { System.out.println("ошибок: " + fail); System.exit(1); }
         System.out.println("все проверки IvaPatch пройдены");
     }
@@ -2623,6 +2624,141 @@ public class IvaPatchTest {
     }
 
     /** 10.107: «кто выдал / кто принял», «Сводка по пунктам», имя сотрудника в чате владельца (этап 4). */
+    @SuppressWarnings("unchecked")
+    static void realtime112() {
+        // разбор JSON без org.json
+        Object j = IvaRealtimePatch.Json.parse(" {\"a\":[1,2.5,-3e2,true,false,null],\"b\":{\"c\":\"x\\\"y\\\\z\\n\\u0416\"},\"d\":[]} ");
+        java.util.Map<String, Object> jm = (java.util.Map<String, Object>) j;
+        String bad = "";
+        for (String b : new String[]{"", "{", "{\"a\":}", "[1,]x", "\"abc", "{\"a\":1}}"}) {
+            try { IvaRealtimePatch.Json.parse(b); bad += "!" + b; } catch (RuntimeException e) { bad += "."; }
+        }
+        eq("realtime 10.112: разбор JSON — числа, строки с экранированием, вложенные, ошибки",
+            jm.get("a") + "|" + ((java.util.Map<String, Object>) jm.get("b")).get("c") + "|" + jm.get("d") + "|" + bad,
+            "[1, 2.5, -300.0, true, false, null]|x\"y\\z\nЖ|[]|......");
+        // сообщения Phoenix 1.0.0 — как у supabase-js
+        java.util.Map<String, Object> jn = (java.util.Map<String, Object>) IvaRealtimePatch.Json.parse(IvaRealtimePatch.joinMsg(" Ivan@Mail.RU ", "tok\"1"));
+        java.util.Map<String, Object> pl = (java.util.Map<String, Object>) jn.get("payload");
+        java.util.Map<String, Object> cf = (java.util.Map<String, Object>) pl.get("config");
+        java.util.Map<String, Object> pc = (java.util.Map<String, Object>) ((java.util.List<Object>) cf.get("postgres_changes")).get(0);
+        eq("realtime 10.112: вход в канал — своя строка iva_role_ping, ключ входа, не приватный",
+            jn.get("topic") + "|" + jn.get("event") + "|" + jn.get("ref") + "|" + jn.get("join_ref") + "|" + pc.get("event") + "|" + pc.get("schema") + "|"
+            + pc.get("table") + "|" + pc.get("filter") + "|" + cf.get("private") + "|" + pl.get("access_token"),
+            "realtime:iva_role|phx_join|1|1|*|public|iva_role_ping|email=eq.ivan@mail.ru|false|tok\"1");
+        java.util.Map<String, Object> hb = (java.util.Map<String, Object>) IvaRealtimePatch.Json.parse(IvaRealtimePatch.heartbeatMsg(7));
+        java.util.Map<String, Object> tk = (java.util.Map<String, Object>) IvaRealtimePatch.Json.parse(IvaRealtimePatch.tokenMsg("new", 8));
+        eq("realtime 10.112: heartbeat и новый ключ (10.69)",
+            hb.get("topic") + "|" + hb.get("event") + "|" + hb.get("ref") + "|" + tk.get("topic") + "|" + tk.get("event") + "|"
+            + ((java.util.Map<String, Object>) tk.get("payload")).get("access_token") + "|" + IvaRealtimePatch.path("k") + "|" + IvaRealtimePatch.host(),
+            "phoenix|heartbeat|7|realtime:iva_role|access_token|new|/realtime/v1/websocket?apikey=k&vsn=1.0.0|wdxdeatphizclskfmfxi.supabase.co");
+        String T = "\"topic\":\"realtime:iva_role\"";
+        eq("realtime 10.112: ответы сервера — подписка, событие, ошибки, чужое",
+            IvaRealtimePatch.classify("{\"event\":\"phx_reply\",\"payload\":{\"response\":{\"postgres_changes\":[{\"id\":5,\"event\":\"*\"}]},\"status\":\"ok\"},\"ref\":\"1\"," + T + "}") + ","
+            + IvaRealtimePatch.classify("{\"event\":\"phx_reply\",\"payload\":{\"response\":{\"reason\":\"bad\"},\"status\":\"error\"},\"ref\":\"1\"," + T + "}") + ","
+            + IvaRealtimePatch.classify("{\"event\":\"postgres_changes\",\"payload\":{\"data\":{\"type\":\"UPDATE\"},\"ids\":[5]},\"ref\":null," + T + "}") + ","
+            + IvaRealtimePatch.classify("{\"event\":\"system\",\"payload\":{\"extension\":\"postgres_changes\",\"status\":\"ok\"},\"ref\":null," + T + "}") + ","
+            + IvaRealtimePatch.classify("{\"event\":\"system\",\"payload\":{\"message\":\"Token has expired\",\"status\":\"error\"},\"ref\":null," + T + "}") + ","
+            + IvaRealtimePatch.classify("{\"event\":\"phx_close\",\"payload\":{},\"ref\":\"1\"," + T + "}") + ","
+            + IvaRealtimePatch.classify("{\"event\":\"phx_reply\",\"payload\":{\"response\":{},\"status\":\"ok\"},\"ref\":\"3\",\"topic\":\"phoenix\"}") + ","
+            + IvaRealtimePatch.classify("{\"event\":\"phx_reply\",\"payload\":{\"response\":{},\"status\":\"ok\"},\"ref\":\"4\"," + T + "}") + ","
+            + IvaRealtimePatch.classify("{\"event\":\"postgres_changes\",\"payload\":{},\"topic\":\"realtime:other\"}") + ","
+            + IvaRealtimePatch.classify("не json"),
+            "1,2,3,4,5,6,0,0,0,0");
+        eq("realtime 10.112: переподключение — 2 с, 5 с, 15 с … не реже 5 минут",
+            IvaRealtimePatch.retryMs(0) + "," + IvaRealtimePatch.retryMs(1) + "," + IvaRealtimePatch.retryMs(2) + "," + IvaRealtimePatch.retryMs(3) + ","
+            + IvaRealtimePatch.retryMs(6) + "," + IvaRealtimePatch.retryMs(50),
+            "2000,2000,5000,15000,300000,300000");
+        String acc;
+        try { acc = IvaRealtimePatch.acceptFor("dGhlIHNhbXBsZSBub25jZQ=="); } catch (Exception e) { acc = e.toString(); }
+        eq("realtime 10.112: WebSocket — ключ из RFC 6455 и base64",
+            acc + "|" + IvaRealtimePatch.b64(new byte[0]) + "|" + IvaRealtimePatch.b64("f".getBytes()) + "|" + IvaRealtimePatch.b64("fo".getBytes()) + "|" + IvaRealtimePatch.b64("foobar".getBytes()),
+            "s3pPLMBiTxaQ9kYGzzhZRbK+xOo=||Zg==|Zm8=|Zm9vYmFy");
+        eq("realtime 10.112: права сотрудника поменялись — страницы пункта открываются заново",
+            IvaAccessPatch.rightsChanged(new boolean[]{true, true, false, false}, false, new boolean[]{true, true, false, false}, false) + ","
+            + IvaAccessPatch.rightsChanged(new boolean[]{true, true, false, false}, false, new boolean[]{true, false, false, false}, false) + ","
+            + IvaAccessPatch.rightsChanged(new boolean[]{true, true, false, false}, false, new boolean[]{true, true, false, false}, true),
+            "false,true,true");
+        eq("realtime 10.112: WebSocket с настоящим сервером (кадры, маска, ping, части, 126, закрытие)", wsStand(true), "ok");
+        eq("realtime 10.112: WebSocket — чужой ответ на рукопожатие не принимается", wsStand(false), "отказ");
+    }
+
+    /** Маленький WebSocket-сервер на 127.0.0.1: принимает рукопожатие, читает кадр клиента (с маской), шлёт ping,
+     *  сообщение из двух частей, длинное (126) и закрывает. good=false — неверный Sec-WebSocket-Accept. */
+    static String wsStand(final boolean good) {
+        try {
+            final java.net.ServerSocket ss = new java.net.ServerSocket(0, 1, java.net.InetAddress.getByName("127.0.0.1"));
+            final String[] got = {"", "", ""};
+            Thread srv = new Thread(new Runnable() {
+                @Override public void run() {
+                    try (java.net.Socket c = ss.accept()) {
+                        c.setSoTimeout(5000);
+                        java.io.InputStream in = c.getInputStream();
+                        java.io.OutputStream out = c.getOutputStream();
+                        StringBuilder h = new StringBuilder();
+                        while (!h.toString().endsWith("\r\n\r\n")) { int b = in.read(); if (b < 0) return; h.append((char) b); }
+                        got[0] = h.substring(0, h.indexOf("\r\n"));
+                        String key = "";
+                        for (String l : h.toString().split("\r\n")) if (l.toLowerCase().startsWith("sec-websocket-key:")) key = l.substring(18).trim();
+                        String acc = good ? IvaRealtimePatch.acceptFor(key) : "AAAA";
+                        out.write(("HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: " + acc + "\r\n\r\n").getBytes("US-ASCII"));
+                        out.flush();
+                        if (!good) return;
+                        got[1] = new String(frame(in, null), "UTF-8");          // текст клиента
+                        out.write(new byte[]{(byte) 0x89, 2, 'h', 'i'});         // ping «hi»
+                        out.write(new byte[]{(byte) 0x01, 3, 'a', 'b', 'c'});    // текст, часть 1
+                        out.write(new byte[]{(byte) 0x80, 3, 'd', 'e', 'f'});    // часть 2 (fin)
+                        byte[] big = new byte[300];
+                        java.util.Arrays.fill(big, (byte) 'x');
+                        out.write(new byte[]{(byte) 0x81, 126, 1, 44});
+                        out.write(big);
+                        out.flush();
+                        int[] op = new int[1];
+                        byte[] pong = frame(in, op);
+                        got[2] = op[0] + ":" + new String(pong, "UTF-8");
+                        out.write(new byte[]{(byte) 0x88, 0});
+                        out.flush();
+                        Thread.sleep(200);
+                    } catch (Throwable e) { got[2] = "ошибка сервера " + e; }
+                }
+            });
+            srv.start();
+            String res;
+            IvaRealtimePatch.Ws ws = null;
+            try {
+                ws = IvaRealtimePatch.Ws.open("127.0.0.1", ss.getLocalPort(), false, "/realtime/v1/websocket?apikey=k&vsn=1.0.0");
+                ws.text("{\"привет\":1}");
+                String m1 = ws.read(3000), m2 = ws.read(3000);
+                String end;
+                try { ws.read(3000); end = "нет закрытия"; } catch (java.io.EOFException e) { end = "закрыто"; }
+                srv.join(3000);
+                res = "abcdef".equals(m1) && m2 != null && m2.length() == 300 && "закрыто".equals(end)
+                    && "GET /realtime/v1/websocket?apikey=k&vsn=1.0.0 HTTP/1.1".equals(got[0]) && "{\"привет\":1}".equals(got[1]) && "10:hi".equals(got[2])
+                    ? "ok" : m1 + "|" + (m2 == null ? null : m2.length()) + "|" + end + "|" + got[0] + "|" + got[1] + "|" + got[2];
+            } catch (java.io.IOException e) {
+                res = good ? "ошибка " + e : "отказ";
+            } finally {
+                if (ws != null) ws.close();
+                ss.close();
+            }
+            return res;
+        } catch (Throwable e) { return "ошибка " + e; }
+    }
+
+    /** Кадр клиента: обязательно с маской (RFC 6455) — иначе ошибка. */
+    static byte[] frame(java.io.InputStream in, int[] op) throws java.io.IOException {
+        int b0 = in.read(), b1 = in.read();
+        if (b0 < 0 || b1 < 0) throw new java.io.EOFException();
+        if ((b1 & 0x80) == 0) throw new java.io.IOException("кадр клиента без маски");
+        if (op != null) op[0] = b0 & 0x0f;
+        int len = b1 & 0x7f;
+        if (len == 126) len = in.read() << 8 | in.read();
+        byte[] mask = new byte[4];
+        for (int i = 0; i < 4; i++) mask[i] = (byte) in.read();
+        byte[] d = new byte[len];
+        for (int i = 0; i < len; i++) d[i] = (byte) (in.read() ^ mask[i & 3]);
+        return d;
+    }
+
     static void summary111() {
         eq("сводка 10.111: показываются только настоящие пункты, «Без пункта» (пустой id) — нет",
             IvaStaffJournalPatch.realPoint("6f1c2a3b-0000-4000-8000-000000000001") + "," + IvaStaffJournalPatch.realPoint("") + ","
@@ -2667,16 +2803,16 @@ public class IvaPatchTest {
             + IvaAccessPatch.staffChange("invited", "active") + "," + IvaAccessPatch.staffChange("active", "active") + ","
             + IvaAccessPatch.staffChange("", "") + "," + IvaAccessPatch.staffChange(null, null),
             "1,1,2,3,3,0,0,0");
-        eq("доступ 10.110: сотрудника спрашиваем каждые 30 с, клиента — раз в минуту",
+        eq("доступ 10.110: сотрудника спрашиваем каждые 30 с, клиента — тоже раз в 30 с (10.112), не чаще",
             IvaAccessPatch.staffDue("active", 1000, 2000) + "," + IvaAccessPatch.staffDue("invited", 1000, 2000) + ","
-            + IvaAccessPatch.staffDue("", 1000, 2000) + "," + IvaAccessPatch.staffDue("", 1000, 61000) + "," + IvaAccessPatch.staffDue("", 0, 5),
+            + IvaAccessPatch.staffDue("", 1000, 2000) + "," + IvaAccessPatch.staffDue("", 1000, 31000) + "," + IvaAccessPatch.staffDue("", 0, 5),
             "true,true,false,true,true");
         String g = IvaAccessPatch.staffGoneText("Прокат «Сила»"), g0 = IvaAccessPatch.staffGoneText(" ");
         eq("доступ 10.110: тексты — понятно, что осталось клиенту",
             g.contains("к прокату «Прокат «Сила»» закрыт") && g.contains("возможности клиента") && g0.startsWith("Доступ сотрудника закрыт —")
             && IvaAccessPatch.ADMIN_GONE_TEXT.contains("возможности клиента") && "Понятно".equals(IvaAccessPatch.OK)
             && IvaAccessPatch.ADMIN_PATH.contains("select=email,removed_at&email=ilike.") && !IvaAccessPatch.ADMIN_PATH.contains("*")
-            && IvaAccessPatch.TAB_EVERY_MS == 8000L && IvaAccessPatch.STAFF_IDLE_MS == 60000L, true);
+            && IvaAccessPatch.TAB_EVERY_MS == 8000L && IvaAccessPatch.STAFF_IDLE_MS == 30000L, true);
     }
 
     static void avatarEdit109() {

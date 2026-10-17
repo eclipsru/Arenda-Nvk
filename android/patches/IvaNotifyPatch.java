@@ -456,6 +456,7 @@ public final class IvaNotifyPatch {
         try { IvaTestPatch.onTab(a, tab); } catch (Throwable ignore) {}     // 10.94: жёлтая «Обновить до версии N» у eclips и eclipsik
         try { IvaAdminsPatch.onTab(a, tab); } catch (Throwable ignore) {}   // 10.108: приостановить / удалить админа, «Добавить админа» в списке
         try { IvaAccessPatch.onTab(a, tab); } catch (Throwable ignore) {}   // 10.110: убрали админа / сотрудника — сразу клиент
+        try { IvaRealtimePatch.ensure(a); } catch (Throwable ignore) {}   // 10.112: база сама сообщает о смене роли
     }
 
     static Object get(Object o, String f) { return IvaClientPatch.get(o, f); }
@@ -506,6 +507,7 @@ public final class IvaNotifyPatch {
         try { stopNative(a); } catch (Throwable ignore) {}
         poll.removeCallbacks(TICK);
         poll.postDelayed(TICK, POLL_MS);
+        try { IvaRealtimePatch.ensure(a); } catch (Throwable ignore) {}   // 10.112: роль — моментально (Realtime)
         if (busy) return;
         busy = true;
         final boolean logged = loggedIn(a), admin = logged && isAdmin(a);

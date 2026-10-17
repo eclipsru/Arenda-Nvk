@@ -19,6 +19,12 @@ package ru.prokatnvsk.app;
 // Создателя (eclips.ru@mail.ru) не трогаем. Решения только по ответу базы 2xx: нет связи, ошибка, нет столбца —
 // ничего не меняем. Новых вставок в smali нет: вход — IvaNotifyPatch.onShowTab / tick и IvaClientPatch.onProfile.
 // Сеть — только в фоновых потоках. Персональные данные не запрашиваются: только своя почта и отметка удаления.
+//
+// 10.112 (просьба владельца 17.10.2026): моментально. IvaRealtimePatch держит соединение Supabase Realtime и по событию
+// базы зовёт poke — та же проверка сразу. Новое приглашение — окном поверх любого экрана («Принять» / «Отказаться» /
+// «Позже», один раз на приглашение; карточка в «Кабинете» остаётся). Назначили админом — окно «Вы назначены
+// администратором». Владелец поменял права сотрудника — страницы пункта открываются заново. Запасная проверка
+// приглашения — раз в 30 секунд (было раз в минуту).
 
 import android.app.Activity;
 import android.app.Dialog;
@@ -41,12 +47,16 @@ public final class IvaAccessPatch {
 
     static final String ADMIN_PATH = "/rest/v1/admins?select=email,removed_at&email=ilike.";
     static final String ADMIN_PATH_OLD = "/rest/v1/admins?select=email&email=ilike.";   // нет SQL 20261102
-    static final long TAB_EVERY_MS = 8000L, STAFF_IDLE_MS = 60000L;
+    static final long TAB_EVERY_MS = 8000L, STAFF_IDLE_MS = 30000L;   // 10.112: запасная проверка приглашения — каждые 30 с (основное — Realtime)
 
     static final String ADMIN_GONE_TITLE = "Вы больше не администратор";
     static final String ADMIN_GONE_TEXT = "Создатель площадки убрал вас из администраторов. Кабинет проката закрыт — "
         + "остались возможности клиента: поиск, избранное, заявки и чат.";
-    static final String ADMIN_BACK = "Вам снова открыт кабинет администратора";
+    static final String ADMIN_NEW_TITLE = "Вы назначены администратором";
+    static final String ADMIN_NEW_TEXT = "Создатель площадки открыл вам кабинет проката: свои инструменты, заявки, пункты выдачи "
+        + "и сотрудники. Всё — в «Кабинете».";
+    static final String RIGHTS_TOAST = "Владелец проката изменил ваши права";
+    static final String INVITE_TITLE = "Приглашение в сотрудники", INVITE_YES = "Принять", INVITE_NO = "Отказаться", INVITE_LATER = "Позже";
     static final String STAFF_GONE_TITLE = "Вы больше не сотрудник";
     static final String OK = "Понятно";
 
@@ -169,7 +179,8 @@ public final class IvaAccessPatch {
     static SharedPreferences prefs(Activity a) { return a.getSharedPreferences("iva_access", 0); }
     static String adminKey(String me) { return "admin_" + me; }
 
-    static volatile boolean busy;
+    static final java.util.concurrent.atomic.AtomicBoolean BUSY = new java.util.concurrent.atomic.AtomicBoolean();
+    static volatile boolean again;
     static volatile long tabAt, staffAt;
     static volatile String staffFor = "";
 
@@ -180,8 +191,22 @@ public final class IvaAccessPatch {
         if (!IvaNotifyPatch.loggedIn(a) || IvaReviewPatch.chief(a)) return;
         final String me = me(a);
         long now = System.currentTimeMillis();
-        if (me.isEmpty() || busy || now - tabAt < TAB_EVERY_MS) return;
+        if (me.isEmpty() || BUSY.get() || now - tabAt < TAB_EVERY_MS) return;
         tabAt = now;
+        new Thread(new Runnable() {
+            @Override public void run() { try { check(a, me); } catch (Throwable ignore) {} }
+        }).start();
+    }
+
+    /** 10.112: из IvaRealtimePatch — база сообщила, что роль поменялась (или только подключились): проверить сразу,
+     *  без паузы в 8 секунд и без минутной паузы сотрудника. Идёт проверка — повторить сразу после неё. */
+    static void poke(final Activity a) {
+        if (a == null || a.isFinishing() || !IvaNotifyPatch.loggedIn(a) || IvaReviewPatch.chief(a)) return;
+        final String me = me(a);
+        if (me.isEmpty()) return;
+        staffAt = 0;
+        again = true;
+        if (BUSY.get()) return;
         new Thread(new Runnable() {
             @Override public void run() { try { check(a, me); } catch (Throwable ignore) {} }
         }).start();
@@ -200,20 +225,26 @@ public final class IvaAccessPatch {
 
     /** Фоновый поток (tick / onTab): спросить базу и применить. */
     static void check(final Activity a, final String me) throws Exception {
-        if (busy || me == null || me.isEmpty() || IvaReviewPatch.chief(a)) return;
-        busy = true;
+        if (me == null || me.isEmpty() || IvaReviewPatch.chief(a) || !BUSY.compareAndSet(false, true)) return;
         try {
+          do {
+            again = false;
             Boolean db = askAdmin(a, me);
             if (db != null) {
+                // 10.112: «назначили» объявляем, только если раньше база говорила «не админ» (при запуске штатная
+                // проверка ещё идёт — уже назначенному админу окно не показываем)
+                final boolean wasClient = prefs(a).contains(adminKey(me)) && !prefs(a).getBoolean(adminKey(me), true);
                 prefs(a).edit().putBoolean(adminKey(me), db).apply();
                 final boolean isAdm = db;
                 a.runOnUiThread(new Runnable() {
-                    @Override public void run() { try { applyAdmin(a, me, isAdm); } catch (Throwable ignore) {} }
+                    @Override public void run() { try { applyAdmin(a, me, isAdm, wasClient); } catch (Throwable ignore) {} }
                 });
             }
             boolean admin = db != null ? db : IvaNotifyPatch.isAdmin(a);
             if (!admin) checkStaff(a, me);
-        } finally { busy = false; }
+            if (again) staffAt = 0;                                       // пока проверяли — пришло новое событие
+          } while (again && me.equals(me(a)));
+        } finally { BUSY.set(false); }
     }
 
     static Boolean askAdmin(Activity a, String me) throws Exception {
@@ -225,7 +256,7 @@ public final class IvaAccessPatch {
         return adminFromRows(r.length > 1 ? r[1] : "", me);
     }
 
-    static void applyAdmin(Activity a, String me, boolean db) {
+    static void applyAdmin(Activity a, String me, boolean db, boolean announce) {
         if (!me.equals(me(a)) || !IvaNotifyPatch.loggedIn(a)) return;
         int ch = adminChange(IvaReviewPatch.chief(a), IvaNotifyPatch.isAdmin(a), db);
         if (ch < 0) {
@@ -244,7 +275,7 @@ public final class IvaAccessPatch {
             String tab = t instanceof String ? (String) t : "";
             nativeCall(a, "renderProfile");
             if (redrawTab(tab)) IvaNotifyPatch.tab(a, tab);
-            IvaStaffPatch.toast(a, ADMIN_BACK);
+            if (announce) { closePages(); info(a, ADMIN_NEW_TITLE, ADMIN_NEW_TEXT); }
         }
     }
 
@@ -281,15 +312,29 @@ public final class IvaAccessPatch {
         IvaStaffPatch.meAt = now;
         IvaStaffPatch.meFor = me;
         final int ch = staffChange(was == null ? "" : was.status, m == null ? "" : m.status);
-        if (ch == STAFF_SAME) return;
+        final boolean rights = ch == STAFF_SAME && was != null && m != null && "active".equals(m.status)
+            && rightsChanged(was.r, was.self, m.r, m.self);
+        final boolean popup = m != null && "invited".equals(m.status) && !inviteShown(a, m.id);
+        if (ch == STAFF_SAME && body.equals(oldBody) && !popup) return;
         final IvaStaffPatch.Me fm = m;
         final String company = was == null ? "" : was.company;
         a.runOnUiThread(new Runnable() {
-            @Override public void run() { try { applyStaff(a, me, ch, fm, company); } catch (Throwable ignore) {} }
+            @Override public void run() {
+                try { applyStaff(a, me, ch, fm, company, rights); } catch (Throwable ignore) {}
+                try { if (popup) showInvite(a, me, fm); } catch (Throwable ignore) {}
+            }
         });
     }
 
-    static void applyStaff(Activity a, String me, int ch, IvaStaffPatch.Me m, String company) {
+    /** 10.112: владелец поменял права сотрудника (или «выдаёт свои заявки сам»). */
+    static boolean rightsChanged(boolean[] r1, boolean s1, boolean[] r2, boolean s2) {
+        return s1 != s2 || !java.util.Arrays.equals(r1, r2);
+    }
+
+    static String inviteKey(String id) { return "invite_" + (id == null ? "" : id); }
+    static boolean inviteShown(Activity a, String id) { return prefs(a).getBoolean(inviteKey(id), false); }
+
+    static void applyStaff(Activity a, String me, int ch, IvaStaffPatch.Me m, String company, boolean rights) {
         if (!me.equals(me(a)) || !IvaNotifyPatch.loggedIn(a) || IvaNotifyPatch.isAdmin(a)) return;
         Object t = IvaClientPatch.get(a, "curTab");
         String tab = t instanceof String ? (String) t : "";
@@ -299,17 +344,70 @@ public final class IvaAccessPatch {
             closePages();
             if (staffTab(tab)) { IvaNotifyPatch.tab(a, "profile"); tab = "profile"; }
         }
+        if (rights) {                                                     // 10.112: страницы пункта — с новыми правами
+            boolean open = isOpen(IvaStaffToolsPatch.toolsPage) || isOpen(IvaStaffToolsPatch.minePage);
+            IvaStaffToolsPatch.close(IvaStaffToolsPatch.toolsPage);
+            IvaStaffToolsPatch.close(IvaStaffToolsPatch.minePage);
+            closePages();
+            if (staffTab(tab) && !IvaStaffToolsPatch.want(m.status, m.r)) { IvaNotifyPatch.tab(a, "profile"); tab = "profile"; }
+            IvaStaffPatch.toast(a, open ? RIGHTS_TOAST + " — откройте «Мой пункт» заново" : RIGHTS_TOAST);
+        }
         if ("profile".equals(tab)) IvaStaffPatch.drawMe(a, m);
         if (ch == STAFF_LOST) info(a, STAFF_GONE_TITLE, staffGoneText(company));
     }
 
-    // ───────────── сообщение (как styledChoice, одна кнопка «Понятно») ─────────────
+    // ───────────── окна (как styledChoice: карточка, кнопки-«пузыри») ─────────────
 
     static void info(Activity a, String title, String text) {
         if (a.isFinishing()) return;
-        int orange = IvaClientPatch.navColor(a, "orange", 0xffff8f1f), gray = IvaClientPatch.navColor(a, "gray", 0xff9aa1b0),
-            white = IvaClientPatch.navColor(a, "text", 0xfff2f4f8);
         final Dialog d = new Dialog(a);
+        LinearLayout card = card(a, d, title, text);
+        bubble(a, card, OK, true, 14).setOnClickListener(new View.OnClickListener() {
+            @Override public void onClick(View v) { try { d.dismiss(); } catch (Throwable ignore) {} }
+        });
+        show(a, d, card, true);
+    }
+
+    static WeakReference<Dialog> invitePopup;
+
+    /** 10.112: новое приглашение — сразу окном поверх любого экрана: «Принять» / «Отказаться» / «Позже».
+     *  Показывается один раз на приглашение; карточка в «Кабинете» остаётся, пока не ответили. */
+    static void showInvite(final Activity a, final String me, final IvaStaffPatch.Me m) {
+        if (m == null || a.isFinishing() || !me.equals(me(a)) || !IvaNotifyPatch.loggedIn(a) || IvaNotifyPatch.isAdmin(a)) return;
+        Dialog old = invitePopup == null ? null : invitePopup.get();
+        if (old != null && old.isShowing()) return;
+        prefs(a).edit().putBoolean(inviteKey(m.id), true).apply();
+        final Dialog d = new Dialog(a);
+        LinearLayout card = card(a, d, INVITE_TITLE, IvaStaffPatch.inviteText(m.company, IvaStaffPatch.names(m.points))
+            + "\n\nПрава: " + IvaStaffPatch.rightsText(m.r));
+        final TextView yes = bubble(a, card, INVITE_YES, true, 16);
+        final TextView no = bubble(a, card, INVITE_NO, false, 8);
+        TextView later = bubble(a, card, INVITE_LATER, false, 8);
+        yes.setOnClickListener(new View.OnClickListener() {
+            @Override public void onClick(View v) {
+                try { d.dismiss(); } catch (Throwable ignore) {}
+                IvaStaffPatch.answer(a, m, true, yes);
+            }
+        });
+        no.setOnClickListener(new View.OnClickListener() {
+            @Override public void onClick(View v) {
+                try { d.dismiss(); } catch (Throwable ignore) {}
+                IvaClientPatch.styledChoice(a, "Отказаться от приглашения?", "Прокат увидит, что вы отказались.", new String[]{INVITE_NO},
+                    new IvaClientPatch.Choice() { @Override public void pick(int i) { if (i == 0) IvaStaffPatch.answer(a, m, false, no); } });
+            }
+        });
+        later.setOnClickListener(new View.OnClickListener() {
+            @Override public void onClick(View v) {
+                try { d.dismiss(); } catch (Throwable ignore) {}
+                IvaStaffPatch.toast(a, "Приглашение — в «Кабинете»");
+            }
+        });
+        invitePopup = new WeakReference<Dialog>(d);
+        show(a, d, card, false);
+    }
+
+    static LinearLayout card(Activity a, Dialog d, String title, String text) {
+        int gray = IvaClientPatch.navColor(a, "gray", 0xff9aa1b0), white = IvaClientPatch.navColor(a, "text", 0xfff2f4f8);
         d.requestWindowFeature(android.view.Window.FEATURE_NO_TITLE);
         LinearLayout card = new LinearLayout(a);
         card.setOrientation(LinearLayout.VERTICAL);
@@ -330,23 +428,28 @@ public final class IvaAccessPatch {
         LinearLayout.LayoutParams sl = new LinearLayout.LayoutParams(-1, -2);
         sl.topMargin = IvaClientPatch.hubDp(a, 6);
         card.addView(s, sl);
+        return card;
+    }
+
+    static TextView bubble(Activity a, LinearLayout card, String label, boolean main, int topDp) {
         TextView b = new TextView(a);
-        b.setText(OK);
-        b.setTextColor(orange);
+        b.setText(label);
+        b.setTextColor(main ? IvaClientPatch.navColor(a, "orange", 0xffff8f1f) : IvaClientPatch.navColor(a, "gray", 0xff9aa1b0));
         b.setTextSize(15f);
-        b.setTypeface(null, android.graphics.Typeface.BOLD);
+        b.setTypeface(null, main ? android.graphics.Typeface.BOLD : android.graphics.Typeface.NORMAL);
         b.setGravity(Gravity.CENTER);
         b.setBackground(IvaClientPatch.choiceBg(a, "card", 0xff1a1d24, IvaClientPatch.CHOICE_RADIUS_DP));
         b.setClickable(true);
-        b.setOnClickListener(new View.OnClickListener() {
-            @Override public void onClick(View v) { try { d.dismiss(); } catch (Throwable ignore) {} }
-        });
         LinearLayout.LayoutParams bl = new LinearLayout.LayoutParams(-1, IvaClientPatch.hubDp(a, IvaClientPatch.CHOICE_BUBBLE_DP));
-        bl.topMargin = IvaClientPatch.hubDp(a, 14);
+        bl.topMargin = IvaClientPatch.hubDp(a, topDp);
         card.addView(b, bl);
+        return b;
+    }
+
+    static void show(Activity a, Dialog d, LinearLayout card, boolean cancelable) {
         d.setContentView(card);
-        d.setCancelable(true);
-        d.setCanceledOnTouchOutside(true);
+        d.setCancelable(cancelable);
+        d.setCanceledOnTouchOutside(cancelable);
         android.view.Window w = d.getWindow();
         if (w != null) {
             w.setBackgroundDrawable(new android.graphics.drawable.ColorDrawable(0));
@@ -359,5 +462,10 @@ public final class IvaAccessPatch {
             w.setLayout(Math.min(screen - IvaClientPatch.hubDp(a, 48), IvaClientPatch.hubDp(a, IvaClientPatch.CHOICE_MAX_DP)),
                 android.view.ViewGroup.LayoutParams.WRAP_CONTENT);
         }
+    }
+
+    static boolean isOpen(WeakReference<Dialog> r) {
+        Dialog d = r == null ? null : r.get();
+        return d != null && d.isShowing();
     }
 }

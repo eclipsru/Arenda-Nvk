@@ -426,6 +426,17 @@ else
   skip "стенд «Приостановить и удалить админа»: нет pgserver (PG_PY=<python с pgserver> bash tools/check.sh)"
 fi
 
+head_ "4.5.18. Стенд «Роль — моментально» (локальный PostgreSQL, SQL 10.112)"
+if "$PG_PY" -c "import pgserver" >/dev/null 2>&1; then
+  if "$PG_PY" tools/role-ping-stand.py >/tmp/iva-test-role-ping.log 2>&1; then
+    ok "роль — моментально: $(grep -c '✔' /tmp/iva-test-role-ping.log) проверок SQL на PostgreSQL (отметку трогают назначение / удаление / пауза админа и всё про сотрудника, читает только сам человек, Realtime, откат)"
+  else
+    bad "стенд «Роль — моментально»"; grep -E '✘|Error|ERROR' /tmp/iva-test-role-ping.log | head -8 | sed 's/^/      /'
+  fi
+else
+  skip "стенд «Роль — моментально»: нет pgserver (PG_PY=<python с pgserver> bash tools/check.sh)"
+fi
+
 head_ "Итог"
 printf '  пройдено: %s, ошибок: %s, пропущено: %s\n' "$PASS" "$FAIL" "$SKIP"
 if [ "$FAIL" -eq 0 ]; then echo "  Можно продолжать."; exit 0; else echo "  Сначала исправляем замечания выше."; exit 1; fi
