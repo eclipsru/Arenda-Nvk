@@ -40,6 +40,15 @@ final class IvaToolPointPatch {
     static final String RPC = "/rest/v1/rpc/iva_tool_points";
     static final long MINE_FRESH_MS = 2 * 60_000L, CARD_FRESH_MS = 10 * 60_000L;
     static final int MAX_IDS = 200;
+    // 10.114 (просьба владельца 17.10.2026): пунктов два и больше — пункт в «Добавить инструмент» выбирают сами, заранее
+    // ничего не выбрано; без выбора «Опубликовать» не проходит (решение владельца: на прежнем месте; и у владельца, и
+    // у сотрудника). Сотруднику выбор сразу пишется в базу (SQL 20261105) — новый инструмент встаёт в этот пункт и
+    // получает ЕГО режим «Инструменты сотрудников»; без SQL — как в 10.113 (пункт ставится после публикации).
+    static final String LABEL_ADD = "В какой пункт выдачи добавляете инструмент";
+    static final String HINT = "Пункт не выбран — нажмите на нужный", NEED = "Выберите пункт выдачи — без него инструмент не опубликуется";
+    static final String PICK_RPC = "/rest/v1/rpc/iva_staff_pick_point";
+    static final String PICK_WAIT = "Сохраняем выбор пункта — нажмите «Опубликовать» ещё раз";
+    static final long PICK_FRESH_MS = 40 * 60_000L;              // в базе выбор действует час
 
     // ════════════════════════════════ чистая логика (IvaPatchTest) ════════════════════════════════
 
@@ -66,6 +75,26 @@ final class IvaToolPointPatch {
         if (sel != null && !sel.isEmpty()) for (IvaPickupPatch.Point p : mine) if (sel.equals(p.id)) return sel;
         return mine.get(0).id;
     }
+
+    /** 10.114: выбранный в форме пункт из своих или "" — не выбран (первый заранее не подставляется). */
+    static String chosen(String sel, List<IvaPickupPatch.Point> mine) {
+        if (mine == null || sel == null || sel.isEmpty()) return "";
+        for (IvaPickupPatch.Point p : mine) if (sel.equals(p.id)) return sel;
+        return "";
+    }
+
+    /** 10.114: выбор сотрудника уже в базе и не устарел (иначе «Опубликовать» ждёт). */
+    static boolean pickFresh(String cur, String picked, long at, long now) {
+        return cur != null && !cur.isEmpty() && cur.equalsIgnoreCase(picked == null ? "" : picked) && now >= at && now - at < PICK_FRESH_MS;
+    }
+
+    /** 10.114: функции выбора нет — SQL 20261105 не применён (тогда — как в 10.113). */
+    static boolean noPickRpc(String code, String body) {
+        String b = body == null ? "" : body;
+        return "404".equals(code) || b.contains("PGRST202") || b.contains("42883") || b.contains("iva_staff_pick_point");
+    }
+
+    static String pickBody(String id) { return uuid(id) ? "{\"p_point\":\"" + id.toLowerCase(java.util.Locale.ROOT) + "\"}" : null; }
 
     /** Тело вызова iva_tool_points: только id, без повторов, не больше 200. */
     static String rpcBody(java.util.Collection<String> ids) {
@@ -158,6 +187,10 @@ final class IvaToolPointPatch {
     static final Map<String, Long> cardsAt = new HashMap<String, Long>();
     static volatile boolean cardsLoading = false;
     static final Map<View, String> drawn = new java.util.WeakHashMap<View, String>();
+    static volatile boolean need = false;                        // 10.114: нажали «Опубликовать» без пункта
+    static volatile String picked = "", pickNext = "";
+    static volatile long pickedAt = 0;
+    static volatile boolean pickBusy = false, pickNoDb = false;
 
     // ════════════════════════════════ формы ════════════════════════════════
 
@@ -207,7 +240,8 @@ final class IvaToolPointPatch {
         box.setTag(TAG + ":" + k);
         box.setVisibility(View.GONE);
         TextView l = new TextView(a);
-        l.setText(LABEL);
+        l.setTag(TAG + ":label");
+        l.setText(k == 0 ? LABEL_ADD : LABEL);
         l.setTextColor(IvaPatch.color(a, "gray", 0xff9aa1b0));
         l.setTextSize(13f);
         box.addView(l, new LinearLayout.LayoutParams(-2, -2));
@@ -236,10 +270,10 @@ final class IvaToolPointPatch {
         boolean vis = ps != null && !waiting && show(k, ps.size(), Boolean.TRUE.equals(col), orig.isEmpty());
         box.setVisibility(vis ? View.VISIBLE : View.GONE);
         if (!vis) return;
-        String cur = k == 0 ? current(sel[0], ps) : sel[1];
+        String cur = k == 0 ? chosen(sel[0], ps) : sel[1];      // 10.114: в «Добавить» заранее ничего не выбрано
         LinearLayout chips = (LinearLayout) box.findViewWithTag(TAG + ":chips");
         TextView sub = (TextView) box.findViewWithTag(TAG + ":sub");
-        StringBuilder sig = new StringBuilder(cur).append('|');
+        StringBuilder sig = new StringBuilder(cur).append('|').append(k == 0 && need).append('|');
         for (IvaPickupPatch.Point p : ps) sig.append(p.id).append(chipText(p)).append(';');
         if (sig.toString().equals(drawn.get(chips))) return;           // ничего не менялось — не перерисовываем
         drawn.put(chips, sig.toString());
@@ -252,6 +286,7 @@ final class IvaToolPointPatch {
             c.setOnClickListener(new View.OnClickListener() {
                 @Override public void onClick(View v) {
                     sel[k] = p.id;
+                    if (k == 0) { need = false; try { pick(a, p.id); } catch (Throwable ignore) {} }   // 10.114
                     try { paint(a, box, k); } catch (Throwable ignore) {}
                 }
             });
@@ -259,8 +294,9 @@ final class IvaToolPointPatch {
             cl.rightMargin = IvaPatch.dp(a, 8);
             chips.addView(c, cl);
         }
-        String st = on == null ? (k == 1 ? "Пункт не выбран — адрес выдачи свой (добавлен на сайте)" : "") : subText(on);
+        String st = on == null ? (k == 1 ? "Пункт не выбран — адрес выдачи свой (добавлен на сайте)" : need ? NEED : HINT) : subText(on);
         sub.setText(st);
+        sub.setTextColor(k == 0 && on == null && need ? IvaPatch.color(a, "orange", 0xffff8f1f) : IvaPatch.color(a, "gray", 0xff9aa1b0));
         sub.setVisibility(st.isEmpty() ? View.GONE : View.VISIBLE);
     }
 
@@ -363,8 +399,8 @@ final class IvaToolPointPatch {
         List<IvaPickupPatch.Point> ps = mine;
         if (ps == null || !Boolean.TRUE.equals(col) || !show(k, ps.size(), true, orig.isEmpty())) return;
         if (k == 0) {
-            String cur = current(sel[0], ps);
-            if (!needWrite(0, cur, ps.get(0).id, "")) return;
+            String cur = chosen(sel[0], ps);
+            if (!needWrite(0, cur, "", "")) return;               // 10.114: выбран сам — пишем всегда (первый у базы мог быть другим)
             Object no = IvaClientPatch.get(a, "atName");
             String name = no instanceof TextView ? String.valueOf(((TextView) no).getText()).trim() : "";
             String email = IvaPickupPatch.me(a);
@@ -387,7 +423,7 @@ final class IvaToolPointPatch {
         final String point = pendingPoint, id = pendingId, name = pendingName, email = pendingEmail, staffId = pendingStaff;
         final String body = body(point);
         if (body == null) return;
-        if (k == 0) sel[0] = "";                                         // опубликовано — форма «Добавить» снова с первым пунктом
+        if (k == 0) { sel[0] = ""; need = false; }                       // опубликовано — в «Добавить» снова ничего не выбрано
         new Thread(new Runnable() {
             @Override public void run() {
                 String msg = "";
@@ -419,6 +455,61 @@ final class IvaToolPointPatch {
                     final String m = msg;
                     a.runOnUiThread(new Runnable() { @Override public void run() { IvaPickupPatch.toast(a, m); } });
                 }
+            }
+        }).start();
+    }
+
+    /** 10.114: из IvaFormPatch.onSaveTouch — пунктов два и больше, а пункт не выбран (или выбор сотрудника ещё не в базе):
+     *  «Опубликовать» не пропускаем, блок подсвечиваем и прокручиваем к нему. */
+    static boolean blockPublish(Activity a, LinearLayout form) {
+        List<IvaPickupPatch.Point> ps = mine;
+        if (ps == null || !Boolean.TRUE.equals(col) || !show(0, ps.size(), true, true)) return false;
+        View box = form.findViewWithTag(TAG + ":0");
+        if (!(box instanceof LinearLayout) || box.getVisibility() != View.VISIBLE) return false;
+        String cur = chosen(sel[0], ps);
+        if (cur.isEmpty()) {
+            need = true;
+            paint(a, (LinearLayout) box, 0);
+            try { IvaFormPatch.scrollTo(a, box); } catch (Throwable ignore) {}
+            try { IvaNotifyPatch.flash(box); } catch (Throwable ignore) {}
+            return true;
+        }
+        String sid = "";
+        try { sid = IvaStaffToolsPatch.staffId(a); } catch (Throwable ignore) {}
+        if (!sid.isEmpty() && !pickNoDb && !pickFresh(cur, picked, pickedAt, System.currentTimeMillis())) {
+            pick(a, cur);
+            IvaPickupPatch.toast(a, PICK_WAIT);
+            return true;
+        }
+        return false;
+    }
+
+    /** 10.114: сотрудник выбрал пункт — сразу в базу (iva_staff_pick_point); по одному запросу за раз, последний выбор — последним. */
+    static void pick(final Activity a, final String point) {
+        String sid = "";
+        try { sid = IvaStaffToolsPatch.staffId(a); } catch (Throwable ignore) {}
+        final String body = pickBody(point);
+        if (sid.isEmpty() || pickNoDb || body == null) return;
+        if (pickBusy) { pickNext = point; return; }
+        pickBusy = true;
+        picked = "";
+        new Thread(new Runnable() {
+            @Override public void run() {
+                String[] r = null;
+                try { r = IvaClientPatch.apiCall(a, PICK_RPC, "POST", body, true); } catch (Throwable ignore) {}
+                final String code = r == null || r[0] == null ? "" : r[0];
+                final String res = r != null && r.length > 1 && r[1] != null ? r[1].trim() : "";
+                a.runOnUiThread(new Runnable() {
+                    @Override public void run() {
+                        pickBusy = false;
+                        String next = pickNext;
+                        pickNext = "";
+                        if (!next.isEmpty() && !next.equals(point)) { pick(a, next); return; }
+                        if (code.startsWith("2") && "true".equals(res)) { picked = point; pickedAt = System.currentTimeMillis(); }
+                        else if (noPickRpc(code, res)) pickNoDb = true;
+                        else if (code.startsWith("2")) IvaPickupPatch.toast(a, "Этот пункт вам сейчас недоступен — выберите другой");
+                    }
+                });
             }
         }).start();
     }

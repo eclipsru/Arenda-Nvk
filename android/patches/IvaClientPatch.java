@@ -926,6 +926,7 @@ public final class IvaClientPatch {
             edits[PHONE] = field(personal, "Номер телефона", 50, InputType.TYPE_CLASS_PHONE);
             edits[ADDRESS] = field(personal, "Адрес", 500, InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_CAP_SENTENCES | InputType.TYPE_TEXT_VARIATION_POSTAL_ADDRESS);
             edits[ADDRESS].setHint("Город, улица, дом, квартира");
+            try { IvaPickupPatch.attachSuggest(a, edits[ADDRESS]); } catch (Throwable ignore) {}   // 10.114: подсказки полного адреса
             note(personal, "По адресу считается расстояние до пункта выдачи. Арендодателю в карточке адрес не показывается.");
 
             LinearLayout passport = card(content, "Паспортные данные", "необязательно");

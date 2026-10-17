@@ -1171,6 +1171,58 @@ public class IvaPickupPatch {
         });
     }
 
+    // ───────────── 10.114: подсказки полного адреса в любом поле адреса ─────────────
+    // Профиль («Адрес»), заявка («Адрес доставки» — вместо штатных подсказок, которые искали только по Новочеркасску),
+    // пункты выдачи и «Данные проката» (там — с 10.95 / 10.98). Подсказки — те же (Photon / OpenStreetMap, вся Россия).
+
+    static final String SUG_TAG = "iva_addr_sug_10_114";
+    static final java.util.Map<EditText, LinearLayout> sugs = new java.util.WeakHashMap<EditText, LinearLayout>();
+
+    /** Список подсказок сразу под полем (в том же столбце) и подсказки по набору; повторно — тот же список. */
+    static LinearLayout attachSuggest(Activity a, EditText field) {
+        if (field == null) return null;
+        View anchor = anchor(field);                     // штатное поле заявки лежит в рамке (FrameLayout) — список под рамкой
+        if (anchor == null) return null;
+        LinearLayout col = (LinearLayout) anchor.getParent();
+        LinearLayout had = sugs.get(field);
+        if (had != null && had.getParent() == col) return had;
+        LinearLayout sug = new LinearLayout(a);
+        sug.setOrientation(LinearLayout.VERTICAL);
+        sug.setVisibility(View.GONE);
+        sug.setTag(SUG_TAG);
+        Drawable sb = IvaSearchPatch.drawable(a, "bg_field");
+        if (sb != null) sug.setBackground(sb);
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2);
+        lp.topMargin = dp(a, 4);
+        col.addView(sug, col.indexOfChild(anchor) + 1, lp);
+        Ui u = new Ui();
+        u.a = a;
+        u.cText = color(a, "text", 0xfff2f4f8);
+        u.cGray = color(a, "gray", 0xff9aa1b0);
+        u.cOrange = color(a, "orange", 0xffff8f1f);
+        hookSuggest(u, field, sug, new Point());
+        sugs.put(field, sug);
+        return sug;
+    }
+
+    /** Поле или его рамка (не выше двух уровней), лежащие прямо в вертикальном столбце; нет — null. */
+    static View anchor(View field) {
+        View v = field;
+        for (int i = 0; i < 3 && v != null; i++) {
+            Object p = v.getParent();
+            if (p instanceof LinearLayout && ((LinearLayout) p).getOrientation() == LinearLayout.VERTICAL) return v;
+            v = p instanceof View ? (View) p : null;
+        }
+        return null;
+    }
+
+    /** Штатный список подсказок (только Новочеркасск) — схлопнуть: штатный код может его показать, но он нулевой высоты. */
+    static void collapse(View v) {
+        if (v == null) return;
+        ViewGroup.LayoutParams lp = v.getLayoutParams();
+        if (lp != null && lp.height != 0) { lp.height = 0; v.setLayoutParams(lp); }
+    }
+
     static void toast(Activity a, String s) {
         try { Toast.makeText(a, s, Toast.LENGTH_SHORT).show(); } catch (Throwable ignore) {}
     }

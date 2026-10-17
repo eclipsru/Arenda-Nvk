@@ -1760,11 +1760,12 @@ try {
       && fp.includes('SEC + "4", IvaToolPointPatch.TAG + ":0", IvaKindPatch.LBL + "atTerms"'),
       'пункт 10.101: подключение — через IvaKindPatch (onSaveTouch / onTab / refreshRows) и IvaFormPatch.setup, место в форме — начало «Условий и доставки»');
     assert.ok(!/customer_profiles|passport|phone|surname|select=\*|"DELETE"/.test(code) && (code.match(/"PATCH"/g) || []).length === 1
-      && (code.match(/"POST"/g) || []).length === 1 && code.includes('IvaClientPatch.apiCall(a, RPC, "POST", rpcBody(ids), true)')
+      && (code.match(/"POST"/g) || []).length === 2 && code.includes('IvaClientPatch.apiCall(a, RPC, "POST", rpcBody(ids), true)')
+      && code.includes('IvaClientPatch.apiCall(a, PICK_RPC, "POST", body, true)')   /* 10.114: выбор пункта сотрудника */
       && code.includes('IvaClientPatch.apiCall(a, IvaKindPatch.patchPath(target), "PATCH", body, true)') && code.includes('static String body(String id) { return uuid(id) ?'),
       'пункт 10.101: пишется только point_id (проверенный id) одной записью; читается iva_tool_points; без личных данных и select=*');
     const net = (code.match(/IvaClientPatch\.apiCall\(|IvaPickupPatch\.load\(/g) || []).length, thr = (code.match(/new Thread\(new Runnable\(\)/g) || []).length;
-    assert.ok(net === 6 && thr === 4, 'пункт 10.101: все обращения к серверу — в своих потоках (6 вызовов в 4 потоках), не в главном: ' + net + '/' + thr);
+    assert.ok(net === 7 && thr === 5, 'пункт 10.101: все обращения к серверу — в своих потоках (7 вызовов в 5 потоках, 10.114 — выбор пункта), не в главном: ' + net + '/' + thr);
     assert.ok(code.includes('if (!uuid(pid)) return;') && code.includes('if (IvaClientPatch.get(a, "detItem") != it) return;') && code.includes('Boolean.TRUE.equals(IvaClientPatch.get(a, "detIsSrv"))'),
       'пункт 10.101: карточка — только у инструмента с пунктом, ответ не попадает в другую открытую карточку');
     // 10.105: «свой» — владелец я или я сотрудник «Каталог» (база пускает сотрудника только в его пункты)

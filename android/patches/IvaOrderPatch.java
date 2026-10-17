@@ -420,6 +420,7 @@ public final class IvaOrderPatch {
         if ("order".equals(tab)) {
             try { refresh(a); } catch (Throwable ignore) {}
             try { fillFio(a, true); } catch (Throwable ignore) {}
+            try { addrSuggest(a); } catch (Throwable ignore) {}   // 10.114: подсказки полного адреса доставки
         }
         if ("orders".equals(tab)) {
             try { clientOrders(a); } catch (Throwable ignore) {}
@@ -427,6 +428,14 @@ public final class IvaOrderPatch {
         if ("profile".equals(tab)) {
             try { profileArchiveRow(a); } catch (Throwable ignore) {}
         }
+    }
+
+    /** 10.114: «Адрес доставки» — наши подсказки полного адреса (вся Россия); штатный список (только Новочеркасск) схлопнут. */
+    static void addrSuggest(Activity a) {
+        View f = IvaPatch.view(a, "oAddr");
+        if (!(f instanceof EditText)) return;
+        if (IvaPickupPatch.attachSuggest(a, (EditText) f) == null) return;   // не вышло — штатные подсказки остаются
+        IvaPickupPatch.collapse(IvaPatch.view(a, "oAddrSug"));
     }
 
     /** Из IvaPatch.onSummary (начало штатного updateSummary): свои строки и итог — сразу после него. */

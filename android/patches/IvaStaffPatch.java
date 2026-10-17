@@ -47,6 +47,7 @@ public class IvaStaffPatch {
     static final String[] RIGHTS_SUB = {"Отмечает «Выдал» и «Вернули» по заявкам своего пункта",
         "Добавляет инструмент в свой пункт", "Переписывается с клиентами своего пункта", "«Новая заявка» в своём пункте"};
     static final String P_ISSUE = "Выдача", P_CATALOG = "Каталог";
+    static final String RIGHTS_LABEL = "Права — можно выбрать оба набора или отметить по одному";
     static final String SELF = "Может выдавать заявки самому себе",
         SELF_SUB = "Если сотрудник сам берёт инструмент в аренду. Выключено — «Выдал» и «Вернули» по его заявке отмечает другой";
     static final long ME_EVERY_MS = 60000L;
@@ -73,6 +74,24 @@ public class IvaStaffPatch {
         if (r == null || r.length != 4) return "";
         for (String p : new String[]{P_ISSUE, P_CATALOG}) if (java.util.Arrays.equals(preset(p), r)) return p;
         return "";
+    }
+
+    /** 10.114: набор отмечен целиком — его кнопка выделена (обе кнопки, «Выдача» и «Каталог», могут быть выделены сразу). */
+    static boolean presetOn(String name, boolean[] r) {
+        boolean[] p = preset(name);
+        if (r == null || r.length != 4) return false;
+        boolean any = false;
+        for (int i = 0; i < 4; i++) if (p[i]) { any = true; if (!r[i]) return false; }
+        return any;
+    }
+
+    /** 10.114: нажали на набор — был отмечен: снять его права, нет: добавить; остальные права не трогаются. */
+    static boolean[] togglePreset(String name, boolean[] r) {
+        boolean[] out = r == null || r.length != 4 ? new boolean[4] : r.clone();
+        boolean on = presetOn(name, out);
+        boolean[] p = preset(name);
+        for (int i = 0; i < 4; i++) if (p[i]) out[i] = !on;
+        return out;
     }
 
     static String rightsText(boolean[] r) {
@@ -419,7 +438,7 @@ public class IvaStaffPatch {
         fTel.setInputType(InputType.TYPE_CLASS_PHONE);
         box.addView(fTel, new LinearLayout.LayoutParams(-1, -2));
 
-        box.addView(label(a, "Права", u.cGray));
+        box.addView(label(a, RIGHTS_LABEL, u.cGray));
         final LinearLayout presets = new LinearLayout(a);
         presets.setOrientation(LinearLayout.HORIZONTAL);
         box.addView(presets, new LinearLayout.LayoutParams(-1, -2));
@@ -437,12 +456,12 @@ public class IvaStaffPatch {
         paint[0] = new Runnable() {
             @Override public void run() {
                 presets.removeAllViews();
-                String cur = presetOf(s.r);
                 for (final String p : new String[]{P_ISSUE, P_CATALOG}) {
-                    TextView ch = IvaSearchPatch.chip(a, p, p.equals(cur), false);
+                    // 10.114: наборы складываются — можно выбрать оба («Выдача» и «Каталог»), повторное нажатие снимает
+                    TextView ch = IvaSearchPatch.chip(a, p, presetOn(p, s.r), false);
                     ch.setOnClickListener(new View.OnClickListener() {
                         @Override public void onClick(View v) {
-                            boolean[] x = preset(p);
+                            boolean[] x = togglePreset(p, s.r);
                             for (int i = 0; i < 4; i++) rs[i].setChecked(x[i]);   // слушатели сами перерисуют наборы
                         }
                     });

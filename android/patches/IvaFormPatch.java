@@ -649,6 +649,7 @@ final class IvaFormPatch {
             if (!(no instanceof View) || !(((View) no).getParent() instanceof LinearLayout)) return false;
             LinearLayout form = (LinearLayout) ((View) no).getParent();
             saveBlocked = paintErrors(a, form, true);
+            if (!saveBlocked) try { saveBlocked = IvaToolPointPatch.blockPublish(a, form); } catch (Throwable ignore) {}   // 10.114: пункт выдачи
             if (!saveBlocked) publishAt = System.currentTimeMillis();
             heldWord = saveBlocked ? "" : heldWord(text(a, "atName") + "\n" + text(a, "atDescr") + "\n" + text(a, "atTerms"));
         }
