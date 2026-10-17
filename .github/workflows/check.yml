@@ -23,9 +23,19 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
+          cache: 'npm'
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
+      # Кэш браузера: без него каждый прогон заново скачивает Chromium (~150 МБ).
+      # Ключ привязан к package-lock.json — при обновлении Playwright кэш сбросится сам.
+      - name: Кэш браузера Playwright
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+          restore-keys: |
+            playwright-${{ runner.os }}-
       - name: Установка Playwright и браузера
         run: |
           npm ci --no-audit --no-fund
