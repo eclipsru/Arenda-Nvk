@@ -35,6 +35,7 @@
   let MSGS = [], DLGS = [], WHO = '', TOOL = null;
   let sub = null, poll = null;
   let rec = null, recChunks = [], recStart = 0, recTimer = null;
+  let pendingImg = '';
 
   const P = new URLSearchParams(location.search);
 
@@ -137,6 +138,42 @@
     if (lb) lb.textContent = tot ? tot + ' ' + plural(tot,'непрочитанное','непрочитанных','непрочитанных') : '';
   }
 
+  function threadToolId(who){
+    const w = (who || '').toLowerCase();
+    for (let i = 0; i < MSGS.length; i++){
+      const m = MSGS[i] || {};
+      const f = (m.from_email || '').toLowerCase();
+      const t = (m.to_email || '').toLowerCase();
+      if ((f === A.me && t === w) || (f === w && t === A.me)){
+        if (m.tool_id) return m.tool_id;
+      }
+    }
+    return '';
+  }
+
+  /* Контекст инструмента — это карточка интерфейса, а не сообщение в базе. */
+  function toolContextHtml(){
+    if (!TOOL) return '';
+    const image = (TOOL.imgs && TOOL.imgs[0]) || TOOL.img || '';
+    return '<a class="tool-context" href="tool.html?id=' + encodeURIComponent(TOOL.id) + '"' +
+      ' title="Открыть объявление инструмента">' +
+      (image ? '<img src="' + esc(image) + '" alt="">' : '<span class="tool-context-empty">🔧</span>') +
+      '<span class="tool-context-copy"><small>Обсуждение инструмента</small><b>' +
+        esc(TOOL.name || 'Инструмент') + '</b></span>' +
+      '<span class="tool-context-arrow">↗</span></a>';
+  }
+
+  function renderPendingImage(){
+    const box = $('thDraft');
+    if (!box) return;
+    if (!pendingImg){ box.innerHTML = ''; box.style.display = 'none'; return; }
+    box.style.display = 'flex';
+    box.innerHTML = '<img src="' + esc(pendingImg) + '" alt="Фото к отправке">' +
+      '<span>Фото добавлено. Нажмите «Отправить»</span>' +
+      '<button type="button" id="thDraftRemove" title="Убрать фото">×</button>';
+    $('thDraftRemove').onclick = function(){ pendingImg = ''; renderPendingImage(); };
+  }
+
   /* ---------- Переписка ---------- */
   function paintThread(){
     const box = $('thread');
@@ -162,12 +199,6 @@
       const mine = (m.from_email||'').toLowerCase() === A.me;
 
       let inner = '';
-      if (m.tool_id && TOOL && String(TOOL.id) === String(m.tool_id)){
-        const ti = (TOOL.imgs && TOOL.imgs[0]) || TOOL.img || '';
-        inner += '<div class="tool-ref">' +
-          (ti ? '<img src="' + esc(ti) + '" alt="">' : '') +
-          '<span>' + esc(TOOL.name) + '</span></div>';
-      }
       if (m.img)   inner += '<img class="bimg" src="' + esc(m.img) + '" alt="фото" data-big="' + esc(m.img) + '">';
       if (m.audio) inner += '<audio controls preload="none" src="' + esc(m.audio) + '"></audio>';
       if (m.text)  inner += esc(m.text);
@@ -192,8 +223,10 @@
         '<div><div class="thnm">' + esc(whoTitle(WHO)) + '</div>' +
           '<div class="thsub">' + esc(WHO) + '</div></div>' +
       '</div>' +
+      toolContextHtml() +
       '<div class="th-body" id="thBody">' + body + '</div>' +
       '<div class="th-foot">' +
+        '<div class="th-draft" id="thDraft"></div>' +
         '<div class="th-in" id="thIn">' +
           '<button class="icon-btn" id="bPhoto" title="Фотография">' +
             '<svg viewBox="0 0 24 24"><path d="M3 9a2 2 0 0 1 2-2h2l1.5-2h7L17 7h2a2 2 0 0 1 2 2v9' +
@@ -209,6 +242,7 @@
       '</div>';
 
     bindThread();
+    renderPendingImage();
     scrollDown();
   }
 
@@ -221,7 +255,8 @@
   function bindThread(){
     const back = $('thBack');
     if (back) back.addEventListener('click', function(){
-      WHO = ''; history.replaceState(null,'','chat.html'); render();
+      WHO = ''; TOOL = null; pendingImg = '';
+      history.replaceState(null,'','chat.html'); render();
     });
 
     const ta = $('thText'), send = $('bSend');
@@ -244,9 +279,10 @@
       if (!f) return;
       toast('Загружаем фото…');
       try {
-        const url = await uploadPhoto(f);
-        await pushMessage({ img:url });
-      } catch(err){ toast('Не отправлено: ' + err.message); }
+        pendingImg = await uploadPhoto(f);
+        renderPendingImage();
+        toast('Фото добавлено. Нажмите «Отправить»');
+      } catch(err){ toast('Фото не добавлено: ' + err.message); }
     });
 
     /* Голосовое */
@@ -262,21 +298,26 @@
   async function doSend(){
     const ta = $('thText');
     const t = ta.value.trim();
-    if (!t) return;
+    if (!t && !pendingImg) return;
+    const image = pendingImg;
     ta.value = ''; ta.style.height = 'auto';
-    await pushMessage({ text:t });
+    await pushMessage({ text:t, img:image });
   }
 
-  /* Общая отправка: оптимистично рисуем, потом синхронизируем */
+  /* Отправка выполняется только явной кнопкой «Отправить».
+     Карточка инструмента и черновик фото сами сообщениями не являются. */
   async function pushMessage(payload){
+    const image = payload.img || '';
+    if (!payload.text && !image && !payload.audio) return;
     const tmp = {
       id: 'tmp' + Date.now(),
       from_email: A.me, to_email: WHO,
-      text: payload.text || '', img: payload.img || '',
+      text: payload.text || '', img: image,
       audio: payload.audio || '', audio_dur: payload.audio_dur || 0,
       is_read: false, created_at: new Date().toISOString(),
       tool_id: TOOL ? TOOL.id : null
     };
+    if (image && pendingImg === image) pendingImg = '';
     MSGS.push(tmp);
     paintThread();
 
@@ -285,12 +326,13 @@
                       TOOL ? { tool_id: TOOL.id } : {}));
       const i = MSGS.indexOf(tmp);
       if (i !== -1 && saved) MSGS[i] = saved;
-      TOOL = null;                    /* привязка только к первому сообщению */
+      /* TOOL остаётся видимым в шапке текущего чата и не превращается в сообщение. */
       DLGS = buildDialogs(MSGS);
       paintDialogs();
     } catch(e){
       const i = MSGS.indexOf(tmp);
       if (i !== -1) MSGS.splice(i, 1);
+      if (image) pendingImg = image;
       paintThread();
       toast('Не отправлено: ' + e.message);
     }
@@ -423,13 +465,19 @@
     MSGS = await loadMessages();
     DLGS = buildDialogs(MSGS);
 
-    /* Переход из карточки: ?who=…&tool=… */
+    /* Переход из карточки: ?who=…&tool=…; это только контекст, не отправка сообщения. */
     const qWho  = (P.get('who') || '').toLowerCase();
     const qTool = P.get('tool');
     if (qTool){
       try { TOOL = await loadTool(qTool); } catch(e){ TOOL = null; }
     }
     if (qWho) { WHO = qWho; }
+    if (!TOOL && WHO){
+      const oldTool = threadToolId(WHO);
+      if (oldTool){
+        try { TOOL = await loadTool(oldTool); } catch(e){ TOOL = null; }
+      }
+    }
 
     render();
 
@@ -447,13 +495,13 @@
     poll = setInterval(async function(){
       try {
         const fresh = await loadMessages();
-        if (fresh.length !== MSGS.length){
-          const known = {};
-          MSGS.forEach(function(m){ known[String(m.id)] = 1; });
-          fresh.forEach(function(m){ if (!known[String(m.id)]) onIncoming(m); });
-        }
+        // Не сравниваем только количество: при лимите выдачи 400 новая запись
+        // может заменить старую, и длина массива останется прежней.
+        const known = {};
+        MSGS.forEach(function(m){ known[String(m.id)] = 1; });
+        fresh.forEach(function(m){ if (!known[String(m.id)]) onIncoming(m); });
       } catch(e){}
-    }, 20000);
+    }, 5000);
 
     window.addEventListener('beforeunload', function(){
       if (sub) sub.close();

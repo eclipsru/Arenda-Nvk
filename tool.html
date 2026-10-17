@@ -41,6 +41,7 @@
 <script src="assets/data.js"></script>
 <script src="assets/geo.js?v=20260923-photon"></script>
 <script src="assets/sb.js?v=20260924-order-fee"></script>
+<script src="assets/models.js?v=20261020-power"></script>
 <script src="assets/app-release.js?v=20261009-rel"></script>
 <script src="assets/app.js?v=20261009-rel"></script>
 <script>
@@ -88,7 +89,7 @@
   var specRows = '';
   specRows += '<div class="spec"><dt>Категория</dt><dd>' + esc(catTitle(ad.cat)) +
               (ad.sub ? ' · ' + esc(subTitle(ad.sub)) : '') + '</dd></div>';
-  specRows += '<div class="spec"><dt>Состояние</dt><dd>' + esc(condTitle(ad.cond)) + '</dd></div>';
+  specRows += '<div class="spec" id="specCond"><dt>Состояние</dt><dd>' + esc(condTitle(ad.cond)) + '</dd></div>';
   Object.keys(ad.specs).forEach(function(k){
     specRows += '<div class="spec"><dt>' + esc(k) + '</dt><dd>' + esc(ad.specs[k]) + '</dd></div>';
   });
@@ -195,6 +196,10 @@
           '</button>' +
         '</div>' +
       '</div>' +
+      '<div class="box" id="deliveryEstimate" aria-live="polite">' +
+        '<h3 style="font-size:14px">Расстояние и доставка</h3>' +
+        '<p class="small muted" id="deliveryEstimateText" style="line-height:1.55">Расчёт выполняется…</p>' +
+      '</div>' +
 
       /* Арендодатель */
       '<div class="box">' +
@@ -210,7 +215,7 @@
         '</div>' +
         '<div class="small muted" style="margin-top:12px">' +
           'На площадке с ' + esc(owner.since) + '<br>' +
-          'Выдача: ' + esc(((ad.terms||'').match(/Адрес выдачи:\s*(.+)/)||[])[1]||ad.city) +
+          'Выдача: ' + esc(ad.pickup_address || ((ad.terms||'').match(/Адрес выдачи:\s*(.+)/i)||[])[1] || ad.city) +
         '</div>' + contactBlock +
       '</div>' +
 
@@ -232,6 +237,43 @@
         '<a href="catalog.html?cat=' + ad.cat + '">Все в категории →</a></div>' +
       '<div class="grid">' + similar.map(adCard).join('') + '</div>' +
     '</section>' : '');
+
+  /* 10.83: «Вид» и характеристики объявления (tools.kind / tools.specs) — после «Состояния». Нет данных или SQL
+     не применён — блок как раньше. */
+  (async function paintToolSpecs(){
+    try {
+      if (typeof ivaToolSpecs !== 'function') return;
+      const r = await ivaToolSpecs(api, ad.id);
+      const at = $('specCond');
+      if (!r || !r.rows.length || !at || document.querySelector('[data-tspec]')) return;
+      at.insertAdjacentHTML('afterend', r.rows.map(function(x){
+        return '<div class="spec" data-tspec><dt>' + esc(x[0]) + '</dt><dd>' + esc(x[1]) + '</dd></div>';
+      }).join(''));
+    } catch(e){}
+  })();
+
+  /* Карточка сама показывает ориентировочный тариф при открытии. Адрес
+     клиента не выводится — он используется только локально для расчёта. */
+  (async function paintDeliveryEstimate(){
+    try {
+      if (!isAuthed()) await restoreSess();
+      const el = $('deliveryEstimateText');
+      if (!el) return;
+      const r = IvaDistance.estimate(ad);
+      const result = await r;
+      if (result.ok){
+        el.innerHTML = 'До пункта выдачи: <b>' + result.km + ' км</b>.' +
+          (ad.delivery
+            ? '<br>Ориентировочная доставка: <b style="color:var(--or)">' + rub(result.cost) + '</b> (' + result.km + ' км × ' + result.rate + ' ₽/км). Точную сумму подтвердит арендодатель.'
+            : '<br>Доставка в объявлении не указана — <b>самовывоз</b>.');
+      } else {
+        const why = IvaDistance.fallback(result.reason);
+        el.textContent = ad.delivery
+          ? why + '. После входа и сохранения адреса стоимость рассчитуется по тарифу объявления.'
+          : why + '. Доступен самовывоз: ' + pickupAddr + '.';
+      }
+    } catch(e){}
+  })();
 
   /* ---------- Галерея ---------- */
   var cur = 0;
@@ -272,7 +314,7 @@
       return;
     }
 
-    var pickupAddr = ((ad.terms||'').match(/Адрес выдачи:\s*(.+)/)||[])[1] || ad.pickup_city || ad.city || 'Уточняйте у арендодателя';
+    var pickupAddr = ad.pickup_address || ((ad.terms||'').match(/Адрес выдачи:\s*(.+)/i)||[])[1] || ad.pickup_city || ad.city || 'Уточняйте у арендодателя';
     var hasDelivery = !!ad.delivery;
     var delivRate = Number(ad.delivery_price) || 40;
     var defaultName = A.uname || (A.userMeta && (A.userMeta.full_name || A.userMeta.name)) || '';
@@ -281,18 +323,30 @@
     var days = 1;
     var isDelivery = false; // toggle switch for delivery
     var isRoundTrip = false; // toggle switch for round trip
-    var savedAddr = '';
+    var savedAddr = (A.customerProfile && A.customerProfile.address) || (A.userMeta && A.userMeta.address) || '';
     var savedComment = '';
     var agreeOn = false; // согласие на обработку ПД — не сбрасываем при перерисовке листа
     var destCoords = null;
     var deliveryKm = 0;
 
-    var originCoords = { lat: 47.4526182, lon: 40.1008652 }; // Базовая точка: Новочеркасск, ул. Маресьева, 36
-    if (window.IvaGeo && pickupAddr){
+    var originCoords = null;
+    if (ad.pickup_lat !== null && ad.pickup_lat !== '' && ad.pickup_lng !== null && ad.pickup_lng !== '' && isFinite(Number(ad.pickup_lat)) && isFinite(Number(ad.pickup_lng))){
+      originCoords = { lat: Number(ad.pickup_lat), lon: Number(ad.pickup_lng) };
+    } else if (window.IvaGeo && pickupAddr){
       IvaGeo.search(pickupAddr, 'address').then(function(res){
         if (res && res[0] && res[0].coordinates){
           originCoords = { lat: res[0].coordinates[1], lon: res[0].coordinates[0] };
           if (destCoords) updateDistance();
+        }
+      }).catch(function(){});
+    }
+    /* Адрес из приватного профиля подставляется только в форму самого
+       клиента и геокодируется для расчёта, но никуда не публикуется. */
+    if (savedAddr && window.IvaGeo){
+      IvaGeo.search(savedAddr, 'address').then(function(res){
+        if (res && res[0] && res[0].coordinates){
+          destCoords = { lat: res[0].coordinates[1], lon: res[0].coordinates[0] };
+          if (originCoords) updateDistance();
         }
       }).catch(function(){});
     }
@@ -309,7 +363,7 @@
     }
 
     function updateDistance(){
-      if (destCoords){
+      if (originCoords && destCoords){
         deliveryKm = havDist(originCoords.lat, originCoords.lon, destCoords.lat, destCoords.lon);
       } else {
         deliveryKm = 0;
@@ -327,8 +381,8 @@
 
     function renderOrderSheet(){
       var rentSum = (Number(ad.price) || 0) * days;
-      var km = deliveryKm > 0 ? deliveryKm : 1;
-      var oneWayCost = km * delivRate;
+      var km = deliveryKm > 0 ? deliveryKm : 0;
+      var oneWayCost = km > 0 ? km * delivRate : 0;
       var deliveryCost = isDelivery ? (isRoundTrip ? oneWayCost * 2 : oneWayCost) : 0;
       var totalSum = rentSum + dep + deliveryCost;
 
@@ -338,7 +392,7 @@
           distText = 'Расстояние: <b>' + deliveryKm + ' км</b> · ' + delivRate + ' ₽/км' +
             (isRoundTrip ? ' · <b>Туда и обратно (×2)</b> = <b>' + rub(deliveryCost) + '</b>' : ' = <b>' + rub(deliveryCost) + '</b>');
         } else if (savedAddr.trim()){
-          distText = 'Расчёт: от <b>' + rub(deliveryCost) + '</b> (' + (isRoundTrip ? 'туда и обратно, 2 × ' : '') + '1 км по ' + delivRate + ' ₽/км, точный километраж подтвердит арендодатель).';
+          distText = 'Адрес сохранён, но расстояние пока не определилось. Тариф — ' + delivRate + ' ₽/км; точную стоимость подтвердит арендодатель.';
         } else {
           distText = 'Укажите адрес доставки для расчёта расстояния по тарифу ' + delivRate + ' ₽/км.';
         }
@@ -467,8 +521,7 @@
           var detail = e.detail;
           if (detail && detail.coordinates){
             destCoords = { lat: detail.coordinates[1], lon: detail.coordinates[0] };
-            deliveryKm = havDist(originCoords.lat, originCoords.lon, destCoords.lat, destCoords.lon);
-            renderOrderSheet();
+            updateDistance();
           }
         });
         addrInp.addEventListener('change', function(){
@@ -477,8 +530,7 @@
             IvaGeo.search(this.value.trim(), 'address').then(function(res){
               if (res && res[0] && res[0].coordinates){
                 destCoords = { lat: res[0].coordinates[1], lon: res[0].coordinates[0] };
-                deliveryKm = havDist(originCoords.lat, originCoords.lon, destCoords.lat, destCoords.lon);
-                renderOrderSheet();
+                updateDistance();
               }
             }).catch(function(){});
           }
@@ -558,18 +610,20 @@
       btn.disabled = true;
       btn.textContent = 'Отправляем…';
 
-      var km = deliveryKm > 0 ? deliveryKm : 1;
-      var oneWay = km * delivRate;
+      var km = deliveryKm > 0 ? deliveryKm : 0;
+      var oneWay = km > 0 ? km * delivRate : 0;
       var delivCost = isDelivery ? (isRoundTrip ? oneWay * 2 : oneWay) : 0;
 
       var getMethodText = isDelivery
-        ? ('Доставка' + (isRoundTrip ? ' (туда-обратно)' : '') + ': ' + dAddr + ' — ' + rub(delivCost) + (deliveryKm ? (' (' + (isRoundTrip ? '2 × ' : '') + deliveryKm + ' км по ' + delivRate + ' ₽/км)') : ''))
+        ? ('Доставка' + (isRoundTrip ? ' (туда-обратно)' : '') + ': ' + dAddr + ' — ' +
+           (delivCost > 0 ? rub(delivCost) : 'стоимость подтвердит арендодатель') +
+           (deliveryKm ? (' (' + (isRoundTrip ? '2 × ' : '') + deliveryKm + ' км по ' + delivRate + ' ₽/км)') : ''))
         : ('Самовывоз, ' + pickupAddr);
 
       var commentPayload = 'Срок аренды: ' + days + ' ' + plural(days, 'сутки', 'суток', 'суток') +
         ' · Стоимость аренды: ' + rub((Number(ad.price)||0) * days) + ' · Залог: ' + rub(dep);
       if (isDelivery){
-        commentPayload += '\nДоставка: ' + (isRoundTrip ? 'туда и обратно (×2)' : 'в одну сторону') + ' — ' + rub(delivCost) + (deliveryKm ? (' (' + (isRoundTrip ? '2 × ' : '') + deliveryKm + ' км)') : '');
+        commentPayload += '\nДоставка: ' + (isRoundTrip ? 'туда и обратно (×2)' : 'в одну сторону') + ' — ' + (delivCost > 0 ? rub(delivCost) : 'стоимость подтвердит арендодатель') + (deliveryKm ? (' (' + (isRoundTrip ? '2 × ' : '') + deliveryKm + ' км)') : '');
       }
       if (cmt) commentPayload += '\n\n' + cmt;
 

@@ -98,6 +98,7 @@
 <script src="assets/app-release.js?v=20261009-rel"></script>
 <script src="assets/app.js?v=20261009-rel"></script>
 <script src="assets/partners.js?v=20261003-p6-texts"></script>
+<script src="assets/model-proposals.js?v=20261018-stage4"></script>
 <script>
 (function(){
   mountChrome('chief', '');
@@ -150,6 +151,9 @@
         '<button data-tab="fee" class="'  + (TAB==='fee'?'on':'')  + '">Комиссия' +
           (nFee ? '<span class="n">' + nFee + '</span>' : '') + '</button>' +
         '<button data-tab="cat" class="'  + (TAB==='cat'?'on':'')  + '">Категории</button>' +
+        /* 10.84: предложенные админами модели справочника */
+        '<button data-tab="models" class="' + (TAB==='models'?'on':'') + '">Модели' +
+          (D.props && ivaPropPending(D.props) ? '<span class="n">' + ivaPropPending(D.props) + '</span>' : '') + '</button>' +
         '<button data-tab="outreach" class="' + (TAB==='outreach'?'on':'') + '">🚀 Рассылка по РФ</button>' +
       '</div>' + inner;
   }
@@ -787,6 +791,7 @@
     else if (TAB === 'landlords') inner = viewLandlordApplications(D.landlordApps,D.landlordError);
     else if (TAB === 'fee') inner = viewFee();
     else if (TAB === 'cat') inner = viewCats();
+    else if (TAB === 'models') inner = D.props ? ivaPropView(D.props) : '<div class="empty" style="padding:40px 20px"><b>Загрузка…</b></div>';
     else if (TAB === 'outreach') inner = viewOutreach();
     else                    inner = viewDash();
 
@@ -799,6 +804,25 @@
     const ac = $('addCatBtn'); if (ac) ac.addEventListener('click', function(){
       location.href = 'admin.html';
     });
+  }
+
+  /* 10.84: предложенные модели */
+  async function refreshProps(){
+    D.props = await ivaPropLoad(api);
+    render();
+  }
+  async function decideProp(btn, approve){
+    const row = btn.closest('[data-pp-row]');
+    if (!row) return;
+    const f = {};
+    row.querySelectorAll('[data-pp-f]').forEach(function(i){ f[i.getAttribute('data-pp-f')] = i.value.trim(); });
+    if (approve && (!f.brand || !f.model || !f.title)){ toast('Укажите бренд, модель и название'); return; }
+    if (!approve && !confirm('Отклонить предложение «' + (f.brand + ' ' + f.model).trim() + '»?')) return;
+    row.querySelectorAll('button').forEach(function(b){ b.disabled = true; });
+    const err = await ivaPropDecide(api, row.getAttribute('data-pp-row'), approve, f);
+    if (err){ toast(err); row.querySelectorAll('button').forEach(function(b){ b.disabled = false; }); return; }
+    toast(approve ? 'Модель добавлена в справочник' : 'Предложение отклонено');
+    await refreshProps();
   }
 
   async function refreshLandlords(){
@@ -846,6 +870,11 @@
   });
 
   document.addEventListener('click', async function(e){
+    /* 10.84: вкладка «Модели» */
+    const ppOk = e.target.closest('[data-pp-ok]'), ppNo = e.target.closest('[data-pp-no]');
+    if (ppOk || ppNo){ decideProp(ppOk || ppNo, !!ppOk); return; }
+    if (e.target.closest('[data-pp-refresh]')){ refreshProps(); return; }
+
     const phBtn = e.target.closest('[data-ph]');
     if (phBtn && phBtn.closest('#root')){
       const ta = $('outreachTemplateEdit');
@@ -1192,6 +1221,7 @@
         D.clicksError = '';
       } catch(e){ D.clicks = []; D.clicksError = e.message; }
       try { D.landlordApps=await loadLandlordApplications(); } catch(err){D.landlordError=err.message;}
+      try { D.props = await ivaPropLoad(api); } catch(err){ D.props = null; }   /* 10.84: нет таблицы — вкладка покажет, что применить */
       render();
     } catch(e){
       $('root').innerHTML = '<div class="sect" style="padding-bottom:0"><div class="sect-h">' +

@@ -34,6 +34,60 @@ jobs:
         run: |
           set -o pipefail
           bash tools/check.sh 2>&1 | tee /tmp/check.log
+      # 10.46: фильтры приложения на настоящем каталоге — только чтение (те же GET-запросы, что делает
+      # приложение при запуске; публичный ключ сайта). Не роняет проверку: сеть к базе может пропасть,
+      # результат — в пометках «Каталог · …». Код: tools/catalog-audit/.
+      - name: Фильтры приложения на настоящем каталоге (только чтение)
+        continue-on-error: true
+        run: |
+          set -euo pipefail
+          JAR="$ANDROID_HOME/platforms/$(ls "$ANDROID_HOME/platforms" | grep -E '^android-[0-9]+$' | sort -t- -k2 -n | tail -1)/android.jar"
+          C="$RUNNER_TEMP/audit-cls"; D="$RUNNER_TEMP/catalog"
+          mkdir -p "$C"
+          javac -encoding UTF-8 -source 8 -target 8 -nowarn -bootclasspath "$JAR" -d "$C" \
+            android/patches/IvaPatch.java android/patches/IvaClientPatch.java android/patches/IvaSearchPatch.java android/patches/IvaChatPatch.java android/patches/IvaOrderPatch.java android/patches/IvaNotifyPatch.java \
+            android/patches/IvaReviewPatch.java android/patches/IvaPushPatch.java android/patches/IvaRentPatch.java android/patches/IvaKindPatch.java android/patches/IvaModelPatch.java android/patches/IvaFormPatch.java android/patches/IvaPhotoPatch.java android/patches/IvaCensorPatch.java android/patches/IvaChiefPatch.java android/patches/IvaTestPatch.java android/patches/IvaPickupPatch.java android/patches/IvaAvatarPatch.java android/patches/IvaShopPatch.java android/patches/IvaSoundPatch.java android/patches/IvaToolPointPatch.java android/patches/IvaOrderPointPatch.java android/patches/IvaStaffPatch.java android/patches/IvaStaffOrdersPatch.java android/patches/IvaStaffToolsPatch.java android/patches/IvaStaffChatPatch.java android/patches/IvaStaffJournalPatch.java android/patches/IvaAdminsPatch.java \
+            tools/catalog-audit/IvaCatalogAudit.java
+          python3 tools/catalog-audit/fetch.py "$D" | tee "$RUNNER_TEMP/fetch.log"
+          echo "::notice title=Каталог · Выгрузка::$(tr '\n' ' ' < "$RUNNER_TEMP/fetch.log" | cut -c1-900)"
+          rc=0
+          java -Dfile.encoding=UTF-8 -cp "$C:$JAR" ru.prokatnvsk.app.IvaCatalogAudit "$D" || rc=1
+          node tools/catalog-audit/site-compare.cjs "$D" || rc=1
+          exit $rc
+      - name: Схема базы для фильтров разделов (только чтение, строки не читаются)
+        continue-on-error: true
+        run: |
+          set -euo pipefail
+          out=$(python3 tools/catalog-audit/probe-columns.py)
+          echo "$out"
+          echo "::notice title=Схема · колонки::$(printf '%s' "$out" | sed ':a;N;$!ba;s/%/%25/g;s/\r//g;s/\n/%0A/g' | cut -c1-1500)"
+      # 10.79: справочник категорий до нового дерева категорий и «Видов» — только чтение, публичный ключ.
+      - name: Справочник категорий (только чтение)
+        continue-on-error: true
+        run: |
+          set -euo pipefail
+          python3 tools/catalog-audit/probe-cats.py > "$RUNNER_TEMP/cats.txt"
+          cat "$RUNNER_TEMP/cats.txt"
+          python3 - "$RUNNER_TEMP/cats.txt" <<'PY'
+          import sys
+          lines = open(sys.argv[1], encoding='utf-8').read().splitlines()
+          chunks, cur = [], ''
+          for l in lines:
+              if len(cur) + len(l) + 1 > 3500:
+                  chunks.append(cur); cur = ''
+              cur += l + '\n'
+          if cur: chunks.append(cur)
+          for i, c in enumerate(chunks[:8]):
+              m = c.replace('%', '%25').replace('\r', '').replace('\n', '%0A')
+              print('::notice title=Категории · %d/%d::%s' % (i + 1, len(chunks), m))
+          PY
+      - name: Схема базы для чата 10.54 (только чтение, строки не читаются)
+        continue-on-error: true
+        run: |
+          set -euo pipefail
+          out=$(python3 tools/catalog-audit/probe-chat.py)
+          echo "$out"
+          echo "::notice title=Схема · чат::$(printf '%s' "$out" | sed ':a;N;$!ba;s/%/%25/g;s/\r//g;s/\n/%0A/g' | cut -c1-2000)"
       - name: Итог одной строкой (видно в списке проверок PR)
         if: always()
         run: |

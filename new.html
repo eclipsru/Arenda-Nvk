@@ -7,7 +7,7 @@
 <meta name="robots" content="noindex, nofollow">
 <meta name="theme-color" content="#101217">
 <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
-<link rel="stylesheet" href="assets/theme.css?v=20261005-rel">
+<link rel="stylesheet" href="assets/theme.css?v=20261017-models">
 <style>
 /* ---------- Шаги ---------- */
 .steps{display:flex;gap:6px;margin:18px 0 22px;flex-wrap:wrap}
@@ -96,7 +96,10 @@ textarea.inp{resize:vertical;min-height:110px;font-family:inherit;line-height:1.
 
 <script src="assets/data.js"></script>
 <script src="assets/geo.js?v=20260923-photon"></script>
-<script src="assets/sb.js?v=20260923-photon"></script>
+<script src="assets/sb.js?v=20261018-stage4"></script>
+<script src="assets/kind-guess.js?v=20261016-kind"></script>
+<script src="assets/models.js?v=20261020-power"></script>
+<script src="assets/model-form.js?v=20261020-power"></script>
 <script src="assets/app-release.js?v=20261009-rel"></script>
 <script src="assets/app.js?v=20261009-rel"></script>
 <script>
@@ -109,13 +112,20 @@ textarea.inp{resize:vertical;min-height:110px;font-family:inherit;line-height:1.
   let uploadsInFlight = 0;
   window.addEventListener('beforeunload',function(e){ if(editDirty){e.preventDefault();e.returnValue='';} });
   let CATS_DB = [], SUBS_DB = [];
+  let KINDS_DB = [];                       /* 10.81: виды (iva_kinds) со словами автоподбора; пусто — SQL не применён */
+  let AUTO = { cat:'', sub:'', kind:'' };  /* что подставил автоподбор в прошлый раз — ручной выбор не трогаем */
+  let autoTimer = 0;
+  let MD = null;                           /* 10.82: справочник моделей (assets/models.js); null — нет (SQL не применён) */
+  const PROP = {};                         /* 10.84: «Предложить модель» — состояние по виду|бренду|модели */
+  let PH = null;                           /* 10.84: подсказка цены шага 4 */
   let step = 1;
   const TOTAL = 5;
 
   /* Состояние формы */
   let F = {
-    cat:'', sub:'', imgs:[], name:'', descr:'', cond:'good',
-    price:'', deposit:'', terms:'', delivery:false, delivery_price:40, address:'', city:''
+    cat:'', sub:'', kind:'', imgs:[], name:'', descr:'', cond:'good',
+    model_id:null, specs:{}, specsAuto:{}, mbrand:'', mtext:'', kit:[], descrAuto:'',   /* 10.84: текст «Модели», комплектация, наше описание */
+    price:'', deposit:'', terms:'', delivery:false, delivery_price:40, address:'', city:'', pickup_lat:null, pickup_lng:null
   };
 
   /* ---------- Черновик ---------- */
@@ -158,9 +168,188 @@ textarea.inp{resize:vertical;min-height:110px;font-family:inherit;line-height:1.
     }).join('') + '</div>';
   }
 
+  /* 10.81: виды подкатегории и автоподбор по названию (assets/kind-guess.js — тот же алгоритм, что в приложении) */
+  function kindsFor(cat, sub){
+    return KINDS_DB.filter(function(k){ return cat && sub && k.cat === cat && k.sub === sub; });
+  }
+  function kindKeep(){
+    if (F.kind && !kindsFor(F.cat, F.sub).some(function(k){ return k.key === F.kind; })) F.kind = '';
+  }
+  function canAuto(){
+    return typeof ivaGuessKind === 'function' && KINDS_DB.some(function(k){ return k.words && k.words.length; });
+  }
+  function autoKind(){
+    if (!canAuto()) return;
+    let g = ivaGuessKind(F.name, KINDS_DB);
+    if (!g.cat || !CATS_DB.some(function(c){ return c.key === g.cat; })) return;
+    if (g.sub && !SUBS_DB.some(function(x){ return x.cat === g.cat && x.key === g.sub; })) g = { cat:g.cat, sub:'', kind:'' };
+    const p = ivaKindPlan({ cat:F.cat, sub:F.sub, kind:F.kind }, AUTO, g);
+    if (!p) return;
+    F.cat = p.cat; F.sub = p.sub; F.kind = p.kind;
+    AUTO = { cat:p.cat, sub:p.sub, kind:p.kind };
+    saveDraft();
+    if ($('catArea')){ paintCat(); bad('fCat', false); }
+    livePreview();
+  }
+
+  /* 10.82: модель из справочника — только новое объявление и только когда справочник загрузился */
+  function mdOn(){ return !!MD && !EDIT_ID; }
+  function modelById(id){ return MD && id ? MD.byId[id] || null : null; }
+  function modelText(m){ return m ? m.brand + ' ' + m.model : ''; }
+  /* модель снимается, если вид другой или название уже не про неё; характеристики остаются */
+  function modelKeep(){
+    const m = modelById(F.model_id);
+    if (F.model_id && (!m || m.kind !== F.kind || !ivaModelStillFits(F.name, m))) F.model_id = null;
+  }
+  function chooseModel(m){
+    clearTimeout(autoTimer);   /* 10.86: отложенный автоподбор от набора не должен сработать после выбора модели (сбрасывал вид и модель) */
+    const k = KINDS_DB.find(function(x){ return x.key === m.kind; });
+    F.name = m.title;
+    if (k && CATS_DB.some(function(c){ return c.key === k.cat; })){
+      const subOk = SUBS_DB.some(function(x){ return x.cat === k.cat && x.key === k.sub; });
+      F.cat = k.cat; F.sub = subOk ? k.sub : ''; F.kind = subOk ? k.key : '';
+      AUTO = { cat:F.cat, sub:F.sub, kind:F.kind };   /* как автоподбор: новое название может сменить, ручной выбор — нет */
+    }
+    F.model_id = F.kind === m.kind ? m.id : null;
+    F.mtext = '';
+    const r = ivaSpecsFill(F.specs, F.specsAuto, m.specs);
+    F.specs = r.values; F.specsAuto = r.auto;
+    saveDraft(); render();
+  }
+  /* 10.86 (решение владельца 15.10): «Питание» — только у выбранной модели (одним вариантом), «Напряжение
+     аккумулятора» — только при «Аккумуляторе»; сохраняются только показанные поля */
+  function specFields(){
+    if (!MD || !F.kind) return [];
+    const m = modelById(F.model_id);
+    return ivaFormFields(ivaFieldsFor(MD, F.kind), m && m.kind === F.kind ? m.specs : null, F.specs);
+  }
+  function specSig(){ return specFields().map(function(f){ return f.key + ':' + (f.options || []).join(';'); }).join('|'); }
+  function modelHTML(){
+    if (!mdOn() || !F.kind) return '';
+    modelKeep();
+    const brands = ivaModelBrands(MD.index, F.kind), fields = specFields();
+    if (F.mbrand && brands.indexOf(F.mbrand) < 0) F.mbrand = '';
+    const ex = brands.length ? ivaModelSearch('', MD.index, { kind:F.kind, limit:1 })[0] : null;
+    const kitItems = (MD.kit && MD.kit[F.kind]) || [];
+    /* 10.84: «Модель» — при любом виде (и без брендов): нет в списке — «Предложить модель» */
+    return '<div class="fld" id="fModel" style="margin:14px 0 0"><label>Модель ' +
+          '<span class="muted" style="font-weight:400">— необязательно, характеристики заполнятся сами</span></label>' +
+          (brands.length ? '<div class="mbrands">' + brands.map(function(b){
+            return '<button type="button" data-mbrand="' + esc(b) + '"' + (F.mbrand === b ? ' class="on"' : '') + '>' + esc(b) + '</button>';
+          }).join('') + '</div>' : '') +
+          '<input class="inp" id="iModel" style="margin-top:9px" autocomplete="off" maxlength="90" placeholder="' +
+            esc(ex ? 'Например: ' + modelText(ex) : 'Модель') + '" value="' + esc(modelText(modelById(F.model_id)) || F.mtext || '') + '">' +
+          '<div class="msug" id="mSugModel"></div>' +
+          '<div id="mProp">' + propHTML() + '</div>' +
+        '</div>' +
+      (fields.length ?
+        '<div class="fld" id="fSpecs" style="margin:14px 0 0"><label>Характеристики ' +
+          '<span class="muted" style="font-weight:400">— необязательно, можно поправить</span></label>' +
+          ivaSpecsHTML(fields, F.specs, function(t){ return '<span class="mspec-l">' + esc(t) + '</span>'; }) +
+        '</div>' : '') +
+      (kitItems.length ?
+        '<div class="fld" id="fKit" style="margin:14px 0 0"><label>Комплектация ' +
+          '<span class="muted" style="font-weight:400">— отметьте, что отдаёте вместе с инструментом</span></label>' +
+          '<div class="mbrands">' + ivaKitHTML(kitItems, F.kit, '') + '</div>' +
+        '</div>' : '');
+  }
+  /* 10.84: «Предложить модель» — текст поля «Модель» не выбран из подсказок и такой модели у вида нет */
+  function propParts(){
+    const im = $('iModel'), q = im ? im.value : F.mtext;
+    if (!mdOn() || !F.kind || modelById(F.model_id) || ivaModelExact(MD.index, F.kind, q)) return null;
+    return ivaProposalParts(q, F.mbrand, MD.brands);
+  }
+  function propKey(p){ return F.kind + '|' + p.brand.toLowerCase() + '|' + p.model.toLowerCase(); }
+  function propHTML(){ const p = propParts(); return p ? ivaPropHTML(p, PROP[propKey(p)] || '') : ''; }
+  function paintProp(){ const b = $('mProp'); if (b) b.innerHTML = propHTML(); }
+  function sendProp(){
+    const p = propParts();
+    if (!p) return;
+    const key = propKey(p);
+    if (PROP[key] === 'sending' || PROP[key] === 'ok') return;
+    const k = KINDS_DB.find(function(x){ return x.key === F.kind; });
+    const row = { kind:F.kind, brand:p.brand, model:p.model, title:ivaProposalTitle(F.name, p, k ? k.title : ''),
+      specs:ivaSpecsClean(F.specs, specFields()) || {} };
+    PROP[key] = 'sending'; paintProp();
+    ivaProposalSend(api, row).then(function(err){ PROP[key] = err || 'ok'; paintProp(); });
+  }
+  /* 10.84: «Сгенерировать описание» — в пустое описание или вместо нашего прошлого; написанное руками не трогаем */
+  function genDescr(){
+    const fl = F.kind ? specFields() : [];
+    const rows = fl.length ? ivaSpecRows(ivaSpecsClean(F.specs, fl) || {}, fl) : [];
+    const kit = F.kind && MD.kit ? ivaKitClean(F.kit, MD.kit[F.kind]) : null;
+    const txt = ivaDescribe(F.name, rows, kit).slice(0, 1200);
+    let note = '';
+    if (!txt) note = 'Сначала напишите название.';
+    else if (!(F.descr || '').trim() || F.descr === F.descrAuto){
+      F.descr = txt; F.descrAuto = txt;
+      const ds = $('iDescr'); if (ds) ds.value = txt;
+      countDescr(); saveDraft(); bad('fDescr', false);
+    } else note = 'Описание уже написано — сотрите его, чтобы сгенерировать заново.';
+    const n = $('genNote'); if (n){ n.textContent = note; n.style.display = note ? '' : 'none'; }
+  }
+  /* 10.84: подсказка цены и залога по активным объявлениям той же модели или вида — только текст и «Подставить» в пустое */
+  function paintPriceHint(){
+    if (!$('priceHint') || !F.kind || EDIT_ID || typeof ivaPriceRows !== 'function') return;
+    const kind = F.kind;
+    ivaPriceRows(api, kind).then(function(rows){
+      const el = $('priceHint');
+      if (!el || F.kind !== kind) return;
+      PH = ivaPriceHint(rows, mdOn() ? F.model_id : null, kind);
+      if (!PH){ el.innerHTML = ''; el.style.display = 'none'; return; }
+      const canP = !String(F.price).trim();
+      el.innerHTML = esc(ivaPriceHintText(PH)) + (canP ? ' · <button type="button" id="priceAuto" style="color:var(--or);font-weight:600">Подставить ' +
+        esc(rub(PH.price[2])) + (PH.deposit && String(F.deposit).trim() === '' ? ' и залог ' + esc(rub(PH.deposit[2])) : '') + '</button>' : '');
+      el.style.display = '';
+    });
+  }
+  function paintCat(){
+    const area = $('catArea');
+    if (!area) return;
+    area.innerHTML = catHTML();
+    bindModel();
+  }
+  function bindModel(){
+    const wh = $('iWhat'), ws = $('mSugWhat');
+    if (wh && ws && mdOn() && !wh.dataset.msug){
+      wh.dataset.msug = '1';
+      ivaSugAttach(wh, ws, function(q){ return ivaModelSearch(q, MD.index, { limit:6 }); },
+        function(m){ return m.title; }, chooseModel);
+    }
+    const im = $('iModel'), ms = $('mSugModel');
+    if (im && ms){
+      ivaSugAttach(im, ms, function(q){
+        const m = modelById(F.model_id);
+        if (m && q.trim() === modelText(m)) return [];
+        return ivaModelSearch(q, MD.index, { kind:F.kind, brand:F.mbrand, limit:20 });
+      }, modelText, chooseModel);
+      im.addEventListener('input', function(){
+        const m = modelById(F.model_id);
+        if (m && this.value.trim() !== modelText(m)){ F.model_id = null; saveDraft(); }
+        F.mtext = m && this.value.trim() === modelText(m) ? '' : this.value;
+        paintProp();
+      });
+    }
+  }
+
   function body1(){
-    const subs = SUBS_DB.filter(function(s){ return s.cat === F.cat; });
     return '<div class="box">' +
+      ((canAuto() || mdOn()) && !EDIT_ID ?
+        '<div class="fld" id="fWhat">' +
+          '<label>Что сдаёте <span class="muted" style="font-weight:400">— категория подберётся сама</span></label>' +
+          '<input class="inp" id="iWhat" maxlength="90" autocomplete="off" placeholder="Например: Перфоратор Makita HR2470" value="' + esc(F.name) + '">' +
+          '<div class="msug" id="mSugWhat"></div>' +
+          '<div class="hint">Это же название будет у объявления — его можно поправить на шаге «Описание».</div>' +
+        '</div>' : '') +
+      '<div id="catArea">' + catHTML() + '</div>' +
+    '</div>';
+  }
+
+  function catHTML(){
+    const subs = SUBS_DB.filter(function(s){ return s.cat === F.cat; });
+    kindKeep();
+    const kinds = kindsFor(F.cat, F.sub);
+    return '' +
       '<div class="fld" id="fCat">' +
         '<label>Категория инструмента</label>' +
         '<div class="pick">' +
@@ -183,7 +372,17 @@ textarea.inp{resize:vertical;min-height:110px;font-family:inherit;line-height:1.
                      (F.sub === s.key ? ' class="on"' : '') + '>' + esc(s.title) + '</button>';
             }).join('') +
           '</div></div>' : '') +
-    '</div>';
+      (kinds.length ?
+        '<div class="fld" id="fKind" style="margin:14px 0 0"><label>Вид инструмента ' +
+          '<span class="muted" style="font-weight:400">— необязательно</span></label>' +
+          '<div class="pick row">' +
+            '<button type="button" data-kind=""' + (!F.kind ? ' class="on"' : '') + '>Без уточнения</button>' +
+            kinds.map(function(k){
+              return '<button type="button" data-kind="' + esc(k.key) + '"' +
+                     (F.kind === k.key ? ' class="on"' : '') + '>' + esc(k.title) + '</button>';
+            }).join('') +
+          '</div></div>' : '') +
+      modelHTML();
   }
 
   function body2(){
@@ -215,7 +414,9 @@ textarea.inp{resize:vertical;min-height:110px;font-family:inherit;line-height:1.
       '<div class="fld" id="fDescr">' +
         '<label>Описание</label>' +
         '<textarea class="inp" id="iDescr" maxlength="1200" placeholder="Что входит в комплект, для каких работ подходит, важные ограничения">' + esc(F.descr) + '</textarea>' +
-        '<div class="hint"><span id="dCnt">0</span> из 1200 символов</div>' +
+        '<div class="hint"><span id="dCnt">0</span> из 1200 символов' +
+          (mdOn() ? ' · <button type="button" id="genDescr" style="color:var(--or);font-weight:600">Сгенерировать описание</button>' : '') + '</div>' +
+        '<div class="hint" id="genNote" style="display:none"></div>' +
         '<div class="err">Опишите инструмент (минимум 20 символов)</div>' +
       '</div>' +
       '<div class="fld" style="margin-bottom:0">' +
@@ -235,6 +436,7 @@ textarea.inp{resize:vertical;min-height:110px;font-family:inherit;line-height:1.
       '<div class="fld" id="fPrice">' +
         '<label>Цена за сутки, ₽</label>' +
         '<input class="inp" id="iPrice" type="number" min="1" max="1000000" placeholder="600" value="' + esc(F.price) + '">' +
+        '<div class="hint" id="priceHint" style="display:none"></div>' +
         '<div class="err">Укажите цену больше нуля</div>' +
       '</div>' +
       '<div class="fld" id="fDep">' +
@@ -299,6 +501,8 @@ textarea.inp{resize:vertical;min-height:110px;font-family:inherit;line-height:1.
       '</article>' +
       '<div class="box" style="margin-top:14px">' +
         '<div class="sum-row"><span>Категория</span><b>' + esc(catTitleDB(F.cat) || '—') + '</b></div>' +
+        (F.kind && kindTitle(F.kind) ? '<div class="sum-row"><span>Вид</span><b>' + esc(kindTitle(F.kind)) + '</b></div>' : '') +
+        (mdOn() && modelById(F.model_id) ? '<div class="sum-row"><span>Модель</span><b>' + esc(modelText(modelById(F.model_id))) + '</b></div>' : '') +
         '<div class="sum-row"><span>Фото</span><b>' + (F.imgs.length || '—') + '</b></div>' +
         '<div class="sum-row"><span>Цена</span><b>' + (F.price ? rub(F.price) + '/сут' : '—') + '</b></div>' +
         '<div class="sum-row"><span>Залог</span><b>' + (F.price || F.deposit ? rub(dep) : '—') + '</b></div>' +
@@ -306,6 +510,11 @@ textarea.inp{resize:vertical;min-height:110px;font-family:inherit;line-height:1.
           (F.delivery ? 'Доставка ' + (F.delivery_price || 0) + ' ₽/км' : 'Самовывоз') + '</b></div>' +
       '</div>' +
     '</div>';
+  }
+
+  function kindTitle(k){
+    const x = KINDS_DB.find(function(y){ return y.key === k; });
+    return x ? x.title : '';
   }
 
   function catTitleDB(k){
@@ -339,6 +548,7 @@ textarea.inp{resize:vertical;min-height:110px;font-family:inherit;line-height:1.
     bindStep();
     if (step === 2) paintPhotos();
     if (step === 3) countDescr();
+    if (step === 4) paintPriceHint();
   }
 
   /* ---------- Обработчики текущего шага ---------- */
@@ -347,16 +557,42 @@ textarea.inp{resize:vertical;min-height:110px;font-family:inherit;line-height:1.
 
     root.onclick = function(e){
       const c = e.target.closest('[data-cat]');
-      if (c){ F.cat = c.getAttribute('data-cat'); F.sub = ''; saveDraft(); render(); return; }
+      if (c){ F.cat = c.getAttribute('data-cat'); F.sub = ''; F.kind = ''; saveDraft(); render(); return; }
 
       const s = e.target.closest('[data-sub]');
-      if (s){ F.sub = s.getAttribute('data-sub'); saveDraft(); render(); return; }
+      if (s){ F.sub = s.getAttribute('data-sub'); kindKeep(); saveDraft(); render(); return; }
+
+      const kd = e.target.closest('[data-kind]');
+      if (kd){ F.kind = kd.getAttribute('data-kind'); saveDraft(); render(); return; }
+
+      const mb = e.target.closest('[data-mbrand]');
+      if (mb){
+        const b = mb.getAttribute('data-mbrand');
+        F.mbrand = F.mbrand === b ? '' : b; saveDraft(); paintCat();
+        const im = $('iModel'); if (im) im.focus();
+        return;
+      }
 
       const cd = e.target.closest('[data-cond]');
       if (cd){ F.cond = cd.getAttribute('data-cond'); saveDraft(); render(); return; }
 
       const dl = e.target.closest('[data-dl]');
       if (dl){ F.delivery = dl.getAttribute('data-dl') === '1'; saveDraft(); render(); return; }
+
+      /* 10.84: комплектация, «Предложить модель», описание, подсказка цены */
+      const kt = e.target.closest('[data-kit]');
+      if (kt){
+        const v = kt.getAttribute('data-kit'), i = F.kit.indexOf(v);
+        if (i >= 0) F.kit.splice(i, 1); else F.kit.push(v);
+        saveDraft(); paintCat(); return;
+      }
+      if (e.target.closest('[data-mprop]')){ sendProp(); return; }
+      if (e.target.id === 'genDescr'){ genDescr(); return; }
+      if (e.target.id === 'priceAuto' && PH){
+        if (!String(F.price).trim()) F.price = PH.price[2];
+        if (PH.deposit && String(F.deposit).trim() === '') F.deposit = PH.deposit[2];
+        saveDraft(); render(); return;
+      }
 
       if (e.target.id === 'depAuto'){
         F.deposit = (Number(F.price) || 0) * 5;
@@ -367,6 +603,30 @@ textarea.inp{resize:vertical;min-height:110px;font-family:inherit;line-height:1.
     const bk = $('bBack'); if (bk) bk.addEventListener('click', function(){ step--; render(); });
     const nx = $('bNext'); if (nx) nx.addEventListener('click', function(){ if (validate()) { step++; saveDraft(); render(); } });
     const sv = $('bSave'); if (sv) sv.addEventListener('click', publish);
+
+    /* Шаг 1: название → категория, подкатегория и вид (10.81) */
+    const wh = $('iWhat');
+    if (wh) wh.addEventListener('input', function(){
+      F.name = this.value; saveDraft();
+      clearTimeout(autoTimer);
+      autoTimer = setTimeout(function(){
+        try { autoKind(); } catch(e){}
+        /* 10.82: название уже не про выбранную модель — модель снимается (поле «Модель» пустеет) */
+        const was = F.model_id; modelKeep();
+        if (was && !F.model_id){ saveDraft(); paintCat(); }
+      }, 300);
+    });
+    /* 10.82: характеристики — правки руками (их подстановка модели не перезапишет) */
+    root.oninput = function(e){
+      const sp = e.target.closest && e.target.closest('[data-spec]');
+      if (sp){
+        const was = specSig();
+        F.specs[sp.getAttribute('data-spec')] = sp.value; saveDraft();
+        if (specSig() !== was) paintCat();   /* 10.86: питание сменили — напряжение аккумулятора появляется / пропадает */
+      }
+    };
+    root.onchange = root.oninput;
+    bindModel();
 
     /* Поля шага 3 */
     const nm = $('iName');
@@ -387,7 +647,8 @@ textarea.inp{resize:vertical;min-height:110px;font-family:inherit;line-height:1.
     if (dpr) dpr.addEventListener('input', function(){ F.delivery_price = this.value; livePreview(); saveDraft(); });
     const ad = $('iAddr');
     if (ad) ad.addEventListener('input', function(){
-      F.address=this.value;const inferred=IvaGeo.addressCity(this.value);
+      F.address=this.value; F.pickup_lat=null; F.pickup_lng=null;
+      const inferred=IvaGeo.addressCity(this.value);
       if(inferred){F.city=inferred;if($('iCity'))$('iCity').value=inferred;}saveDraft();
     });
     const ci=$('iCity');
@@ -519,6 +780,20 @@ textarea.inp{resize:vertical;min-height:110px;font-family:inherit;line-height:1.
       'Состояние: ' + condTitle(F.cond)
     ].filter(Boolean).join('\n');
 
+    /* Новые объявления сохраняют координаты отдельно. Если Photon временно
+       недоступен, адрес всё равно сохранится и будет геокодирован позже;
+       публикация не блокируется внешним справочником. */
+    let pickupLat = F.pickup_lat, pickupLng = F.pickup_lng;
+    if (F.address && window.IvaGeo){
+      try {
+        const rows = await IvaGeo.search(F.address, 'address');
+        const point = rows && rows[0] && rows[0].coordinates;
+        if (point && isFinite(Number(point[0])) && isFinite(Number(point[1]))){
+          pickupLng = Number(point[0]); pickupLat = Number(point[1]);
+        }
+      } catch(e){}
+    }
+
     const payload = {
       name: F.name.trim(),
       cat: F.cat,
@@ -530,8 +805,25 @@ textarea.inp{resize:vertical;min-height:110px;font-family:inherit;line-height:1.
       delivery: F.delivery,
       delivery_price: Number(F.delivery_price) || 0,
       terms: terms,
-      pickup_city: F.city
+      pickup_city: F.city,
+      pickup_address: F.address.trim(),
+      pickup_lat: pickupLat,
+      pickup_lng: pickupLng
     };
+    /* 10.81: вид — только когда справочник видов есть в базе (значит, есть и tools.kind) */
+    if (KINDS_DB.length){
+      kindKeep();
+      if (F.kind || EDIT_ID) payload.kind = F.kind || null;
+    }
+    /* 10.82: модель и характеристики — новое объявление, справочник загружен, вид выбран */
+    if (mdOn() && payload.kind){
+      modelKeep();
+      if (F.model_id) payload.model_id = F.model_id;
+      const sp = ivaSpecsClean(F.specs, specFields());   /* 10.86: только показанные поля */
+      if (sp) payload.specs = sp;
+      const kit = MD.kit ? ivaKitClean(F.kit, MD.kit[payload.kind]) : null;   /* 10.84 */
+      if (kit) payload.kit = kit;
+    }
 
     if (EDIT_ID){
       try {
@@ -558,7 +850,22 @@ textarea.inp{resize:vertical;min-height:110px;font-family:inherit;line-height:1.
     payload.status = verdict.status;
 
     try {
-      const t = await createTool(payload);
+      let t;
+      try { t = await createTool(payload); }
+      catch(e1){
+        /* 10.84: нет столбца kit — без комплектации; 10.82: база не приняла модель или характеристики — объявление важнее */
+        if (!payload.model_id && !payload.specs && !payload.kit) throw e1;
+        let e2 = e1;
+        if (payload.kit){
+          delete payload.kit;
+          try { t = await createTool(payload); e2 = null; } catch(x){ e2 = x; }
+        }
+        if (e2){
+          if (!payload.model_id && !payload.specs) throw e2;
+          delete payload.model_id; delete payload.specs;
+          t = await createTool(payload);
+        }
+      }
       dropDraft();
       const onMod = verdict.status === 'moderation';
       const reasons = verdict.failed.map(function(f){
@@ -608,6 +915,16 @@ textarea.inp{resize:vertical;min-height:110px;font-family:inherit;line-height:1.
     } catch(e){
       CATS_DB = CATS; SUBS_DB = SUBS;   /* запасной вариант — справочник из data.js */
     }
+    try { KINDS_DB = await loadKinds(); } catch(e){ KINDS_DB = []; }
+    /* 10.82: справочник моделей — в фоне (форма не ждёт); пришёл — шаг 1 показывает подсказки, «Модель» и характеристики */
+    if (!EDIT_ID && typeof ivaModelsLoad === 'function'){
+      ivaModelsLoad(api, KINDS_DB).then(function(md){
+        if (!md) return;
+        MD = md;
+        if (step !== 1) return;
+        if (!$('iWhat')) render(); else paintCat();
+      }).catch(function(){});
+    }
 
     if (EDIT_ID){
       try {
@@ -626,12 +943,21 @@ textarea.inp{resize:vertical;min-height:110px;font-family:inherit;line-height:1.
           deposit:EDIT_SOURCE.deposit == null ? '' : EDIT_SOURCE.deposit,
           terms:lines.filter(line=>!/^\s*(?:Адрес выдачи|Состояние):/i.test(line)).join('\n').trim(),
           city:parsed.city || '',
-          address:addressLine ? addressLine.trim().replace(/^Адрес выдачи:\s*/i,'') : '',
+          address:EDIT_SOURCE.pickup_address || (addressLine ? addressLine.trim().replace(/^Адрес выдачи:\s*/i,'') : ''),
+          pickup_lat:EDIT_SOURCE.pickup_lat == null ? null : EDIT_SOURCE.pickup_lat,
+          pickup_lng:EDIT_SOURCE.pickup_lng == null ? null : EDIT_SOURCE.pickup_lng,
           delivery:!!EDIT_SOURCE.delivery,delivery_price:EDIT_SOURCE.delivery_price == null ? 40 : EDIT_SOURCE.delivery_price
         };
         // Старую категорию не теряем, даже если её убрали из активного справочника.
         if (F.cat && !CATS_DB.some(c=>c.key===F.cat)) CATS_DB.push({key:F.cat,title:catTitle(F.cat)});
         if (F.sub && !SUBS_DB.some(c=>c.key===F.sub&&c.cat===F.cat)) SUBS_DB.push({key:F.sub,cat:F.cat,title:subTitle(F.sub)});
+        /* вид объявления — отдельным запросом: общий список полей объявления вид не читает */
+        if (KINDS_DB.length){
+          try {
+            const kr = await api('/rest/v1/tools?select=kind&id=eq.' + encodeURIComponent(EDIT_ID));
+            F.kind = (kr && kr[0] && kr[0].kind) || '';
+          } catch(e){ F.kind = ''; }
+        }
         document.title='Редактирование объявления — Ива';
         step=3;render();return;
       } catch(err){

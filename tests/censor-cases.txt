@@ -1,0 +1,190 @@
+# 10.92: «Цензура» — общие случаи для приложения (IvaPatchTest → IvaCensorPatch.check) и базы
+# (tools/censor-stand.py → public.iva_censor). Формат: уровень<TAB>текст; уровень: mat | suspect | ok.
+# \n в тексте — перевод строки, \u200b — невидимый пробел, \u0301 — ударение (обходы).
+# ── явный мат: русскими буквами ──
+mat	хуй
+mat	Нахуй
+mat	ХУЁВО
+mat	хуууй
+mat	пиздец
+mat	пздц
+mat	ебать
+mat	Заебись
+mat	выебон
+mat	съебался
+mat	ёбаный
+mat	долбоеб
+mat	въебал
+mat	бля
+mat	блять
+mat	выблядок
+mat	проблядь
+mat	мудак
+mat	пидор
+mat	пидорас
+mat	залупа
+mat	гондон
+mat	манда
+mat	шлюха
+mat	сука
+mat	херня
+mat	похер
+mat	дрочить
+mat	хули
+mat	Отличная дрель, но продавец мудак
+# ── явный мат: обходы ──
+mat	х.у.й
+mat	х-у-й
+mat	х у й
+mat	п и з д а
+mat	б л я
+mat	xуй
+mat	xyй
+mat	еб@ть
+mat	cyka
+mat	пиzда
+mat	пiзда
+mat	х\u200bуй
+mat	ху\u0301й
+mat	Сдаю перфоратор, xyйня полная
+# ── явный мат: латиницей (транслит) ──
+mat	huy
+mat	hui
+mat	xuy
+mat	nahuy
+mat	pohuy
+mat	nihuya
+mat	huesos
+mat	ohuel
+mat	pizdec
+mat	pizda
+mat	p1zda
+mat	blyat
+mat	blyad
+mat	bl9
+mat	ebat
+mat	yebat
+mat	zaebis
+mat	suka
+mat	mudak
+mat	pidor
+mat	zalupa
+mat	gandon
+mat	shluha
+mat	shlyuha
+mat	HUY
+# ── английский мат ──
+mat	fuck
+mat	f.u.c.k
+mat	fucking
+mat	motherfucker
+mat	shit
+mat	bitch
+# ── сомнительно: не публикуется до решения создателя ──
+suspect	жопа
+suspect	говно
+suspect	дерьмо
+suspect	срать
+suspect	хрен
+suspect	гнида
+suspect	ублюдок
+suspect	мразь
+suspect	тварь
+suspect	урод
+suspect	дебил
+suspect	чмо
+suspect	лох
+suspect	задрот
+suspect	шалава
+suspect	сучара
+suspect	курва
+suspect	пердеж
+suspect	трахать
+suspect	zhopa
+suspect	govno
+suspect	dick
+suspect	wtf
+suspect	пи зда
+suspect	ху йня
+suspect	х*й
+suspect	б**дь
+suspect	п***ц
+suspect	с*ка
+suspect	Хороший инструмент, а хозяин урод
+# ── обычные слова и тексты объявлений — не трогаем ──
+ok	хлеб
+ok	небо
+ok	себе
+ok	тебе
+ok	тебя
+ok	ребята
+ok	требовать
+ok	учебный
+ok	колеблется
+ok	колебать
+ok	хлебать
+ok	бляха
+ok	бляшка
+ok	сабля
+ok	корабля
+ok	рубля
+ok	мудрый
+ok	педикюр
+ok	Педро
+ok	мандарин
+ok	мандат
+ok	сучок
+ok	сук
+ok	сучкорез
+ok	сукно
+ok	скука
+ok	херес
+ok	херувим
+ok	страхует
+ok	застрахуйте
+ok	не психуй
+ok	хулиган
+ok	употреблять
+ok	употребление
+ok	оскорблять
+ok	погребение
+ok	вебинар
+ok	дебет
+ok	лебёдка
+ok	гребень
+ok	щебень
+ok	худой
+ok	хутор
+ok	хребет
+ok	скипидар
+ok	чихуахуа
+ok	курвиметр
+ok	трахея
+ok	сравнение
+ok	срабатывает
+ok	урожай
+ok	чмок
+ok	Лохматый
+ok	говорить
+ok	Хорошая дрель, всё понравилось!
+ok	Перфоратор Makita HR2470, кейс, бур SDS-plus
+ok	Bosch GBH 2-26 DRE
+ok	Huter DY6500L
+ok	Hyundai HHY 3020F
+ok	Husqvarna K 770
+ok	Hilti TE 70
+ok	Hitachi, Einhell, Eibenstock, Elitech, DeWalt, Metabo, Champion, Fubag, Ryobi, Daewoo
+ok	Отопитель Eberspacher, вентилятор EBM-papst
+ok	куплен на ebay
+ok	Philips Hue
+ok	for her
+ok	Д*Ш*В: 300*200*100
+ok	* Кейс\n* Бур\n* Пика
+ok	лобзик Bosch PST 700 E
+ok	Бензопила Stihl MS 180
+ok	болгарка 230 мм, дрель-шуруповёрт
+ok	Сдам в аренду генератор 220 В, оплата при получении
+ok	почта ivan@mail.ru
+ok	Сдаю перфоратор SDS-max, залог 5000 ₽
+ok	Я и ты, а в с у к о
+ok	hello world, best price, heavy duty, Made in Germany
