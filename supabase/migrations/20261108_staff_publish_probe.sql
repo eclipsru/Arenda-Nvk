@@ -216,7 +216,7 @@ begin
    where t.tgrelid = 'public.tools'::regclass and not t.tgisinternal
      and (t.tgtype & 2) = 2 and (t.tgtype & 4) = 4
      and t.tgname not in ('iva_tools_owner_default', 'tr_tools_censor', 'trg_iva_staff_tool', 'trg_iva_tool_paused',
-                          'trg_iva_tool_point', 'zzz_iva_probe');
+                          'trg_iva_tool_point', 'zz_iva_staff_owner', 'zzz_iva_probe');
 
   if st2 = 'IVAOK' then
     code := 'ok';
@@ -351,7 +351,7 @@ BEGIN
   SELECT 30, row_number() OVER (ORDER BY t.tgname)::int,
          'перед записью (по порядку): ' || t.tgname,
          CASE WHEN t.tgname IN ('iva_tools_owner_default', 'tr_tools_censor', 'trg_iva_staff_tool', 'trg_iva_tool_paused',
-                                'trg_iva_tool_point', 'zzz_iva_probe') THEN '✅ ' ELSE '⚠️ не из «Ивы»: ' END
+                                'trg_iva_tool_point', 'zz_iva_staff_owner', 'zzz_iva_probe') THEN '✅ ' ELSE '⚠️ не из «Ивы»: ' END
          || t.tgfoid::regproc::text || CASE WHEN p.prosecdef THEN ' (от имени базы)' ELSE '' END
     FROM pg_trigger t JOIN pg_proc p ON p.oid = t.tgfoid
    WHERE t.tgrelid = 'public.tools'::regclass AND NOT t.tgisinternal

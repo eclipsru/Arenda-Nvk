@@ -492,6 +492,17 @@ else
   skip "стенд «Сотрудник: проба записи»: нет pgserver (PG_PY=<python с pgserver> bash tools/check.sh)"
 fi
 
+head_ "4.5.24. Стенд «Сотрудник публикует, хотя в базе чужой trg_tool_owner» (локальный PostgreSQL, SQL 20261109)"
+if "$PG_PY" -c "import pgserver" >/dev/null 2>&1; then
+  if "$PG_PY" tools/staff-owner-stand.py >/tmp/iva-test-staff-owner.log 2>&1; then
+    ok "владелец объявления сотрудника: $(grep -c '✔' /tmp/iva-test-staff-owner.log) проверок SQL на PostgreSQL (без файла — отказ как на снимке; с файлом — публикует, правит, одобрение; владелец, клиент, чужой прокат — как раньше; откат)"
+  else
+    bad "стенд «Сотрудник: чужой trg_tool_owner»"; grep -E '✘|Error|ERROR' /tmp/iva-test-staff-owner.log | head -8 | sed 's/^/      /'
+  fi
+else
+  skip "стенд «Сотрудник: чужой trg_tool_owner»: нет pgserver (PG_PY=<python с pgserver> bash tools/check.sh)"
+fi
+
 head_ "Итог"
 printf '  пройдено: %s, ошибок: %s, пропущено: %s\n' "$PASS" "$FAIL" "$SKIP"
 if [ "$FAIL" -eq 0 ]; then echo "  Можно продолжать."; exit 0; else echo "  Сначала исправляем замечания выше."; exit 1; fi

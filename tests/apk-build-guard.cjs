@@ -2556,6 +2556,15 @@ try {
       && sq.includes("RAISE EXCEPTION USING ERRCODE = 'IVAOK'") && /SELECT check_name, result FROM iva_probe_out ORDER BY ord, n, check_name;\s*$/.test(sq)
       && chk.includes('tools/staff-probe-stand.py') && sd.includes('20261108_staff_publish_probe.sql'),
       'SQL 10.118: проба — от имени вошедшего (не от имени базы), оба прохода с откатом, триггер пробы спит без флага; одна таблица в конце; стенд в check.sh');
+    // исправление по таблице 20261108 из рабочей базы: чужой trg_tool_owner (после триггера сотрудника) ставил владельцем
+    // почту сотрудника. 20261109: последний триггер zz_iva_staff_owner возвращает владельца-прокат — только сотруднику
+    const fx = R('supabase/migrations/20261109_staff_owner_final.sql'), fs = R('tools/staff-owner-stand.py');
+    assert.ok(fx.includes('CREATE TRIGGER zz_iva_staff_owner\n  BEFORE INSERT OR UPDATE ON public.tools') && 'zz_iva_staff_owner' > 'trg_tool_owner'
+      && 'zz_iva_staff_owner' < 'zzz_iva_probe' && fx.includes("where a.active and a.role in ('admin', 'chief') and lower(btrim(a.email)) = em) then\n    return new;")
+      && fx.includes("where s.email = em and s.status = 'active' and s.can_catalog") && fx.includes('new.owner_email := old.owner_email;')
+      && !/drop\s+trigger\s+(if\s+exists\s+)?trg_tool_owner|drop\s+function[^;]*fn_tool_owner|create\s+policy|drop\s+policy/i.test(fx.replace(/--[^\n]*/g, ''))
+      && chk.includes('tools/staff-owner-stand.py') && fs.includes('20261109_staff_owner_final.sql') && sq.includes("'zz_iva_staff_owner', 'zzz_iva_probe'"),
+      'SQL 20261109: владелец объявления сотрудника — последним триггером, только сотруднику; trg_tool_owner и правила доступа не трогаем; стенд в check.sh');
     assert.ok(/NEW_NAME: '10\.118'/.test(wf) && /NEW_CODE: '192'/.test(wf), 'сборка 10.118 (192)');
     assert.ok((tp.match(/eq\("проба 10\.118: /g) || []).length >= 8, 'IvaPatchTest: проверки 10.118');
   }
