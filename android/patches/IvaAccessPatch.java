@@ -248,16 +248,24 @@ public final class IvaAccessPatch {
         }).start();
     }
 
-    /** Из IvaClientPatch.onProfile (после штатного renderProfile): удалённый по прошлому ответу базы — сразу клиент.
-     *  Нужно при запуске: штатный checkSelfAdmin видит строку удалённого и ставит selfAdmin = true. */
+    /** Из IvaClientPatch.onProfile (после штатного renderProfile): роль — по прошлому ответу базы.
+     *  10.110: удалённый — сразу клиент (штатный checkSelfAdmin видит строку удалённого и ставит selfAdmin = true).
+     *  10.117: и обратно — админ сразу админ. Штатный признак при запуске false, пока checkSelfAdmin не ответил, а после
+     *  трёх неудач (нет связи, истёкший ключ) так и остаётся false: админ видел клиентский кабинет без своих данных,
+     *  клиентский «Архив заявок» рядом со штатным, потом всё возвращалось. Свежий ответ базы по-прежнему решает (check). */
     static boolean onProfile(Activity a) {
-        if (!IvaNotifyPatch.loggedIn(a) || IvaReviewPatch.chief(a) || !IvaNotifyPatch.isAdmin(a)) return false;
+        if (!IvaNotifyPatch.loggedIn(a) || IvaReviewPatch.chief(a)) return false;
         String me = me(a);
-        if (me.isEmpty() || !prefs(a).contains(adminKey(me)) || prefs(a).getBoolean(adminKey(me), true)) return false;
-        setAdmin(a, false);
+        if (me.isEmpty() || !prefs(a).contains(adminKey(me))) return false;
+        int fix = roleFix(IvaNotifyPatch.isAdmin(a), prefs(a).getBoolean(adminKey(me), true));
+        if (fix == 0) return false;
+        setAdmin(a, fix > 0);
         nativeCall(a, "renderProfile");
         return true;
     }
+
+    /** Признак на экране против прошлого ответа базы: 0 — совпадает, +1 — вернуть админа, −1 — сделать клиентом. */
+    static int roleFix(boolean ui, boolean db) { return ui == db ? 0 : (db ? 1 : -1); }
 
     /** Фоновый поток (tick / onTab): спросить базу и применить. */
     static void check(final Activity a, final String me) throws Exception {
@@ -289,6 +297,9 @@ public final class IvaAccessPatch {
     }
 
     static Boolean askAdmin(Activity a, String me) throws Exception {
+        // 10.117: без ключа (идёт восстановление входа) база ответит как гостю — пустым списком; это не «не админ»
+        if (IvaClientPatch.authEmpty(IvaClientPatch.get(a, "accessToken"))) return null;
+        IvaClientPatch.authFresh(a);                                       // 10.117: истёкший ключ — сначала обновить
         String q = IvaReviewPatch.enc(me);
         String[] r = IvaClientPatch.apiCall(a, ADMIN_PATH + q, "GET", null, true);
         if (r != null && !r[0].startsWith("2") && missingColumn(r[0], r.length > 1 ? r[1] : ""))
@@ -556,5 +567,190 @@ public final class IvaAccessPatch {
     static boolean isOpen(WeakReference<Dialog> r) {
         Dialog d = r == null ? null : r.get();
         return d != null && d.isShowing();
+    }
+
+    // ───────────── 10.117: карточка «Комиссия владельцу» (просьба владельца 17.10.2026) ─────────────
+    // Штатный loadDebt — три запроса подряд (начислено, оплачено, процент) без повтора, и любая ошибка выглядит как
+    // сумма: упал первый — «0 ₽», второй или третий — «−начислено», всё дошло — настоящая (например «+150 ₽»
+    // переплаты). Ошибки бывают после сна телефона (истёкший ключ) и при слабой связи; карточка грузится при каждой
+    // перерисовке кабинета, и сумма «прыгала». Ещё он читал процент целым (7,5 % → «7%»).
+    // Теперь штатные строки суммы скрыты, вместо них наши — с теми же шрифтами и цветами. Пишем их только когда
+    // дошли все три ответа (до трёх попыток, ключ — сначала свежий); пока грузится или нет связи — последняя удачная
+    // сумма с телефона и пометка времени. Запрос один за раз, последний выигрывает. Данные те же, что у штатной
+    // карточки (свои строки order_parts, подтверждённые fee_payments, свой процент) — новых данных нет.
+    static final String FEE_PARTS = "/rest/v1/order_parts?select=fee&owner_email=eq.";
+    static final String FEE_PAID = "/rest/v1/fee_payments?select=amount&status=eq.confirmed&admin_email=eq.";
+    static final String FEE_PCT = "/rest/v1/admins?select=fee_pct&email=eq.";
+    static final String FEE_TAG = "iva_fee_";
+    static final String[] FEE_NATIVE = {"feePctTxt", "feeSum", "feeSub"};
+    static final int FEE_TRIES = 3;
+    static final long FEE_RETRY_MS = 2500;
+    static final java.util.concurrent.atomic.AtomicBoolean FEE_BUSY = new java.util.concurrent.atomic.AtomicBoolean();
+    static volatile boolean feeAgain;
+
+    /** Сумма поля по ответу-массиву PostgREST. Не массив (ошибка, пустой ответ) — null: это не «0». */
+    static Double feeSumField(String body, String key) {
+        String t = body == null ? "" : body.trim();
+        if (!t.startsWith("[") || !t.endsWith("]")) return null;
+        java.util.regex.Matcher m = java.util.regex.Pattern.compile("\"" + java.util.regex.Pattern.quote(key)
+            + "\"\\s*:\\s*\"?(null|-?[0-9]+(?:\\.[0-9]+)?(?:[eE][-+]?[0-9]+)?)").matcher(t);
+        double s = 0;
+        while (m.find()) if (!"null".equals(m.group(1))) s += Double.parseDouble(m.group(1));
+        return s;
+    }
+
+    /** Процент своей строки admins: строки нет или пусто — 5, как у штатной карточки. Не массив — null. */
+    static Double feePctField(String body) {
+        String t = body == null ? "" : body.trim();
+        if (!t.startsWith("[") || !t.endsWith("]")) return null;
+        java.util.regex.Matcher m = java.util.regex.Pattern.compile("\"fee_pct\"\\s*:\\s*\"?([0-9]+(?:\\.[0-9]+)?)").matcher(t);
+        return m.find() ? Double.valueOf(m.group(1)) : Double.valueOf(5);
+    }
+
+    /** Как штатный money: 12345.6 → «12 346». */
+    static String feeMoney(double v) {
+        return String.format(java.util.Locale.US, "%,d", Math.round(v)).replace(',', ' ');
+    }
+
+    /** Строки карточки, как у штатной: {процент, сумма, подпись}; [3] = "1" — задолженность (красным). */
+    static String[] feeTexts(double fee, double paid, double pct) {
+        double debt = Math.max(0, fee - paid), over = Math.max(0, paid - fee);
+        String sum = debt > 0 ? "−" + feeMoney(debt) + " ₽" : over > 0 ? "+" + feeMoney(over) + " ₽" : "0 ₽";
+        String sub = "начислено " + feeMoney(fee) + " ₽ · оплачено " + feeMoney(paid) + " ₽";
+        if (debt > 0) sub = "задолженность · " + sub;
+        else if (over > 0) sub = "переплата · " + sub;
+        return new String[]{"Комиссия владельцу — " + num(String.valueOf(pct)) + "% от аренды", sum, sub, debt > 0 ? "1" : "0"};
+    }
+
+    static String feeCacheKey(String me) { return "feecard_" + me; }
+
+    /** «начислено|оплачено|процент|время» → числа; не разобрали — null. */
+    static double[] feeCache(String v) {
+        if (v == null || v.isEmpty()) return null;
+        String[] x = v.split("\\|", -1);
+        if (x.length != 4) return null;
+        try {
+            return new double[]{Double.parseDouble(x[0]), Double.parseDouble(x[1]), Double.parseDouble(x[2]), Double.parseDouble(x[3])};
+        } catch (Throwable e) { return null; }
+    }
+
+    /** Пометка под суммой, когда свежих данных нет (три попытки не дошли): последняя удачная — со временем. */
+    static String feeStale(boolean hasCache, String hhmm) {
+        return hasCache ? "Не удалось обновить — сумма на " + hhmm : "Не удалось загрузить — откройте «Кабинет» ещё раз";
+    }
+
+    /** Из IvaClientPatch.onProfile (после каждой перерисовки кабинета). Главный поток. */
+    static void feeCard(final Activity a) {
+        if (!IvaNotifyPatch.loggedIn(a) || IvaReviewPatch.chief(a) || !IvaNotifyPatch.isAdmin(a)) return;
+        final String me = me(a);
+        if (me.isEmpty()) return;
+        final TextView[] v = feeViews(a);
+        if (v == null) return;                                            // разметка не та — остаётся штатная карточка
+        double[] c = feeCache(prefs(a).getString(feeCacheKey(me), ""));
+        if (c != null) feeShow(a, v, c, null);
+        else { v[1].setText("…"); v[2].setText(""); }                    // первая загрузка на этом телефоне
+        feeAgain = true;
+        if (!FEE_BUSY.compareAndSet(false, true)) return;                 // идёт загрузка — повторит после неё
+        new Thread(new Runnable() {
+            @Override public void run() {
+                do {
+                    try {
+                        while (feeAgain && me.equals(me(a))) { feeAgain = false; feeLoad(a, me); }
+                    } catch (Throwable ignore) {
+                    } finally { FEE_BUSY.set(false); }
+                } while (feeAgain && me.equals(me(a)) && FEE_BUSY.compareAndSet(false, true));
+            }
+        }).start();
+    }
+
+    /** Фоновый поток: до трёх попыток; пишем только полный ответ. */
+    static void feeLoad(final Activity a, final String me) throws Exception {
+        for (int i = 0; i < FEE_TRIES; i++) {
+            if (i > 0) Thread.sleep(FEE_RETRY_MS);
+            if (!me.equals(me(a)) || !IvaNotifyPatch.loggedIn(a)) return;
+            IvaClientPatch.authFresh(a);
+            final double[] r = feeFetch(a, me);
+            if (r == null) continue;
+            final double[] k = {r[0], r[1], r[2], System.currentTimeMillis()};
+            prefs(a).edit().putString(feeCacheKey(me), feeMoneyKey(k)).apply();
+            feePost(a, me, k, null);
+            return;
+        }
+        double[] c = feeCache(prefs(a).getString(feeCacheKey(me), ""));
+        String hhmm = c == null ? "" : new java.text.SimpleDateFormat("HH:mm", java.util.Locale.ROOT).format(new java.util.Date((long) c[3]));
+        feePost(a, me, c, feeStale(c != null, hhmm));
+    }
+
+    static String feeMoneyKey(double[] k) { return k[0] + "|" + k[1] + "|" + k[2] + "|" + (long) k[3]; }
+
+    /** {начислено, оплачено, процент} — только если все три ответа 2xx и разобраны; иначе null. */
+    static double[] feeFetch(Activity a, String me) throws Exception {
+        String q = IvaReviewPatch.enc(me);
+        String[] p = IvaClientPatch.apiCall(a, FEE_PARTS + q, "GET", null, true);
+        if (p == null || !p[0].startsWith("2") || p.length < 2) return null;
+        Double fee = feeSumField(p[1], "fee");
+        if (fee == null) return null;
+        String[] f = IvaClientPatch.apiCall(a, FEE_PAID + q, "GET", null, true);
+        if (f == null || !f[0].startsWith("2") || f.length < 2) return null;
+        Double paid = feeSumField(f[1], "amount");
+        if (paid == null) return null;
+        String[] t = IvaClientPatch.apiCall(a, FEE_PCT + q, "GET", null, true);
+        if (t == null || !t[0].startsWith("2") || t.length < 2) return null;
+        Double pct = feePctField(t[1]);
+        if (pct == null) return null;
+        return new double[]{fee, paid, pct};
+    }
+
+    static void feePost(final Activity a, final String me, final double[] k, final String note) {
+        a.runOnUiThread(new Runnable() {
+            @Override public void run() {
+                try {
+                    if (!me.equals(me(a)) || !IvaNotifyPatch.isAdmin(a)) return;
+                    TextView[] v = feeViews(a);
+                    if (v == null) return;
+                    if (k != null) feeShow(a, v, k, note);
+                    else { v[1].setText("—"); v[2].setText(note == null ? "" : note); }
+                } catch (Throwable ignore) {}
+            }
+        });
+    }
+
+    static void feeShow(Activity a, TextView[] v, double[] k, String note) {
+        String[] t = feeTexts(k[0], k[1], k[2]);
+        v[0].setText(t[0]);
+        v[1].setText(t[1]);
+        v[1].setTextColor("1".equals(t[3]) ? IvaClientPatch.navColor(a, "redBright", 0xffff5a5a)
+            : IvaClientPatch.navColor(a, "greenBright", 0xff3ddc84));
+        v[2].setText(note == null || note.isEmpty() ? t[2] : t[2] + "\n" + note);
+    }
+
+    /** Наши строки вместо штатных feePctTxt / feeSum / feeSub: тот же шрифт, цвет, отступы; штатные — скрыты. */
+    static TextView[] feeViews(Activity a) {
+        TextView[] out = new TextView[3];
+        for (int i = 0; i < 3; i++) {
+            Object o = IvaClientPatch.get(a, FEE_NATIVE[i]);
+            if (!(o instanceof TextView) || !(((TextView) o).getParent() instanceof LinearLayout)) return null;
+            TextView n = (TextView) o;
+            LinearLayout box = (LinearLayout) n.getParent();
+            View twin = box.findViewWithTag(FEE_TAG + i);
+            if (!(twin instanceof TextView)) {
+                TextView t = new TextView(a);
+                t.setTag(FEE_TAG + i);
+                t.setTextSize(android.util.TypedValue.COMPLEX_UNIT_PX, n.getTextSize());
+                t.setTypeface(n.getTypeface());
+                t.setTextColor(n.getTextColors());
+                t.setGravity(n.getGravity());
+                t.setPadding(n.getPaddingLeft(), n.getPaddingTop(), n.getPaddingRight(), n.getPaddingBottom());
+                LinearLayout.LayoutParams lp = n.getLayoutParams() instanceof LinearLayout.LayoutParams
+                    ? new LinearLayout.LayoutParams((LinearLayout.LayoutParams) n.getLayoutParams())
+                    : new LinearLayout.LayoutParams(-2, -2);
+                box.addView(t, box.indexOfChild(n) + 1, lp);
+                twin = t;
+            }
+            n.setVisibility(View.GONE);                                   // штатная строка: её пишет штатный loadDebt
+            twin.setVisibility(View.VISIBLE);
+            out[i] = (TextView) twin;
+        }
+        return out;
     }
 }

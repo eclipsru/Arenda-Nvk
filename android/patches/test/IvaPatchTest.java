@@ -2569,6 +2569,7 @@ public class IvaPatchTest {
         points114();                                                  // 10.114: оба набора прав, выбор пункта в «Добавить»
         live115();                                                    // 10.115: правки доступа сразу, «Сотрудники»
         live116();                                                    // 10.116: причина отказа сотруднику, «на одобрение», переходы
+        cab117();                                                     // 10.117: комиссия без скачков, роль и архив в кабинете
         if (fail > 0) { System.out.println("ошибок: " + fail); System.exit(1); }
         System.out.println("все проверки IvaPatch пройдены");
     }
@@ -3193,5 +3194,48 @@ public class IvaPatchTest {
             + "|" + IvaNotifyPatch.routeReady(3, true, true, false) + "|" + IvaNotifyPatch.routeReady(3, true, false, true) + "|" + IvaNotifyPatch.routeReady(3, false, false, true),
             "true|false|true|false|true|false|true|false");
         eq("переход 10.116: ждём роль не дольше 20 с", IvaNotifyPatch.ROUTE_READY_MS, 20000L);
+    }
+
+    /** 10.117: кабинет админа — комиссия только по полному ответу, роль по прошлому ответу базы, свежий ключ. */
+    static void cab117() {
+        eq("кабинет 10.117: сумма по ответу базы; ошибка/не массив — null (не «0 ₽»)",
+            IvaAccessPatch.feeSumField("[{\"fee\":100},{\"fee\":null},{\"fee\":50.5}]", "fee") + "|" + IvaAccessPatch.feeSumField("[]", "fee")
+            + "|" + IvaAccessPatch.feeSumField("{\"code\":\"PGRST301\",\"message\":\"JWT expired\"}", "fee") + "|" + IvaAccessPatch.feeSumField("", "fee")
+            + "|" + IvaAccessPatch.feeSumField(null, "amount") + "|" + IvaAccessPatch.feeSumField("[{\"amount\":\"200.00\"},{\"amount\":-20}]", "amount"),
+            "150.5|0.0|null|null|null|180.0");
+        eq("кабинет 10.117: поле другого имени не считается",
+            IvaAccessPatch.feeSumField("[{\"fee_pct\":5,\"fee\":10}]", "fee") + "|" + IvaAccessPatch.feeSumField("[{\"amount_x\":5}]", "amount"), "10.0|0.0");
+        eq("кабинет 10.117: процент — 7,5 не режется; нет строки — 5; ошибка — null",
+            IvaAccessPatch.feePctField("[{\"fee_pct\":7.5}]") + "|" + IvaAccessPatch.feePctField("[]") + "|" + IvaAccessPatch.feePctField("[{\"fee_pct\":null}]")
+            + "|" + IvaAccessPatch.feePctField("{\"message\":\"x\"}"), "7.5|5.0|5.0|null");
+        String[] d = IvaAccessPatch.feeTexts(1250, 1000, 7.5), o = IvaAccessPatch.feeTexts(100, 250, 5), z = IvaAccessPatch.feeTexts(0, 0, 5);
+        eq("кабинет 10.117: задолженность — как штатная карточка, красным",
+            d[0] + "|" + d[1] + "|" + d[2] + "|" + d[3],
+            "Комиссия владельцу — 7,5% от аренды|−250 ₽|задолженность · начислено 1 250 ₽ · оплачено 1 000 ₽|1");
+        eq("кабинет 10.117: переплата и ноль — зелёным",
+            o[1] + "|" + o[2] + "|" + o[3] + "|" + z[1] + "|" + z[2] + "|" + z[3],
+            "+150 ₽|переплата · начислено 100 ₽ · оплачено 250 ₽|0|0 ₽|начислено 0 ₽ · оплачено 0 ₽|0");
+        eq("кабинет 10.117: деньги как штатный money", IvaAccessPatch.feeMoney(1234567.4) + "|" + IvaAccessPatch.feeMoney(0.6), "1 234 567|1");
+        double[] k = IvaAccessPatch.feeCache(IvaAccessPatch.feeMoneyKey(new double[]{1250, 1000, 7.5, 1760000000000d}));
+        eq("кабинет 10.117: последняя удачная сумма на телефоне — туда и обратно",
+            k[0] + "|" + k[1] + "|" + k[2] + "|" + (long) k[3], "1250.0|1000.0|7.5|1760000000000");
+        eq("кабинет 10.117: испорченная запись — нет суммы",
+            (IvaAccessPatch.feeCache("") == null) + "|" + (IvaAccessPatch.feeCache(null) == null) + "|" + (IvaAccessPatch.feeCache("1|2|x|4") == null)
+            + "|" + (IvaAccessPatch.feeCache("1|2|3") == null), "true|true|true|true");
+        eq("кабинет 10.117: нет свежих данных — пометка, а не другая сумма",
+            IvaAccessPatch.feeStale(true, "14:05") + "|" + IvaAccessPatch.feeStale(false, ""),
+            "Не удалось обновить — сумма на 14:05|Не удалось загрузить — откройте «Кабинет» ещё раз");
+        eq("кабинет 10.117: три попытки, пауза 2,5 с", IvaAccessPatch.FEE_TRIES + "|" + IvaAccessPatch.FEE_RETRY_MS, "3|2500");
+        eq("роль 10.117: по прошлому ответу базы — вернуть админа / сделать клиентом / не трогать",
+            IvaAccessPatch.roleFix(false, true) + "|" + IvaAccessPatch.roleFix(true, false) + "|" + IvaAccessPatch.roleFix(true, true) + "|" + IvaAccessPatch.roleFix(false, false),
+            "1|-1|0|0");
+        long now = 1760000000000L;
+        eq("ключ 10.117: истёк ли ключ, с которым ходили (запас 5 с)",
+            IvaClientPatch.authDead(now / 1000 - 10, now) + "|" + IvaClientPatch.authDead(now / 1000 + 3, now) + "|" + IvaClientPatch.authDead(now / 1000 + 60, now)
+            + "|" + IvaClientPatch.authDead(0, now), "true|true|false|false");
+        eq("ключ 10.117: перерисовать после обновления — только «Кабинет» и «Заявки»",
+            IvaClientPatch.authHealTab("profile") + "|" + IvaClientPatch.authHealTab("orders") + "|" + IvaClientPatch.authHealTab("home") + "|" + IvaClientPatch.authHealTab(""),
+            "true|true|false|false");
+        eq("ключ 10.117: первая проверка через 5 с после запуска", IvaClientPatch.AUTH_FIRST_MS, 5000L);
     }
 }

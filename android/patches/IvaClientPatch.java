@@ -1549,6 +1549,11 @@ public final class IvaClientPatch {
         try { installClientNav(a); } catch (Throwable ignore) {}
         try { IvaLogoPatch.cabinet(a); } catch (Throwable ignore) {}   // 10.113: строка «Мои инструменты проката» — есть / нет
         try { IvaShopPatch.cabinet(a); } catch (Throwable ignore) {}   // 10.116: «Настройка проката» — первой строкой кабинета (админу)
+        // 10.117: строки, зависящие от роли, — после каждой перерисовки (роль при запуске приходит позже первого показа:
+        // клиентский «Архив заявок» оставался рядом со штатным админским — архив «двоился»)
+        try { IvaOrderPatch.profileArchiveRow(a); } catch (Throwable ignore) {}
+        try { IvaNotifyPatch.ensureSupport(a); } catch (Throwable ignore) {}
+        try { IvaAccessPatch.feeCard(a); } catch (Throwable ignore) {}   // 10.117: комиссия — только по полному ответу базы
         try { if (hubVisible && IvaLogoPatch.target(a) == IvaLogoPatch.NATIVE) callNativeTab(a, "home"); } catch (Throwable ignore) {}   // выход из аккаунта
     }
 
@@ -3243,7 +3248,7 @@ public final class IvaClientPatch {
     //     был (ключ обновится позже). Сервер ответил, что rt больше не действует (400) — выход настоящий.
     //  в) «Выйти» — копия стирается, выход как раньше.
     static final String AUTH_BAK = "iva_auth_bak", AUTH_SESSION = "prokat_session";
-    static final long AUTH_TICK_MS = 60L * 1000, AUTH_AHEAD_MS = 5L * 60 * 1000, AUTH_FIRST_MS = 20L * 1000;
+    static final long AUTH_TICK_MS = 60L * 1000, AUTH_AHEAD_MS = 5L * 60 * 1000, AUTH_FIRST_MS = 5L * 1000;   // 10.117: было 20 с
     static final Object AUTH_LOCK = new Object();
     static final int AUTH_NONE = 0, AUTH_KEEP = 1, AUTH_FRESH = 2;
     static volatile String authBakAt = "";
@@ -3405,23 +3410,60 @@ public final class IvaClientPatch {
         if (!authNeed(IvaNotifyPatch.jwtExp((String) fat), System.currentTimeMillis())) return;
         final String used = (String) fat;
         new Thread(new Runnable() {
-            @Override public void run() {
-                synchronized (AUTH_LOCK) {
-                    try {
-                        if (!used.equals(get(a, "accessToken"))) return;              // уже обновили
-                        Object rt = get(a, "refreshToken");
-                        if (authEmpty(rt)) return;
-                        String[] r = authRefresh((String) rt);
-                        if (!r[0].startsWith("2")) return;                           // не вышло — попробуем через минуту; не выходим
-                        if (!rt.equals(get(a, "refreshToken"))) return;              // пока ходили — вышли
-                        set(a, "accessToken", r[1]);
-                        set(a, "refreshToken", r[2]);
-                        a.getSharedPreferences(AUTH_SESSION, Context.MODE_PRIVATE).edit()
-                            .putString("at", r[1]).putString("rt", r[2]).commit();
-                        authBackup(a);
-                    } catch (Throwable ignore) {}
-                }
-            }
+            @Override public void run() { try { authRenew(a, used); } catch (Throwable ignore) {} }
         }).start();
     }
+
+    // ───────────── 10.117: кабинет без «0 ₽ / −… / +…» и без пустого профиля (разбор 17.10, журнал) ─────────────
+    // Ключ живёт час. Пока телефон спал, минутная проверка стоит (Handler считает только время без сна), и первые
+    // запросы после пробуждения идут с истёкшим ключом: штатные карточки кабинета получают 401 и показывают «0 ₽»,
+    // пустые данные, клиентский вид у админа. Поэтому: ключ проверяется и при каждой смене раздела (IvaNotifyPatch),
+    // первая проверка — через 5 с после запуска (было 20 с), наши запросы кабинета сначала берут свежий ключ
+    // (authFresh), а если обновили уже истёкший — открытый «Кабинет» / «Заявки» перерисовываются со свежим ключом.
+
+    /** Фоновый поток: ключ истекает (или истёк) — обновить сейчас, до запроса. */
+    static void authFresh(Activity a) {
+        Object t = get(a, "accessToken");
+        if (authEmpty(t) || !authNeed(IvaNotifyPatch.jwtExp((String) t), System.currentTimeMillis())) return;
+        authRenew(a, (String) t);
+    }
+
+    /** Истёк ли ключ, с которым ходили (запас 5 с): тогда штатные экраны, загруженные с ним, пустые. */
+    static boolean authDead(long expSec, long nowMs) { return expSec > 0 && expSec * 1000L <= nowMs + 5000L; }
+
+    /** Обновить пару по rt (один за раз, как штатный ensureFreshToken). true — обновили. */
+    static boolean authRenew(final Activity a, String used) {
+        synchronized (AUTH_LOCK) {
+            try {
+                if (!used.equals(get(a, "accessToken"))) return false;        // уже обновили
+                Object rt = get(a, "refreshToken");
+                if (authEmpty(rt)) return false;
+                String[] r = authRefresh((String) rt);
+                if (!r[0].startsWith("2")) return false;                     // не вышло — попробуем через минуту; не выходим
+                if (!rt.equals(get(a, "refreshToken"))) return false;        // пока ходили — вышли
+                set(a, "accessToken", r[1]);
+                set(a, "refreshToken", r[2]);
+                a.getSharedPreferences(AUTH_SESSION, Context.MODE_PRIVATE).edit()
+                    .putString("at", r[1]).putString("rt", r[2]).commit();
+                authBackup(a);
+            } catch (Throwable e) { return false; }
+        }
+        if (authDead(IvaNotifyPatch.jwtExp(used), System.currentTimeMillis())) authHeal(a);
+        return true;
+    }
+
+    /** Ключ был уже истёкшим — открытый «Кабинет» или «Заявки» загружались с ним: открыть раздел заново. */
+    static void authHeal(final Activity a) {
+        a.runOnUiThread(new Runnable() {
+            @Override public void run() {
+                try {
+                    if (a.isFinishing() || !IvaNotifyPatch.loggedIn(a)) return;
+                    Object t = get(a, "curTab");
+                    if (authHealTab(t instanceof String ? (String) t : "")) IvaNotifyPatch.tab(a, (String) t);
+                } catch (Throwable ignore) {}
+            }
+        });
+    }
+
+    static boolean authHealTab(String tab) { return "profile".equals(tab) || "orders".equals(tab); }
 }

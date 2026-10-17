@@ -449,6 +449,7 @@ public final class IvaNotifyPatch {
 
     public static void onShowTab(Activity a, String tab) {
         act = new WeakReference<Activity>(a);
+        try { IvaClientPatch.authTick(a); } catch (Throwable ignore) {}   // 10.117: после сна ключ мог истечь — обновить сразу
         try { stopNative(a); } catch (Throwable ignore) {}
         try { startPoll(); } catch (Throwable ignore) {}
         try { scheduleBg(a.getApplicationContext()); } catch (Throwable ignore) {}   // 10.65: этап 2 — когда приложение закрыто
