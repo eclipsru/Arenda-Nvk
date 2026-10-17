@@ -2563,6 +2563,7 @@ public class IvaPatchTest {
         adminManage108();                                             // 10.108: приостановить / удалить админа, порядок в панели
         avatarEdit109();                                              // 10.109: редактировать аватарку, галерея вместо проводника
         access110();                                                  // 10.110: убрали админа / сотрудника — сразу клиент
+        summary111();                                                 // 10.111: в «Сводке» нет раздела «Без пункта»
         if (fail > 0) { System.out.println("ошибок: " + fail); System.exit(1); }
         System.out.println("все проверки IvaPatch пройдены");
     }
@@ -2622,6 +2623,13 @@ public class IvaPatchTest {
     }
 
     /** 10.107: «кто выдал / кто принял», «Сводка по пунктам», имя сотрудника в чате владельца (этап 4). */
+    static void summary111() {
+        eq("сводка 10.111: показываются только настоящие пункты, «Без пункта» (пустой id) — нет",
+            IvaStaffJournalPatch.realPoint("6f1c2a3b-0000-4000-8000-000000000001") + "," + IvaStaffJournalPatch.realPoint("") + ","
+            + IvaStaffJournalPatch.realPoint("  ") + "," + IvaStaffJournalPatch.realPoint(null) + "," + IvaStaffJournalPatch.realPoint("null"),
+            "true,false,false,false,false");
+    }
+
     static void access110() {
         java.util.List<String[]> rows = new java.util.ArrayList<String[]>();
         String pre = String.valueOf(IvaAccessPatch.adminFromPairs(rows, "a@b.ru"));

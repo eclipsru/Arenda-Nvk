@@ -2145,8 +2145,20 @@ try {
       'доступ 10.110: сотрудник — страницы пункта закрываются, со штатной формы — в профиль, «Мой пункт» пропадает');
     assert.ok(!/#[0-9A-Fa-f]{6}|0xff(?!ff8f1f|9aa1b0|f2f4f8|101217|1a1d24)[0-9a-f]{6}/i.test(code) && fn('info').includes('IvaClientPatch.choiceBg('),
       'доступ 10.110: сообщение — в стиле окон приложения, только цвета темы');
-    assert.ok(wf.includes("NEW_NAME: '10.110'") && wf.includes("NEW_CODE: '184'"), 'сборка 10.110 (184)');
+    assert.ok(Number((wf.match(/NEW_CODE: '(\d+)'/) || [])[1]) >= 184, 'сборка 10.110 (184) или новее');
     assert.ok((tp.match(/eq\("доступ 10\.110: /g) || []).length >= 7, 'IvaPatchTest: проверки 10.110');
+  }
+  // 10.111 (решение владельца 17.10.2026): в «Сводке по пунктам» нет раздела «Без пункта» — заявки и инструменты без
+  // пункта не показываются и ни к какому пункту не прибавляются; база и SQL не меняются
+  {
+    const sj = R('android/patches/IvaStaffJournalPatch.java'), tp = R('android/patches/test/IvaPatchTest.java'), wf = R('.github/workflows/build-apk.yml');
+    const dr = sj.slice(sj.indexOf('static void draw(Ui u, JSONArray ps, int days) {'), sj.indexOf('static boolean realPoint('));
+    assert.ok(dr.includes('if (p == null || !realPoint(str(p, "id"))) continue;') && dr.includes('shown++;')
+      && dr.includes('u.status.setText(shown == 0 ?') && !dr.includes('ps.length() == 0')
+      && sj.includes('static boolean realPoint(String id) { return id != null && !id.trim().isEmpty() && !"null".equals(id.trim()); }'),
+      'сводка 10.111: строка с пустым id («Без пункта») не рисуется; «Пунктов пока нет» — по показанным');
+    assert.ok(wf.includes("NEW_NAME: '10.111'") && wf.includes("NEW_CODE: '185'"), 'сборка 10.111 (185)');
+    assert.ok((tp.match(/eq\("сводка 10\.111: /g) || []).length >= 1, 'IvaPatchTest: проверки 10.111');
   }
   // 10.75 (просьба владельца 14.10.2026): в «Настройках» — кнопка «Уведомления» (с 10.97 — открывает отдельную страницу);
   // внутри сверху «Открыть настройки уведомлений Android», потом какие присылать, потом расписание, потом всё остальное

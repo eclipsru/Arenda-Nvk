@@ -346,16 +346,18 @@ public class IvaStaffJournalPatch {
     static void draw(Ui u, JSONArray ps, int days) {
         Activity a = u.a;
         u.items.removeAllViews();
+        int shown = 0;
         for (int i = 0; i < ps.length(); i++) {
             JSONObject p = ps.optJSONObject(i);
-            if (p == null) continue;
+            if (p == null || !realPoint(str(p, "id"))) continue;   // 10.111: раздела «Без пункта» нет (решение владельца)
+            shown++;
             LinearLayout c = IvaChiefPatch.card(a);
             c.addView(IvaChiefPatch.text(a, pointTitle(str(p, "name"), str(p, "city")), 15f, u.cText, true));
             line(a, c, nowLine(p.optInt("new", 0), p.optInt("rented", 0)), u.cText);
             line(a, c, periodLine(days, p.optInt("parts", 0), p.optInt("closed", 0)), u.cText);
             line(a, c, moneyLine(str(p, "rent"), str(p, "fee")), u.cGray);
             line(a, c, toolsLine(p.optInt("tools", 0), p.optInt("shown", 0), p.optInt("pending", 0)), u.cGray);
-            if (!str(p, "id").isEmpty()) line(a, c, staffLine(p.optInt("staff", 0), p.optInt("invited", 0)), u.cGray);
+            line(a, c, staffLine(p.optInt("staff", 0), p.optInt("invited", 0)), u.cGray);
             JSONArray pp = p.optJSONArray("people");
             if (pp != null && pp.length() > 0) {
                 TextView h = IvaChiefPatch.text(a, "Кто выдавал и принимал", 13f, u.cGray, true);
@@ -370,9 +372,13 @@ public class IvaStaffJournalPatch {
             lp.topMargin = IvaChiefPatch.dp(a, 10);
             u.items.addView(c, lp);
         }
-        u.status.setText(ps.length() == 0 ? "Пунктов выдачи пока нет — добавьте их в «Пункты выдачи»" : "");
-        u.status.setVisibility(ps.length() == 0 ? View.VISIBLE : View.GONE);
+        u.status.setText(shown == 0 ? "Пунктов выдачи пока нет — добавьте их в «Пункты выдачи»" : "");
+        u.status.setVisibility(shown == 0 ? View.VISIBLE : View.GONE);
     }
+
+    /** 10.111 (решение владельца 17.10.2026): в «Сводке» — только настоящие пункты. Заявки и инструменты без пункта
+     *  (база отдаёт их строкой с пустым id — «Без пункта») не показываются и ни к какому пункту не прибавляются. */
+    static boolean realPoint(String id) { return id != null && !id.trim().isEmpty() && !"null".equals(id.trim()); }
 
     static void line(Activity a, LinearLayout c, String s, int color) {
         TextView x = IvaChiefPatch.text(a, s, 14f, color, false);
