@@ -594,7 +594,7 @@ public final class IvaOrderPatch {
             boolean deliv = deliveryChecked(a);
             Object dt = get(a, "delivTxt");
             String owner = cartOwner(ls);
-            String t = summary(ls, deliv, dt instanceof String ? (String) dt : null, pickupOf(a, owner), text(get(a, "oCmt")));
+            String t = summary(ls, deliv, dt instanceof String ? (String) dt : null, IvaOrderPointPatch.pickupFor(a, ls, pickupOf(a, owner)), text(get(a, "oCmt")));
             if (!t.contentEquals(((TextView) sum).getText())) ((TextView) sum).setText(t);
         }
         // состав доставки поменялся, а адрес уже введён — пересчитать (штатно пересчёт только при вводе адреса)
@@ -945,7 +945,7 @@ public final class IvaOrderPatch {
             String receipt = receipt(ls, deliv, delivTxt);
             String cmt = text(get(a, "oCmt"));
             String owner = cartOwner(ls);
-            String pickup = pickupOf(a, owner);
+            String pickup = IvaOrderPointPatch.pickupFor(a, ls, pickupOf(a, owner));   // 10.102: адрес пункта инструментов
             String method = deliv
                 ? "Доставка: " + addr + (delivTxt != null ? " — " + delivTxt : "")
                 : "Самовывоз, " + (pickup.isEmpty() ? "адрес уточнит прокат" : pickup);
@@ -959,6 +959,7 @@ public final class IvaOrderPatch {
             body.put("p_comment", cmt.isEmpty() ? receipt : cmt + "\n\n" + receipt);
             body.put("p_user_email", ue == null ? "" : String.valueOf(ue));
             body.put("p_days", maxDays(ls));
+            final List<Line> fls = ls;
             final TextView btn = (TextView) get(a, "btnSend");
             if (btn != null) btn.setText("Отправляем…");
             sending = true;
@@ -966,7 +967,7 @@ public final class IvaOrderPatch {
                 @Override public void run() {
                     String err = null;
                     try {
-                        String[] r = IvaClientPatch.apiCall(a, "/rest/v1/rpc/submit_order", "POST", body.toString(), true);
+                        String[] r = IvaOrderPointPatch.submit(a, body, fls);   // 10.102: со списком инструментов; нет SQL — штатная submit_order
                         if (r == null) err = "нет ответа сервера";
                         else if (!r[0].startsWith("2")) err = IvaClientPatch.serverMessage(r[0], r[1]);
                     } catch (Throwable e) {
@@ -1135,6 +1136,7 @@ public final class IvaOrderPatch {
                         String[] r = IvaClientPatch.apiCall(a, ORD_PARTS_RPC, "POST", "{}", true);
                         if (r != null && r.length > 1 && "200".equals(r[0])) ordMergeParts(rows, ordParseParts(r[1]));
                     } catch (Throwable ignore) {}
+                    IvaOrderPointPatch.loadClient(a);   // 10.102: пункты частей заявок (нет SQL — без них)
                     try {
                         String[] r = IvaClientPatch.apiCall(a, ARCH_PATH, "GET", null, true);
                         if (r != null && "404".equals(r[0])) noArch = true;
@@ -1353,6 +1355,16 @@ public final class IvaOrderPatch {
         return out;
     }
 
+    static volatile boolean ordNoAddr = false;     // 10.102: у заявки есть пункт — адрес и часы проката не показываем
+
+    static List<String[]> ordProkatFields(Map<String, String> ad, boolean noAddr) {
+        List<String[]> out = ordProkatFields(ad);
+        if (!noAddr) return out;
+        List<String[]> keep = new ArrayList<String[]>();
+        for (String[] f : out) if (!"Адрес выдачи".equals(f[0]) && !"Часы работы".equals(f[0])) keep.add(f);
+        return keep;
+    }
+
     /** Строки о прокате: название (компания, иначе имя), контактное лицо, телефон, адрес выдачи, часы работы. */
     static List<String[]> ordProkatFields(Map<String, String> ad) {
         List<String[]> out = new ArrayList<String[]>();
@@ -1448,6 +1460,7 @@ public final class IvaOrderPatch {
         View root = null;
         for (int i = 0; i < page.getChildCount(); i++) if (ORD_ROOT_TAG.equals(page.getChildAt(i).getTag())) root = page.getChildAt(i);
         boolean client = IvaClientPatch.isClient(a);
+        if (client) try { IvaOrderPointPatch.hide(a); } catch (Throwable ignore) {}   // 10.102: фильтр пунктов — только прокату
         if (!client || (!ordMine(a) && ordFailed)) {       // админ / гость — штатный список; не загрузилось — тоже (как 10.62)
             if (scroll != null) scroll.setVisibility(View.VISIBLE);
             if (root != null) root.setVisibility(View.GONE);
@@ -1758,6 +1771,7 @@ public final class IvaOrderPatch {
     }
 
     static void admPics(Activity a) {
+        try { if (IvaOrderPointPatch.admFilter(a)) return; } catch (Throwable ignore) {}   // 10.102: «Все пункты / пункт» — список перерисован
         Object ol = get(a, "ordersList"), parts = get(a, "admParts");
         if (!(ol instanceof LinearLayout) || !(parts instanceof List)) return;
         List<String> keys = new ArrayList<String>(), tools = new ArrayList<String>(), owners = new ArrayList<String>();
@@ -2134,6 +2148,9 @@ public final class IvaOrderPatch {
         final boolean adm = r.containsKey(ADM_ROW);           // 10.68: заявка у админа — вместо «Прокат» блок «Клиент»
         for (String[] f : adm ? admFields(r, nice) : ordFields(r, nice)) ordFieldView(a, body, f, "Статус".equals(f[0]));
         try { IvaRentPatch.sheet(a, body, r, adm, archived); } catch (Throwable ignore) {}   // 10.77: «До конца аренды» — живой таймер
+        try { IvaOrderPointPatch.sheet(a, body, r, adm); } catch (Throwable ignore) {}       // 10.102: пункт выдачи части / частей
+        ordNoAddr = false;
+        try { ordNoAddr = !adm && IvaOrderPointPatch.clientHas(ordVal(r.get("id"))); } catch (Throwable ignore) {}
         if (adm) admClientBlock(a, body, r);
         final LinearLayout prokat = new LinearLayout(a);
         prokat.setOrientation(LinearLayout.VERTICAL);
@@ -2366,7 +2383,7 @@ public final class IvaOrderPatch {
         for (String e : owners) {
             Map<String, String> ad = ordProkat.get(e);
             if (ad == null) { loading = true; continue; }
-            for (String[] f : ordProkatFields(ad)) ordFieldView(a, box, f, false);
+            for (String[] f : ordProkatFields(ad, ordNoAddr)) ordFieldView(a, box, f, false);
             shown++;
         }
         if (shown == 0) {

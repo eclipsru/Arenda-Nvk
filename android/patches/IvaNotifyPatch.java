@@ -957,6 +957,7 @@ public final class IvaNotifyPatch {
 
     /** Заявки (админ): дождаться штатной загрузки, открыть клиента этой заявки (как нажатие на него) и показать карточку. */
     static void openOrder(final Activity a, final String partId) {
+        try { IvaOrderPointPatch.showAll(a); } catch (Throwable ignore) {}   // 10.102: заявка может быть в другом пункте
         tab(a, "orders");
         if (partId.isEmpty()) return;
         final long until = System.currentTimeMillis() + ROUTE_WAIT_MS;

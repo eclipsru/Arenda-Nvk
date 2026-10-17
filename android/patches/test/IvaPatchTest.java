@@ -2396,6 +2396,63 @@ public class IvaPatchTest {
                 if ((IvaFormPatch.SEC + "4").equals(IvaFormPatch.ORDER[i]) && (IvaToolPointPatch.TAG + ":0").equals(IvaFormPatch.ORDER[i + 1])) ord = true;
             eq("пункт 10.101: в форме «Добавить» — первым в «Условиях и доставке»", ord + "", "true");
         }
+        {   // 10.102: заявки по пунктам выдачи (этап 2 «Сотрудники и пункты»)
+            String u1 = "0b6f9c2e-1d2a-4c3b-9e8f-112233445566", u2 = "AB6F9C2E-1D2A-4C3B-9E8F-112233445577";
+            java.util.List<IvaOrderPatch.Line> ls = new java.util.ArrayList<IvaOrderPatch.Line>();
+            IvaOrderPatch.Line l1 = IvaOrderPatch.line("t" + u1, "Дрель", 300, 1500, false, 0, false, "a@x.ru", 3); l1.id = u1;
+            IvaOrderPatch.Line l2 = IvaOrderPatch.line("t" + u2, "Пила", 500, 2500, false, 0, false, "a@x.ru", 120); l2.id = u2;
+            IvaOrderPatch.Line l3 = IvaOrderPatch.line("t" + u1, "Дрель ещё раз", 300, 1500, false, 0, false, "a@x.ru", 5); l3.id = u1.toUpperCase();
+            IvaOrderPatch.Line l4 = IvaOrderPatch.line("s1", "Заточка", 100, 0, false, 0, true, "a@x.ru", 1); l4.id = u2;
+            IvaOrderPatch.Line l5 = IvaOrderPatch.line("t7", "Старая", 100, 0, false, 0, false, "a@x.ru", 1); l5.id = "7";
+            ls.add(l1); ls.add(l2); ls.add(l3); ls.add(l4); ls.add(l5);
+            eq("заявки 10.102: список инструментов — id без повторов, свой срок (не больше 90), без услуг и старых id", IvaOrderPointPatch.itemsJson(ls),
+                "[{\"id\":\"" + u1 + "\",\"days\":3},{\"id\":\"ab6f9c2e-1d2a-4c3b-9e8f-112233445577\",\"days\":90}]");
+            java.util.List<IvaOrderPatch.Line> none = new java.util.ArrayList<IvaOrderPatch.Line>();
+            none.add(l4); none.add(l5);
+            eq("заявки 10.102: нет ни одного инструмента с id — без списка", IvaOrderPointPatch.itemsJson(none) + "|" + IvaOrderPointPatch.itemsJson(null), "null|null");
+            java.util.List<IvaOrderPatch.Line> big = new java.util.ArrayList<IvaOrderPatch.Line>();
+            for (int i = 0; i < 70; i++) { IvaOrderPatch.Line x = IvaOrderPatch.line("t" + i, "x", 1, 1, false, 0, false, "a@x.ru", 1); x.id = String.format("00000000-0000-0000-0000-%012d", i); big.add(x); }
+            eq("заявки 10.102: не больше 50 инструментов", IvaOrderPointPatch.itemsJson(big).split("\\{").length - 1 + "", "50");
+            eq("заявки 10.102: повторно штатно — только когда функции нет (заявка точно не сохранилась)",
+                IvaOrderPointPatch.noRpc("404", "{\"code\":\"PGRST202\",\"message\":\"Could not find the function public.iva_submit_order(...)\"}") + "|"
+                + IvaOrderPointPatch.noRpc("404", "{\"message\":\"Could not find the function public.iva_submit_order\"}") + "|"
+                + IvaOrderPointPatch.noRpc("404", "<html>Not found</html>") + "|" + IvaOrderPointPatch.noRpc("500", "PGRST202") + "|"
+                + IvaOrderPointPatch.noRpc("200", "123") + "|" + IvaOrderPointPatch.noRpc(null, null) + "|" + IvaOrderPointPatch.noRpc("400", "{\"code\":\"22P02\"}"),
+                "true|true|false|false|false|false|false");
+            eq("заявки 10.102: адрес самовывоза — адреса пунктов без повторов, нет — прежний",
+                IvaOrderPointPatch.joinAddr(java.util.Arrays.asList("Новосибирск, Ленина, 5", " Новосибирск, Ленина, 5 ", "Бердск, Мира, 1", "", null, "null"), "прокат") + "|"
+                + IvaOrderPointPatch.joinAddr(new java.util.ArrayList<String>(), "прокат") + "|" + IvaOrderPointPatch.joinAddr(null, null),
+                "Новосибирск, Ленина, 5; Бердск, Мира, 1|прокат|");
+            java.util.Map<String, String> pp = new java.util.HashMap<String, String>();
+            pp.put("11", u1); pp.put("12", "ab6f9c2e-1d2a-4c3b-9e8f-112233445577"); pp.put("13", "");
+            java.util.List<String> pids = java.util.Arrays.asList("11", "12", "13", "14", "11");
+            eq("заявки 10.102: фильтр «Все пункты» / пункт", IvaOrderPointPatch.keep(pids, pp, "") + "|" + IvaOrderPointPatch.keep(pids, pp, u1) + "|"
+                + IvaOrderPointPatch.keep(pids, pp, u2) + "|" + IvaOrderPointPatch.keep(pids, pp, "00000000-0000-0000-0000-000000000000") + "|"
+                + IvaOrderPointPatch.keep(null, pp, u1) + "|" + IvaOrderPointPatch.keep(pids, null, u1),
+                "[0, 1, 2, 3, 4]|[0, 4]|[1]|[]|[]|[]");
+            IvaPickupPatch.Point a1 = new IvaPickupPatch.Point(), a2 = new IvaPickupPatch.Point();
+            a1.id = u1; a1.name = "Склад"; a1.city = "Новосибирск"; a1.address = "Новосибирск, улица Ленина, д. 5"; a1.tel = " +7 383 111-22-33 ";
+            a2.id = u2; a2.name = "Бердск центр"; a2.city = "Бердск"; a2.address = ""; a2.tel = "";
+            a2.open = new int[]{540, 540, 540, 540, 540, 600, -1}; a2.close = new int[]{1140, 1140, 1140, 1140, 1140, 960, -1};
+            StringBuilder one = new StringBuilder();
+            for (String[] f : IvaOrderPointPatch.clientFields(java.util.Collections.singletonList(a1), java.util.Collections.singletonList("Дрель"))) one.append(f[0]).append('=').append(f[1]).append(';');
+            eq("заявки 10.102: клиенту — пункт, адрес, время работы, телефон (одна часть — без списка инструментов)", one.toString(),
+                "Пункт выдачи=Склад · Новосибирск;Адрес=Новосибирск, улица Ленина, д. 5;Время работы=Пн–Вс 09:00–19:00;Телефон=+7 383 111-22-33;");
+            StringBuilder two = new StringBuilder();
+            for (String[] f : IvaOrderPointPatch.clientFields(java.util.Arrays.asList(a1, a2), java.util.Arrays.asList("Дрель", "Пила"))) two.append(f[0]).append('=').append(f[1]).append(';');
+            eq("заявки 10.102: две части — у каждой свой пункт и свои инструменты; пустое не показывается", two.toString(),
+                "Пункт выдачи=Склад · Новосибирск;Инструменты=Дрель;Адрес=Новосибирск, улица Ленина, д. 5;Время работы=Пн–Вс 09:00–19:00;Телефон=+7 383 111-22-33;"
+                + "Пункт выдачи=Бердск центр;Инструменты=Пила;Время работы=Пн–Пт 09:00–19:00 · Сб 10:00–16:00 · Вс выходной;");
+            eq("заявки 10.102: без пунктов — пусто", IvaOrderPointPatch.clientFields(null, null).size() + "", "0");
+            java.util.Map<String, String> ad = new java.util.HashMap<String, String>();
+            ad.put("company", "Прокат"); ad.put("full_name", "Иван"); ad.put("phone", "+7 900"); ad.put("address", "Адрес проката"); ad.put("work_hours", "9–19");
+            StringBuilder pf = new StringBuilder(), pn = new StringBuilder();
+            for (String[] f : IvaOrderPatch.ordProkatFields(ad, false)) pf.append(f[0]).append(';');
+            for (String[] f : IvaOrderPatch.ordProkatFields(ad, true)) pn.append(f[0]).append(';');
+            eq("заявки 10.102: у заявки есть пункт — адрес и часы проката не показываются", pf + "|" + pn,
+                "Прокат;Контактное лицо;Телефон;Адрес выдачи;Часы работы;|Прокат;Контактное лицо;Телефон;");
+            eq("заявки 10.102: подпись набора частей", IvaOrderPointPatch.sig(java.util.Arrays.asList("x", null)) + "|" + IvaOrderPointPatch.sig(null), "?,?,|");
+        }
         if (fail > 0) { System.out.println("ошибок: " + fail); System.exit(1); }
         System.out.println("все проверки IvaPatch пройдены");
     }
