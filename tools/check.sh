@@ -470,6 +470,17 @@ else
   skip "стенд «Правки доступа — сразу»: нет pgserver (PG_PY=<python с pgserver> bash tools/check.sh)"
 fi
 
+head_ "4.5.22. Стенд «Сотрудник: причина отказа словами, „на одобрение“ — сразу» (локальный PostgreSQL, SQL 10.116)"
+if "$PG_PY" -c "import pgserver" >/dev/null 2>&1; then
+  if "$PG_PY" tools/staff-publish-stand.py >/tmp/iva-test-staff-publish.log 2>&1; then
+    ok "причина отказа: $(grep -c '✔' /tmp/iva-test-staff-publish.log) проверок SQL на PostgreSQL (не сотрудник, приглашён, без права, без пункта, прокат выключен, нет правила фото, нет SQL; «на одобрение» — отметка и push владельцу; откат)"
+  else
+    bad "стенд «Сотрудник: причина отказа словами»"; grep -E '✘|Error|ERROR' /tmp/iva-test-staff-publish.log | head -8 | sed 's/^/      /'
+  fi
+else
+  skip "стенд «Сотрудник: причина отказа словами»: нет pgserver (PG_PY=<python с pgserver> bash tools/check.sh)"
+fi
+
 head_ "Итог"
 printf '  пройдено: %s, ошибок: %s, пропущено: %s\n' "$PASS" "$FAIL" "$SKIP"
 if [ "$FAIL" -eq 0 ]; then echo "  Можно продолжать."; exit 0; else echo "  Сначала исправляем замечания выше."; exit 1; fi
