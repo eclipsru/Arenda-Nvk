@@ -1916,7 +1916,7 @@ try {
       && (ip.match(/IvaStaffToolsPatch\./g) || []).length === 4,   // 10.116: + publishError (сотруднику — причина окном)
       'инструменты пункта 10.105: подключение — onTab/onBack, «Мой пункт», «Настройка проката», опрос владельца (окно и фон), нажатие на уведомление');
     assert.ok(!/customer_profiles|passport|phone|surname|select=|"PATCH"|"DELETE"|"GET"|\/rest\/v1\/(?!rpc\/iva_(staff_tools|tools_pending|tool_review|staff_publish|staff_catalog))/.test(code)   // 10.116: + причина отказа
-      && (code.match(/IvaClientPatch\.apiCall\(/g) || []).length === 9 && (code.match(/IvaNotifyPatch\.api\(/g) || []).length === 1   // 10.116: + why, catalog, счётчик
+      && (code.match(/IvaClientPatch\.apiCall\(/g) || []).length === 10 && (code.match(/IvaNotifyPatch\.api\(/g) || []).length === 1   // 10.116: + why, catalog, счётчик; 10.118: + проба записи
       && (code.match(/new Thread\(new Runnable\(\)/g) || []).length === 7   // 10.116: + live, explainRefusal
       && code.includes('if (!IvaNotifyPatch.loggedIn(a) || IvaNotifyPatch.isAdmin(a)) return false;')
       && code.includes('if (IvaNotifyPatch.isAdmin(a)) openReview(a, null);'),
@@ -2465,7 +2465,7 @@ try {
       'IvaTestPatch.openFromNote(a)', 'IvaStaffOrdersPatch.openFromNote(a)', 'IvaStaffToolsPatch.openFromNote(a)', 'IvaStaffChatPatch.openFromNote(a, target)'])
       assert.ok(go.includes(k), 'переход 10.116: нет ' + k);
     assert.ok(!/customer_profiles|passport|phone|surname|select=\*/.test(stc + shc), 'публикация 10.116: без личных данных клиентов');
-    assert.ok(/NEW_NAME: '10\.(?:116|117)'/.test(wf) && /NEW_CODE: '(?:190|191)'/.test(wf), 'сборка 10.116 (190) или новее');
+    assert.ok(Number((/NEW_CODE: '(\d+)'/.exec(wf) || [])[1]) >= 190, 'сборка 10.116 (190) или новее');
     assert.ok((tp.match(/eq\("сотрудник 10\.116: /g) || []).length >= 6 && (tp.match(/eq\("переход 10\.116: /g) || []).length >= 3
       && (tp.match(/eq\("кабинет 10\.116: /g) || []).length >= 3 && (tp.match(/eq\("одобрение 10\.116: /g) || []).length >= 2, 'IvaPatchTest: проверки 10.116');
   }
@@ -2525,9 +2525,39 @@ try {
       && af.includes('authRenew(a, (String) t);') && !/logoutLocal\(|\/rest\/v1/.test(rn + hl + af),
       'ключ 10.117: проверяется при смене раздела и через 5 с после запуска; при неудаче не выходим; истёкший обновили — «Кабинет»/«Заявки» заново');
     assert.ok(!/IvaAccessPatch|feeCard|authRenew|authHeal/.test(ap), 'кабинет 10.117: новых вставок в smali нет');
-    assert.ok(/NEW_NAME: '10\.117'/.test(wf) && /NEW_CODE: '191'/.test(wf), 'сборка 10.117 (191)');
+    assert.ok(Number((/NEW_CODE: '(\d+)'/.exec(wf) || [])[1]) >= 191, 'сборка 10.117 (191) или новее');
     assert.ok((tp.match(/eq\("кабинет 10\.117: /g) || []).length >= 9 && (tp.match(/eq\("роль 10\.117: /g) || []).length >= 1
       && (tp.match(/eq\("ключ 10\.117: /g) || []).length >= 3, 'IvaPatchTest: проверки 10.117');
+  }
+  // 10.118 (снимок владельца 17.10.2026): у сотрудника «Не опубликовано: база не пустила запись», а 20261107 — «В базе всё
+  // в порядке». 20261107 смотрит только, есть ли право и пункт; база отказывает на самой записи (правила доступа после
+  // триггеров). SQL 20261108: пробная запись как из формы, всегда с откатом, называет шаг; окно показывает её фразу и ответ базы
+  {
+    const st = R('android/patches/IvaStaffToolsPatch.java'), tp = R('android/patches/test/IvaPatchTest.java'), wf = R('.github/workflows/build-apk.yml'),
+      chk = R('tools/check.sh'), sq = R('supabase/migrations/20261108_staff_publish_probe.sql'), sd = R('tools/staff-probe-stand.py'), ap = R('android/patches/apply.py');
+    const strip = (x) => x.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '');
+    const fn = (src, name) => { const m = new RegExp('static [\\w.<>\\[\\]]+ ' + name + '\\(').exec(src); assert.ok(m, 'нет ' + name);
+      return src.slice(m.index, src.indexOf('\n    }\n', m.index)); };
+    const stc = strip(st), er = fn(stc, 'explainRefusal');
+    assert.ok(st.includes('TRY_RPC = "/rest/v1/rpc/iva_staff_publish_try"') && er.includes('IvaClientPatch.apiCall(a, TRY_RPC, "POST", "{}", true);')
+      && er.indexOf('TRY_RPC') < er.indexOf('WHY_RPC') && er.indexOf('WHY_RPC') < er.indexOf('CAT_RPC')
+      && /if \(why\.isEmpty\(\)\) \{\s*String\[\] r = IvaClientPatch\.apiCall\(a, WHY_RPC/.test(er) && er.includes('refusalText(step, why, msg)')
+      && er.includes('new Thread(new Runnable() {') && er.includes('a.runOnUiThread('),
+      'публикация 10.118: сначала пробная запись базы, без SQL 10.118 — как в 10.116 (why, затем catalog); сеть в фоне, окно в главном потоке');
+    const rl = fn(stc, 'rawLine');
+    assert.ok(rl.includes("replace('\\n', ' ')") && rl.includes('r.length() > RAW_MAX') && /RAW_MAX = 240;/.test(st)
+      && !/IvaStaffToolsPatch|TRY_RPC/.test(ap) && !/customer_profiles|passport|phone|surname|select=\*/.test(stc),
+      'публикация 10.118: ответ базы — одной строкой, коротко; без личных данных; вставок в smali нет');
+    assert.ok(/RETURNS jsonb\s+LANGUAGE plpgsql\s+SET search_path TO 'public'/.test(sq.slice(sq.indexOf('FUNCTION public.iva_staff_publish_try()')))
+      && sq.includes("raise exception using errcode = 'IVAOK', message = 'iva-probe-ok';") && (sq.match(/errcode = 'IVAOK'/g) || []).length === 2
+      && sq.includes("if coalesce(current_setting('iva.probe', true), '') = '1' then") && sq.includes('CREATE TRIGGER zzz_iva_probe')
+      && sq.includes('REVOKE ALL ON FUNCTION public.iva_staff_publish_try() FROM public, anon;')
+      && sq.includes('GRANT EXECUTE ON FUNCTION public.iva_staff_publish_try() TO authenticated;')
+      && sq.includes("RAISE EXCEPTION USING ERRCODE = 'IVAOK'") && /SELECT check_name, result FROM iva_probe_out ORDER BY ord, n, check_name;\s*$/.test(sq)
+      && chk.includes('tools/staff-probe-stand.py') && sd.includes('20261108_staff_publish_probe.sql'),
+      'SQL 10.118: проба — от имени вошедшего (не от имени базы), оба прохода с откатом, триггер пробы спит без флага; одна таблица в конце; стенд в check.sh');
+    assert.ok(/NEW_NAME: '10\.118'/.test(wf) && /NEW_CODE: '192'/.test(wf), 'сборка 10.118 (192)');
+    assert.ok((tp.match(/eq\("проба 10\.118: /g) || []).length >= 8, 'IvaPatchTest: проверки 10.118');
   }
   // 10.75 (просьба владельца 14.10.2026): в «Настройках» — кнопка «Уведомления» (с 10.97 — открывает отдельную страницу);
   // внутри сверху «Открыть настройки уведомлений Android», потом какие присылать, потом расписание, потом всё остальное
