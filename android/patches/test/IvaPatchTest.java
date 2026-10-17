@@ -2557,8 +2557,68 @@ public class IvaPatchTest {
             eq("заявки пункта 10.104: id уведомления не совпадает с другими", IvaStaffOrdersPatch.ID_NOTE != IvaNotifyPatch.ID_ORD && IvaStaffOrdersPatch.ID_NOTE != IvaNotifyPatch.ID_TEST
                 && IvaStaffOrdersPatch.ID_NOTE != IvaNotifyPatch.ID_UPD && IvaStaffOrdersPatch.ID_NOTE != IvaNotifyPatch.ID_MSG, true);
         }
+        staffTools105();                                              // 10.105: отдельно — main у предела 64 КБ
         if (fail > 0) { System.out.println("ошибок: " + fail); System.exit(1); }
         System.out.println("все проверки IvaPatch пройдены");
+    }
+
+    /** 10.105: инструменты пункта у сотрудника и одобрение владельцем (этап 3в «Сотрудники и пункты»). */
+    static void staffTools105() {
+        String u = "0F8FAD5B-D9CB-469F-A165-70867728950E";
+        eq("инструменты пункта 10.105: кому показывать — принятый сотрудник с правом «Выкладывает инструмент»",
+            IvaStaffToolsPatch.want("active", new boolean[]{false, true, false, false}) + "|" + IvaStaffToolsPatch.want("active", new boolean[]{true, false, true, true}) + "|"
+            + IvaStaffToolsPatch.want("invited", new boolean[]{true, true, true, true}) + "|" + IvaStaffToolsPatch.want("active", null) + "|"
+            + IvaStaffToolsPatch.want("active", new boolean[]{false}), "true|false|false|false|false");
+        eq("инструменты пункта 10.105: возврат после штатного успеха — только сотрудника и только из кабинета",
+            IvaStaffToolsPatch.redirect("admhub", true, false) + "|" + IvaStaffToolsPatch.redirect("admhub", true, true) + "|"
+            + IvaStaffToolsPatch.redirect("admhub", false, false) + "|" + IvaStaffToolsPatch.redirect("addtool", true, false) + "|"
+            + IvaStaffToolsPatch.redirect(null, true, false), "true|false|false|false|false");
+        eq("инструменты пункта 10.105: «Назад» с формы и правки — к своему списку",
+            IvaStaffToolsPatch.backTab("addtool", true, false) + "|" + IvaStaffToolsPatch.backTab("tooledit", true, false) + "|"
+            + IvaStaffToolsPatch.backTab("home", true, false) + "|" + IvaStaffToolsPatch.backTab("addtool", false, false) + "|"
+            + IvaStaffToolsPatch.backTab("addtool", true, true), "true|true|false|false|false");
+        eq("инструменты пункта 10.105: состояние словами",
+            IvaStaffToolsPatch.statusText("pending", false) + "|" + IvaStaffToolsPatch.statusText("rejected", false) + "|"
+            + IvaStaffToolsPatch.statusText("", true) + "|" + IvaStaffToolsPatch.statusText("", false) + "|" + IvaStaffToolsPatch.statusHint(""),
+            "На одобрении|Отклонён|Опубликован|Скрыт|");
+        eq("инструменты пункта 10.105: цена и пункт",
+            IvaStaffToolsPatch.priceText("400") + "|" + IvaStaffToolsPatch.priceText("450.6") + "|" + IvaStaffToolsPatch.priceText("null") + "|"
+            + IvaStaffToolsPatch.priceText("абв") + "|" + IvaStaffToolsPatch.priceText("-5") + "|" + IvaStaffToolsPatch.line2("300", "Склад") + "|"
+            + IvaStaffToolsPatch.line2("", "Склад") + "|" + IvaStaffToolsPatch.line2("300", " "),
+            "400 ₽/сутки|451 ₽/сутки||||300 ₽/сутки · Склад|Склад|300 ₽/сутки");
+        eq("инструменты пункта 10.105: «Опубликовать» / «Отклонить» — только номер-uuid",
+            IvaStaffToolsPatch.reviewBody(u, true) + "|" + IvaStaffToolsPatch.reviewBody(u, false) + "|" + IvaStaffToolsPatch.reviewBody("1; drop", true)
+            + "|" + IvaStaffToolsPatch.reviewBody(null, true),
+            "{\"p_id\":\"0f8fad5b-d9cb-469f-a165-70867728950e\",\"p_ok\":true}|{\"p_id\":\"0f8fad5b-d9cb-469f-a165-70867728950e\",\"p_ok\":false}|null|null");
+        eq("инструменты пункта 10.105: режим «сразу / после одобрения»",
+            IvaStaffToolsPatch.modeBody("now") + "|" + IvaStaffToolsPatch.modeBody("approve") + "|" + IvaStaffToolsPatch.modeBody("later") + "|"
+            + IvaStaffToolsPatch.modeOf("\"now\"") + "|" + IvaStaffToolsPatch.modeOf(" \"approve\" ") + "|" + IvaStaffToolsPatch.modeOf("null") + "|"
+            + IvaStaffToolsPatch.modeText("now") + "|" + IvaStaffToolsPatch.modeText("approve") + "|" + IvaStaffToolsPatch.modeText(""),
+            "{\"p_mode\":\"now\"}|{\"p_mode\":\"approve\"}|null|now|approve||Публиковать сразу|После моего одобрения|");
+        eq("инструменты пункта 10.105: строка и уведомление",
+            IvaStaffToolsPatch.reviewRow(0) + "|" + IvaStaffToolsPatch.reviewRow(2) + "|" + IvaStaffToolsPatch.noteTitle(1) + "|" + IvaStaffToolsPatch.noteTitle(3) + "|"
+            + IvaStaffToolsPatch.noteText(1, "Перфоратор", "Пётр") + "|" + IvaStaffToolsPatch.noteText(1, "Перфоратор", " ") + "|" + IvaStaffToolsPatch.noteText(2, "Перфоратор", "Пётр"),
+            "На одобрении|На одобрении · 2|Инструмент на одобрение|Инструменты на одобрение: 3|Перфоратор · добавил(а) Пётр|Перфоратор|"
+            + "Откройте «Настройка проката → На одобрении»");
+        eq("инструменты пункта 10.105: ответы базы",
+            IvaStaffToolsPatch.dbError("201", "") + "|"
+            + IvaStaffToolsPatch.dbError("400", "{\"message\":\"Пункт выдачи — только из ваших пунктов\"}") + "|"
+            + IvaStaffToolsPatch.dbError("400", "{\"message\":\"Инструмент уже не ждёт одобрения — обновите список\"}") + "|"
+            + IvaStaffToolsPatch.dbError("404", "{\"code\":\"PGRST202\"}") + "|" + IvaStaffToolsPatch.dbError("403", "") + "|" + IvaStaffToolsPatch.dbError("", ""),
+            "|Пункт выдачи — только из ваших пунктов|Инструмент уже не ждёт одобрения — обновите список|"
+            + "Инструменты сотрудников заработают после обновления базы (SQL 10.105)|Нет права — войдите заново|Не получилось — нет связи с сервером");
+        eq("инструменты пункта 10.105: свой новый инструмент сотрудник ищет по номеру сотрудника, владелец — по почте",
+            IvaKindPatch.lookupPath("Admin@X.ru", "Дрель", "2026-10-17T10:00:00Z", u).startsWith("/rest/v1/tools?select=id,kind&staff_id=eq.0f8fad5b-d9cb-469f-a165-70867728950e&name=eq.")
+            + "|" + IvaKindPatch.lookupPath("Admin@X.ru", "Дрель", "2026-10-17T10:00:00Z", "").startsWith("/rest/v1/tools?select=id,kind&owner_email=eq.admin%40x.ru&name=eq.")
+            + "|" + IvaKindPatch.lookupPath("a@x.ru", "Дрель", "t", "не-uuid").contains("owner_email=eq.")
+            + "|" + IvaKindPatch.lookupPath("a@x.ru", "Дрель", "t").equals(IvaKindPatch.lookupPath("a@x.ru", "Дрель", "t", "")), "true|true|true|true");
+        eq("инструменты пункта 10.105: id уведомления не совпадает с другими", IvaStaffToolsPatch.ID_NOTE != IvaNotifyPatch.ID_ORD
+            && IvaStaffToolsPatch.ID_NOTE != IvaNotifyPatch.ID_TEST && IvaStaffToolsPatch.ID_NOTE != IvaNotifyPatch.ID_UPD
+            && IvaStaffToolsPatch.ID_NOTE != IvaNotifyPatch.ID_MSG && IvaStaffToolsPatch.ID_NOTE != IvaStaffOrdersPatch.ID_NOTE
+            && !IvaStaffToolsPatch.OPEN.equals(IvaStaffOrdersPatch.OPEN), true);
+        java.util.List<IvaStaffToolsPatch.Pending> pp = null;
+        try { pp = IvaStaffToolsPatch.parsePending("not json"); } catch (Throwable e) { pp = null; }
+        eq("инструменты пункта 10.105: ответ не массив — пустой список", pp != null && pp.isEmpty(), true);
     }
 
     static String rowsText(java.util.List<String[]> rows) {

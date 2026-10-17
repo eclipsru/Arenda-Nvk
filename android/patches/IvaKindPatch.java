@@ -116,8 +116,14 @@ final class IvaKindPatch {
     }
 
     /** Своё последнее объявление с этим названием, созданное не раньше since (ISO, UTC). */
-    static String lookupPath(String email, String name, String since) {
-        return "/rest/v1/tools?select=id,kind&owner_email=eq." + enc(email == null ? "" : email.trim().toLowerCase(Locale.ROOT))
+    static String lookupPath(String email, String name, String since) { return lookupPath(email, name, since, ""); }
+
+    /** 10.105: у сотрудника «Каталог» владелец инструмента — прокат, поэтому свой новый ищем по номеру сотрудника. */
+    static String lookupPath(String email, String name, String since, String staffId) {
+        String who = staffId != null && IvaToolPointPatch.uuid(staffId)
+            ? "staff_id=eq." + enc(staffId.trim().toLowerCase(Locale.ROOT))
+            : "owner_email=eq." + enc(email == null ? "" : email.trim().toLowerCase(Locale.ROOT));
+        return "/rest/v1/tools?select=id,kind&" + who
             + "&name=eq." + enc(name == null ? "" : name.trim()) + "&created_at=gte." + enc(since)
             + "&order=created_at.desc&limit=1";
     }
@@ -678,6 +684,7 @@ final class IvaKindPatch {
     static volatile long pendingAt = 0;
     static volatile int pendingForm = -1;
     static volatile String pendingKind = "", pendingId = "", pendingName = "", pendingEmail = "";
+    static volatile String pendingStaff = "";            // 10.105: номер сотрудника «Каталог» (свой новый — по нему)
     static volatile String pendingExtra = "";            // 10.82: ,"model_id":…,"specs":{…} — только форма «Добавить»
 
     /** Нажали «Опубликовать» (k=0) / «Сохранить» (k=1): запоминаем, что записать, если штатное сохранение удастся. */
@@ -703,6 +710,7 @@ final class IvaKindPatch {
                 pendingName = name;
                 pendingEmail = str(IvaClientPatch.get(a, "userEmail"));
                 if (pendingEmail.isEmpty()) return;
+                try { pendingStaff = IvaStaffToolsPatch.staffId(a); } catch (Throwable e) { pendingStaff = ""; }
                 try { pendingExtra = IvaModelPatch.saveExtra(a, kind, name); } catch (Throwable e) { pendingExtra = ""; }   // 10.82
             }
             pendingKind = kind;
@@ -718,6 +726,7 @@ final class IvaKindPatch {
         if (!write) return;
         final int k = pendingForm;
         final String kind = pendingKind, id = pendingId, name = pendingName, email = pendingEmail, extra = k == 0 ? pendingExtra : "";
+        final String staffId = pendingStaff;
         final String body = patchBody(kind);
         if (body == null) return;
         if (k == 0) sel[0] = "";                                         // опубликовано — форма «Добавить» начинается заново
@@ -727,7 +736,7 @@ final class IvaKindPatch {
                 try {
                     String target = id;
                     if (k == 0) {
-                        String[] r = IvaClientPatch.apiCall(a, lookupPath(email, name, isoUtc(System.currentTimeMillis() - FRESH_MS)), "GET", null, true);
+                        String[] r = IvaClientPatch.apiCall(a, lookupPath(email, name, isoUtc(System.currentTimeMillis() - FRESH_MS), staffId), "GET", null, true);
                         if (r == null || r.length < 2 || r[0] == null || !r[0].startsWith("2")) return;
                         JSONArray arr = new JSONArray(r[1] == null ? "[]" : r[1].trim());
                         JSONObject o = arr.length() > 0 ? arr.optJSONObject(0) : null;

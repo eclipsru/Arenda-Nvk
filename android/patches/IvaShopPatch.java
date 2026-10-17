@@ -319,6 +319,7 @@ public class IvaShopPatch {
         });
         try { IvaPickupPatch.settingsRow(a, list, cText, cGray, cOrange); } catch (Throwable ignore) {}
         try { IvaRentPatch.settingsSection(a, list, cText, cGray, cOrange); } catch (Throwable ignore) {}
+        try { IvaStaffToolsPatch.settingsSection(a, list, cText, cGray, cOrange); } catch (Throwable ignore) {}   // 10.105
     }
 
     /** Значки строк (цвет приложения, линией 2dp): витрина проката и карточка данных. */

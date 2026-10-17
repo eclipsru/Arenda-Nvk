@@ -748,6 +748,17 @@ public class IvaStaffPatch {
     static void openMine(Activity a, Me m) {
         int cText = color(a, "text", 0xfff2f4f8), cGray = color(a, "gray", 0xff9aa1b0);
         IvaChiefPatch.Page pg = IvaChiefPatch.page(a, "Мой пункт", "Вы сотрудник «" + m.company + "». Права меняет владелец проката.", false);
+        IvaStaffToolsPatch.minePage = new java.lang.ref.WeakReference<android.app.Dialog>(pg.d);   // 10.105: закрыть перед штатной формой
+        if (IvaStaffToolsPatch.want(m.status, m.r)) {                   // 10.105: инструменты пункта — добавить, править
+            final Activity fa = a;
+            final String co = m.company;
+            TextView tl = IvaPickupPatch.addButton(a, color(a, "orange", 0xffff8f1f));
+            tl.setText(IvaStaffToolsPatch.TITLE);
+            tl.setOnClickListener(new View.OnClickListener() { @Override public void onClick(View v) { try { IvaStaffToolsPatch.open(fa, co); } catch (Throwable ignore) {} } });
+            LinearLayout.LayoutParams tll = new LinearLayout.LayoutParams(-1, -2);
+            tll.bottomMargin = dp(a, 10);
+            pg.list.addView(tl, tll);
+        }
         if (IvaStaffOrdersPatch.want(m.status, m.r)) {                   // 10.104: заявки пункта — «Выдал» / «Вернули»
             final Activity fa = a;
             final String co = m.company;

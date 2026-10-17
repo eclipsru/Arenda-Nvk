@@ -1,0 +1,670 @@
+package ru.prokatnvsk.app;
+
+import android.app.Activity;
+import android.app.Dialog;
+import android.content.Context;
+import android.content.SharedPreferences;
+import android.os.Handler;
+import android.os.Looper;
+import android.view.Gravity;
+import android.view.View;
+import android.view.ViewGroup;
+import android.widget.LinearLayout;
+import android.widget.TextView;
+import android.widget.Toast;
+
+import org.json.JSONArray;
+import org.json.JSONObject;
+
+import java.lang.ref.WeakReference;
+import java.lang.reflect.Method;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Locale;
+import java.util.Set;
+
+/**
+ * 10.105 — этап 3в «Сотрудники и пункты» (решения владельца 16–17.10.2026, docs/СОТРУДНИКИ-И-ПУНКТЫ.md).
+ *
+ * Сотрудник с правом «Выкладывает инструмент»: «Мой пункт» → «Инструменты пункта» — инструменты своих пунктов
+ * (ждущие одобрения и отклонённые — первыми), кнопка «Добавить инструмент». Форма — ШТАТНАЯ, та же, что у владельца
+ * (фото, название, категория, вид, модель, цена, залог, описание, условия, доставка, пункт выдачи — только свои пункты):
+ * «Добавить» открывает штатную страницу добавления без вкладок кабинета («Мои инструменты» сотруднику не показываем),
+ * нажатие на инструмент — штатную правку (сохранить, скрыть/показать, удалить). После «Опубликовать» / «Сохранить» /
+ * «Удалить» штатный код открывает кабинет владельца (showTab("admhub")) — сотрудника возвращаем в «Инструменты пункта».
+ * Вид, модель и пункт после публикации пишутся как у владельца (IvaKindPatch / IvaToolPointPatch), но свой новый
+ * инструмент сотрудник ищет по своему номеру (tools.staff_id), а не по почте владельца.
+ *
+ * Владелец: «Настройки → Настройка проката» → «Инструменты сотрудников» (сразу / после моего одобрения, по умолчанию —
+ * после одобрения) и «На одобрении · N» (карточка, «Опубликовать» / «Отклонить»); уведомление «Инструмент на
+ * одобрение» (переключатель «Новая заявка»), нажатие открывает «На одобрении».
+ *
+ * Права — в базе (SQL 20261030_staff_tools.sql): правила доступа к tools, триггер (владелец — прокат, пункт — свой,
+ * «на одобрении»), функции iva_staff_tools / iva_tools_pending / iva_tool_review / iva_staff_publish(_set).
+ * Без SQL — «заработают после обновления базы». Новых вставок в smali нет: вызовы — из IvaPatch.onTab / onBack,
+ * IvaStaffPatch («Мой пункт»), IvaShopPatch («Настройка проката»), IvaNotifyPatch (tick, bgRun, route).
+ */
+public class IvaStaffToolsPatch {
+    static final String LIST_RPC = "/rest/v1/rpc/iva_staff_tools", PENDING_RPC = "/rest/v1/rpc/iva_tools_pending",
+        REVIEW_RPC = "/rest/v1/rpc/iva_tool_review", MODE_RPC = "/rest/v1/rpc/iva_staff_publish",
+        MODE_SET_RPC = "/rest/v1/rpc/iva_staff_publish_set";
+    static final String TITLE = "Инструменты пункта", ADD = "Добавить инструмент";
+    static final String REVIEW_TITLE = "На одобрении", MODE_TITLE = "Инструменты сотрудников", OPEN = "review";
+    static final String NO_DB = "Инструменты сотрудников заработают после обновления базы (SQL 10.105)";
+    static final String[] MODES = {"now", "approve"};
+    static final String[] MODE_TEXT = {"Публиковать сразу", "После моего одобрения"};
+    static final int ID_NOTE = 7206;
+    static final long NO_DB_PAUSE_MS = 30L * 60000L;
+
+    // ───────────── чистые функции (IvaPatchTest) ─────────────
+
+    /** Показывать ли «Инструменты пункта»: принятый сотрудник с правом «Выкладывает инструмент». */
+    static boolean want(String status, boolean[] r) { return "active".equals(status) && r != null && r.length >= 2 && r[1]; }
+
+    /** Штатный успех открыл кабинет владельца — сотрудника (не админа) возвращаем в «Инструменты пункта». */
+    static boolean redirect(String tab, boolean staff, boolean admin) { return staff && !admin && "admhub".equals(tab); }
+
+    /** Системная «Назад» на штатной форме или правке у сотрудника — тоже в «Инструменты пункта». */
+    static boolean backTab(String tab, boolean staff, boolean admin) {
+        return staff && !admin && ("addtool".equals(tab) || "tooledit".equals(tab));
+    }
+
+    static String statusText(String review, boolean active) {
+        if ("pending".equals(review)) return "На одобрении";
+        if ("rejected".equals(review)) return "Отклонён";
+        return active ? "Опубликован" : "Скрыт";
+    }
+
+    static String statusHint(String review) {
+        if ("pending".equals(review)) return "Клиенты увидят после одобрения владельца";
+        if ("rejected".equals(review)) return "Владелец отклонил — исправьте и сохраните, он посмотрит снова";
+        return "";
+    }
+
+    /** «400 ₽/сутки»; пусто или не число — пусто. */
+    static String priceText(String raw) {
+        String s = raw == null ? "" : raw.trim().replace(',', '.');
+        if (s.isEmpty() || "null".equals(s)) return "";
+        try {
+            double d = Double.parseDouble(s);
+            if (Double.isNaN(d) || Double.isInfinite(d) || d < 0) return "";
+            return Math.round(d) + " ₽/сутки";
+        } catch (Throwable e) { return ""; }
+    }
+
+    static String line2(String price, String point) {
+        String p = priceText(price), q = point == null ? "" : point.trim();
+        return p.isEmpty() ? q : q.isEmpty() ? p : p + " · " + q;
+    }
+
+    /** {"p_id":"…","p_ok":true} — только номер-uuid; иначе null. */
+    static String reviewBody(String id, boolean ok) {
+        if (!IvaToolPointPatch.uuid(id)) return null;
+        return "{\"p_id\":\"" + id.trim().toLowerCase(Locale.ROOT) + "\",\"p_ok\":" + ok + "}";
+    }
+
+    static String modeBody(String mode) {
+        return "now".equals(mode) || "approve".equals(mode) ? "{\"p_mode\":\"" + mode + "\"}" : null;
+    }
+
+    /** Ответ iva_staff_publish(): "now" / "approve"; null или что-то другое — пусто. */
+    static String modeOf(String body) {
+        String t = body == null ? "" : body.trim();
+        if (t.startsWith("\"") && t.endsWith("\"") && t.length() >= 2) t = t.substring(1, t.length() - 1);
+        return "now".equals(t) || "approve".equals(t) ? t : "";
+    }
+
+    static String modeText(String mode) { return "now".equals(mode) ? MODE_TEXT[0] : "approve".equals(mode) ? MODE_TEXT[1] : ""; }
+
+    static String reviewRow(int n) { return n > 0 ? REVIEW_TITLE + " · " + n : REVIEW_TITLE; }
+
+    static String noteTitle(int n) { return n > 1 ? "Инструменты на одобрение: " + n : "Инструмент на одобрение"; }
+
+    static String noteText(int n, String name, String staff) {
+        if (n > 1) return "Откройте «Настройка проката → " + REVIEW_TITLE + "»";
+        String t = IvaNotifyPatch.oneLine(name, 80), s = staff == null ? "" : staff.trim();
+        return s.isEmpty() ? t : t + " · добавил(а) " + s;
+    }
+
+    /** Фразы базы (RAISE EXCEPTION в 20261030_staff_tools.sql), которые показываем как есть. */
+    static final String[] DB_PHRASES = {
+        "Пункт выдачи — только из ваших пунктов", "У вас нет пункта выдачи — обратитесь к владельцу проката",
+        "Инструмент уже не ждёт одобрения — обновите список", "Только владелец проката", "Неизвестный режим публикации"};
+
+    static String dbError(String code, String body) {
+        String c = code == null ? "" : code, b = body == null ? "" : body;
+        if (c.startsWith("2")) return "";
+        for (String p : DB_PHRASES) if (b.contains(p)) return p;
+        if (b.contains("PGRST202") || "404".equals(c)) return NO_DB;
+        if (b.contains("42501") || "401".equals(c) || "403".equals(c)) return "Нет права — войдите заново";
+        return c.isEmpty() ? "Не получилось — нет связи с сервером" : "Не получилось (ответ " + c + ")";
+    }
+
+    // ───────────── разбор ответов ─────────────
+
+    static final class Tool {
+        String id = "", name = "", price = "", point = "", review = "";
+        boolean active, mine;
+        JSONObject raw;
+    }
+
+    static String str(JSONObject o, String k) { return o == null || o.isNull(k) ? "" : o.optString(k, "").trim(); }
+
+    static List<Tool> parseTools(String body) throws Exception {
+        List<Tool> out = new ArrayList<Tool>();
+        String t = body == null ? "" : body.trim();
+        if (!t.startsWith("[")) return out;
+        JSONArray arr = new JSONArray(t);
+        for (int i = 0; i < arr.length(); i++) {
+            JSONObject o = arr.optJSONObject(i);
+            if (o == null) continue;
+            Tool x = new Tool();
+            x.id = str(o, "id");
+            x.name = str(o, "name");
+            x.price = str(o, "price");
+            x.point = str(o, "point_name");
+            x.review = str(o, "review");
+            x.active = o.optBoolean("active", false);
+            x.mine = o.optBoolean("mine", false);
+            x.raw = o;
+            if (!x.id.isEmpty()) out.add(x);
+        }
+        return out;
+    }
+
+    static final class Pending { String id = "", name = "", price = "", point = "", staff = ""; }
+
+    static List<Pending> parsePending(String body) throws Exception {
+        List<Pending> out = new ArrayList<Pending>();
+        String t = body == null ? "" : body.trim();
+        if (!t.startsWith("[")) return out;
+        JSONArray arr = new JSONArray(t);
+        for (int i = 0; i < arr.length(); i++) {
+            JSONObject o = arr.optJSONObject(i);
+            if (o == null) continue;
+            Pending p = new Pending();
+            p.id = str(o, "id");
+            p.name = str(o, "name");
+            p.price = str(o, "price");
+            p.point = str(o, "point_name");
+            p.staff = str(o, "staff_name");
+            if (!p.id.isEmpty()) out.add(p);
+        }
+        return out;
+    }
+
+    // ───────────── кто вошёл: сотрудник «Каталог» (кэш «Мой пункт», IvaStaffPatch) ─────────────
+
+    static volatile String meBody = null;
+    static volatile IvaStaffPatch.Me meParsed = null;
+
+    static IvaStaffPatch.Me cached(Activity a) {
+        String e = IvaPickupPatch.me(a);
+        if (e.isEmpty()) return null;
+        String body = IvaStaffPatch.prefs(a).getString("me_" + e, "");
+        if (body == null || body.isEmpty()) return null;
+        if (body.equals(meBody)) return meParsed;
+        IvaStaffPatch.Me m = null;
+        try { m = IvaStaffPatch.parseMe(body); } catch (Throwable ignore) {}
+        meParsed = m;
+        meBody = body;
+        return m;
+    }
+
+    /** Вошёл сотрудник с правом «Выкладывает инструмент» (не владелец проката). */
+    static boolean staff(Activity a) {
+        try {
+            if (!IvaNotifyPatch.loggedIn(a) || IvaNotifyPatch.isAdmin(a)) return false;
+            IvaStaffPatch.Me m = cached(a);
+            return m != null && want(m.status, m.r);
+        } catch (Throwable e) { return false; }
+    }
+
+    /** Пункты сотрудника «Каталог» (для поля «Пункт выдачи» в форме) или null — не сотрудник. */
+    static List<IvaPickupPatch.Point> points(Activity a) {
+        if (!staff(a)) return null;
+        IvaStaffPatch.Me m = cached(a);
+        return m == null ? null : m.points;
+    }
+
+    /** Номер сотрудника (tools.staff_id) или "" — не сотрудник. */
+    static String staffId(Activity a) {
+        if (!staff(a)) return "";
+        IvaStaffPatch.Me m = cached(a);
+        return m == null ? "" : m.id;
+    }
+
+    // ───────────── штатная форма у сотрудника: без вкладок кабинета, возврат на свою страницу ─────────────
+
+    static WeakReference<Dialog> minePage, toolsPage;
+
+    static void close(WeakReference<Dialog> r) {
+        Dialog d = r == null ? null : r.get();
+        try { if (d != null && d.isShowing()) d.dismiss(); } catch (Throwable ignore) {}
+    }
+
+    /** Из IvaPatch.onTab (последним): вкладки «Мои инструменты / Добавить» — прятать у сотрудника; кабинет — возврат. */
+    static void onTab(final Activity a, String tab) {
+        String t = tab == null ? "" : tab;
+        boolean form = "addtool".equals(t) || "admhub".equals(t) || "tooledit".equals(t);
+        boolean st = form && staff(a);
+        hubTabs(a, st);
+        if (redirect(t, st, false)) {
+            new Handler(Looper.getMainLooper()).post(new Runnable() {
+                @Override public void run() { try { backToList(a); } catch (Throwable ignore) {} }
+            });
+        }
+    }
+
+    /** Из IvaPatch.onBack: сотрудник на штатной форме / правке — «Назад» ведёт в «Инструменты пункта». */
+    static boolean onBack(Activity a, String curTab) {
+        if (!backTab(curTab, staff(a), false)) return false;
+        backToList(a);
+        return true;
+    }
+
+    static void backToList(Activity a) {
+        IvaNotifyPatch.tab(a, "profile");
+        IvaStaffPatch.Me m = cached(a);
+        if (m != null && want(m.status, m.r)) open(a, m.company);
+    }
+
+    static WeakReference<View> hiddenRow;
+
+    /** Ряд вкладок кабинета (родитель hubTabMy): у сотрудника — скрыт, у владельца — как был (возвращаем только свой). */
+    static void hubTabs(Activity a, boolean hide) {
+        int id = a.getResources().getIdentifier("hubTabMy", "id", a.getPackageName());
+        View my = id == 0 ? null : a.findViewById(id);
+        if (my == null || !(my.getParent() instanceof View)) return;
+        View row = (View) my.getParent();
+        if (hide) {
+            if (row.getVisibility() != View.GONE) { row.setVisibility(View.GONE); hiddenRow = new WeakReference<View>(row); }
+        } else {
+            View h = hiddenRow == null ? null : hiddenRow.get();
+            if (h == row) { row.setVisibility(View.VISIBLE); hiddenRow = null; }
+        }
+    }
+
+    /** «Добавить инструмент»: штатная страница добавления, сразу на форме (как вкладка «Добавить» у владельца). */
+    static void openAdd(Activity a) {
+        close(toolsPage);
+        close(minePage);
+        IvaNotifyPatch.tab(a, "addtool");
+        try {
+            Method m = a.getClass().getDeclaredMethod("showAdmHub", int.class);
+            m.setAccessible(true);
+            m.invoke(a, 1);
+        } catch (Throwable ignore) {}
+        hubTabs(a, true);
+    }
+
+    /** Нажали на инструмент: штатная правка с его данными. */
+    static void openEdit(Activity a, Tool t) {
+        if (t == null || t.raw == null) return;
+        close(toolsPage);
+        close(minePage);
+        try {
+            Method m = a.getClass().getDeclaredMethod("openToolEdit", JSONObject.class);
+            m.setAccessible(true);
+            m.invoke(a, t.raw);
+        } catch (Throwable e) { IvaStaffPatch.toast(a, "Не получилось открыть инструмент"); }
+    }
+
+    // ───────────── страница «Инструменты пункта» (сотрудник) ─────────────
+
+    static final class Ui {
+        Activity a;
+        IvaChiefPatch.Page page;
+        LinearLayout items;
+        TextView status;
+        boolean busy;
+        int cText, cGray, cOrange;
+    }
+
+    static int dp(Activity a, float v) { return IvaChiefPatch.dp(a, v); }
+
+    static void open(final Activity a, String company) {
+        close(toolsPage);
+        final Ui u = new Ui();
+        u.a = a;
+        u.cText = IvaStaffPatch.color(a, "text", 0xfff2f4f8);
+        u.cGray = IvaStaffPatch.color(a, "gray", 0xff9aa1b0);
+        u.cOrange = IvaStaffPatch.color(a, "orange", 0xffff8f1f);
+        String c = company == null || company.trim().isEmpty() ? "Прокат" : company.trim();
+        u.page = IvaChiefPatch.page(a, TITLE, "«" + c + "»: инструменты ваших пунктов. Новые могут ждать одобрения владельца.", false);
+        toolsPage = new WeakReference<Dialog>(u.page.d);
+        TextView add = IvaPickupPatch.addButton(a, u.cOrange);
+        add.setText(ADD);
+        add.setOnClickListener(new View.OnClickListener() { @Override public void onClick(View v) { try { openAdd(a); } catch (Throwable ignore) {} } });
+        u.page.list.addView(add, new LinearLayout.LayoutParams(-1, -2));
+        u.status = IvaChiefPatch.text(a, "Загружаем…", 13f, u.cGray, false);
+        u.status.setPadding(dp(a, 2), dp(a, 12), 0, 0);
+        u.page.list.addView(u.status, new LinearLayout.LayoutParams(-1, -2));
+        u.items = new LinearLayout(a);
+        u.items.setOrientation(LinearLayout.VERTICAL);
+        u.page.list.addView(u.items, new LinearLayout.LayoutParams(-1, -2));
+        reload(u);
+    }
+
+    static void reload(final Ui u) {
+        if (u.busy) return;
+        u.busy = true;
+        new Thread(new Runnable() {
+            @Override public void run() {
+                List<Tool> got = null;
+                String err;
+                try {
+                    String[] r = IvaClientPatch.apiCall(u.a, LIST_RPC, "POST", "{}", true);
+                    err = r == null ? dbError("", "") : dbError(r[0], r.length > 1 ? r[1] : "");
+                    if (err.isEmpty()) got = parseTools(r.length > 1 ? r[1] : "");
+                } catch (Throwable e) { err = dbError("", ""); }
+                final List<Tool> ft = got;
+                final String fe = err;
+                u.a.runOnUiThread(new Runnable() {
+                    @Override public void run() {
+                        try {
+                            u.busy = false;
+                            if (!u.page.open()) return;
+                            if (ft == null) { u.status.setText(fe); u.status.setTextColor(u.cOrange); return; }
+                            draw(u, ft);
+                        } catch (Throwable ignore) {}
+                    }
+                });
+            }
+        }).start();
+    }
+
+    static void draw(final Ui u, List<Tool> tools) {
+        final Activity a = u.a;
+        u.items.removeAllViews();
+        for (final Tool t : tools) {
+            LinearLayout c = IvaChiefPatch.card(a);
+            LinearLayout top = new LinearLayout(a);
+            top.setOrientation(LinearLayout.HORIZONTAL);
+            top.setGravity(Gravity.CENTER_VERTICAL);
+            top.addView(IvaChiefPatch.text(a, t.name.isEmpty() ? "Без названия" : t.name, 15f, u.cText, true), new LinearLayout.LayoutParams(0, -2, 1f));
+            boolean warn = !t.review.isEmpty();
+            TextView s = IvaChiefPatch.text(a, statusText(t.review, t.active), 12f, warn ? u.cOrange : u.cGray, warn);
+            s.setPadding(dp(a, 8), 0, 0, 0);
+            top.addView(s);
+            c.addView(top);
+            String l2 = line2(t.price, t.point);
+            if (!l2.isEmpty()) {
+                TextView x = IvaChiefPatch.text(a, l2, 14f, u.cGray, false);
+                x.setPadding(0, dp(a, 4), 0, 0);
+                c.addView(x);
+            }
+            String h = statusHint(t.review);
+            if (!h.isEmpty()) {
+                TextView x = IvaChiefPatch.text(a, h, 13f, u.cGray, false);
+                x.setPadding(0, dp(a, 4), 0, 0);
+                c.addView(x);
+            }
+            c.setClickable(true);
+            c.setOnClickListener(new View.OnClickListener() { @Override public void onClick(View v) { openEdit(a, t); } });
+            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2);
+            lp.topMargin = dp(a, 10);
+            u.items.addView(c, lp);
+        }
+        u.status.setTextColor(u.cGray);
+        u.status.setText(tools.isEmpty() ? "В ваших пунктах пока нет инструментов" : "");
+        u.status.setVisibility(tools.isEmpty() ? View.VISIBLE : View.GONE);
+    }
+
+    // ───────────── владелец: «Настройка проката» → режим и «На одобрении» ─────────────
+
+    /** Из IvaShopPatch.openPage: две строки — «Инструменты сотрудников» (режим) и «На одобрении · N». */
+    static void settingsSection(final Activity a, LinearLayout list, final int cText, final int cGray, final int cOrange) {
+        float den = a.getResources().getDisplayMetrics().density;
+        final LinearLayout modeRow = IvaShopPatch.row(a, list, new IvaShopPatch.Icon(IvaShopPatch.Icon.CARD, cOrange, den), MODE_TITLE, "Загружаем…", cText, cGray);
+        final LinearLayout revRow = IvaShopPatch.row(a, list, new IvaShopPatch.Icon(IvaShopPatch.Icon.SHOP, cOrange, den), REVIEW_TITLE, "Загружаем…", cText, cGray);
+        final String[] mode = {""};
+        final Runnable refresh = new Runnable() { @Override public void run() { loadSection(a, modeRow, revRow, mode); } };
+        modeRow.setOnClickListener(new View.OnClickListener() {
+            @Override public void onClick(View v) {
+                IvaClientPatch.styledChoice(a, MODE_TITLE, "Как публиковать новые инструменты, которые добавили сотрудники. Правки — всегда сразу.",
+                    MODE_TEXT, new IvaClientPatch.Choice() {
+                        @Override public void pick(int i) { if (i >= 0 && i < MODES.length) setMode(a, MODES[i], refresh); }
+                    });
+            }
+        });
+        revRow.setOnClickListener(new View.OnClickListener() {
+            @Override public void onClick(View v) { try { openReview(a, refresh); } catch (Throwable ignore) {} }
+        });
+        refresh.run();
+    }
+
+    static TextView sub(LinearLayout row) {
+        try {
+            ViewGroup col = (ViewGroup) row.getChildAt(1);
+            return (TextView) col.getChildAt(1);
+        } catch (Throwable e) { return null; }
+    }
+
+    static TextView title(LinearLayout row) {
+        try {
+            ViewGroup col = (ViewGroup) row.getChildAt(1);
+            return (TextView) col.getChildAt(0);
+        } catch (Throwable e) { return null; }
+    }
+
+    static void loadSection(final Activity a, final LinearLayout modeRow, final LinearLayout revRow, final String[] mode) {
+        new Thread(new Runnable() {
+            @Override public void run() {
+                String m = "", e1, e2;
+                int n = -1;
+                try {
+                    String[] r = IvaClientPatch.apiCall(a, MODE_RPC, "POST", "{}", true);
+                    e1 = r == null ? dbError("", "") : dbError(r[0], r.length > 1 ? r[1] : "");
+                    if (e1.isEmpty()) m = modeOf(r.length > 1 ? r[1] : "");
+                } catch (Throwable x) { e1 = dbError("", ""); }
+                try {
+                    String[] r = IvaClientPatch.apiCall(a, PENDING_RPC, "POST", "{}", true);
+                    e2 = r == null ? dbError("", "") : dbError(r[0], r.length > 1 ? r[1] : "");
+                    if (e2.isEmpty()) n = parsePending(r.length > 1 ? r[1] : "").size();
+                } catch (Throwable x) { e2 = dbError("", ""); }
+                final String fm = m, f1 = e1, f2 = e2;
+                final int fn = n;
+                a.runOnUiThread(new Runnable() {
+                    @Override public void run() {
+                        try {
+                            mode[0] = fm;
+                            TextView s1 = sub(modeRow), s2 = sub(revRow), t2 = title(revRow);
+                            if (s1 != null) s1.setText(!f1.isEmpty() ? f1 : modeText(fm).isEmpty() ? MODE_TEXT[1] : modeText(fm));
+                            if (t2 != null) t2.setText(reviewRow(Math.max(0, fn)));
+                            if (s2 != null) s2.setText(!f2.isEmpty() ? f2 : fn > 0 ? "Добавили сотрудники — клиенты пока не видят" : "Ничего не ждёт одобрения");
+                        } catch (Throwable ignore) {}
+                    }
+                });
+            }
+        }).start();
+    }
+
+    static void setMode(final Activity a, String mode, final Runnable done) {
+        final String body = modeBody(mode);
+        if (body == null) return;
+        new Thread(new Runnable() {
+            @Override public void run() {
+                String e;
+                try {
+                    String[] r = IvaClientPatch.apiCall(a, MODE_SET_RPC, "POST", body, true);
+                    e = r == null ? dbError("", "") : dbError(r[0], r.length > 1 ? r[1] : "");
+                } catch (Throwable x) { e = dbError("", ""); }
+                final String fe = e;
+                a.runOnUiThread(new Runnable() {
+                    @Override public void run() {
+                        IvaStaffPatch.toast(a, fe.isEmpty() ? "Сохранено" : fe);
+                        try { done.run(); } catch (Throwable ignore) {}
+                    }
+                });
+            }
+        }).start();
+    }
+
+    static final class Rev {
+        Activity a;
+        IvaChiefPatch.Page page;
+        LinearLayout items;
+        TextView status;
+        Runnable changed;
+        boolean busy;
+        int cText, cGray, cOrange;
+    }
+
+    static void openReview(final Activity a, Runnable changed) {
+        final Rev u = new Rev();
+        u.a = a;
+        u.changed = changed;
+        u.cText = IvaStaffPatch.color(a, "text", 0xfff2f4f8);
+        u.cGray = IvaStaffPatch.color(a, "gray", 0xff9aa1b0);
+        u.cOrange = IvaStaffPatch.color(a, "orange", 0xffff8f1f);
+        u.page = IvaChiefPatch.page(a, REVIEW_TITLE, "Инструменты, которые добавили сотрудники. Клиенты их не видят, пока вы не опубликуете.", false);
+        u.status = IvaChiefPatch.text(a, "Загружаем…", 13f, u.cGray, false);
+        u.status.setPadding(dp(a, 2), dp(a, 4), 0, 0);
+        u.page.list.addView(u.status, new LinearLayout.LayoutParams(-1, -2));
+        u.items = new LinearLayout(a);
+        u.items.setOrientation(LinearLayout.VERTICAL);
+        u.page.list.addView(u.items, new LinearLayout.LayoutParams(-1, -2));
+        reloadReview(u);
+    }
+
+    static void reloadReview(final Rev u) {
+        if (u.busy) return;
+        u.busy = true;
+        new Thread(new Runnable() {
+            @Override public void run() {
+                List<Pending> got = null;
+                String err;
+                try {
+                    String[] r = IvaClientPatch.apiCall(u.a, PENDING_RPC, "POST", "{}", true);
+                    err = r == null ? dbError("", "") : dbError(r[0], r.length > 1 ? r[1] : "");
+                    if (err.isEmpty()) got = parsePending(r.length > 1 ? r[1] : "");
+                } catch (Throwable e) { err = dbError("", ""); }
+                final List<Pending> fp = got;
+                final String fe = err;
+                u.a.runOnUiThread(new Runnable() {
+                    @Override public void run() {
+                        try {
+                            u.busy = false;
+                            if (!u.page.open()) return;
+                            if (fp == null) { u.status.setText(fe); u.status.setTextColor(u.cOrange); return; }
+                            drawReview(u, fp);
+                        } catch (Throwable ignore) {}
+                    }
+                });
+            }
+        }).start();
+    }
+
+    static void drawReview(final Rev u, List<Pending> ps) {
+        final Activity a = u.a;
+        u.items.removeAllViews();
+        for (final Pending p : ps) {
+            LinearLayout c = IvaChiefPatch.card(a);
+            c.addView(IvaChiefPatch.text(a, p.name.isEmpty() ? "Без названия" : p.name, 15f, u.cText, true));
+            String l2 = line2(p.price, p.point);
+            if (!l2.isEmpty()) {
+                TextView x = IvaChiefPatch.text(a, l2, 14f, u.cGray, false);
+                x.setPadding(0, dp(a, 4), 0, 0);
+                c.addView(x);
+            }
+            if (!p.staff.isEmpty()) {
+                TextView x = IvaChiefPatch.text(a, "Добавил(а): " + p.staff, 13f, u.cGray, false);
+                x.setPadding(0, dp(a, 4), 0, 0);
+                c.addView(x);
+            }
+            LinearLayout btns = new LinearLayout(a);
+            btns.setOrientation(LinearLayout.HORIZONTAL);
+            btns.setPadding(0, dp(a, 12), 0, 0);
+            final TextView yes = IvaPickupPatch.addButton(a, u.cOrange);
+            yes.setText("Опубликовать");
+            final TextView no = IvaSearchPatch.chip(a, "Отклонить", false, false);
+            no.setGravity(Gravity.CENTER);
+            LinearLayout.LayoutParams yl = new LinearLayout.LayoutParams(0, -2, 1f);
+            yl.rightMargin = dp(a, 8);
+            btns.addView(yes, yl);
+            btns.addView(no, new LinearLayout.LayoutParams(0, -1, 1f));
+            c.addView(btns);
+            yes.setOnClickListener(new View.OnClickListener() { @Override public void onClick(View v) { review(u, p, true, yes); } });
+            no.setOnClickListener(new View.OnClickListener() {
+                @Override public void onClick(View v) {
+                    IvaClientPatch.styledChoice(a, "Отклонить инструмент?", "Клиенты его не увидят. Сотрудник увидит «Отклонён» и сможет исправить.",
+                        new String[]{"Отклонить"}, new IvaClientPatch.Choice() { @Override public void pick(int i) { if (i == 0) review(u, p, false, no); } });
+                }
+            });
+            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2);
+            lp.topMargin = dp(a, 10);
+            u.items.addView(c, lp);
+        }
+        u.status.setTextColor(u.cGray);
+        u.status.setText(ps.isEmpty() ? "Ничего не ждёт одобрения" : "");
+        u.status.setVisibility(ps.isEmpty() ? View.VISIBLE : View.GONE);
+    }
+
+    static void review(final Rev u, final Pending p, final boolean ok, final TextView btn) {
+        final String body = reviewBody(p.id, ok);
+        if (body == null) return;
+        btn.setEnabled(false);
+        btn.setAlpha(0.6f);
+        new Thread(new Runnable() {
+            @Override public void run() {
+                String e;
+                try {
+                    String[] r = IvaClientPatch.apiCall(u.a, REVIEW_RPC, "POST", body, true);
+                    e = r == null ? dbError("", "") : dbError(r[0], r.length > 1 ? r[1] : "");
+                } catch (Throwable x) { e = dbError("", ""); }
+                final String fe = e;
+                u.a.runOnUiThread(new Runnable() {
+                    @Override public void run() {
+                        try {
+                            btn.setEnabled(true);
+                            btn.setAlpha(1f);
+                            IvaStaffPatch.toast(u.a, fe.isEmpty() ? (ok ? "Опубликовано — клиенты видят" : "Отклонено") : fe);
+                            if (fe.isEmpty()) try { IvaNotifyPatch.call(u.a, "loadCatalog"); } catch (Throwable ignore) {}   // каталог — с новым
+                            reloadReview(u);
+                            if (u.changed != null) u.changed.run();
+                        } catch (Throwable ignore) {}
+                    }
+                });
+            }
+        }).start();
+    }
+
+    // ───────────── уведомление «Инструмент на одобрение» (IvaNotifyPatch.tick и bgRun, владельцу, не главный поток) ─────────────
+
+    static void check(Context c, String email) throws Exception {
+        SharedPreferences sp = c.getSharedPreferences("iva_staff", 0);
+        long now = System.currentTimeMillis();
+        if (now < sp.getLong("review_nodb_" + email, 0L)) return;
+        String[] r = IvaNotifyPatch.api(c, PENDING_RPC, "POST", "{}");
+        if (r == null) return;
+        if (!r[0].startsWith("2")) {
+            if (NO_DB.equals(dbError(r[0], r.length > 1 ? r[1] : ""))) sp.edit().putLong("review_nodb_" + email, now + NO_DB_PAUSE_MS).apply();
+            return;
+        }
+        List<Pending> ps = parsePending(r.length > 1 ? r[1] : "");
+        List<String> ids = new ArrayList<String>();
+        for (Pending p : ps) ids.add(p.id);
+        SharedPreferences p = IvaNotifyPatch.prefs(c);
+        String k = IvaNotifyPatch.key("seen_tr", email);
+        Set<String> seen = IvaNotifyPatch.splitSet(p.getString(k, null));
+        List<String> nw = IvaNotifyPatch.fresh(seen, ids);                                // первый раз — молча запоминаем
+        p.edit().putString(k, IvaNotifyPatch.joinSet(IvaNotifyPatch.remember(seen, ids))).apply();
+        if (nw.isEmpty() || !IvaNotifyPatch.on(c, IvaNotifyPatch.K_ORD, true)) return;
+        String name = "", who = "";
+        for (Pending x : ps) if (x.id.equals(nw.get(0))) { name = x.name; who = x.staff; break; }
+        if (c instanceof Activity) {
+            final Activity a = (Activity) c;
+            a.runOnUiThread(new Runnable() {
+                @Override public void run() { try { Toast.makeText(a, "Инструмент на одобрение!", Toast.LENGTH_LONG).show(); } catch (Throwable ignore) {} }
+            });
+        }
+        IvaNotifyPatch.showNote(c, IvaNotifyPatch.CH_ORD, ID_NOTE, noteTitle(nw.size()), noteText(nw.size(), name, who), OPEN, nw.get(0));
+    }
+
+    /** Нажали на уведомление: кабинет → «На одобрении». */
+    static void openFromNote(Activity a) {
+        IvaNotifyPatch.tab(a, "profile");
+        if (IvaNotifyPatch.isAdmin(a)) openReview(a, null);
+    }
+}

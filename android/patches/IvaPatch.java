@@ -416,6 +416,7 @@ public final class IvaPatch {
         try { IvaReviewPatch.onTab(a, tab); } catch (Throwable ignore) {}   // 10.70: отзывы — страница инструмента и проката
         try { IvaAvatarPatch.onTab(a, tab); } catch (Throwable ignore) {}   // 10.98: «Мои данные» — фото кругом, крупнее, выбор области
         try { IvaShopPatch.onTab(a, tab); } catch (Throwable ignore) {}     // 10.98: «Мои данные» — только ФИО, телефон, мессенджеры
+        try { IvaStaffToolsPatch.onTab(a, tab); } catch (Throwable ignore) {}   // 10.105: сотрудник «Каталог» — форма без вкладок, возврат
         try {
             String t = tab == null ? "" : tab;
             int orange = navColor(a, "orange", 0xffff9800);
@@ -775,6 +776,8 @@ public final class IvaPatch {
         ViewGroup pages = IvaClientPatch.hubPages(a);
         View btn = pages == null ? null : backButton(pages);
         Object ct = get(a, "curTab");
+        // 10.105: сотрудник на штатной форме / правке — «Назад» в «Инструменты пункта», не на главную
+        try { if (IvaStaffToolsPatch.onBack(a, ct instanceof String ? (String) ct : "")) return; } catch (Throwable ignore) {}
         String act = backAction(IvaSearchPatch.panelOpen(), shown(a, "scrSuccess"), shown(a, "scrMain"), btn != null,
             ct instanceof String ? (String) ct : "", IvaClientPatch.hubVisible);
         if (BACK_PANEL.equals(act)) IvaSearchPatch.closePanel(a, true);

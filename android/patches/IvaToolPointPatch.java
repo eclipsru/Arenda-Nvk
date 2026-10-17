@@ -152,6 +152,7 @@ final class IvaToolPointPatch {
     static volatile long pendingAt = 0;
     static volatile int pendingForm = -1;
     static volatile String pendingPoint = "", pendingId = "", pendingName = "", pendingEmail = "";
+    static volatile String pendingStaff = "";                   // 10.105: номер сотрудника «Каталог»
 
     static final Map<String, IvaPickupPatch.Point> cards = new HashMap<String, IvaPickupPatch.Point>();
     static final Map<String, Long> cardsAt = new HashMap<String, Long>();
@@ -231,7 +232,7 @@ final class IvaToolPointPatch {
 
     static void paint(final Activity a, final LinearLayout box, final int k) {
         final List<IvaPickupPatch.Point> ps = mine;
-        boolean waiting = k == 1 && (!editLoaded || !editOwner.equals(IvaPickupPatch.me(a)));   // чужой инструмент (создатель) — без поля
+        boolean waiting = k == 1 && (!editLoaded || !ownEdit(a));   // чужой инструмент (создатель) — без поля
         boolean vis = ps != null && !waiting && show(k, ps.size(), Boolean.TRUE.equals(col), orig.isEmpty());
         box.setVisibility(vis ? View.VISIBLE : View.GONE);
         if (!vis) return;
@@ -274,6 +275,12 @@ final class IvaToolPointPatch {
         } catch (Throwable ignore) {}
     }
 
+    /** Правка своего инструмента: владелец — я; 10.105: или я сотрудник «Каталог» (база пустит только в свои пункты). */
+    static boolean ownEdit(Activity a) {
+        if (editOwner.equals(IvaPickupPatch.me(a))) return true;
+        try { return IvaStaffToolsPatch.staff(a); } catch (Throwable e) { return false; }
+    }
+
     /** Свои пункты и есть ли столбец point_id — фоном, не чаще раза в 2 минуты (и при смене входа). */
     static void ensureMine(final Activity a) {
         final String me = IvaPickupPatch.me(a);
@@ -285,7 +292,10 @@ final class IvaToolPointPatch {
                 List<IvaPickupPatch.Point> ps = new ArrayList<IvaPickupPatch.Point>();
                 Boolean c = col;
                 boolean ok = false;
-                try { ps = IvaPickupPatch.load(a, new String[1]); ok = true; } catch (Throwable ignore) {}
+                List<IvaPickupPatch.Point> sp = null;
+                try { sp = IvaStaffToolsPatch.points(a); } catch (Throwable ignore) {}   // 10.105: сотруднику — его пункты
+                if (sp != null) { ps = new ArrayList<IvaPickupPatch.Point>(sp); ok = true; }
+                else try { ps = IvaPickupPatch.load(a, new String[1]); ok = true; } catch (Throwable ignore) {}
                 if (ok && !ps.isEmpty()) {
                     try {
                         String[] r = IvaClientPatch.apiCall(a, "/rest/v1/tools?select=point_id&limit=1", "GET", null, true);
@@ -349,6 +359,7 @@ final class IvaToolPointPatch {
     /** Нажали «Опубликовать» (k=0) / «Сохранить» (k=1): запомнить, что записать после штатного успеха. */
     static void onSaveTouch(Activity a, int k) {
         pendingAt = 0;
+        try { pendingStaff = IvaStaffToolsPatch.staffId(a); } catch (Throwable e) { pendingStaff = ""; }
         List<IvaPickupPatch.Point> ps = mine;
         if (ps == null || !Boolean.TRUE.equals(col) || !show(k, ps.size(), true, orig.isEmpty())) return;
         if (k == 0) {
@@ -360,7 +371,7 @@ final class IvaToolPointPatch {
             if (name.isEmpty() || email.isEmpty()) return;
             pendingPoint = cur; pendingId = ""; pendingName = name; pendingEmail = email;
         } else {
-            if (!editLoaded || editId.isEmpty() || !editOwner.equals(IvaPickupPatch.me(a)) || !needWrite(1, sel[1], "", orig)) return;
+            if (!editLoaded || editId.isEmpty() || !ownEdit(a) || !needWrite(1, sel[1], "", orig)) return;
             pendingPoint = sel[1]; pendingId = editId;
         }
         pendingForm = k;
@@ -373,7 +384,7 @@ final class IvaToolPointPatch {
         pendingAt = 0;
         if (!write) return;
         final int k = pendingForm;
-        final String point = pendingPoint, id = pendingId, name = pendingName, email = pendingEmail;
+        final String point = pendingPoint, id = pendingId, name = pendingName, email = pendingEmail, staffId = pendingStaff;
         final String body = body(point);
         if (body == null) return;
         if (k == 0) sel[0] = "";                                         // опубликовано — форма «Добавить» снова с первым пунктом
@@ -384,7 +395,7 @@ final class IvaToolPointPatch {
                     String target = id;
                     if (k == 0) {
                         String[] r = IvaClientPatch.apiCall(a, IvaKindPatch.lookupPath(email, name,
-                            IvaKindPatch.isoUtc(System.currentTimeMillis() - IvaKindPatch.FRESH_MS)), "GET", null, true);
+                            IvaKindPatch.isoUtc(System.currentTimeMillis() - IvaKindPatch.FRESH_MS), staffId), "GET", null, true);
                         if (r == null || r[0] == null || !r[0].startsWith("2")) return;
                         JSONArray arr = new JSONArray(r.length > 1 && r[1] != null ? r[1].trim() : "[]");
                         JSONObject o = arr.length() > 0 ? arr.optJSONObject(0) : null;
@@ -399,7 +410,7 @@ final class IvaToolPointPatch {
                         a.runOnUiThread(new Runnable() {
                             @Override public void run() {
                                 if (k == 1 && tid.equals(editId)) orig = point;
-                                try { patchCatalog(a, tid, point); } catch (Throwable ignore) {}
+                                if (staffId.isEmpty()) try { patchCatalog(a, tid, point); } catch (Throwable ignore) {}   // у сотрудника в пунктах нет координат
                             }
                         });
                     }
