@@ -719,8 +719,8 @@ public final class IvaAccessPatch {
         String[] t = feeTexts(k[0], k[1], k[2]);
         v[0].setText(t[0]);
         v[1].setText(t[1]);
-        v[1].setTextColor("1".equals(t[3]) ? IvaClientPatch.navColor(a, "redBright", 0xffff5a5a)
-            : IvaClientPatch.navColor(a, "greenBright", 0xff3ddc84));
+        v[1].setTextColor("1".equals(t[3]) ? IvaClientPatch.navColor(a, "redBright", 0xfff2f4f8)
+            : IvaClientPatch.navColor(a, "greenBright", 0xfff2f4f8));
         v[2].setText(note == null || note.isEmpty() ? t[2] : t[2] + "\n" + note);
     }
 

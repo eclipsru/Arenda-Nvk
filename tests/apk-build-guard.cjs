@@ -96,7 +96,7 @@ try {
   assert.match(jpc, /t = IvaLogoPatch\.target\(a\);[\s\S]{0,120}if \(t == IvaLogoPatch\.CLIENT_HUB && openHub\(a, 0\)\) return;\n\s*if \(t == IvaLogoPatch\.STAFF_HUB && openHub\(a, 1\)\) return;\n\s*callNative\(a, "onPlus"\);/, 'IvaClientPatch: логотип у админа и гостя должен вести в штатный onPlus');
   assert.match(jpc, /View plus = a\.findViewById\(id\(a, "navPlus"\)\);/, 'IvaClientPatch: обработчик логотипа не ставится на navPlus');
   assert.match(jpc, /if \(toHub && openClientHub\(a\)\) return;\n\s*callNativeTab\(a, "home"\);/, 'IvaClientPatch: «Назад» в карточке инструмента должна вести на главную, как штатная');
-  assert.match(jpc, /try \{ installClientNav\(a\); \} catch \(Throwable ignore\) \{\}\n\s*try \{ IvaLogoPatch\.cabinet\(a\); \} catch \(Throwable ignore\) \{\}[^\n]*(?:\n\s*try \{ IvaShopPatch\.cabinet\(a\); \} catch \(Throwable ignore\) \{\}[^\n]*)?\n\s*try \{ if \(hubVisible && IvaLogoPatch\.target\(a\) == IvaLogoPatch\.NATIVE\) callNativeTab\(a, "home"\); \}/, 'IvaClientPatch: onProfile не ставит логотип клиента или не прячет раздел при выходе');
+  assert.match(jpc, /try \{ installClientNav\(a\); \} catch \(Throwable ignore\) \{\}\n\s*try \{ IvaLogoPatch\.cabinet\(a\); \} catch \(Throwable ignore\) \{\}[^\n]*(?:\n\s*try \{ IvaShopPatch\.cabinet\(a\); \} catch \(Throwable ignore\) \{\}[^\n]*)?(?:\n\s*(?:\/\/[^\n]*|try \{ (?:IvaOrderPatch\.profileArchiveRow|IvaNotifyPatch\.ensureSupport|IvaAccessPatch\.feeCard)\(a\); \} catch \(Throwable ignore\) \{\}[^\n]*))*\n\s*try \{ if \(hubVisible && IvaLogoPatch\.target\(a\) == IvaLogoPatch\.NATIVE\) callNativeTab\(a, "home"\); \}/, 'IvaClientPatch: onProfile не ставит логотип клиента или не прячет раздел при выходе');
   assert.match(jp, /try \{ IvaClientPatch\.onShowTab\(a, tab\); \} catch \(Throwable ignore\) \{\}\n(?:\s*\/\/[^\n]*\n)?\s*try \{ IvaSearchPatch\.onShowTab\(a, tab\); \} catch \(Throwable ignore\) \{\}\n(?:\s*\/\/[^\n]*\n)?\s*try \{ IvaChatPatch\.onShowTab\(a, tab\); \} catch \(Throwable ignore\) \{\}\n(?:\s*\/\/[^\n]*\n)?\s*try \{ IvaOrderPatch\.onShowTab\(a, tab\); \} catch \(Throwable ignore\) \{\}\n(?:\s*\/\/[^\n]*\n)?\s*try \{ IvaNotifyPatch\.onShowTab\(a, tab\); \} catch \(Throwable ignore\) \{\}\n    \}/, 'IvaPatch.onTab: штатный переход должен прятать раздел клиента, включать/прятать поиск 10.45, чат 10.54, заявку 10.55 и уведомления 10.56');
   assert.match(jpc, /if \(hubVisible\) \{\n\s*detailFromHub = "detail"\.equals\(t\);\n\s*hideClientHub\(a\);/, 'IvaClientPatch: раздел клиента не прячется при штатном переходе');
   assert.match(jpc, /hubStyling = true;\n\s*try \{ IvaPatch\.onTab\(a, HUB_PAGE\); \}[^\n]*finally \{ hubStyling = false; \}/, 'IvaClientPatch: подсветка логотипа не должна прятать сам раздел');
@@ -2465,9 +2465,69 @@ try {
       'IvaTestPatch.openFromNote(a)', 'IvaStaffOrdersPatch.openFromNote(a)', 'IvaStaffToolsPatch.openFromNote(a)', 'IvaStaffChatPatch.openFromNote(a, target)'])
       assert.ok(go.includes(k), 'переход 10.116: нет ' + k);
     assert.ok(!/customer_profiles|passport|phone|surname|select=\*/.test(stc + shc), 'публикация 10.116: без личных данных клиентов');
-    assert.ok(wf.includes("NEW_NAME: '10.116'") && wf.includes("NEW_CODE: '190'"), 'сборка 10.116 (190)');
+    assert.ok(/NEW_NAME: '10\.(?:116|117)'/.test(wf) && /NEW_CODE: '(?:190|191)'/.test(wf), 'сборка 10.116 (190) или новее');
     assert.ok((tp.match(/eq\("сотрудник 10\.116: /g) || []).length >= 6 && (tp.match(/eq\("переход 10\.116: /g) || []).length >= 3
       && (tp.match(/eq\("кабинет 10\.116: /g) || []).length >= 3 && (tp.match(/eq\("одобрение 10\.116: /g) || []).length >= 2, 'IvaPatchTest: проверки 10.116');
+  }
+  // 10.117 (просьба владельца 17.10.2026): в кабинете админа сумма комиссии прыгала (0 / −2xx / +150), профиль то не
+  // открывался, то без данных, «Архив заявок» двоился. Причины: штатный loadDebt превращает любую ошибку запроса в сумму;
+  // штатный selfAdmin при запуске false, пока checkSelfAdmin не ответил (после трёх неудач так и остаётся); наш клиентский
+  // «Архив заявок» ставился только при смене раздела; после сна ключ истёкший, минутная проверка стоит.
+  {
+    const ac = R('android/patches/IvaAccessPatch.java'), cl = R('android/patches/IvaClientPatch.java'), np = R('android/patches/IvaNotifyPatch.java'),
+      tp = R('android/patches/test/IvaPatchTest.java'), wf = R('.github/workflows/build-apk.yml'), ap = R('android/patches/apply.py');
+    const strip = (x) => x.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '');
+    const fn = (src, name) => { const m = new RegExp('static [\\w.<>\\[\\]]+ ' + name + '\\(').exec(src); assert.ok(m, 'нет ' + name);
+      return src.slice(m.index, src.indexOf('\n    }\n', m.index)); };
+    const acc = strip(ac), clc = strip(cl), npc = strip(np);
+    // 1. комиссия: штатные строки скрыты, наши пишутся только по полному ответу (3 запроса 2xx), иначе — прошлая сумма с пометкой
+    const ff = fn(acc, 'feeFetch'), fl = fn(acc, 'feeLoad'), fc = fn(acc, 'feeCard'), fv = fn(acc, 'feeViews'), fp = fn(acc, 'feePost');
+    assert.ok((ff.match(/if \(\w+ == null \|\| !\w+\[0\]\.startsWith\("2"\) \|\| \w+\.length < 2\) return null;/g) || []).length === 3
+      && (ff.match(/== null\) return null;/g) || []).length >= 3 && (ff.match(/IvaClientPatch\.apiCall\(a, FEE_(?:PARTS|PAID|PCT) \+ q, "GET", null, true\)/g) || []).length === 3
+      && ff.lastIndexOf('return null;') < ff.indexOf('return new double[]{fee, paid, pct};'),
+      'комиссия 10.117: три запроса; любой не 2xx или не массив — нет суммы (не «0 ₽» и не «−начислено»)');
+    assert.ok(fl.includes('for (int i = 0; i < FEE_TRIES; i++)') && fl.includes('IvaClientPatch.authFresh(a);') && fl.indexOf('IvaClientPatch.authFresh(a);') < fl.indexOf('feeFetch(a, me)')
+      && fl.includes('if (r == null) continue;') && fl.indexOf('prefs(a).edit().putString(feeCacheKey(me)') > fl.indexOf('if (r == null) continue;')
+      && fl.includes('feePost(a, me, c, feeStale(c != null, hhmm));'),
+      'комиссия 10.117: до трёх попыток со свежим ключом; на телефон — только удачная; не дошло — прошлая сумма с пометкой');
+    assert.ok(fc.includes('IvaReviewPatch.chief(a)') && fc.includes('!IvaNotifyPatch.isAdmin(a)) return;') && fc.includes('if (!FEE_BUSY.compareAndSet(false, true)) return;')
+      && fc.includes('new Thread(new Runnable() {') && fc.includes('while (feeAgain && me.equals(me(a)))') && !/apiCall/.test(fc),
+      'комиссия 10.117: только админу (не создателю), запрос один за раз, сеть в фоне');
+    assert.ok(fv.includes('n.setVisibility(View.GONE);') && fv.includes('box.findViewWithTag(FEE_TAG + i)') && fv.includes('box.addView(t, box.indexOfChild(n) + 1, lp);')
+      && /FEE_NATIVE = \{"feePctTxt", "feeSum", "feeSub"\}/.test(ac) && fp.includes('a.runOnUiThread(') && fp.includes('!IvaNotifyPatch.isAdmin(a)) return;'),
+      'комиссия 10.117: штатные строки скрыты, наши — рядом (штатные не переносим), пишутся в главном потоке');
+    assert.ok(ac.includes('FEE_PARTS = "/rest/v1/order_parts?select=fee&owner_email=eq."') && ac.includes('FEE_PAID = "/rest/v1/fee_payments?select=amount&status=eq.confirmed&admin_email=eq."')
+      && ac.includes('FEE_PCT = "/rest/v1/admins?select=fee_pct&email=eq."') && !/customer_profiles|passport|phone|surname|select=\*/.test(acc)
+      && (acc.match(/"POST"/g) || []).length === 1,
+      'комиссия 10.117: те же данные, что у штатной карточки; новых данных нет; POST по-прежнему один');
+    // 2. роль: по прошлому ответу базы в обе стороны; без ключа ответ базы не считается
+    const op = fn(acc, 'onProfile'), aa = fn(acc, 'askAdmin');
+    assert.ok(op.includes('int fix = roleFix(IvaNotifyPatch.isAdmin(a), prefs(a).getBoolean(adminKey(me), true));') && op.includes('setAdmin(a, fix > 0);')
+      && op.includes('!prefs(a).contains(adminKey(me))) return false;') && op.includes('IvaReviewPatch.chief(a)') && !/apiCall/.test(op)
+      && /^static Boolean askAdmin\(Activity a, String me\) throws Exception \{\s*if \(IvaClientPatch\.authEmpty\(IvaClientPatch\.get\(a, "accessToken"\)\)\) return null;\s*IvaClientPatch\.authFresh\(a\);/.test(aa),
+      'роль 10.117: админ сразу админ (и удалённый сразу клиент) по прошлому ответу базы; без ключа «не админ» не принимаем');
+    // 3. строки, зависящие от роли, — после каждой перерисовки кабинета
+    const cp = fn(clc, 'onProfile');
+    assert.ok(cp.includes('try { IvaOrderPatch.profileArchiveRow(a); } catch (Throwable ignore) {}') && cp.includes('try { IvaNotifyPatch.ensureSupport(a); } catch (Throwable ignore) {}')
+      && cp.includes('try { IvaAccessPatch.feeCard(a); } catch (Throwable ignore) {}')
+      && cp.indexOf('IvaAccessPatch.onProfile(a)') < cp.indexOf('IvaOrderPatch.profileArchiveRow(a)'),
+      'кабинет 10.117: «Архив заявок», «Чат поддержки», комиссия — после каждой перерисовки (архив не двоится)');
+    const pr = fn(strip(R('android/patches/IvaOrderPatch.java')), 'profileArchiveRow');
+    assert.ok(pr.includes('boolean client = IvaClientPatch.isClient(a);') && pr.includes('row.setVisibility(client ? View.VISIBLE : View.GONE);'),
+      'кабинет 10.117: клиентский «Архив заявок» прячется у админа');
+    // 4. ключ: при смене раздела, первая проверка через 5 с, истёкший обновили — раздел заново
+    const rn = fn(clc, 'authRenew'), hl = fn(clc, 'authHeal'), af = fn(clc, 'authFresh');
+    assert.ok(npc.includes('try { IvaClientPatch.authTick(a); } catch (Throwable ignore) {}') && cl.includes('AUTH_FIRST_MS = 5L * 1000;')
+      && rn.includes('synchronized (AUTH_LOCK)') && rn.includes('if (!used.equals(get(a, "accessToken"))) return false;')
+      && rn.indexOf('if (!rt.equals(get(a, "refreshToken"))) return false;') < rn.indexOf('set(a, "accessToken", r[1]);')
+      && rn.includes('if (authDead(IvaNotifyPatch.jwtExp(used), System.currentTimeMillis())) authHeal(a);')
+      && rn.indexOf('authHeal(a)') > rn.indexOf('authBackup(a);') && hl.includes('a.runOnUiThread(') && hl.includes('IvaNotifyPatch.tab(a, (String) t)')
+      && af.includes('authRenew(a, (String) t);') && !/logoutLocal\(|\/rest\/v1/.test(rn + hl + af),
+      'ключ 10.117: проверяется при смене раздела и через 5 с после запуска; при неудаче не выходим; истёкший обновили — «Кабинет»/«Заявки» заново');
+    assert.ok(!/IvaAccessPatch|feeCard|authRenew|authHeal/.test(ap), 'кабинет 10.117: новых вставок в smali нет');
+    assert.ok(/NEW_NAME: '10\.117'/.test(wf) && /NEW_CODE: '191'/.test(wf), 'сборка 10.117 (191)');
+    assert.ok((tp.match(/eq\("кабинет 10\.117: /g) || []).length >= 9 && (tp.match(/eq\("роль 10\.117: /g) || []).length >= 1
+      && (tp.match(/eq\("ключ 10\.117: /g) || []).length >= 3, 'IvaPatchTest: проверки 10.117');
   }
   // 10.75 (просьба владельца 14.10.2026): в «Настройках» — кнопка «Уведомления» (с 10.97 — открывает отдельную страницу);
   // внутри сверху «Открыть настройки уведомлений Android», потом какие присылать, потом расписание, потом всё остальное
@@ -2726,9 +2786,10 @@ try {
       'вход 10.69: единственный запрос — обновление ключа (как штатный); новых персональных данных нет');
     // обновление заранее: не выходит при неудаче, не пишет после выхода, один за раз
     const tk = au.slice(au.indexOf('static void authTick('));
-    assert.ok(tk.includes('synchronized (AUTH_LOCK)') && tk.includes('if (!r[0].startsWith("2")) return;')
-      && tk.includes('if (!rt.equals(get(a, "refreshToken"))) return;')
-      && tk.indexOf('if (!rt.equals(get(a, "refreshToken"))) return;') < tk.indexOf('set(a, "accessToken", r[1]);')
+    // 10.117: обновление вынесено в authRenew (его зовут и минутная проверка, и запросы кабинета) — возвращает false
+    assert.ok(tk.includes('synchronized (AUTH_LOCK)') && /if \(!r\[0\]\.startsWith\("2"\)\) return(?: false)?;/.test(tk)
+      && /if \(!rt\.equals\(get\(a, "refreshToken"\)\)\) return(?: false)?;/.test(tk)
+      && tk.search(/if \(!rt\.equals\(get\(a, "refreshToken"\)\)\) return(?: false)?;/) < tk.indexOf('set(a, "accessToken", r[1]);')
       && rc.includes('synchronized (AUTH_LOCK)') && np.includes('synchronized (IvaClientPatch.AUTH_LOCK) { return bgRefreshLocked(s, rt); }'),
       'вход 10.69: при неудаче не выходим; после «Выйти» пару не возвращаем; обновления не идут одновременно');
     assert.ok(au.includes('if (a.isFinishing()) return;') && au.includes('if (authRun != null) authH.removeCallbacks(authRun);'),
