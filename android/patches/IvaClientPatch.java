@@ -3303,6 +3303,56 @@ public final class IvaClientPatch {
         authBakAt = "";
     }
 
+    // ───────────── 10.119: в профиле — почта другого аккаунта (сообщение владельца 18.10, журнал) ─────────────
+    // Штатный saveSession берёт почту из поля ввода, только если поле userEmail пустое, а имя и телефон — прежние.
+    // Пустыми их делает лишь кнопка «Выйти». После выхода по сбою проверки входа (rt больше не действует) в полях
+    // оставалась почта прежнего аккаунта — и вход в ДРУГОЙ аккаунт сохранялся с ней: ключ новый, а в профиле, в
+    // хранилище и во всех проверках по почте — прежний аккаунт. Теперь: 1) такой выход очищает почту, имя и телефон
+    // (как «Выйти»); 2) правда — почта в самом ключе (JWT): после входа, при запуске, при восстановлении входа,
+    // раз в минуту и в фоновой проверке сверяем; не совпала — ставим почту из ключа, чужие имя и телефон стираем.
+
+    /** Почта в поле/хранилище не та, что в ключе (почту ключа разобрали). */
+    static boolean authEmailWrong(String cur, String jwtEmail) {
+        if (jwtEmail == null || jwtEmail.trim().isEmpty()) return false;
+        return cur == null || !jwtEmail.trim().equalsIgnoreCase(cur.trim());
+    }
+
+    /** Штатное хранилище входа: почта — из его ключа. true — исправили. */
+    static boolean authPrefsEmailFix(SharedPreferences s) {
+        String je = IvaNotifyPatch.jwtEmail(s.getString("at", ""));
+        if (!authEmailWrong(s.getString("email", null), je)) return false;
+        s.edit().putString("email", je).putString("name", "").putString(AUTH_PH, "").commit();
+        authBakAt = "";                                                       // копию входа переписать
+        return true;
+    }
+
+    /** Поля приложения и хранилище: почта — из ключа; чужие имя и телефон — стереть. true — что-то исправили. */
+    static boolean authEmailFix(Activity a) {
+        boolean fixed = false;
+        try {
+            Object at = get(a, "accessToken");
+            if (authEmpty(at)) return false;
+            String je = IvaNotifyPatch.jwtEmail((String) at);
+            Object cur = get(a, "userEmail");
+            if (authEmailWrong(cur instanceof String ? (String) cur : null, je)) {
+                set(a, "userEmail", je);
+                set(a, "userName", "");
+                set(a, "userPhone", "");
+                authBakAt = "";
+                fixed = true;
+            }
+            if (authPrefsEmailFix(a.getSharedPreferences(AUTH_SESSION, Context.MODE_PRIVATE))) fixed = true;
+        } catch (Throwable ignore) {}
+        return fixed;
+    }
+
+    /** Выход по сбою проверки входа — как «Выйти»: в полях не остаётся почты, имени и телефона прежнего аккаунта. */
+    static void authClearUser(Activity a) {
+        set(a, "userEmail", null);
+        set(a, "userName", "");
+        set(a, "userPhone", "");
+    }
+
     /** POST refresh_token → {код, access_token, refresh_token}; нет связи — {"-1", null, null}. */
     static String[] authRefresh(String rt) {
         try {
@@ -3330,7 +3380,7 @@ public final class IvaClientPatch {
         synchronized (AUTH_LOCK) {
             if (has) r = authRefresh((String) brt);
             d = authDecision(false, has, r[0]);
-            if (d == AUTH_NONE) { if (has) authForget(a); return false; }
+            if (d == AUTH_NONE) { if (has) authForget(a); authClearUser(a); return false; }   // 10.119
             String at = d == AUTH_FRESH ? r[1] : (String) bat, rt = d == AUTH_FRESH ? r[2] : (String) brt;
             SharedPreferences.Editor e = a.getSharedPreferences(AUTH_SESSION, Context.MODE_PRIVATE).edit();
             authPutAll(e, bak);
@@ -3343,6 +3393,7 @@ public final class IvaClientPatch {
             set(a, "userName", nm instanceof String ? nm : "");
             set(a, "userPhone", ph instanceof String ? ph : "");
             authBakAt = "";
+            authEmailFix(a);                                                  // 10.119: почта — из ключа, не из копии
             authBackup(a);
         }
         // Штатный код после logoutLocal покажет экран входа (ui → Lambda14 → showScreen). Ждём, пока он покажется
@@ -3406,6 +3457,7 @@ public final class IvaClientPatch {
             set(a, "refreshToken", prt);
             fat = pat;
         }
+        if (authEmailFix(a)) authHealProfile(a);                            // 10.119: почта другого аккаунта — исправить
         authBackup(a);
         if (!authNeed(IvaNotifyPatch.jwtExp((String) fat), System.currentTimeMillis())) return;
         final String used = (String) fat;
@@ -3463,6 +3515,11 @@ public final class IvaClientPatch {
                 } catch (Throwable ignore) {}
             }
         });
+    }
+
+    /** 10.119: почту исправили — открытый «Кабинет» / «Заявки» показать заново (с верной почтой и ролью). */
+    static void authHealProfile(final Activity a) {
+        authHeal(a);
     }
 
     static boolean authHealTab(String tab) { return "profile".equals(tab) || "orders".equals(tab); }

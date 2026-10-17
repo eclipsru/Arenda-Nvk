@@ -2321,6 +2321,25 @@ public final class IvaNotifyPatch {
         } catch (Throwable e) { return 0; }
     }
 
+    /** 10.119: почта входа из JWT — поле email верхнего уровня (вложенные объекты вроде user_metadata не смотрим);
+     *  строчными буквами; не разобрали — "". */
+    static String jwtEmail(String jwt) {
+        try {
+            String[] parts = jwt == null ? new String[0] : jwt.split("\\.");
+            if (parts.length < 2) return "";
+            String json = new String(b64url(parts[1]), "UTF-8").trim();
+            if (!json.startsWith("{") || !json.endsWith("}")) return "";
+            String top = json.substring(1, json.length() - 1);
+            for (int i = 0; i < 16; i++) {
+                String t = top.replaceAll("\\{[^{}]*\\}", "0");         // вложенный объект → 0, изнутри наружу
+                if (t.equals(top)) break;
+                top = t;
+            }
+            java.util.regex.Matcher m = java.util.regex.Pattern.compile("\"email\"\\s*:\\s*\"([^\"\\\\]*)\"").matcher(top);
+            return m.find() ? m.group(1).trim().toLowerCase(Locale.ROOT) : "";
+        } catch (Throwable e) { return ""; }
+    }
+
     static byte[] b64url(String s) {
         String abc = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
         ByteArrayOutputStream out = new ByteArrayOutputStream();
@@ -2387,6 +2406,9 @@ public final class IvaNotifyPatch {
             String fresh = bgRefresh(s, s.getString("rt", ""));
             if (fresh == null) logged = false; else at = fresh;
         }
+        if (logged) try {                                                                     // 10.119: почта — из ключа
+            if (IvaClientPatch.authPrefsEmailFix(s)) email = s.getString("email", email).trim();
+        } catch (Throwable ignore) {}
         if (logged) try { IvaClientPatch.authBackup(app); } catch (Throwable ignore) {}   // 10.69: копия входа
         BgCtx c = new BgCtx(app, logged ? at : null);
         boolean admin = logged && prefs(app).getBoolean(key("admin", email), false);

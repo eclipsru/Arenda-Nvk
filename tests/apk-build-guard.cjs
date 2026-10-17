@@ -2576,8 +2576,38 @@ try {
       && /SELECT check_name, result FROM iva_probe_out ORDER BY ord, n, check_name;\s*$/.test(fc)
       && fs.includes('20261110_staff_probe_cat.sql'),
       'SQL 20261110: проба — категория из справочника, отказ по ссылке — код data; от имени вошедшего; таблицы и правила не трогает; стенд');
-    assert.ok(/NEW_NAME: '10\.118'/.test(wf) && /NEW_CODE: '192'/.test(wf), 'сборка 10.118 (192)');
+    assert.ok(Number((/NEW_CODE: '(\d+)'/.exec(wf) || [])[1]) >= 192, 'сборка 10.118 (192) или новее');
     assert.ok((tp.match(/eq\("проба 10\.118: /g) || []).length >= 8, 'IvaPatchTest: проверки 10.118');
+  }
+  // 10.119 (сообщение владельца 18.10.2026): «в разных аккаунтах в профиле один и тот же email». Штатный saveSession берёт
+  // почту из поля ввода, только если userEmail пустой; после выхода по сбою проверки входа в нём оставалась прежняя почта
+  {
+    const cp = R('android/patches/IvaClientPatch.java'), np = R('android/patches/IvaNotifyPatch.java'), ip = R('android/patches/IvaPatch.java');
+    const tp = R('android/patches/test/IvaPatchTest.java'), wf = R('.github/workflows/build-apk.yml');
+    const fnb = (src, name) => { const i = src.indexOf('static ' + name); assert.ok(i >= 0, 'нет ' + name); return src.slice(i, src.indexOf('\n    }\n', i)); };
+    const je = fnb(np, 'String jwtEmail(String jwt)');
+    assert.ok(je.includes('replaceAll("\\\\{[^{}]*\\\\}", "0")') && je.includes('toLowerCase(Locale.ROOT)') && !je.includes('JSONObject'),
+      '10.119: почта из ключа — только верхний уровень (вложенные объекты убраны), без org.json');
+    const fix = fnb(cp, 'boolean authEmailFix(Activity a)'), pf = fnb(cp, 'boolean authPrefsEmailFix(SharedPreferences s)');
+    assert.ok(fix.includes('IvaNotifyPatch.jwtEmail((String) at)') && fix.includes('set(a, "userEmail", je);') && fix.includes('set(a, "userName", "");')
+      && fix.includes('authPrefsEmailFix(') && pf.includes('.putString("email", je)') && pf.includes('authBakAt = "";'),
+      '10.119: почта в полях и в хранилище — из ключа, чужие имя/телефон стираются, копия входа переписывается');
+    const rec = fnb(cp, 'boolean authRecover(final Activity a)');
+    assert.ok(rec.includes('if (d == AUTH_NONE) { if (has) authForget(a); authClearUser(a); return false; }')
+      && rec.indexOf('authEmailFix(a);') > rec.indexOf('set(a, "userEmail", bak.get("email"));') && rec.indexOf('authEmailFix(a);') < rec.lastIndexOf('authBackup(a);'),
+      '10.119: выход по сбою — как «Выйти» (почта стёрта); восстановление — почта из ключа, а не из копии');
+    const tick = fnb(cp, 'void authTick(final Activity a)');
+    assert.ok(tick.includes('if (authEmailFix(a)) authHealProfile(a);') && tick.indexOf('authEmailFix') < tick.indexOf('authBackup(a);'), '10.119: раз в минуту — сверка почты');
+    const os = ip.slice(ip.indexOf('public static void onSession(Activity a)'), ip.indexOf('public static void onAvatar'));
+    assert.ok(os.indexOf('IvaClientPatch.authEmailFix(a)') >= 0 && os.indexOf('IvaClientPatch.authEmailFix(a)') < os.indexOf('IvaClientPatch.authBackup(a)')
+      && ip.slice(ip.indexOf('public static void onCreated'), ip.indexOf('public static void onSession')).includes('IvaClientPatch.authEmailFix(a)'),
+      '10.119: после входа (конец saveSession) и при запуске — почта из ключа');
+    const bg = np.slice(np.indexOf('static void bgRun(Context app)'), np.indexOf('static void bgRun(Context app)') + 1800);
+    assert.ok(bg.indexOf('IvaClientPatch.authPrefsEmailFix(s)') > 0 && bg.indexOf('IvaClientPatch.authPrefsEmailFix(s)') < bg.indexOf('BgCtx c = new BgCtx'),
+      '10.119: фоновая проверка — почта из ключа до проверок по почте');
+    assert.ok(!/"phone"/.test(cp.slice(cp.indexOf('10.119: в профиле'), cp.indexOf('static String[] authRefresh'))), '10.119: без слова-ключа телефона');
+    assert.ok((tp.match(/eq\("почта 10\.119: /g) || []).length >= 5 && tp.includes('mail119();'), 'IvaPatchTest: проверки 10.119');
+    assert.ok(/NEW_NAME: '10\.119'/.test(wf) && /NEW_CODE: '193'/.test(wf), 'сборка 10.119 (193)');
   }
   // 10.75 (просьба владельца 14.10.2026): в «Настройках» — кнопка «Уведомления» (с 10.97 — открывает отдельную страницу);
   // внутри сверху «Открыть настройки уведомлений Android», потом какие присылать, потом расписание, потом всё остальное
@@ -2820,7 +2850,7 @@ try {
     assert.ok(rc.includes('boolean main = Looper.myLooper() == Looper.getMainLooper();')
       && rc.includes('if (main) { authForget(a); return false; }')
       && rc.indexOf('if (main) { authForget(a); return false; }') < rc.indexOf('authRefresh(')
-      && rc.includes('if (d == AUTH_NONE) { if (has) authForget(a); return false; }'),
+      && /if \(d == AUTH_NONE\) \{ if \(has\) authForget\(a\);( authClearUser\(a\);)? return false; \}/.test(rc),   // 10.119: + почта стёрта
       'вход 10.69: кнопка «Выйти» выходит как раньше; rt не действует — выход настоящий');
     // открытие — штатным enterApp и только после штатного показа экрана входа (иначе он ляжет поверх)
     assert.ok(rc.includes('int st = authEnterStep(authVisible(a, "scrLogin"), authVisible(a, "scrMain"), tries++);')

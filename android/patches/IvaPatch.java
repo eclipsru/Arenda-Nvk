@@ -388,11 +388,13 @@ public final class IvaPatch {
             // логотип и подсветка — только внешний вид: без них меню работает как раньше
         }
         try { IvaClientPatch.authStart(a); } catch (Throwable ignore) {}   // 10.69: ключ обновляется заранее
+        try { IvaClientPatch.authEmailFix(a); } catch (Throwable ignore) {}   // 10.119: почта — из ключа
         reloadProfile(a);
     }
 
     /** 8) Конец saveSession (вход и восстановление сессии): профиль админа → аватарка в меню. */
     public static void onSession(Activity a) {
+        try { IvaClientPatch.authEmailFix(a); } catch (Throwable ignore) {}   // 10.119: почта — из ключа нового входа
         try { IvaClientPatch.authBackup(a); } catch (Throwable ignore) {}   // 10.69: копия входа (вход, восстановление)
         reloadProfile(a);
     }

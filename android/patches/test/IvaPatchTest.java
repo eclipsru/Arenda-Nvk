@@ -2571,6 +2571,7 @@ public class IvaPatchTest {
         live116();                                                    // 10.116: причина отказа сотруднику, «на одобрение», переходы
         cab117();                                                     // 10.117: комиссия без скачков, роль и архив в кабинете
         try118();                                                     // 10.118: пробная запись называет причину отказа
+        mail119();                                                    // 10.119: почта — из ключа входа
         if (fail > 0) { System.out.println("ошибок: " + fail); System.exit(1); }
         System.out.println("все проверки IvaPatch пройдены");
     }
@@ -3241,6 +3242,35 @@ public class IvaPatchTest {
     }
 
     /** 10.118: сотруднику отказали в публикации — причина по пробной записи базы (iva_staff_publish_try). */
+    static String jwt119(String payload) {
+        try {
+            java.util.Base64.Encoder e = java.util.Base64.getUrlEncoder().withoutPadding();
+            return e.encodeToString("{\"alg\":\"HS256\"}".getBytes("UTF-8")) + "." + e.encodeToString(payload.getBytes("UTF-8")) + ".sig";
+        } catch (Exception x) { return ""; }
+    }
+
+    static void mail119() {
+        eq("почта 10.119: из ключа — верхнего уровня, строчными (user_metadata после)",
+            IvaNotifyPatch.jwtEmail(jwt119("{\"aud\":\"authenticated\",\"exp\":1760000000,\"sub\":\"u1\",\"email\":\"Eclips161@Mail.RU\","
+                + "\"user_metadata\":{\"email\":\"eclipsik.ru@mail.ru\",\"email_verified\":true}}")), "eclips161@mail.ru");
+        eq("почта 10.119: вложенные объекты раньше почты — не путаемся",
+            IvaNotifyPatch.jwtEmail(jwt119("{\"user_metadata\":{\"email\":\"eclipsik.ru@mail.ru\",\"x\":{\"email\":\"z@z\"}},"
+                + "\"app_metadata\":{\"providers\":[\"email\"],\"a\":{\"b\":{\"c\":1}}},\"email\":\"staff@x.ru\"}")), "staff@x.ru");
+        eq("почта 10.119: нет почты / только вложенная / мусор / пусто — \"\"",
+            IvaNotifyPatch.jwtEmail(jwt119("{\"sub\":\"u\",\"exp\":1}")) + "|"
+            + IvaNotifyPatch.jwtEmail(jwt119("{\"user_metadata\":{\"email\":\"eclipsik.ru@mail.ru\"}}")) + "|"
+            + IvaNotifyPatch.jwtEmail("not.a.jwt") + "|" + IvaNotifyPatch.jwtEmail("abc") + "|" + IvaNotifyPatch.jwtEmail(null) + "|"
+            + IvaNotifyPatch.jwtEmail(""), "|||||");
+        eq("почта 10.119: срок из того же ключа читается как раньше",
+            IvaNotifyPatch.jwtExp(jwt119("{\"exp\":1760000000,\"email\":\"a@b.ru\"}")), 1760000000L);
+        eq("почта 10.119: чужая почта в поле — исправить; та же (любой регистр) — нет; ключ без почты — не трогать",
+            IvaClientPatch.authEmailWrong("eclipsik.ru@mail.ru", "eclips161@mail.ru") + "|"
+            + IvaClientPatch.authEmailWrong(null, "eclips161@mail.ru") + "|"
+            + IvaClientPatch.authEmailWrong(" Eclips161@mail.ru ", "eclips161@mail.ru") + "|"
+            + IvaClientPatch.authEmailWrong("eclipsik.ru@mail.ru", "") + "|" + IvaClientPatch.authEmailWrong("x@y", null),
+            "true|true|false|false|false");
+    }
+
     static void try118() {
         String rls = "new row violates row-level security policy for table \"tools\"";
         String why = IvaStaffToolsPatch.tryText("Не пускает ограничивающее правило: only_own.", "42501: " + rls);
