@@ -2278,8 +2278,60 @@ try {
       && sq.includes('--  ОТКАТ (') && !/DROP TABLE|DELETE FROM|TRUNCATE|DROP COLUMN/i.test(sq.replace(/--[^\n]*/g, '')),
       'SQL 10.113: выключатель у пункта, триггер берёт режим пункта, email необязателен, данные не удаляются');
     assert.ok(chk.includes('tools/point-publish-stand.py') && st.includes("SQL = rd('supabase/migrations/20261104_point_staff_publish.sql')"), 'SQL 10.113: стенд PostgreSQL в check.sh');
-    assert.ok(wf.includes("NEW_NAME: '10.113'") && wf.includes("NEW_CODE: '187'"), 'сборка 10.113 (187)');
+    assert.ok(Number((wf.match(/NEW_CODE: '(\d+)'/) || [])[1]) >= 187, 'сборка 10.113 (187) или новее');
     assert.ok((tp.match(/eq\("логотип 10\.113: /g) || []).length >= 4 && (tp.match(/eq\("пункт 10\.113: /g) || []).length >= 5, 'IvaPatchTest: проверки 10.113');
+  }
+  // 10.114 (просьба владельца 17.10.2026): 1) подсказки полного адреса везде, где вводят адрес (профиль, заявка, пункт,
+  // «Данные проката»); 2) «Новый сотрудник» — можно выбрать оба набора прав; 3) пунктов два и больше — пункт в «Добавить
+  // инструмент» выбирают сами (заранее ничего, без выбора не публикуется; и владелец, и сотрудник), выбор сотрудника — в базу
+  {
+    const pk = R('android/patches/IvaPickupPatch.java'), jc = R('android/patches/IvaClientPatch.java'), op = R('android/patches/IvaOrderPatch.java'),
+      sh = R('android/patches/IvaShopPatch.java'), sp = R('android/patches/IvaStaffPatch.java'), tpp = R('android/patches/IvaToolPointPatch.java'),
+      fp = R('android/patches/IvaFormPatch.java'), tp = R('android/patches/test/IvaPatchTest.java'), wf = R('.github/workflows/build-apk.yml'),
+      chk = R('tools/check.sh'), sq = R('supabase/migrations/20261105_staff_pick_point.sql'), st = R('tools/staff-pick-stand.py');
+    const strip = (x) => x.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '');
+    // 1. адрес — четыре места, одни и те же подсказки
+    const at = pk.slice(pk.indexOf('static LinearLayout attachSuggest('), pk.indexOf('static View anchor('));
+    assert.ok(at.includes('hookSuggest(u, field, sug, new Point());') && at.includes('col.addView(sug, col.indexOfChild(anchor) + 1, lp);')
+      && at.includes('if (had != null && had.getParent() == col) return had;') && pk.includes('for (int i = 0; i < 3 && v != null; i++) {'),
+      'адрес 10.114: список подсказок — сразу под полем (или под его рамкой), один на поле');
+    assert.ok(/edits\[ADDRESS\]\.setHint\("Город, улица, дом, квартира"\);\n\s*try \{ IvaPickupPatch\.attachSuggest\(a, edits\[ADDRESS\]\); \} catch \(Throwable ignore\) \{\}/.test(jc),
+      'адрес 10.114: «Адрес» в профиле — подсказки полного адреса');
+    assert.ok(op.includes('try { addrSuggest(a); } catch (Throwable ignore) {}') && op.includes('View f = IvaPatch.view(a, "oAddr");')
+      && /if \(IvaPickupPatch\.attachSuggest\(a, \(EditText\) f\) == null\) return;[^\n]*\n\s*IvaPickupPatch\.collapse\(IvaPatch\.view\(a, "oAddrSug"\)\);/.test(op),
+      'адрес 10.114: «Адрес доставки» в заявке — наши подсказки, штатные (только Новочеркасск) схлопнуты, не вышло — штатные остаются');
+    assert.ok(pk.includes('hookSuggest(u, addr, sug, p);') && sh.includes('IvaPickupPatch.hookSuggest(pu, u.addr, sug, new IvaPickupPatch.Point());')
+      && pk.includes('return PHOTON + "?q=" + enc(t) + "&lang=default&countrycode=RU&limit=8";'),
+      'адрес 10.114: пункт выдачи и «Данные проката» — те же подсказки по всей России');
+    // 2. оба набора прав
+    const ed0 = sp.indexOf('paint[0] = new Runnable() {'), ed = sp.slice(ed0, sp.indexOf('\n        paint[0].run();', ed0));
+    assert.ok(ed.includes('TextView ch = IvaSearchPatch.chip(a, p, presetOn(p, s.r), false);') && ed.includes('boolean[] x = togglePreset(p, s.r);')
+      && !ed.includes('preset(p)') && !ed.includes('presetOf(') && sp.includes('box.addView(label(a, RIGHTS_LABEL, u.cGray));'),
+      'сотрудник 10.114: «Выдача» и «Каталог» — можно выбрать обе, повторное нажатие снимает');
+    // 3. пункт в «Добавить инструмент»
+    const pt = tpp.slice(tpp.indexOf('static void paint('), tpp.indexOf('static void repaint('));
+    assert.ok(pt.includes('String cur = k == 0 ? chosen(sel[0], ps) : sel[1];') && !pt.includes('current(')
+      && pt.includes('if (k == 0) { need = false; try { pick(a, p.id); } catch (Throwable ignore) {} }')
+      && tpp.includes('l.setText(k == 0 ? LABEL_ADD : LABEL);') && tpp.includes('if (!needWrite(0, cur, "", "")) return;'),
+      'пункт 10.114: в «Добавить» заранее ничего не выбрано; нажатие — выбор (сотруднику — сразу в базу); выбранный пишется всегда');
+    const bp = tpp.slice(tpp.indexOf('static boolean blockPublish('), tpp.indexOf('static void pick('));
+    assert.ok(fp.includes('if (!saveBlocked) try { saveBlocked = IvaToolPointPatch.blockPublish(a, form); } catch (Throwable ignore) {}')
+      && fp.indexOf('IvaToolPointPatch.blockPublish(a, form)') < fp.indexOf('if (!saveBlocked) publishAt = System.currentTimeMillis();')
+      && bp.includes('if (cur.isEmpty()) {') && bp.includes('need = true;') && bp.includes('IvaFormPatch.scrollTo(a, box);')
+      && bp.includes('!pickFresh(cur, picked, pickedAt, System.currentTimeMillis())') && bp.includes('return true;'),
+      'пункт 10.114: без выбранного пункта «Опубликовать» не проходит (подсветка и прокрутка); выбор сотрудника ещё не в базе — ждёт');
+    const pc = strip(tpp.slice(tpp.indexOf('static void pick('), tpp.indexOf('static void patchCatalog(')));
+    assert.ok(pc.includes('new Thread(new Runnable()') && pc.includes('if (pickBusy) { pickNext = point; return; }') && pc.includes('else if (noPickRpc(code, res)) pickNoDb = true;'),
+      'пункт 10.114: выбор — в своём потоке, по одному запросу; без SQL — как в 10.113');
+    // SQL
+    assert.ok(sq.includes('ALTER TABLE public.iva_staff_pick ENABLE ROW LEVEL SECURITY;') && sq.includes('REVOKE ALL ON public.iva_staff_pick FROM public, anon, authenticated;')
+      && sq.includes("not public.iva_staff_right(p_point, 'catalog')") && sq.includes("k.picked_at > now() - interval '1 hour'")
+      && sq.includes('REVOKE ALL ON FUNCTION public.iva_staff_pick_point(uuid) FROM public, anon;') && sq.includes('--  ОТКАТ (')
+      && !/DELETE FROM|TRUNCATE|DROP COLUMN/i.test(sq.replace(/--[^\n]*/g, '')),
+      'SQL 10.114: выбор пункта — только свои пункты «Каталог», таблица закрыта, выбор действует час, данные не удаляются');
+    assert.ok(chk.includes('tools/staff-pick-stand.py') && st.includes("SQL = rd('supabase/migrations/20261105_staff_pick_point.sql')"), 'SQL 10.114: стенд PostgreSQL в check.sh');
+    assert.ok(wf.includes("NEW_NAME: '10.114'") && wf.includes("NEW_CODE: '188'"), 'сборка 10.114 (188)');
+    assert.ok((tp.match(/eq\("сотрудник 10\.114: /g) || []).length >= 4 && (tp.match(/eq\("пункт 10\.114: /g) || []).length >= 5, 'IvaPatchTest: проверки 10.114');
   }
   // 10.75 (просьба владельца 14.10.2026): в «Настройках» — кнопка «Уведомления» (с 10.97 — открывает отдельную страницу);
   // внутри сверху «Открыть настройки уведомлений Android», потом какие присылать, потом расписание, потом всё остальное

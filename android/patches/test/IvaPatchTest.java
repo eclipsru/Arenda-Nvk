@@ -2566,6 +2566,7 @@ public class IvaPatchTest {
         summary111();                                                 // 10.111: в «Сводке» нет раздела «Без пункта»
         realtime112();                                                // 10.112: роль и приглашение — моментально (Realtime)
         logo113();                                                    // 10.113: вид раздела с логотипом, выключатель у пункта
+        points114();                                                  // 10.114: оба набора прав, выбор пункта в «Добавить»
         if (fail > 0) { System.out.println("ошибок: " + fail); System.exit(1); }
         System.out.println("все проверки IvaPatch пройдены");
     }
@@ -3051,5 +3052,43 @@ public class IvaPatchTest {
             "Инструменты сотрудников: сразу, без одобрения / Инструменты сотрудников: после вашего одобрения / approvenowapprove");
         // разбор ответа (org.json) здесь — заглушки Android; пустой email и режим проверяет стенд и сторож
         eq("пункт 10.113: общей строки «Инструменты сотрудников» в «Настройке проката» нет", IvaStaffToolsPatch.MODE_ROW, false);
+    }
+
+    /** 10.114: «Выдача» и «Каталог» вместе; пункт в «Добавить инструмент» выбирают сами; выбор сотрудника — в базу. */
+    static void points114() {
+        boolean[] none = new boolean[4], issue = IvaStaffPatch.preset("Выдача"), both = IvaStaffPatch.togglePreset("Каталог", issue);
+        eq("сотрудник 10.114: наборы складываются — «Выдача» + «Каталог» = все четыре права",
+            java.util.Arrays.toString(IvaStaffPatch.togglePreset("Выдача", none)) + "|" + java.util.Arrays.toString(both),
+            "[true, false, true, true]|[true, true, true, true]");
+        eq("сотрудник 10.114: обе кнопки выделены сразу; повторное нажатие снимает только свой набор",
+            IvaStaffPatch.presetOn("Выдача", both) + "|" + IvaStaffPatch.presetOn("Каталог", both) + "|"
+                + java.util.Arrays.toString(IvaStaffPatch.togglePreset("Выдача", both)) + "|"
+                + IvaStaffPatch.presetOn("Выдача", new boolean[]{true, true, false, true}) + "|" + IvaStaffPatch.presetOn("другое", both)
+                + "|" + IvaStaffPatch.presetOn("Каталог", null),
+            "true|true|[false, true, false, false]|false|false|false");
+        eq("сотрудник 10.114: прежняя «какой набор» не сломана", IvaStaffPatch.presetOf(both) + "|" + IvaStaffPatch.presetOf(issue), "|Выдача");
+        eq("сотрудник 10.114: подпись прав", IvaStaffPatch.RIGHTS_LABEL, "Права — можно выбрать оба набора или отметить по одному");
+        java.util.List<IvaPickupPatch.Point> ps = new java.util.ArrayList<IvaPickupPatch.Point>();
+        String A = "0f8fad5b-d9cb-469f-a165-70867728950e", B = "7c9e6679-7425-40de-944b-e07fc1f90ae7";
+        for (String id : new String[]{A, B}) { IvaPickupPatch.Point p = new IvaPickupPatch.Point(); p.id = id; ps.add(p); }
+        eq("пункт 10.114: заранее ничего не выбрано; выбран — свой; чужой — не выбран",
+            "[" + IvaToolPointPatch.chosen("", ps) + "][" + IvaToolPointPatch.chosen(B, ps) + "][" + IvaToolPointPatch.chosen("x", ps) + "]["
+                + IvaToolPointPatch.chosen(A, null) + "]",
+            "[][" + B + "][][]");
+        eq("пункт 10.114: выбранный пункт пишется всегда (первый у базы мог быть другим)",
+            IvaToolPointPatch.needWrite(0, A, "", "") + "|" + IvaToolPointPatch.needWrite(0, "", "", ""), "true|false");
+        long now = 10_000_000L;
+        eq("пункт 10.114: выбор сотрудника в базе — тот же пункт и не старше 40 минут",
+            IvaToolPointPatch.pickFresh(A, A.toUpperCase(java.util.Locale.ROOT), now - 60_000L, now) + "|" + IvaToolPointPatch.pickFresh(A, B, now, now)
+                + "|" + IvaToolPointPatch.pickFresh(A, A, now - 41 * 60_000L, now) + "|" + IvaToolPointPatch.pickFresh("", "", now, now)
+                + "|" + IvaToolPointPatch.pickFresh(A, A, now + 5, now),
+            "true|false|false|false|false");
+        eq("пункт 10.114: без SQL 20261105 — как в 10.113; тело — только проверенный id",
+            IvaToolPointPatch.noPickRpc("404", "") + "|" + IvaToolPointPatch.noPickRpc("400", "{\"code\":\"PGRST202\"}") + "|"
+                + IvaToolPointPatch.noPickRpc("401", "{\"code\":\"PGRST301\"}") + "|" + IvaToolPointPatch.noPickRpc("", "") + "|"
+                + IvaToolPointPatch.pickBody(B.toUpperCase(java.util.Locale.ROOT)) + "|" + IvaToolPointPatch.pickBody("1; drop"),
+            "true|true|false|false|{\"p_point\":\"" + B + "\"}|null");
+        eq("пункт 10.114: подписи", IvaToolPointPatch.LABEL_ADD + " / " + IvaToolPointPatch.NEED,
+            "В какой пункт выдачи добавляете инструмент / Выберите пункт выдачи — без него инструмент не опубликуется");
     }
 }

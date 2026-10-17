@@ -448,6 +448,17 @@ else
   skip "стенд «Инструменты сотрудников — у пункта»: нет pgserver (PG_PY=<python с pgserver> bash tools/check.sh)"
 fi
 
+head_ "4.5.20. Стенд «Сотрудник на двух пунктах — пункт из формы» (локальный PostgreSQL, SQL 10.114)"
+if "$PG_PY" -c "import pgserver" >/dev/null 2>&1; then
+  if "$PG_PY" tools/staff-pick-stand.py >/tmp/iva-test-staff-pick.log 2>&1; then
+    ok "пункт из формы: $(grep -c '✔' /tmp/iva-test-staff-pick.log) проверок SQL на PostgreSQL (новый инструмент сотрудника — в выбранный пункт и с его режимом, только свои пункты, таблица закрыта, старый выбор не действует, откат)"
+  else
+    bad "стенд «Сотрудник на двух пунктах — пункт из формы»"; grep -E '✘|Error|ERROR' /tmp/iva-test-staff-pick.log | head -8 | sed 's/^/      /'
+  fi
+else
+  skip "стенд «Сотрудник на двух пунктах — пункт из формы»: нет pgserver (PG_PY=<python с pgserver> bash tools/check.sh)"
+fi
+
 head_ "Итог"
 printf '  пройдено: %s, ошибок: %s, пропущено: %s\n' "$PASS" "$FAIL" "$SKIP"
 if [ "$FAIL" -eq 0 ]; then echo "  Можно продолжать."; exit 0; else echo "  Сначала исправляем замечания выше."; exit 1; fi
