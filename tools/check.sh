@@ -481,6 +481,17 @@ else
   skip "стенд «Сотрудник: причина отказа словами»: нет pgserver (PG_PY=<python с pgserver> bash tools/check.sh)"
 fi
 
+head_ "4.5.23. Стенд «Сотрудник: база не пустила запись — проба называет причину» (локальный PostgreSQL, SQL 10.118)"
+if "$PG_PY" -c "import pgserver" >/dev/null 2>&1; then
+  if "$PG_PY" tools/staff-probe-stand.py >/tmp/iva-test-staff-probe.log 2>&1; then
+    ok "проба записи: $(grep -c '✔' /tmp/iva-test-staff-probe.log) проверок SQL на PostgreSQL (проба ничего не оставляет; RESTRICTIVE, чужой триггер, другое правило, триггер-стоп, нет INSERT — называет причину; откат)"
+  else
+    bad "стенд «Сотрудник: проба записи»"; grep -E '✘|Error|ERROR' /tmp/iva-test-staff-probe.log | head -8 | sed 's/^/      /'
+  fi
+else
+  skip "стенд «Сотрудник: проба записи»: нет pgserver (PG_PY=<python с pgserver> bash tools/check.sh)"
+fi
+
 head_ "Итог"
 printf '  пройдено: %s, ошибок: %s, пропущено: %s\n' "$PASS" "$FAIL" "$SKIP"
 if [ "$FAIL" -eq 0 ]; then echo "  Можно продолжать."; exit 0; else echo "  Сначала исправляем замечания выше."; exit 1; fi
