@@ -1837,8 +1837,9 @@ try {
       && np.includes('try { IvaStaffPatch.onShowTab(a, tab); } catch (Throwable ignore) {}'),
       'сотрудники 10.103: подключение — страница пунктов (список в её потоке, «Сотрудники · N», предупреждение при удалении) и кабинет');
     assert.ok(!/customer_profiles|passport|phone|surname|select=|"PATCH"|"DELETE"|"GET"|\/rest\/v1\/iva_staff/.test(code)
-      && (code.match(/IvaClientPatch\.apiCall\(/g) || []).length === 5 && (code.match(/"POST"/g) || []).length === 5
-      && (code.match(/new Thread\(new Runnable\(\)/g) || []).length === 4
+      /* 10.115: + iva_staff_link (запасной путь — iva_staff_save / iva_staff_remove) и перечитать список по отметке */
+      && (code.match(/IvaClientPatch\.apiCall\(/g) || []).length === 9 && (code.match(/"POST"/g) || []).length === 9
+      && (code.match(/new Thread\(new Runnable\(\)/g) || []).length === 5
       && code.includes('boolean want = IvaNotifyPatch.loggedIn(a) && !me.isEmpty() && !IvaNotifyPatch.isAdmin(a);'),
       'сотрудники 10.103: только функции базы iva_staff_* (таблицы напрямую — нет), сеть — в потоках, владельцу проката приглашений не показываем');
     const phrases = (code.match(/DB_PHRASES = \{([\s\S]*?)\};/) || ['', ''])[1].match(/"([^"]+)"/g) || [];
@@ -2181,9 +2182,10 @@ try {
       && code.includes('static boolean android() { return String.valueOf(System.getProperty("java.vm.name")).toLowerCase().contains("dalvik"); }')
       && code.includes('if (!accept.equals(acceptFor(key))) throw new IOException(') && code.includes('if (n < 126) f.write(0x80 | n);'),
       'realtime 10.112: wss://…supabase.co, сертификат и имя проверяются, кадры клиента с маской');
-    assert.ok(fn(code, 'ensure').includes('new Thread(new Runnable() {') && fn(code, 'ensure').includes('IvaReviewPatch.chief(a)') && fn(code, 'ensure').includes('if (!foreground()) return;')
+    // 10.115: соединение и у создателя (ответы его сотрудников на приглашение) — роль создателя по-прежнему не трогается
+    assert.ok(fn(code, 'ensure').includes('new Thread(new Runnable() {') && fn(code, 'ensure').includes('boolean want = IvaNotifyPatch.loggedIn(a);') && fn(code, 'ensure').includes('if (!foreground()) return;')
       && !/apiCall|"POST"|"PATCH"|"DELETE"|select=|customer_profiles|passport|phone|surname/.test(code),
-      'realtime 10.112: соединение — в своём потоке, не у создателя, только когда приложение открыто; запросов к базе и личных данных нет');
+      'realtime 10.112: соединение — в своём потоке, только когда приложение открыто; запросов к базе и личных данных нет');
     const lp = fn(code, 'loop');
     assert.ok(lp.includes('if (k == M_JOIN_OK) { ok = true; fails = 0; IvaAccessPatch.poke(a); }') && lp.includes('else if (k == M_CHANGE) { lastEvent = now; IvaAccessPatch.poke(a); }')
       && lp.includes('ws.text(heartbeatMsg(ref++));') && lp.includes('ws.text(tokenMsg(tok, ref++));') && lp.includes('now - bgSince > BG_GRACE_MS')

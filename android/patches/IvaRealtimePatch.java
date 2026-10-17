@@ -381,7 +381,7 @@ public final class IvaRealtimePatch {
     static void ensure(Activity a) {
         if (a == null) return;
         act = new WeakReference<Activity>(a);
-        boolean want = IvaNotifyPatch.loggedIn(a) && !IvaReviewPatch.chief(a);
+        boolean want = IvaNotifyPatch.loggedIn(a);                         // 10.115: и у создателя — ответы его сотрудников
         String me = IvaPickupPatch.me(a);
         if (!want || me.isEmpty()) { stop(); return; }
         if (running) {

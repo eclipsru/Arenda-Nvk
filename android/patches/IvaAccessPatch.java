@@ -56,6 +56,8 @@ public final class IvaAccessPatch {
     static final String ADMIN_NEW_TEXT = "Создатель площадки открыл вам кабинет проката: свои инструменты, заявки, пункты выдачи "
         + "и сотрудники. Всё — в «Кабинете».";
     static final String RIGHTS_TOAST = "Владелец проката изменил ваши права";
+    /** 10.115: тариф и лимит своей строки admins — подсказка, когда создатель их сменил. */
+    static final String FEE_PATH = "/rest/v1/admins?select=fee_pct,debt_limit&email=ilike.";
     static final String INVITE_TITLE = "Приглашение в сотрудники", INVITE_YES = "Принять", INVITE_NO = "Отказаться", INVITE_LATER = "Позже";
     static final String STAFF_GONE_TITLE = "Вы больше не сотрудник";
     static final String OK = "Понятно";
@@ -106,6 +108,31 @@ public final class IvaAccessPatch {
         String b = body == null ? "" : body;
         return code != null && code.startsWith("4") && b.contains("removed_at")
             && (b.contains("42703") || b.contains("PGRST204") || b.contains("column"));
+    }
+
+    /** 10.115: «комиссия|лимит» из ответа admins (первая строка) или "" — не разобрали. */
+    static String feeKey(String body) {
+        String b = body == null ? "" : body;
+        java.util.regex.Matcher f = java.util.regex.Pattern.compile("\"fee_pct\"\\s*:\\s*\"?([0-9.]+|null)").matcher(b);
+        java.util.regex.Matcher d = java.util.regex.Pattern.compile("\"debt_limit\"\\s*:\\s*\"?([0-9.]+|null)").matcher(b);
+        if (!f.find() || !d.find()) return "";
+        return num(f.group(1)) + "|" + num(d.group(1));
+    }
+
+    /** 7.50 → 7,5; 5000.0 → 5000; null → 0. */
+    static String num(String v) {
+        String t = v == null || "null".equals(v) ? "0" : v.trim();
+        if (t.contains(".")) { t = t.replaceAll("0+$", ""); if (t.endsWith(".")) t = t.substring(0, t.length() - 1); }
+        return t.isEmpty() ? "0" : t.replace('.', ',');
+    }
+
+    /** 10.115: подсказка админу — создатель сменил тариф (пусто — не менялся или раньше не знали). */
+    static String feeHint(String was, String now) {
+        if (was == null || now == null || was.isEmpty() || now.isEmpty() || was.equals(now)) return "";
+        String[] x = now.split("\\|", -1);
+        if (x.length != 2) return "";
+        return "Создатель площадки изменил ваш тариф: комиссия " + x[0] + " %, "
+            + ("0".equals(x[1]) ? "без лимита задолженности" : "лимит задолженности " + x[1] + " ₽");
     }
 
     static boolean in(String[] list, String t) {
@@ -181,6 +208,7 @@ public final class IvaAccessPatch {
 
     static final java.util.concurrent.atomic.AtomicBoolean BUSY = new java.util.concurrent.atomic.AtomicBoolean();
     static volatile boolean again;
+    static volatile boolean ownerDue = true;                              // 10.115: тариф и сотрудники владельца — по отметке
     static volatile long tabAt, staffAt;
     static volatile String staffFor = "";
 
@@ -201,9 +229,16 @@ public final class IvaAccessPatch {
     /** 10.112: из IvaRealtimePatch — база сообщила, что роль поменялась (или только подключились): проверить сразу,
      *  без паузы в 8 секунд и без минутной паузы сотрудника. Идёт проверка — повторить сразу после неё. */
     static void poke(final Activity a) {
-        if (a == null || a.isFinishing() || !IvaNotifyPatch.loggedIn(a) || IvaReviewPatch.chief(a)) return;
+        if (a == null || a.isFinishing() || !IvaNotifyPatch.loggedIn(a)) return;
         final String me = me(a);
         if (me.isEmpty()) return;
+        ownerDue = true;
+        if (IvaReviewPatch.chief(a)) {                                    // 10.115: создатель — только его сотрудники
+            new Thread(new Runnable() {
+                @Override public void run() { try { IvaStaffPatch.ownerPoke(a); } catch (Throwable ignore) {} }
+            }).start();
+            return;
+        }
         staffAt = 0;
         again = true;
         if (BUSY.get()) return;
@@ -242,6 +277,11 @@ public final class IvaAccessPatch {
             }
             boolean admin = db != null ? db : IvaNotifyPatch.isAdmin(a);
             if (!admin) checkStaff(a, me);
+            else if (ownerDue) {                                          // 10.115: тариф; сотрудник ответил
+                ownerDue = false;
+                try { checkFee(a, me); } catch (Throwable ignore) {}
+                try { IvaStaffPatch.ownerPoke(a); } catch (Throwable ignore) {}
+            }
             if (again) staffAt = 0;                                       // пока проверяли — пришло новое событие
           } while (again && me.equals(me(a)));
         } finally { BUSY.set(false); }
@@ -254,6 +294,28 @@ public final class IvaAccessPatch {
             r = IvaClientPatch.apiCall(a, ADMIN_PATH_OLD + q, "GET", null, true);
         if (r == null || !r[0].startsWith("2")) return null;
         return adminFromRows(r.length > 1 ? r[1] : "", me);
+    }
+
+    /** 10.115: тариф и лимит своей строки; поменялись — подсказка и «Кабинет» заново (карточка комиссии). */
+    static void checkFee(final Activity a, final String me) throws Exception {
+        String[] r = IvaClientPatch.apiCall(a, FEE_PATH + IvaReviewPatch.enc(me), "GET", null, true);
+        if (r == null || !r[0].startsWith("2")) return;
+        String key = feeKey(r.length > 1 ? r[1] : "");
+        if (key.isEmpty()) return;
+        String was = prefs(a).getString("fee_" + me, "");
+        prefs(a).edit().putString("fee_" + me, key).apply();
+        final String hint = feeHint(was, key);
+        if (hint.isEmpty()) return;
+        a.runOnUiThread(new Runnable() {
+            @Override public void run() {
+                try {
+                    if (!me.equals(me(a)) || !IvaNotifyPatch.isAdmin(a)) return;
+                    Object t = IvaClientPatch.get(a, "curTab");
+                    if ("profile".equals(t)) nativeCall(a, "renderProfile");
+                    IvaStaffPatch.toast(a, hint);
+                } catch (Throwable ignore) {}
+            }
+        });
     }
 
     static void applyAdmin(Activity a, String me, boolean db, boolean announce) {
@@ -314,13 +376,17 @@ public final class IvaAccessPatch {
         final int ch = staffChange(was == null ? "" : was.status, m == null ? "" : m.status);
         final boolean rights = ch == STAFF_SAME && was != null && m != null && "active".equals(m.status)
             && rightsChanged(was.r, was.self, m.r, m.self);
+        // 10.115: пункты (убрали / добавили) и данные пункта — тоже сразу и с подсказкой
+        final boolean live = ch == STAFF_SAME && was != null && m != null && "active".equals(m.status);
+        final boolean moved = live && IvaStaffPatch.pointsMoved(was.points, m.points);
+        final String hint = live ? IvaStaffPatch.staffHint(was.r, was.self, was.points, m.r, m.self, m.points) : "";
         final boolean popup = m != null && "invited".equals(m.status) && !inviteShown(a, m.id);
         if (ch == STAFF_SAME && body.equals(oldBody) && !popup) return;
         final IvaStaffPatch.Me fm = m;
         final String company = was == null ? "" : was.company;
         a.runOnUiThread(new Runnable() {
             @Override public void run() {
-                try { applyStaff(a, me, ch, fm, company, rights); } catch (Throwable ignore) {}
+                try { applyStaff(a, me, ch, fm, company, rights || moved, hint); } catch (Throwable ignore) {}
                 try { if (popup) showInvite(a, me, fm); } catch (Throwable ignore) {}
             }
         });
@@ -337,7 +403,16 @@ public final class IvaAccessPatch {
     /** 10.113: открыт раздел логотипа сотрудника «как у админов» («Мой инструмент»). */
     static boolean staffHub() { return IvaClientPatch.hubVisible && IvaClientPatch.hubKind == 1; }
 
-    static void applyStaff(Activity a, String me, int ch, IvaStaffPatch.Me m, String company, boolean rights) {
+    /** 10.115: открыта ли страница, кроме keep (заявки, чат, инструменты пункта поверх «Мой пункт»). */
+    static boolean otherOpen(WeakReference<Dialog> keep) {
+        Dialog k = keep == null ? null : keep.get();
+        synchronized (pages) {
+            for (WeakReference<Dialog> r : pages) { Dialog d = r.get(); if (d != null && d != k && d.isShowing()) return true; }
+        }
+        return false;
+    }
+
+    static void applyStaff(Activity a, String me, int ch, IvaStaffPatch.Me m, String company, boolean rights, String hint) {
         if (!me.equals(me(a)) || !IvaNotifyPatch.loggedIn(a) || IvaNotifyPatch.isAdmin(a)) return;
         Object t = IvaClientPatch.get(a, "curTab");
         String tab = t instanceof String ? (String) t : "";
@@ -347,15 +422,23 @@ public final class IvaAccessPatch {
             closePages();
             if (staffTab(tab) || staffHub()) { IvaNotifyPatch.tab(a, "profile"); tab = "profile"; }
         }
-        if (rights) {                                                     // 10.112: страницы пункта — с новыми правами
-            boolean open = isOpen(IvaStaffToolsPatch.toolsPage) || isOpen(IvaStaffToolsPatch.minePage);
-            IvaStaffToolsPatch.close(IvaStaffToolsPatch.toolsPage);
-            IvaStaffToolsPatch.close(IvaStaffToolsPatch.minePage);
-            closePages();
-            boolean can = IvaStaffToolsPatch.want(m.status, m.r);
-            if ((staffTab(tab) || staffHub()) && !can) { IvaNotifyPatch.tab(a, "profile"); tab = "profile"; }
-            else if (staffHub()) IvaClientPatch.renderClientHub(a);        // 10.113: «Мой инструмент» — заново
-            IvaStaffPatch.toast(a, open ? RIGHTS_TOAST + " — откройте «Мой пункт» заново" : RIGHTS_TOAST);
+        String h = hint == null ? "" : hint;
+        if (rights || !h.isEmpty()) {
+            // 10.112 / 10.115: права или пункты — страницы пункта закрываются, «Мой пункт» открывается заново уже новым;
+            // только данные пункта — так же, если поверх «Мой пункт» ничего не открыто (иначе — одна подсказка)
+            boolean mine = isOpen(IvaStaffToolsPatch.minePage);
+            boolean deep = isOpen(IvaStaffToolsPatch.toolsPage) || otherOpen(IvaStaffToolsPatch.minePage);
+            if (rights || !deep) {
+                IvaStaffToolsPatch.close(IvaStaffToolsPatch.toolsPage);
+                IvaStaffToolsPatch.close(IvaStaffToolsPatch.minePage);
+                closePages();
+                boolean can = IvaStaffToolsPatch.want(m.status, m.r);
+                if ((staffTab(tab) || staffHub()) && !can) { IvaNotifyPatch.tab(a, "profile"); tab = "profile"; }
+                else if (staffHub()) IvaClientPatch.renderClientHub(a);    // 10.113: «Мой инструмент» — заново
+                if (mine) try { IvaStaffPatch.openMine(a, m); } catch (Throwable ignore) {}
+            }
+            try { IvaToolPointPatch.mineAt = 0; IvaToolPointPatch.ensureMine(a); } catch (Throwable ignore) {}   // выбор пункта в форме
+            IvaStaffPatch.toast(a, h.isEmpty() ? RIGHTS_TOAST : h);
         }
         if ("profile".equals(tab)) IvaStaffPatch.drawMe(a, m);
         if (ch == STAFF_LOST) info(a, STAFF_GONE_TITLE, staffGoneText(company));

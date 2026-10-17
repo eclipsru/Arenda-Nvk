@@ -41,6 +41,14 @@ import java.util.Locale;
 public class IvaStaffPatch {
     static final String LIST_RPC = "/rest/v1/rpc/iva_staff_list", SAVE_RPC = "/rest/v1/rpc/iva_staff_save",
         REMOVE_RPC = "/rest/v1/rpc/iva_staff_remove", ME_RPC = "/rest/v1/rpc/iva_staff_me", ANSWER_RPC = "/rest/v1/rpc/iva_staff_answer";
+    /** 10.115: сотрудник — в пункт / из пункта (SQL 20261106; без него — через iva_staff_save, как раньше). */
+    static final String LINK_RPC = "/rest/v1/rpc/iva_staff_link";
+    static final String ALL_SUB = "ФИО, телефон, почта, пункты и права";
+    static final String ALL_HEAD = "Все сотрудники проката. Нажмите на карточку — изменить данные, права и пункты выдачи. "
+        + "Клиенты имён и телефонов сотрудников не видят.";
+    static final String NO_POINTS = "Сначала добавьте пункт выдачи: «Настройка проката» → «Пункты выдачи»";
+    static final String UNLINK = "Убрать из пункта", NEW_STAFF = "Новый сотрудник";
+    static final String RIGHTS_HINT = "Владелец проката изменил ваши права";
     static final String TITLE = "Сотрудники", BOX_TAG = "iva_staff_box";
     static final String NO_DB = "Сотрудники заработают после обновления базы (SQL 10.103)";
     static final String[] RIGHTS = {"Выдаёт и принимает", "Выкладывает инструмент", "Отвечает в чате", "Получает уведомления"};
@@ -117,8 +125,8 @@ public class IvaStaffPatch {
             if (me != null && e.equals(me.trim().toLowerCase(Locale.ROOT))) return "Это ваша почта — владельца проката добавлять не нужно";
         }
         String n = name == null ? "" : name.trim().replaceAll("\\s+", " ");
-        if (n.isEmpty()) return "Введите имя сотрудника";
-        if (n.length() > 80) return "Имя — не длиннее 80 символов";
+        if (n.isEmpty()) return "Введите ФИО сотрудника";                 // 10.115: «Имя» → «ФИО» (решение владельца)
+        if (n.length() > 80) return "ФИО — не длиннее 80 символов";
         String t = IvaPickupPatch.telErr(tel);
         if (!t.isEmpty()) return t;
         if (points < 1) return "Отметьте хотя бы один пункт выдачи";
@@ -206,6 +214,105 @@ public class IvaStaffPatch {
         return out;
     }
 
+    /** 10.115: тело iva_staff_link (сотрудник — в пункт / из пункта); не uuid — null. */
+    static String linkBody(String id, String point, boolean on) {
+        if (!IvaToolPointPatch.uuid(id) || !IvaToolPointPatch.uuid(point)) return null;
+        return "{\"p_id\":" + jsonStr(id.toLowerCase(Locale.ROOT)) + ",\"p_point\":" + jsonStr(point.toLowerCase(Locale.ROOT))
+            + ",\"p_on\":" + on + "}";
+    }
+
+    /** 10.115: пункты сотрудника после «в пункт» / «из пункта» (для запасного пути через iva_staff_save). */
+    static List<String> linked(List<String> points, String point, boolean on) {
+        List<String> out = new ArrayList<String>();
+        String id = point == null ? "" : point.toLowerCase(Locale.ROOT);
+        for (String p : points == null ? Collections.<String>emptyList() : points)
+            if (!p.equalsIgnoreCase(id) && !out.contains(p.toLowerCase(Locale.ROOT))) out.add(p.toLowerCase(Locale.ROOT));
+        if (on && !id.isEmpty()) out.add(id);
+        return out;
+    }
+
+    /** 10.115: «Убрать из пункта» — это его последний пункт (тогда он больше не сотрудник). */
+    static boolean lastPoint(List<String> points, String point) { return linked(points, point, false).isEmpty(); }
+
+    static String unlinkText(String name, List<String> others, boolean last) {
+        if (last) return "Это его единственный пункт — «" + name + "» перестанет быть сотрудником, доступ пропадёт сразу. "
+            + "Пригласить снова можно в любой момент.";
+        return "В других пунктах (" + join(others) + ") он останется, права — прежние.";
+    }
+
+    /** 10.115: «Пункт выдачи: Склад» / «Пункты выдачи: Склад, Бердск» (карточка на странице «Сотрудники»). */
+    static String pointsLine(List<String> names) {
+        if (names == null || names.isEmpty()) return "Пункт выдачи не выбран";
+        return (names.size() == 1 ? "Пункт выдачи: " : "Пункты выдачи: ") + join(names);
+    }
+
+    /** «Склад», «Бердск» */
+    static String quoted(List<String> names) {
+        StringBuilder b = new StringBuilder();
+        for (String n : names) b.append(b.length() > 0 ? ", " : "").append('«').append(n).append('»');
+        return b.toString();
+    }
+
+    static String join(List<String> names) { return join(names, ", "); }
+
+    static String join(List<String> names, String sep) {
+        StringBuilder b = new StringBuilder();
+        for (String n : names == null ? Collections.<String>emptyList() : names) b.append(b.length() > 0 ? sep : "").append(n);
+        return b.toString();
+    }
+
+    /** 10.115: всё, что сотрудник видит о пункте (название, адрес, телефон, время, режим) — сравнить «было / стало». */
+    static String pointKey(IvaPickupPatch.Point p) {
+        return p.name + "|" + p.address + "|" + p.city + "|" + p.tel + "|" + p.publish + "|" + p.lat + "|" + p.lng
+            + "|" + java.util.Arrays.toString(p.open) + "|" + java.util.Arrays.toString(p.close);
+    }
+
+    static boolean has(List<IvaPickupPatch.Point> ps, String id) {
+        for (IvaPickupPatch.Point p : ps) if (p.id.equalsIgnoreCase(id)) return true;
+        return false;
+    }
+
+    /** 10.115: пункты сотрудника поменялись (добавили / убрали). */
+    static boolean pointsMoved(List<IvaPickupPatch.Point> was, List<IvaPickupPatch.Point> now) {
+        List<IvaPickupPatch.Point> a = was == null ? Collections.<IvaPickupPatch.Point>emptyList() : was;
+        List<IvaPickupPatch.Point> b = now == null ? Collections.<IvaPickupPatch.Point>emptyList() : now;
+        for (IvaPickupPatch.Point p : a) if (!has(b, p.id)) return true;
+        for (IvaPickupPatch.Point p : b) if (!has(a, p.id)) return true;
+        return false;
+    }
+
+    /** 10.115: короткая подсказка сотруднику — что поменял владелец (пусто — ничего из видимого). */
+    static String staffHint(boolean[] r1, boolean s1, List<IvaPickupPatch.Point> was, boolean[] r2, boolean s2, List<IvaPickupPatch.Point> now) {
+        List<IvaPickupPatch.Point> a = was == null ? Collections.<IvaPickupPatch.Point>emptyList() : was;
+        List<IvaPickupPatch.Point> b = now == null ? Collections.<IvaPickupPatch.Point>emptyList() : now;
+        List<String> gone = new ArrayList<String>(), added = new ArrayList<String>(), changed = new ArrayList<String>();
+        for (IvaPickupPatch.Point p : a) if (!has(b, p.id)) gone.add(p.name);
+        for (IvaPickupPatch.Point p : b) {
+            if (!has(a, p.id)) { added.add(p.name); continue; }
+            for (IvaPickupPatch.Point o : a) if (o.id.equalsIgnoreCase(p.id) && !pointKey(o).equals(pointKey(p))) changed.add(p.name);
+        }
+        List<String> parts = new ArrayList<String>();
+        if (!gone.isEmpty()) parts.add((gone.size() == 1 ? "Вас убрали из пункта " : "Вас убрали из пунктов ") + quoted(gone));
+        if (!added.isEmpty()) parts.add((added.size() == 1 ? "Вас добавили в пункт " : "Вас добавили в пункты ") + quoted(added));
+        if (s1 != s2 || !java.util.Arrays.equals(r1, r2)) parts.add(RIGHTS_HINT);
+        if (!changed.isEmpty()) parts.add((changed.size() == 1 ? "Изменились данные пункта " : "Изменились данные пунктов ") + quoted(changed));
+        return join(parts, ". ");
+    }
+
+    /** 10.115: подсказка владельцу — кто из сотрудников ответил на приглашение. */
+    static String ownerHint(List<Staff> was, List<Staff> now) {
+        if (was == null || now == null) return "";
+        List<String> parts = new ArrayList<String>();
+        for (Staff s : now) {
+            String old = null;
+            for (Staff o : was) if (o.id.equals(s.id)) old = o.status;
+            if (old == null || old.equals(s.status)) continue;
+            if ("active".equals(s.status)) parts.add("«" + s.name + "» принял приглашение");
+            else if ("declined".equals(s.status)) parts.add("«" + s.name + "» отказался от приглашения");
+        }
+        return join(parts, ". ");
+    }
+
     // ───────────── разбор ответов базы ─────────────
 
     static List<Staff> parseList(String body) throws Exception {
@@ -261,14 +368,17 @@ public class IvaStaffPatch {
         IvaChiefPatch.Page page;
         LinearLayout items;
         TextView status;
-        IvaPickupPatch.Point point;
+        IvaPickupPatch.Point point;                 // null — 10.115: страница «Сотрудники» всего проката
         List<IvaPickupPatch.Point> all;
         Runnable changed;
         int cText, cGray, cOrange, cRed = 0xffff5a5f;
     }
 
-    static void openPoint(final Activity a, IvaPickupPatch.Point p, List<IvaPickupPatch.Point> all, Runnable changed) {
-        final Ui u = new Ui();
+    /** 10.115: открытые страницы «Сотрудники» — обновить, когда сотрудник ответил на приглашение. */
+    static final List<java.lang.ref.WeakReference<Ui>> uis = new ArrayList<java.lang.ref.WeakReference<Ui>>();
+
+    static Ui newUi(Activity a, IvaPickupPatch.Point p, List<IvaPickupPatch.Point> all, Runnable changed) {
+        Ui u = new Ui();
         u.a = a;
         u.point = p;
         u.all = all == null ? new ArrayList<IvaPickupPatch.Point>() : new ArrayList<IvaPickupPatch.Point>(all);
@@ -276,8 +386,15 @@ public class IvaStaffPatch {
         u.cText = color(a, "text", 0xfff2f4f8);
         u.cGray = color(a, "gray", 0xff9aa1b0);
         u.cOrange = color(a, "orange", 0xffff8f1f);
-        u.page = IvaChiefPatch.page(a, TITLE, "Пункт «" + p.name + "». Сотрудник входит в приложение под своей почтой и сам "
-            + "принимает приглашение. Клиенты имён и телефонов сотрудников не видят.", false);
+        synchronized (uis) {
+            for (int i = uis.size() - 1; i >= 0; i--) { Ui x = uis.get(i).get(); if (x == null || x.page == null || !x.page.d.isShowing()) uis.remove(i); }
+            uis.add(new java.lang.ref.WeakReference<Ui>(u));
+        }
+        return u;
+    }
+
+    static void body(final Ui u, View.OnClickListener onAdd) {
+        Activity a = u.a;
         LinearLayout list = u.page.list;
         TextView add = IvaPickupPatch.addButton(a, u.cOrange);
         LinearLayout.LayoutParams al = new LinearLayout.LayoutParams(-1, -2);
@@ -289,10 +406,33 @@ public class IvaStaffPatch {
         u.items = new LinearLayout(a);
         u.items.setOrientation(LinearLayout.VERTICAL);
         list.addView(u.items, new LinearLayout.LayoutParams(-1, -2));
-        add.setOnClickListener(new View.OnClickListener() {
+        add.setOnClickListener(onAdd);
+    }
+
+    /** Пункт → «Сотрудники»: «Добавить» (свой сотрудник или новый) и карточки с «Убрать из пункта»; карточки не нажимаются. */
+    static void openPoint(final Activity a, IvaPickupPatch.Point p, List<IvaPickupPatch.Point> all, Runnable changed) {
+        final Ui u = newUi(a, p, all, changed);
+        u.page = IvaChiefPatch.page(a, TITLE, "Пункт «" + p.name + "». Сотрудник входит в приложение под своей почтой и сам "
+            + "принимает приглашение. Данные и права — «Настройка проката» → «Сотрудники».", false);
+        body(u, new View.OnClickListener() {
             @Override public void onClick(View v) {
                 List<Staff> c = cache;
                 if (noDb) { toast(a, NO_DB); return; }
+                openAdd(u, c == null ? new ArrayList<Staff>() : c);
+            }
+        });
+        reload(u);
+    }
+
+    /** 10.115: «Настройка проката» → «Сотрудники»: «Добавить» сверху, ниже карточки всех сотрудников (нажать — изменить). */
+    static void openAll(final Activity a) {
+        final Ui u = newUi(a, null, null, null);
+        u.page = IvaChiefPatch.page(a, TITLE, ALL_HEAD, false);
+        body(u, new View.OnClickListener() {
+            @Override public void onClick(View v) {
+                List<Staff> c = cache;
+                if (noDb) { toast(a, NO_DB); return; }
+                if (u.all.isEmpty()) { toast(a, NO_POINTS); return; }
                 if (c != null && c.size() >= MAX) { toast(a, "Не больше " + MAX + " сотрудников"); return; }
                 openStaff(u, null);
             }
@@ -300,17 +440,29 @@ public class IvaStaffPatch {
         reload(u);
     }
 
+    /** 10.115: строка «Сотрудники» в «Настройка проката» (третья). */
+    static void settingsRow(final Activity a, LinearLayout list, final int cText, final int cGray, final int cOrange) {
+        float den = a.getResources().getDisplayMetrics().density;
+        LinearLayout row = IvaShopPatch.row(a, list, new IvaShopPatch.Icon(IvaShopPatch.Icon.PEOPLE, cOrange, den), TITLE, ALL_SUB, cText, cGray);
+        row.setOnClickListener(new View.OnClickListener() {
+            @Override public void onClick(View v) { try { openAll(a); } catch (Throwable ignore) {} }
+        });
+    }
+
     static void reload(final Ui u) {
         new Thread(new Runnable() {
             @Override public void run() {
                 List<Staff> got = null;
+                List<IvaPickupPatch.Point> ps = null;
                 String err = "";
                 try {
                     String[] r = IvaClientPatch.apiCall(u.a, LIST_RPC, "POST", "{}", true);
                     if (r != null && r[0].startsWith("2")) got = parseList(r.length > 1 ? r[1] : "");
                     else err = dbError(r == null ? "" : r[0], r != null && r.length > 1 ? r[1] : "");
-                } catch (Throwable e) { err = dbError("", ""); }
+                    if (got != null && u.point == null) ps = IvaPickupPatch.load(u.a, new String[1]);   // 10.115: пункты проката
+                } catch (Throwable e) { if (got == null) err = dbError("", ""); }
                 final List<Staff> fs = got;
+                final List<IvaPickupPatch.Point> fps = ps;
                 final String ferr = err;
                 u.a.runOnUiThread(new Runnable() {
                     @Override public void run() {
@@ -318,6 +470,7 @@ public class IvaStaffPatch {
                             noDb = NO_DB.equals(ferr);
                             if (fs == null) { u.status.setText(ferr); u.status.setTextColor(u.cOrange); return; }
                             cache = fs;
+                            if (fps != null) u.all = fps;
                             draw(u, fs);
                             if (u.changed != null) u.changed.run();
                         } catch (Throwable ignore) {}
@@ -327,44 +480,182 @@ public class IvaStaffPatch {
         }).start();
     }
 
+    static TextView line(Activity a, String s, int color, int top) {
+        TextView t = IvaChiefPatch.text(a, s, 13f, color, false);
+        t.setPadding(0, dp(a, top), 0, 0);
+        return t;
+    }
+
+    /** Карточка сотрудника: ФИО и состояние, телефон, почта, пункты, права. */
+    static LinearLayout staffCard(Ui u, Staff s, boolean pointsLine) {
+        Activity a = u.a;
+        LinearLayout c = IvaChiefPatch.card(a);
+        LinearLayout top = new LinearLayout(a);
+        top.setOrientation(LinearLayout.HORIZONTAL);
+        top.setGravity(Gravity.CENTER_VERTICAL);
+        top.addView(IvaChiefPatch.text(a, s.name, 16f, u.cText, true), new LinearLayout.LayoutParams(0, -2, 1f));
+        int sc = "active".equals(s.status) ? u.cText : "declined".equals(s.status) ? u.cGray : u.cOrange;
+        top.addView(IvaChiefPatch.text(a, statusText(s.status), 12f, sc, "invited".equals(s.status)));
+        c.addView(top);
+        if (!s.tel.trim().isEmpty()) c.addView(line(a, s.tel.trim(), u.cText, 4));
+        c.addView(line(a, s.email, u.cGray, 4));
+        if (pointsLine) c.addView(line(a, pointsLine(pointNames(u.all, s.points, null)), u.cText, 6));
+        else {
+            List<String> more = pointNames(u.all, s.points, u.point.id);
+            if (!more.isEmpty()) c.addView(line(a, "Ещё пункты: " + join(more), u.cGray, 4));
+        }
+        c.addView(line(a, rightsText(s.r) + (s.self ? " · сам себе — можно" : ""), u.cGray, 6));
+        return c;
+    }
+
     static void draw(final Ui u, List<Staff> all) {
         final Activity a = u.a;
         u.items.removeAllViews();
-        List<Staff> mine = ofPoint(all, u.point.id);
+        final boolean whole = u.point == null;
+        List<Staff> mine = whole ? all : ofPoint(all, u.point.id);
         u.status.setTextColor(u.cGray);
-        u.status.setText(mine.isEmpty() ? "Сотрудников пока нет — нажмите «Добавить»" : "Сотрудников: " + mine.size());
+        if (whole && u.all.isEmpty()) u.status.setText(NO_POINTS);
+        else u.status.setText(mine.isEmpty() ? "Сотрудников пока нет — нажмите «Добавить»" : "Сотрудников: " + mine.size());
         for (final Staff s : mine) {
-            LinearLayout c = IvaChiefPatch.card(a);
-            LinearLayout top = new LinearLayout(a);
-            top.setOrientation(LinearLayout.HORIZONTAL);
-            top.setGravity(Gravity.CENTER_VERTICAL);
-            top.addView(IvaChiefPatch.text(a, s.name, 16f, u.cText, true), new LinearLayout.LayoutParams(0, -2, 1f));
-            int sc = "active".equals(s.status) ? u.cText : "declined".equals(s.status) ? u.cGray : u.cOrange;
-            top.addView(IvaChiefPatch.text(a, statusText(s.status), 12f, sc, "invited".equals(s.status)));
-            c.addView(top);
-            TextView em = IvaChiefPatch.text(a, s.email, 13f, u.cGray, false);
-            em.setPadding(0, dp(a, 4), 0, 0);
-            c.addView(em);
-            if (!s.tel.trim().isEmpty()) {
-                TextView tl = IvaChiefPatch.text(a, s.tel.trim(), 13f, u.cText, false);
-                tl.setPadding(0, dp(a, 4), 0, 0);
-                c.addView(tl);
+            LinearLayout c = staffCard(u, s, whole);
+            if (whole) {                                                  // 10.115: правка — только здесь
+                c.setClickable(true);
+                c.setOnClickListener(new View.OnClickListener() { @Override public void onClick(View v) { openStaff(u, s); } });
+            } else {                                                      // 10.115: у пункта — только «Убрать из пункта»
+                final TextView rm = IvaSearchPatch.chip(a, UNLINK, false, false);
+                rm.setTextColor(u.cRed);
+                rm.setGravity(Gravity.CENTER);
+                LinearLayout.LayoutParams rl = new LinearLayout.LayoutParams(-1, -2);
+                rl.topMargin = dp(a, 10);
+                c.addView(rm, rl);
+                rm.setOnClickListener(new View.OnClickListener() { @Override public void onClick(View v) { askUnlink(u, s, rm); } });
             }
-            TextView rt = IvaChiefPatch.text(a, rightsText(s.r) + (s.self ? " · сам себе — можно" : ""), 13f, u.cGray, false);
-            rt.setPadding(0, dp(a, 6), 0, 0);
-            c.addView(rt);
-            List<String> more = pointNames(u.all, s.points, u.point.id);
-            if (!more.isEmpty()) {
-                TextView mo = IvaChiefPatch.text(a, "Ещё пункты: " + android.text.TextUtils.join(", ", more), 13f, u.cGray, false);
-                mo.setPadding(0, dp(a, 4), 0, 0);
-                c.addView(mo);
-            }
-            c.setClickable(true);
-            c.setOnClickListener(new View.OnClickListener() { @Override public void onClick(View v) { openStaff(u, s); } });
             LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2);
             lp.topMargin = dp(a, 10);
             u.items.addView(c, lp);
         }
+    }
+
+    // ───────────── 10.115: пункт → «Сотрудники»: в пункт / из пункта ─────────────
+
+    static void askUnlink(final Ui u, final Staff s, final TextView btn) {
+        final boolean last = lastPoint(s.points, u.point.id);
+        IvaClientPatch.styledChoice(u.a, "Убрать «" + s.name + "» из пункта «" + u.point.name + "»?",
+            unlinkText(s.name, pointNames(u.all, s.points, u.point.id), last), new String[]{"Убрать"},
+            new IvaClientPatch.Choice() {
+                @Override public void pick(int i) {
+                    if (i == 0) link(u, s, false, btn, null, last ? "«" + s.name + "» больше не сотрудник"
+                        : "«" + s.name + "» убран из пункта «" + u.point.name + "»");
+                }
+            });
+    }
+
+    /** «Добавить» у пункта: свои сотрудники, которых в пункте нет (нажать — прикрепить), внизу — «Новый сотрудник». */
+    static void openAdd(final Ui u, List<Staff> all) {
+        final Activity a = u.a;
+        List<Staff> free = new ArrayList<Staff>();
+        for (Staff s : all) if (!s.points.contains(u.point.id.toLowerCase(Locale.ROOT))) free.add(s);
+        if (free.isEmpty()) {
+            if (all.size() >= MAX) { toast(a, "Не больше " + MAX + " сотрудников"); return; }
+            openStaff(u, null);                                          // своих нет — сразу новый
+            return;
+        }
+        final IvaChiefPatch.Page pg = IvaChiefPatch.page(a, "Добавить в пункт", "Пункт «" + u.point.name
+            + "». Нажмите на сотрудника — он будет работать и в этом пункте, права прежние. Или пригласите нового.", false);
+        for (final Staff s : free) {
+            LinearLayout c = staffCard(u, s, true);
+            c.setClickable(true);
+            c.setOnClickListener(new View.OnClickListener() {
+                @Override public void onClick(final View v) {
+                    link(u, s, true, v, pg, "«" + s.name + "» теперь и в пункте «" + u.point.name + "»");
+                }
+            });
+            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2);
+            lp.topMargin = dp(a, 10);
+            pg.list.addView(c, lp);
+        }
+        TextView nw = IvaPickupPatch.addButton(a, u.cOrange);
+        nw.setText(NEW_STAFF);
+        LinearLayout.LayoutParams nl = new LinearLayout.LayoutParams(-1, -2);
+        nl.topMargin = dp(a, 14);
+        pg.list.addView(nw, nl);
+        final int total = all.size();
+        nw.setOnClickListener(new View.OnClickListener() {
+            @Override public void onClick(View v) {
+                if (total >= MAX) { toast(a, "Не больше " + MAX + " сотрудников"); return; }
+                try { pg.d.dismiss(); } catch (Throwable ignore) {}
+                openStaff(u, null);
+            }
+        });
+    }
+
+    /** В пункт / из пункта: iva_staff_link; без SQL 10.115 — как раньше, через iva_staff_save (из последнего — iva_staff_remove). */
+    static void link(final Ui u, final Staff s, final boolean on, final View btn, final IvaChiefPatch.Page pg, final String done) {
+        final String body = linkBody(s.id, u.point.id, on);
+        if (body == null) return;
+        btn.setEnabled(false);
+        btn.setAlpha(0.6f);
+        new Thread(new Runnable() {
+            @Override public void run() {
+                String e;
+                try {
+                    String[] r = IvaClientPatch.apiCall(u.a, LINK_RPC, "POST", body, true);
+                    e = r == null ? dbError("", "") : dbError(r[0], r.length > 1 ? r[1] : "");
+                    if (NO_DB.equals(e)) {
+                        List<String> ps = linked(s.points, u.point.id, on);
+                        r = ps.isEmpty() ? IvaClientPatch.apiCall(u.a, REMOVE_RPC, "POST", idBody(s.id), true)
+                            : IvaClientPatch.apiCall(u.a, SAVE_RPC, "POST", saveBody(s.id, s.email, s.name, s.tel, ps, s.r, s.self), true);
+                        e = r == null ? dbError("", "") : dbError(r[0], r.length > 1 ? r[1] : "");
+                    }
+                } catch (Throwable x) { e = dbError("", ""); }
+                final String fe = e;
+                u.a.runOnUiThread(new Runnable() {
+                    @Override public void run() {
+                        try {
+                            btn.setEnabled(true);
+                            btn.setAlpha(1f);
+                            if (!fe.isEmpty()) { toast(u.a, fe); return; }
+                            toast(u.a, done);
+                            if (pg != null) try { pg.d.dismiss(); } catch (Throwable ignore) {}
+                            reload(u);
+                        } catch (Throwable ignore) {}
+                    }
+                });
+            }
+        }).start();
+    }
+
+    // ───────────── 10.115: владелец — сотрудник ответил на приглашение (Realtime) ─────────────
+
+    static volatile boolean ownerBusy;
+
+    /** Из IvaAccessPatch (фон, по отметке «роль поменялась»): список уже открывали — перечитать, подсказка, перерисовать. */
+    static void ownerPoke(final Activity a) {
+        final List<Staff> was = cache;
+        if (was == null || ownerBusy) return;
+        ownerBusy = true;
+        try {
+            String[] r = IvaClientPatch.apiCall(a, LIST_RPC, "POST", "{}", true);
+            if (r == null || !r[0].startsWith("2")) return;
+            final List<Staff> now = parseList(r.length > 1 ? r[1] : "");
+            final String hint = ownerHint(was, now);
+            cache = now;
+            a.runOnUiThread(new Runnable() {
+                @Override public void run() {
+                    List<Ui> open = new ArrayList<Ui>();
+                    synchronized (uis) { for (java.lang.ref.WeakReference<Ui> w : uis) { Ui u = w.get(); if (u != null) open.add(u); } }
+                    for (Ui u : open) {
+                        try {
+                            if (u.page == null || !u.page.d.isShowing() || u.items == null) continue;
+                            draw(u, now);
+                            if (u.changed != null) u.changed.run();
+                        } catch (Throwable ignore) {}
+                    }
+                    if (!hint.isEmpty()) toast(a, hint);
+                }
+            });
+        } catch (Throwable ignore) {
+        } finally { ownerBusy = false; }
     }
 
     // ───────────── владелец: страница сотрудника (новый или правка) ─────────────
@@ -412,7 +703,11 @@ public class IvaStaffPatch {
         final Activity a = u.a;
         final boolean isNew = old == null;
         final Staff s = new Staff();
-        if (isNew) { s.r = preset(P_ISSUE); s.points.add(u.point.id.toLowerCase(Locale.ROOT)); }
+        if (isNew) {
+            s.r = preset(P_ISSUE);
+            if (u.point != null) s.points.add(u.point.id.toLowerCase(Locale.ROOT));
+            else if (u.all.size() == 1) s.points.add(u.all.get(0).id.toLowerCase(Locale.ROOT));   // 10.115: пункт один — он и есть
+        }
         else {
             s.id = old.id; s.email = old.email; s.name = old.name; s.tel = old.tel; s.status = old.status;
             s.r = old.r.clone(); s.self = old.self; s.points = new ArrayList<String>(old.points);
@@ -429,8 +724,8 @@ public class IvaStaffPatch {
             fEmail.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_EMAIL_ADDRESS);
             box.addView(fEmail, new LinearLayout.LayoutParams(-1, -2));
         } else fEmail = null;
-        box.addView(label(a, "Имя", u.cGray));
-        final EditText fName = field(a, "Например: Иван", s.name, u.cText);
+        box.addView(label(a, "ФИО", u.cGray));
+        final EditText fName = field(a, "Например: Иванов Иван Иванович", s.name, u.cText);
         fName.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_CAP_WORDS);
         box.addView(fName, new LinearLayout.LayoutParams(-1, -2));
         box.addView(label(a, "Телефон (необязательно, клиенты его не видят)", u.cGray));

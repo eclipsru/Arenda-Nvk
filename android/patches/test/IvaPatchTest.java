@@ -2474,11 +2474,11 @@ public class IvaPatchTest {
                 + IvaStaffPatch.formErr(true, "i@x.ru", "a@x.ru", "Иван", "", 1, none) + "|" + IvaStaffPatch.formErr(true, "i@x.ru", "a@x.ru", "Иван", "+7 900 123-45-67", 1, ok) + "|"
                 + IvaStaffPatch.formErr(false, "", "a@x.ru", "Иван", "", 1, ok),
                 "Введите почту, под которой сотрудник входит в приложение|Похоже, в email ошибка (пример: ivan@mail.ru)|"
-                + "Это ваша почта — владельца проката добавлять не нужно|Введите имя сотрудника|Проверьте номер: 10–15 цифр, например +7 900 123-45-67|"
+                + "Это ваша почта — владельца проката добавлять не нужно|Введите ФИО сотрудника|Проверьте номер: 10–15 цифр, например +7 900 123-45-67|"
                 + "Отметьте хотя бы один пункт выдачи|Отметьте хотя бы одно право||");
             StringBuilder longName = new StringBuilder();
             for (int i = 0; i < 81; i++) longName.append('я');
-            eq("сотрудники 10.103: имя не длиннее 80", IvaStaffPatch.formErr(false, "", "", longName.toString(), "", 1, ok), "Имя — не длиннее 80 символов");
+            eq("сотрудники 10.103: имя не длиннее 80", IvaStaffPatch.formErr(false, "", "", longName.toString(), "", 1, ok), "ФИО — не длиннее 80 символов");
             eq("сотрудники 10.103: запрос «Пригласить» — почта строчными, только настоящие id пунктов, кавычки экранированы",
                 IvaStaffPatch.saveBody(null, " Ivan@X.ru ", "  Иван  \"Ваня\"  ", " +7 900 ", java.util.Arrays.asList(u1, "x", null, u2), new boolean[]{true, false, true, true}, false),
                 "{\"p_id\":null,\"p_email\":\"ivan@x.ru\",\"p_name\":\"Иван \\\"Ваня\\\"\",\"p_tel\":\"+7 900\",\"p_points\":[\"" + u1
@@ -2567,6 +2567,7 @@ public class IvaPatchTest {
         realtime112();                                                // 10.112: роль и приглашение — моментально (Realtime)
         logo113();                                                    // 10.113: вид раздела с логотипом, выключатель у пункта
         points114();                                                  // 10.114: оба набора прав, выбор пункта в «Добавить»
+        live115();                                                    // 10.115: правки доступа сразу, «Сотрудники»
         if (fail > 0) { System.out.println("ошибок: " + fail); System.exit(1); }
         System.out.println("все проверки IvaPatch пройдены");
     }
@@ -3090,5 +3091,61 @@ public class IvaPatchTest {
             "true|true|false|false|{\"p_point\":\"" + B + "\"}|null");
         eq("пункт 10.114: подписи", IvaToolPointPatch.LABEL_ADD + " / " + IvaToolPointPatch.NEED,
             "В какой пункт выдачи добавляете инструмент / Выберите пункт выдачи — без него инструмент не опубликуется");
+    }
+
+    static IvaPickupPatch.Point pt115(String id, String name, String tel) {
+        IvaPickupPatch.Point p = new IvaPickupPatch.Point();
+        p.id = id; p.name = name; p.tel = tel; p.address = name + ", улица Ленина, 1";
+        return p;
+    }
+
+    static IvaStaffPatch.Staff st115(String id, String name, String status) {
+        IvaStaffPatch.Staff s = new IvaStaffPatch.Staff();
+        s.id = id; s.name = name; s.status = status;
+        return s;
+    }
+
+    static void live115() {
+        String A = "11111111-1111-1111-1111-111111111111", B = "22222222-2222-2222-2222-222222222222", S = "33333333-3333-3333-3333-333333333333";
+        boolean[] r = {true, false, true, true}, r2 = {true, true, true, true};
+        java.util.List<IvaPickupPatch.Point> two = java.util.Arrays.asList(pt115(A, "Склад", ""), pt115(B, "Бердск", ""));
+        java.util.List<IvaPickupPatch.Point> one = java.util.Arrays.asList(pt115(A, "Склад", ""));
+        java.util.List<IvaPickupPatch.Point> oneTel = java.util.Arrays.asList(pt115(A, "Склад", "+79001234567"));
+        eq("сотрудник 10.115: убрали из одного пункта из двух — подсказка и «пункты поменялись»",
+            IvaStaffPatch.staffHint(r, false, two, r, false, one) + "|" + IvaStaffPatch.pointsMoved(two, one), "Вас убрали из пункта «Бердск»|true");
+        eq("сотрудник 10.115: добавили пункт", IvaStaffPatch.staffHint(r, false, one, r, false, two), "Вас добавили в пункт «Бердск»");
+        eq("сотрудник 10.115: права и «сам себе» — прежняя подсказка",
+            IvaStaffPatch.staffHint(r, false, one, r2, false, one) + "|" + IvaStaffPatch.staffHint(r, false, one, r, true, one) + "|" + IvaStaffPatch.pointsMoved(one, one),
+            "Владелец проката изменил ваши права|Владелец проката изменил ваши права|false");
+        eq("сотрудник 10.115: данные пункта (телефон) — своя подсказка, пункты те же",
+            IvaStaffPatch.staffHint(r, false, one, r, false, oneTel) + "|" + IvaStaffPatch.pointsMoved(one, oneTel), "Изменились данные пункта «Склад»|false");
+        eq("сотрудник 10.115: всё сразу — по порядку; ничего — пусто",
+            IvaStaffPatch.staffHint(r, false, two, r2, false, oneTel) + "|" + IvaStaffPatch.staffHint(r, false, two, r, false, two) + "|",
+            "Вас убрали из пункта «Бердск». Владелец проката изменил ваши права. Изменились данные пункта «Склад»||");
+        java.util.List<IvaStaffPatch.Staff> was = java.util.Arrays.asList(st115(S, "Иван", "invited"), st115(A, "Пётр", "invited"), st115(B, "Ольга", "active"));
+        java.util.List<IvaStaffPatch.Staff> now = java.util.Arrays.asList(st115(S, "Иван", "active"), st115(A, "Пётр", "declined"), st115(B, "Ольга", "active"));
+        eq("сотрудники 10.115: владельцу — кто принял и кто отказался; без изменений — пусто",
+            IvaStaffPatch.ownerHint(was, now) + "|" + IvaStaffPatch.ownerHint(now, now) + "|" + IvaStaffPatch.ownerHint(null, now),
+            "«Иван» принял приглашение. «Пётр» отказался от приглашения||");
+        eq("сотрудники 10.115: тело «в пункт / из пункта» — только проверенные id",
+            IvaStaffPatch.linkBody(S, A.toUpperCase(), true) + "|" + IvaStaffPatch.linkBody("x", A, false) + "|" + IvaStaffPatch.linkBody(S, "", false),
+            "{\"p_id\":\"" + S + "\",\"p_point\":\"" + A + "\",\"p_on\":true}|null|null");
+        java.util.List<String> ids = java.util.Arrays.asList(A, B);
+        eq("сотрудники 10.115: пункты после «в / из пункта» и «последний пункт»",
+            IvaStaffPatch.linked(ids, B, false) + "|" + IvaStaffPatch.linked(java.util.Arrays.asList(A), B.toUpperCase(), true) + "|" + IvaStaffPatch.linked(ids, A, true)
+                + "|" + IvaStaffPatch.lastPoint(ids, A) + "|" + IvaStaffPatch.lastPoint(java.util.Arrays.asList(A), A),
+            "[" + A + "]|[" + A + ", " + B + "]|[" + B + ", " + A + "]|false|true");
+        eq("сотрудники 10.115: предупреждение «Убрать из пункта»",
+            IvaStaffPatch.unlinkText("Иван", java.util.Arrays.asList("Бердск"), false) + "|" + IvaStaffPatch.unlinkText("Иван", new java.util.ArrayList<String>(), true),
+            "В других пунктах (Бердск) он останется, права — прежние.|Это его единственный пункт — «Иван» перестанет быть сотрудником, доступ пропадёт сразу. Пригласить снова можно в любой момент.");
+        eq("сотрудники 10.115: строка пунктов на карточке",
+            IvaStaffPatch.pointsLine(java.util.Arrays.asList("Склад")) + "|" + IvaStaffPatch.pointsLine(java.util.Arrays.asList("Склад", "Бердск")) + "|" + IvaStaffPatch.pointsLine(null),
+            "Пункт выдачи: Склад|Пункты выдачи: Склад, Бердск|Пункт выдачи не выбран");
+        eq("сотрудники 10.115: «ФИО» в форме", IvaStaffPatch.formErr(true, "ivan@mail.ru", "me@mail.ru", " ", "", 1, r), "Введите ФИО сотрудника");
+        eq("тариф 10.115: разбор строки admins", IvaAccessPatch.feeKey("[{\"fee_pct\":7.50,\"debt_limit\":5000.0}]") + "|"
+            + IvaAccessPatch.feeKey("[{\"fee_pct\": null, \"debt_limit\": null}]") + "|" + IvaAccessPatch.feeKey("[]"), "7,5|5000|0|0|");
+        eq("тариф 10.115: подсказка только когда поменялся (и раньше знали)",
+            IvaAccessPatch.feeHint("5|0", "7,5|5000") + "|" + IvaAccessPatch.feeHint("7|5000", "7|0") + "|" + IvaAccessPatch.feeHint("", "7|0") + "|" + IvaAccessPatch.feeHint("7|0", "7|0"),
+            "Создатель площадки изменил ваш тариф: комиссия 7,5 %, лимит задолженности 5000 ₽|Создатель площадки изменил ваш тариф: комиссия 7 %, без лимита задолженности||");
     }
 }

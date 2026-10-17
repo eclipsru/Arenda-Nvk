@@ -55,7 +55,7 @@ import java.util.regex.Pattern;
  * Новых вставок в smali нет: строка — из IvaNotifyPatch.openSettings, «Мои данные» — из IvaPatch.onTab("adminData").
  */
 public class IvaShopPatch {
-    static final String ROW_TITLE = "Настройка проката", ROW_SUB = "Данные проката, пункты выдачи, срок аренды";
+    static final String ROW_TITLE = "Настройка проката", ROW_SUB = "Данные проката, пункты выдачи, сотрудники, срок аренды";
     static final String DATA_TITLE = "Данные проката", DATA_SUB = "Название, адрес, ИП, телефон и время работы";
     static final String L_NAME = "Название проката", L_ADDR = "Адрес организации", L_IP = "ИП организации",
         L_TEL = "Номер телефона (для связи с начальником)", L_TIME = "Время работы", L_DAYS = "Рабочие дни";
@@ -318,6 +318,7 @@ public class IvaShopPatch {
             @Override public void onClick(View v) { try { openData(a); } catch (Throwable ignore) {} }
         });
         try { IvaPickupPatch.settingsRow(a, list, cText, cGray, cOrange); } catch (Throwable ignore) {}
+        try { IvaStaffPatch.settingsRow(a, list, cText, cGray, cOrange); } catch (Throwable ignore) {}           // 10.115: «Сотрудники» — третьим
         try { IvaRentPatch.settingsSection(a, list, cText, cGray, cOrange); } catch (Throwable ignore) {}
         try { IvaStaffToolsPatch.settingsSection(a, list, cText, cGray, cOrange); } catch (Throwable ignore) {}   // 10.105
         try { IvaStaffJournalPatch.settingsRow(a, list, cText, cGray, cOrange); } catch (Throwable ignore) {}    // 10.107: «Сводка по пунктам»
@@ -326,7 +327,7 @@ public class IvaShopPatch {
 
     /** Значки строк (цвет приложения, линией 2dp): витрина проката и карточка данных. */
     static final class Icon extends Drawable {
-        static final int SHOP = 1, CARD = 2;
+        static final int SHOP = 1, CARD = 2, PEOPLE = 3;
         final int kind;
         final Paint p = new Paint(Paint.ANTI_ALIAS_FLAG);
 
@@ -351,6 +352,11 @@ public class IvaShopPatch {
                 c.drawPath(roof, p);
                 c.drawRect(l + w * 0.18f, t + h * 0.38f, l + w * 0.82f, t + h * 0.86f, p);
                 c.drawRect(l + w * 0.42f, t + h * 0.58f, l + w * 0.58f, t + h * 0.86f, p);   // дверь
+            } else if (kind == PEOPLE) {                         // 10.115: два человека — «Сотрудники»
+                c.drawCircle(l + w * 0.36f, t + h * 0.32f, w * 0.14f, p);
+                c.drawArc(new RectF(l + w * 0.1f, t + h * 0.54f, l + w * 0.62f, t + h * 1.06f), 180f, 180f, false, p);
+                c.drawCircle(l + w * 0.7f, t + h * 0.36f, w * 0.11f, p);
+                c.drawArc(new RectF(l + w * 0.56f, t + h * 0.6f, l + w * 0.94f, t + h * 0.98f), 200f, 160f, false, p);
             } else {
                 c.drawRoundRect(new RectF(l + w * 0.08f, t + h * 0.2f, l + w * 0.92f, t + h * 0.8f), w * 0.1f, w * 0.1f, p);
                 c.drawCircle(l + w * 0.32f, t + h * 0.44f, w * 0.09f, p);
