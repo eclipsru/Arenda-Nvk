@@ -52,7 +52,7 @@ final class IvaProkatPatch {
     static final String K_OWNER = "pt_chat_owner";        // выключатель владельца (настройки уведомлений телефона)
     static final String TOGGLE_TITLE = "Чаты пунктов у меня";
     static final String TOGGLE_ON = "Вопросы клиентов пунктам видите вы и сотрудники пункта с правом «Отвечает в чате»";
-    static final String TOGGLE_OFF = "Выключено: вопросы пунктам видят только сотрудники пункта с правом «Отвечает в чате»";
+    static final String TOGGLE_OFF = "Выключено: вопросы пунктам видят сотрудники пункта с правом «Отвечает в чате»; где таких нет — вы";
     static final long FRESH_MS = 5 * 60_000L, NO_DB_MS = 10 * 60_000L;
 
     // ════════════════════════════════ чистая логика (IvaPatchTest) ════════════════════════════════
@@ -215,6 +215,46 @@ final class IvaProkatPatch {
 
     static boolean ownerSees(Context c) {
         try { return IvaNotifyPatch.prefs(c).getBoolean(K_OWNER, true); } catch (Throwable e) { return true; }
+    }
+
+    // ───────────── 10.121: переписка пункта без сотрудника — у владельца ─────────────
+
+    static volatile Set<String> answered;
+    static volatile long answeredAt;
+    static final long ANSWERED_MS = 60000L;
+
+    /** Пункты, где в чате отвечает сотрудник (принял приглашение и есть право «Чат»), из ответа iva_staff_list. */
+    static Set<String> answeredFrom(List<IvaStaffPatch.Staff> staff) {
+        Set<String> out = new HashSet<String>();
+        if (staff == null) return out;
+        for (IvaStaffPatch.Staff s : staff)
+            if (s != null && "active".equals(s.status) && s.r != null && s.r.length > 2 && s.r[2])
+                for (String p : s.points) if (p != null && !p.trim().isEmpty()) out.add(p.trim().toLowerCase(Locale.ROOT));
+        return out;
+    }
+
+    /** Фон. Владелец выключил «Чаты пунктов у меня»: переписки пунктов, где ещё никто не отвечает в чате, всё равно
+     *  у него (иначе клиенту никто не ответит). null — список не получили (тогда прячем все, как в 10.120). */
+    static Set<String> answeredPoints(Context a) {
+        Set<String> c = answered;
+        long now = System.currentTimeMillis();
+        if (c != null && now - answeredAt < ANSWERED_MS) return c;
+        try {
+            String[] r = a instanceof Activity ? IvaClientPatch.apiCall((Activity) a, IvaStaffPatch.LIST_RPC, "POST", "{}", true)
+                : IvaNotifyPatch.api(a, IvaStaffPatch.LIST_RPC, "POST", "{}");
+            if (r == null || !r[0].startsWith("2")) return c;
+            c = answeredFrom(IvaStaffPatch.parseList(r.length > 1 ? r[1] : ""));
+            answered = c;
+            answeredAt = now;
+            return c;
+        } catch (Throwable e) { return c; }
+    }
+
+    /** Прятать ли у владельца переписку пункта pid при выключенных «Чатах пунктов у меня». */
+    static boolean hideForOwner(Set<String> ans, String pid) {
+        if (ans == null) return true;
+        String id = pid == null ? "" : pid.trim().toLowerCase(Locale.ROOT);
+        return !id.isEmpty() && ans.contains(id);
     }
 
     /** «Настройка проката» → «Чаты пунктов у меня» (после «На одобрении»). */

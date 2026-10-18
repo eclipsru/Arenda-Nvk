@@ -19,8 +19,10 @@ import org.json.JSONObject;
 import java.lang.ref.WeakReference;
 import java.lang.reflect.Method;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Set;
 
 /**
@@ -82,6 +84,39 @@ public class IvaStaffToolsPatch {
         return "";
     }
 
+    // 10.121: правка уже опубликованного инструмента (режим «после моего одобрения») — edit_state из iva_staff_tools
+    static String statusText(String review, boolean active, String edit) {
+        if (review != null && !review.isEmpty()) return statusText(review, active);
+        if ("pending".equals(edit)) return "Правка на одобрении";
+        if ("rejected".equals(edit)) return "Правка отклонена";
+        return statusText(review, active);
+    }
+
+    static String statusHint(String review, String edit) {
+        if (review != null && !review.isEmpty()) return statusHint(review);
+        if ("pending".equals(edit)) return "Клиенты видят прежний вариант, пока владелец не одобрит правку";
+        if ("rejected".equals(edit)) return "Владелец отклонил правку — клиенты видят прежний вариант. Исправьте и сохраните снова";
+        return "";
+    }
+
+    /** Поля правки → подписи карточки (по порядку карточки, без повторов). */
+    static final String[][] EDIT_LABELS = {
+        {"name", "Название"}, {"cat", "Категория"}, {"cat_label", "Категория"}, {"sub", "Категория"}, {"kind", "Вид"},
+        {"model_text", "Модель"}, {"price", "Цена"}, {"deposit", "Залог"}, {"descr", "Описание"}, {"terms", "Условия аренды"},
+        {"delivery", "Доставка"}, {"delivery_price", "Доставка"}, {"point_id", "Пункт выдачи"}, {"img", "Фото"}, {"imgs", "Фото"}};
+
+    static List<String> changedLabels(List<String> keys) {
+        List<String> out = new ArrayList<String>();
+        if (keys == null) return out;
+        for (String[] e : EDIT_LABELS) if (keys.contains(e[0]) && !out.contains(e[1])) out.add(e[1]);
+        return out;
+    }
+
+    static String changedText(List<String> keys) {
+        List<String> l = changedLabels(keys);
+        return l.isEmpty() ? "Правка опубликованного инструмента" : "Правка опубликованного инструмента. Изменено: " + IvaStaffPatch.join(l, ", ");
+    }
+
     /** «400 ₽/сутки»; пусто или не число — пусто. */
     static String priceText(String raw) {
         String s = raw == null ? "" : raw.trim().replace(',', '.');
@@ -130,7 +165,17 @@ public class IvaStaffToolsPatch {
     /** Фразы базы (RAISE EXCEPTION в 20261030_staff_tools.sql), которые показываем как есть. */
     static final String[] DB_PHRASES = {
         "Пункт выдачи — только из ваших пунктов", "У вас нет пункта выдачи — обратитесь к владельцу проката",
-        "Инструмент уже не ждёт одобрения — обновите список", "Только владелец проката", "Неизвестный режим публикации"};
+        "Инструмент уже не ждёт одобрения — обновите список", "Только владелец проката", "Неизвестный режим публикации",
+        "Такой инструмент уже есть в вашем пункте — откройте его в «Инструментах пункта» и измените"};
+
+    /** 10.121: база не даёт опубликовать второй раз тот же инструмент (20261112_v121.sql). */
+    static final String DUP_PHRASE = "Такой инструмент уже есть в вашем пункте — откройте его в «Инструментах пункта» и измените";
+
+    /** Фраза базы из ответа публикации (IvaPatch.publishError) или null. */
+    static String dbPhrase(String msg) {
+        if (msg == null) return null;
+        return msg.contains(DUP_PHRASE) ? DUP_PHRASE : null;
+    }
 
     static String dbError(String code, String body) {
         String c = code == null ? "" : code, b = body == null ? "" : body;
@@ -144,7 +189,7 @@ public class IvaStaffToolsPatch {
     // ───────────── разбор ответов ─────────────
 
     static final class Tool {
-        String id = "", name = "", price = "", point = "", review = "";
+        String id = "", name = "", price = "", point = "", review = "", edit = "";
         boolean active, mine;
         JSONObject raw;
     }
@@ -165,6 +210,7 @@ public class IvaStaffToolsPatch {
             x.price = str(o, "price");
             x.point = str(o, "point_name");
             x.review = str(o, "review");
+            x.edit = str(o, "edit_state");                                  // 10.121: правка ждёт / отклонена
             x.active = o.optBoolean("active", false);
             x.mine = o.optBoolean("mine", false);
             x.raw = o;
@@ -173,7 +219,10 @@ public class IvaStaffToolsPatch {
         return out;
     }
 
-    static final class Pending { String id = "", name = "", price = "", point = "", staff = ""; }
+    static final class Pending {
+        String id = "", name = "", price = "", point = "", staff = "", key = "";
+        boolean edit;                                  // 10.121: правка опубликованного (ключ уведомления — id@edit_at)
+    }
 
     // ── 10.120: «На одобрении» → нажатие на карточку — инструмент целиком (просьба владельца 18.10.2026) ──
 
@@ -239,6 +288,8 @@ public class IvaStaffToolsPatch {
             p.price = str(o, "price");
             p.point = str(o, "point_name");
             p.staff = str(o, "staff_name");
+            p.edit = o.optBoolean("edit", false);
+            p.key = p.edit ? p.id + "@" + str(o, "edit_at") : p.id;
             if (!p.id.isEmpty()) out.add(p);
         }
         return out;
@@ -497,8 +548,8 @@ public class IvaStaffToolsPatch {
             top.setOrientation(LinearLayout.HORIZONTAL);
             top.setGravity(Gravity.CENTER_VERTICAL);
             top.addView(IvaChiefPatch.text(a, t.name.isEmpty() ? "Без названия" : t.name, 15f, u.cText, true), new LinearLayout.LayoutParams(0, -2, 1f));
-            boolean warn = !t.review.isEmpty();
-            TextView s = IvaChiefPatch.text(a, statusText(t.review, t.active), 12f, warn ? u.cOrange : u.cGray, warn);
+            boolean warn = !t.review.isEmpty() || !t.edit.isEmpty();
+            TextView s = IvaChiefPatch.text(a, statusText(t.review, t.active, t.edit), 12f, warn ? u.cOrange : u.cGray, warn);
             s.setPadding(dp(a, 8), 0, 0, 0);
             top.addView(s);
             c.addView(top);
@@ -508,7 +559,7 @@ public class IvaStaffToolsPatch {
                 x.setPadding(0, dp(a, 4), 0, 0);
                 c.addView(x);
             }
-            String h = statusHint(t.review);
+            String h = statusHint(t.review, t.edit);
             if (!h.isEmpty()) {
                 TextView x = IvaChiefPatch.text(a, h, 13f, u.cGray, false);
                 x.setPadding(0, dp(a, 4), 0, 0);
@@ -541,7 +592,7 @@ public class IvaStaffToolsPatch {
         sectionRefresh = new WeakReference<Runnable>(refresh);                 // 10.116: «на одобрение» пришло — счётчик сразу
         if (modeRow != null) modeRow.setOnClickListener(new View.OnClickListener() {
             @Override public void onClick(View v) {
-                IvaClientPatch.styledChoice(a, MODE_TITLE, "Как публиковать новые инструменты, которые добавили сотрудники. Правки — всегда сразу.",
+                IvaClientPatch.styledChoice(a, MODE_TITLE, "Как публиковать новые инструменты и правки, которые сделали сотрудники.",
                     MODE_TEXT, new IvaClientPatch.Choice() {
                         @Override public void pick(int i) { if (i >= 0 && i < MODES.length) setMode(a, MODES[i], refresh); }
                     });
@@ -688,7 +739,7 @@ public class IvaStaffToolsPatch {
             c.addView(IvaChiefPatch.text(a, p.name.isEmpty() ? "Без названия" : p.name, 15f, u.cText, true));
             c.setClickable(true);                                          // 10.120: нажатие — инструмент целиком
             c.setOnClickListener(new View.OnClickListener() { @Override public void onClick(View v) { try { openCard(u, p); } catch (Throwable ignore) {} } });
-            TextView more = IvaChiefPatch.text(a, "Нажмите, чтобы посмотреть целиком", 12f, u.cOrange, false);
+            TextView more = IvaChiefPatch.text(a, p.edit ? "Правка — нажмите, чтобы посмотреть, что изменилось" : "Нажмите, чтобы посмотреть целиком", 12f, u.cOrange, false);
             more.setPadding(0, dp(a, 2), 0, 0);
             c.addView(more);
             String l2 = line2(p.price, p.point);
@@ -698,7 +749,7 @@ public class IvaStaffToolsPatch {
                 c.addView(x);
             }
             if (!p.staff.isEmpty()) {
-                TextView x = IvaChiefPatch.text(a, "Добавил(а): " + p.staff, 13f, u.cGray, false);
+                TextView x = IvaChiefPatch.text(a, (p.edit ? "Изменил(а): " : "Добавил(а): ") + p.staff, 13f, u.cGray, false);
                 x.setPadding(0, dp(a, 4), 0, 0);
                 c.addView(x);
             }
@@ -717,7 +768,7 @@ public class IvaStaffToolsPatch {
             yes.setOnClickListener(new View.OnClickListener() { @Override public void onClick(View v) { review(u, p, true, yes); } });
             no.setOnClickListener(new View.OnClickListener() {
                 @Override public void onClick(View v) {
-                    IvaClientPatch.styledChoice(a, "Отклонить инструмент?", "Клиенты его не увидят. Сотрудник увидит «Отклонён» и сможет исправить.",
+                    IvaClientPatch.styledChoice(a, rejectTitle(p.edit), rejectText(p.edit),
                         new String[]{"Отклонить"}, new IvaClientPatch.Choice() { @Override public void pick(int i) { if (i == 0) review(u, p, false, no); } });
                 }
             });
@@ -805,16 +856,55 @@ public class IvaStaffToolsPatch {
             catTitle = (ct == null ? "" : ct) + (sc == null || sc.isEmpty() ? "" : (ct == null ? "" : " · ") + sc);
             kindTitle = IvaKindPatch.titleOf(IvaKindPatch.list(), js(j, "kind"));
         } catch (Throwable ignore) {}
+        // 10.121: правка опубликованного — что изменилось и как было (iva_tool_pending_card: edit, changed, old)
+        List<String> changed = new ArrayList<String>();
+        Map<String, String> was = new HashMap<String, String>();
+        if (j.optBoolean("edit", false)) {
+            JSONArray ch = j.optJSONArray("changed");
+            for (int i = 0; ch != null && i < ch.length(); i++) changed.add(ch.optString(i, ""));
+            try {
+                JSONObject old = new JSONObject(j.toString()), oj = j.optJSONObject("old");
+                if (oj != null) for (java.util.Iterator<String> it = oj.keys(); it.hasNext(); ) { String k = it.next(); old.put(k, oj.opt(k)); }
+                for (String[] r : cardRows(old, catTitle, kindTitle)) was.put(r[0], r[1]);
+            } catch (Throwable ignore) {}
+            TextView en = IvaChiefPatch.text(a, changedText(changed), 14f, u.cOrange, true);
+            en.setPadding(dp(a, 2), dp(a, 10), 0, 0);
+            list.addView(en, new LinearLayout.LayoutParams(-1, -2));
+        }
+        List<String> chl = changedLabels(changed);
         LinearLayout card = IvaChiefPatch.card(a);
         boolean first = true;
         for (String[] r : cardRows(j, catTitle, kindTitle)) {
-            TextView l = IvaChiefPatch.text(a, r[0], 12f, u.cGray, false);
+            boolean ch = chl.contains(r[0]);
+            TextView l = IvaChiefPatch.text(a, ch ? r[0] + " · изменено" : r[0], 12f, ch ? u.cOrange : u.cGray, false);
             if (!first) l.setPadding(0, dp(a, 10), 0, 0);
             card.addView(l);
             TextView v = IvaChiefPatch.text(a, r[1], 15f, u.cText, "Название".equals(r[0]));
             v.setPadding(0, dp(a, 2), 0, 0);
             card.addView(v);
+            String w = was.get(r[0]);
+            if (ch && w != null && !w.equals(r[1])) {
+                TextView o = IvaChiefPatch.text(a, "Было: " + w, 13f, u.cGray, false);
+                o.setPadding(0, dp(a, 2), 0, 0);
+                card.addView(o);
+            }
             first = false;
+        }
+        for (String lb : chl) if (!was.isEmpty() && was.containsKey(lb) && !lb.equals("Фото")) {
+            boolean shown = false;
+            for (String[] r : cardRows(j, catTitle, kindTitle)) if (r[0].equals(lb)) shown = true;
+            if (shown) continue;                                                // поле очистили — «Было: …» отдельной строкой
+            TextView l = IvaChiefPatch.text(a, lb + " · изменено", 12f, u.cOrange, false);
+            l.setPadding(0, dp(a, 10), 0, 0);
+            card.addView(l);
+            TextView o = IvaChiefPatch.text(a, "Было: " + was.get(lb) + " · стало: пусто", 13f, u.cGray, false);
+            o.setPadding(0, dp(a, 2), 0, 0);
+            card.addView(o);
+        }
+        if (chl.contains("Фото")) {
+            TextView o = IvaChiefPatch.text(a, "Фото изменены — выше новые", 13f, u.cOrange, false);
+            o.setPadding(0, dp(a, 10), 0, 0);
+            card.addView(o);
         }
         LinearLayout.LayoutParams cl = new LinearLayout.LayoutParams(-1, -2);
         cl.topMargin = dp(a, 12);
@@ -835,10 +925,22 @@ public class IvaStaffToolsPatch {
         yes.setOnClickListener(new View.OnClickListener() { @Override public void onClick(View v) { review(u, p, true, yes, close); } });
         no.setOnClickListener(new View.OnClickListener() {
             @Override public void onClick(View v) {
-                IvaClientPatch.styledChoice(a, "Отклонить инструмент?", "Клиенты его не увидят. Сотрудник увидит «Отклонён» и сможет исправить.",
+                IvaClientPatch.styledChoice(a, rejectTitle(p.edit), rejectText(p.edit),
                     new String[]{"Отклонить"}, new IvaClientPatch.Choice() { @Override public void pick(int i) { if (i == 0) review(u, p, false, no, close); } });
             }
         });
+    }
+
+    static String rejectTitle(boolean edit) { return edit ? "Отклонить правку?" : "Отклонить инструмент?"; }
+
+    static String rejectText(boolean edit) {
+        return edit ? "Клиенты продолжат видеть прежний вариант. Сотрудник увидит «Правка отклонена» и сможет исправить."
+            : "Клиенты его не увидят. Сотрудник увидит «Отклонён» и сможет исправить.";
+    }
+
+    static String reviewDone(boolean edit, boolean ok) {
+        return ok ? (edit ? "Правка опубликована — клиенты видят новый вариант" : "Опубликовано — клиенты видят")
+            : (edit ? "Правка отклонена — клиенты видят прежний вариант" : "Отклонено");
     }
 
     static void review(final Rev u, final Pending p, final boolean ok, final TextView btn) { review(u, p, ok, btn, null); }
@@ -861,7 +963,7 @@ public class IvaStaffToolsPatch {
                         try {
                             btn.setEnabled(true);
                             btn.setAlpha(1f);
-                            IvaStaffPatch.toast(u.a, fe.isEmpty() ? (ok ? "Опубликовано — клиенты видят" : "Отклонено") : fe);
+                            IvaStaffPatch.toast(u.a, fe.isEmpty() ? reviewDone(p.edit, ok) : fe);
                             if (fe.isEmpty()) try { IvaNotifyPatch.call(u.a, "loadCatalog"); } catch (Throwable ignore) {}   // каталог — с новым
                             if (fe.isEmpty() && done != null) done.run();     // 10.120: со страницы инструмента — назад к списку
                             reloadReview(u);
@@ -891,22 +993,22 @@ public class IvaStaffToolsPatch {
         }
         List<Pending> ps = parsePending(r.length > 1 ? r[1] : "");
         List<String> ids = new ArrayList<String>();
-        for (Pending p : ps) ids.add(p.id);
+        for (Pending p : ps) ids.add(p.key.isEmpty() ? p.id : p.key);        // 10.121: новая правка того же инструмента — снова уведомление
         SharedPreferences p = IvaNotifyPatch.prefs(c);
         String k = IvaNotifyPatch.key("seen_tr", email);
         Set<String> seen = IvaNotifyPatch.splitSet(p.getString(k, null));
         List<String> nw = IvaNotifyPatch.fresh(seen, ids);                                // первый раз — молча запоминаем
         p.edit().putString(k, IvaNotifyPatch.joinSet(IvaNotifyPatch.remember(seen, ids))).apply();
         if (nw.isEmpty() || !IvaNotifyPatch.on(c, IvaNotifyPatch.K_REV, true)) return ps.size();
-        String name = "", who = "";
-        for (Pending x : ps) if (x.id.equals(nw.get(0))) { name = x.name; who = x.staff; break; }
+        String name = "", who = "", nid = nw.get(0);
+        for (Pending x : ps) if ((x.key.isEmpty() ? x.id : x.key).equals(nw.get(0))) { name = x.name; who = x.staff; nid = x.id; break; }
         if (c instanceof Activity) {
             final Activity a = (Activity) c;
             a.runOnUiThread(new Runnable() {
                 @Override public void run() { try { Toast.makeText(a, "Инструмент на одобрение!", Toast.LENGTH_LONG).show(); } catch (Throwable ignore) {} }
             });
         }
-        IvaNotifyPatch.showNote(c, IvaNotifyPatch.CH_REV, ID_NOTE, noteTitle(nw.size()), noteText(nw.size(), name, who), OPEN, nw.get(0));
+        IvaNotifyPatch.showNote(c, IvaNotifyPatch.CH_REV, ID_NOTE, noteTitle(nw.size()), noteText(nw.size(), name, who), OPEN, nid);
         return ps.size();
         }
     }

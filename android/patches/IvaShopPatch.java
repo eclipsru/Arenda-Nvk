@@ -60,9 +60,12 @@ public class IvaShopPatch {
     static final String DATA_TITLE = "Данные проката", DATA_SUB = "Название, адрес, ИП, телефон и время работы";
     static final String L_NAME = "Название проката", L_ADDR = "Адрес организации", L_IP = "ИП организации",
         L_TEL = "Номер телефона (для связи с начальником)", L_TIME = "Время работы", L_DAYS = "Рабочие дни";
+    // 10.121: адрес выдачи проката (admins.address; штатное поле «Адрес выдачи» в «Моих данных» спрятано с 10.98)
+    static final String L_PICK = "Адрес пункта выдачи",
+        PICK_HINT = "Если пунктов выдачи ещё нет, по этому адресу один раз создастся первый пункт. Дальше пункты меняются в «Пунктах выдачи».";
     static final String NO_DB = "«ИП», телефон, рабочие дни и аватарка проката заработают после обновления базы (SQL 10.98)";
     static final String MOVED = "Название проката, адрес организации и время работы — в «Кабинет → Настройка проката → Данные проката»";
-    static final String COLS_OLD = "company,org_address,work_hours";
+    static final String COLS_OLD = "company,org_address,work_hours,address";
     static final String COLS_NEW = "org_ip,org_tel,work_days,org_avatar";
     static final int FROM_DEF = 9 * 60, TO_DEF = 18 * 60, ALL_DAYS = 127;
     static final String[] DAYS = {"Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"};
@@ -70,7 +73,7 @@ public class IvaShopPatch {
 
     /** Данные проката (как строка admins). from/to — минуты, -1 — не указано; days — биты Пн…Вс (0 — не указаны). */
     static final class Data {
-        String name = "", addr = "", ip = "", tel = "", avatar = "", hoursRaw = "";
+        String name = "", addr = "", ip = "", tel = "", avatar = "", hoursRaw = "", pick = "";
         int from = -1, to = -1, days = 0;
         boolean full;     // новые поля (SQL 10.98) есть в базе
     }
@@ -184,6 +187,7 @@ public class IvaShopPatch {
         d.full = full;
         d.name = val(r, "company");
         d.addr = val(r, "org_address");
+        d.pick = val(r, "address");
         d.hoursRaw = val(r, "work_hours");
         int[] t = parseTime(d.hoursRaw);
         if (t != null) { d.from = t[0]; d.to = t[1]; }
@@ -226,6 +230,26 @@ public class IvaShopPatch {
             b.append(",\"work_days\":").append(d.days & ALL_DAYS);
         }
         return b.append('}').toString();
+    }
+
+    /** 10.121: то же + адрес пункта выдачи (admins.address — штатная колонка, есть всегда). */
+    static String withPick(String body, String pick) {
+        if (body == null || !body.endsWith("}")) return body;
+        return body.substring(0, body.length() - 1) + ",\"address\":" + q(clean(pick)) + "}";
+    }
+
+    /** 10.121: график для первого пункта из «Данных проката»: Пн…Вс, выходной — -1; время не выбрано или дней нет — null. */
+    static int[][] pickHours(int days, int from, int to) {
+        if (from < 0 || to < 0 || (days & ALL_DAYS) == 0) return null;
+        int c = Math.min(to, 1439);
+        if (from >= c) return null;
+        int[] o = new int[7], cl = new int[7];
+        for (int i = 0; i < 7; i++) {
+            boolean on = (days & (1 << i)) != 0;
+            o[i] = on ? from : -1;
+            cl[i] = on ? c : -1;
+        }
+        return new int[][]{o, cl};
     }
 
     /** Ответ «такой колонки нет» (SQL 10.98 не применён). */
@@ -399,10 +423,10 @@ public class IvaShopPatch {
         });
         try { IvaPickupPatch.settingsRow(a, list, cText, cGray, cOrange); } catch (Throwable ignore) {}
         try { IvaStaffPatch.settingsRow(a, list, cText, cGray, cOrange); } catch (Throwable ignore) {}           // 10.115: «Сотрудники» — третьим
+        try { IvaStaffJournalPatch.settingsRow(a, list, cText, cGray, cOrange); } catch (Throwable ignore) {}    // 10.121: «Сводка по пунктам» — после «Сотрудников»
+        try { IvaStaffToolsPatch.settingsSection(a, list, cText, cGray, cOrange); } catch (Throwable ignore) {}   // 10.121: «На одобрении» — под «Сводкой»
         try { IvaRentPatch.settingsSection(a, list, cText, cGray, cOrange); } catch (Throwable ignore) {}
-        try { IvaStaffToolsPatch.settingsSection(a, list, cText, cGray, cOrange); } catch (Throwable ignore) {}   // 10.105
         try { IvaProkatPatch.settingsRow(a, list, cText, cGray, cOrange); } catch (Throwable ignore) {}         // 10.120: «Чаты пунктов у меня»
-        try { IvaStaffJournalPatch.settingsRow(a, list, cText, cGray, cOrange); } catch (Throwable ignore) {}    // 10.107: «Сводка по пунктам»
         try { IvaLogoPatch.settingsRow(a, list, cText, cGray, cOrange); } catch (Throwable ignore) {}            // 10.113: в самом низу
     }
 
@@ -460,8 +484,9 @@ public class IvaShopPatch {
         Data d = new Data();
         View[] avatar;
         TextView avatarHint, status, from, to, noDb;
-        EditText name, addr, ip, tel;
-        TextView nameE, addrE, ipE, telE, timeE;
+        EditText name, addr, ip, tel, pick;
+        TextView nameE, addrE, ipE, telE, timeE, pickE;
+        IvaPickupPatch.Point pickPt = new IvaPickupPatch.Point();   // 10.121: город и координаты из подсказки адреса
         TextView[] dayChips = new TextView[7];
         LinearLayout days;
         TextView save;
@@ -588,6 +613,25 @@ public class IvaShopPatch {
             pu.a = a; pu.cText = u.cText; pu.cGray = u.cGray; pu.cOrange = u.cOrange;
             IvaPickupPatch.hookSuggest(pu, u.addr, sug, new IvaPickupPatch.Point());
         } catch (Throwable ignore) {}
+        // 10.121: «Адрес пункта выдачи» — с теми же подсказками; пунктов нет — один раз создаст первый пункт
+        u.pick = field(u, list, L_PICK, "Город, улица, дом", InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_CAP_SENTENCES);
+        final LinearLayout pickSug = new LinearLayout(a);
+        pickSug.setOrientation(LinearLayout.VERTICAL);
+        pickSug.setVisibility(View.GONE);
+        Drawable psb = IvaSearchPatch.drawable(a, "bg_field");
+        if (psb != null) pickSug.setBackground(psb);
+        LinearLayout.LayoutParams psl = new LinearLayout.LayoutParams(-1, -2);
+        psl.topMargin = dp(a, 4);
+        list.addView(pickSug, psl);
+        list.addView(u.pickE = err(u));
+        TextView ph = IvaChiefPatch.text(a, PICK_HINT, 12f, u.cGray, false);
+        ph.setPadding(dp(a, 2), dp(a, 4), 0, 0);
+        list.addView(ph);
+        try {
+            IvaPickupPatch.Ui pu2 = new IvaPickupPatch.Ui();
+            pu2.a = a; pu2.cText = u.cText; pu2.cGray = u.cGray; pu2.cOrange = u.cOrange;
+            IvaPickupPatch.hookSuggest(pu2, u.pick, pickSug, u.pickPt);
+        } catch (Throwable ignore) {}
         u.ip = field(u, list, L_IP, "Например: ИП Иванов Иван Иванович", InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_CAP_WORDS);
         list.addView(u.ipE = err(u));
         u.tel = field(u, list, L_TEL, "+7 900 123-45-67", InputType.TYPE_CLASS_PHONE);
@@ -685,7 +729,7 @@ public class IvaShopPatch {
     }
 
     static void setEnabled(Ui u, boolean on) {
-        for (View v : new View[]{u.name, u.addr, u.ip, u.tel, u.from, u.to, u.save}) if (v != null) v.setEnabled(on);
+        for (View v : new View[]{u.name, u.addr, u.pick, u.ip, u.tel, u.from, u.to, u.save}) if (v != null) v.setEnabled(on);
         boolean extra = on && u.d.full;
         u.ip.setEnabled(extra);
         u.tel.setEnabled(extra);
@@ -696,6 +740,7 @@ public class IvaShopPatch {
     static void fill(Ui u) {
         u.name.setText(u.d.name);
         u.addr.setText(u.d.addr);
+        if (u.pick != null) u.pick.setText(u.d.pick);
         u.ip.setText(u.d.ip);
         u.tel.setText(u.d.tel);
         u.noDb.setVisibility(u.d.full ? View.GONE : View.VISIBLE);
@@ -734,17 +779,21 @@ public class IvaShopPatch {
         final Activity a = u.a;
         u.d.name = String.valueOf(u.name.getText());
         u.d.addr = String.valueOf(u.addr.getText());
+        u.d.pick = u.pick == null ? u.d.pick : String.valueOf(u.pick.getText());
         u.d.ip = String.valueOf(u.ip.getText());
         u.d.tel = String.valueOf(u.tel.getText()).trim();
         String ne = nameErr(u.d.name), ae = addrErr(u.d.addr), ie = u.d.full ? ipErr(u.d.ip) : "", te = u.d.full ? telErr(u.d.tel) : "";
         if (ne.isEmpty()) try { ne = IvaCensorPatch.fieldError(u.d.name); } catch (Throwable ignore) {}
         if (ae.isEmpty() && !clean(u.d.addr).isEmpty()) try { ae = IvaCensorPatch.fieldError(u.d.addr); } catch (Throwable ignore) {}
         if (ie.isEmpty() && !clean(u.d.ip).isEmpty()) try { ie = IvaCensorPatch.fieldError(u.d.ip); } catch (Throwable ignore) {}
+        String pe = addrErr(u.d.pick);
+        if (pe.isEmpty() && !clean(u.d.pick).isEmpty()) try { pe = IvaCensorPatch.fieldError(u.d.pick); } catch (Throwable ignore) {}
+        if (u.pickE != null) setErr(u.pickE, pe);
         String tm = timeErr(u.d.from, u.d.to);
         u.timeE.setTextColor(u.cRed);
         setErr(u.nameE, ne); setErr(u.addrE, ae); setErr(u.ipE, ie); setErr(u.telE, te);
         if (!tm.isEmpty() || u.d.from >= 0) setErr(u.timeE, tm);
-        if (!ne.isEmpty() || !ae.isEmpty() || !ie.isEmpty() || !te.isEmpty() || !tm.isEmpty()) {
+        if (!ne.isEmpty() || !ae.isEmpty() || !ie.isEmpty() || !te.isEmpty() || !tm.isEmpty() || !pe.isEmpty()) {
             u.status.setText("Проверьте поля, отмеченные красным");
             u.status.setTextColor(u.cRed);
             return;
@@ -753,7 +802,11 @@ public class IvaShopPatch {
         u.saving = true;
         u.save.setText("Сохраняем…");
         u.status.setText("");
-        final String body = body(u.d, u.d.full);
+        final String body = withPick(body(u.d, u.d.full), u.d.pick);
+        final String pickAddr = clean(u.d.pick);
+        final int[][] pickH = pickHours(u.d.days, u.d.from, u.d.to);
+        final IvaPickupPatch.Point pp = u.pickPt;
+        final String pickCo = clean(u.d.name);
         new Thread(new Runnable() {
             @Override public void run() {
                 String err = "";
@@ -762,6 +815,11 @@ public class IvaShopPatch {
                     if (r == null) err = "нет ответа сервера";
                     else if (!r[0].startsWith("2")) err = IvaClientPatch.serverMessage(r[0], r.length > 1 ? r[1] : "");
                 } catch (Throwable e) { err = IvaAvatarPatch.errText(e); }
+                String made = "";
+                if (err.isEmpty() && pickAddr.length() >= 5) {   // 10.121: пунктов ещё нет — первый пункт по этому адресу (один раз)
+                    try { made = IvaPickupPatch.first(a, pickAddr, pp, pickH, pickCo); } catch (Throwable ignore) {}
+                }
+                final String fmade = made;
                 final String ferr = err;
                 a.runOnUiThread(new Runnable() {
                     @Override public void run() {
@@ -776,7 +834,8 @@ public class IvaShopPatch {
                         syncNative(a, u.d);
                         u.status.setText("Сохранено");
                         u.status.setTextColor(u.cGray);
-                        toast(a, "Данные проката сохранены");
+                        toast(a, fmade.isEmpty() ? "Данные проката сохранены"
+                            : "Сохранено. Создан первый пункт выдачи «" + fmade + "» — его можно изменить в «Пунктах выдачи»");
                     }
                 });
             }
@@ -789,11 +848,14 @@ public class IvaShopPatch {
             Object c = IvaClientPatch.get(a, "adCompany"), o = IvaClientPatch.get(a, "adOrgAddr"), h = IvaClientPatch.get(a, "adHours");
             if (c instanceof EditText) ((EditText) c).setText(clean(d.name));
             if (o instanceof EditText) ((EditText) o).setText(clean(d.addr));
+            Object ad = IvaClientPatch.get(a, "adAddr");                   // 10.121: адрес выдачи — тоже, чтобы штатное «Сохранить» не вернуло прежний
+            if (ad instanceof EditText) ((EditText) ad).setText(clean(d.pick));
             if (h instanceof EditText) ((EditText) h).setText(d.hoursRaw);
             Object p = IvaClientPatch.get(a, "admProfile");
             if (p instanceof JSONObject) {
                 ((JSONObject) p).put("company", clean(d.name));
                 ((JSONObject) p).put("org_address", clean(d.addr));
+                ((JSONObject) p).put("address", clean(d.pick));
                 ((JSONObject) p).put("work_hours", d.hoursRaw);
             }
         } catch (Throwable ignore) {}

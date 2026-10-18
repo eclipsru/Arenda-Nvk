@@ -1311,7 +1311,8 @@ final class IvaChatPatch {
         }
         if (adm && !IvaProkatPatch.ownerSees(a)) {                 // 10.120: владелец выключил «Чаты пунктов у меня»
             ArrayList<Msg> keep = new ArrayList<Msg>();
-            for (Msg m : asc) if (!isPoint(m.tool)) keep.add(m);
+            java.util.Set<String> ans = IvaProkatPatch.answeredPoints(a);   // 10.121: в пункте ещё никто не отвечает — переписка у владельца
+            for (Msg m : asc) if (!isPoint(m.tool) || !IvaProkatPatch.hideForOwner(ans, IvaProkatPatch.idOf(clean(m.tool)))) keep.add(m);
             asc = keep;
         }
         // Голосовые, записанные в открытой переписке по инструменту, — метка на телефоне и (если есть SQL) в базе.

@@ -640,7 +640,18 @@ public final class IvaNotifyPatch {
             + "&is_read=eq.false&order=created_at.desc&limit=50";
         JSONArray rows;
         if (admin && !IvaProkatPatch.ownerSees(a)) {   // 10.120: «Чаты пунктов у меня» выключены — о переписках пунктов не сообщаем
-            try { rows = getArr(a, mq + "&point_id=is.null"); } catch (Throwable e) { rows = getArr(a, mq); }   // без SQL 10.120 — как раньше
+            try {
+                rows = getArr(a, mq.replace("select=id,", "select=id,point_id,"));
+                java.util.Set<String> ans = IvaProkatPatch.answeredPoints(a);   // 10.121: в пункте ещё никто не отвечает — сообщаем владельцу
+                JSONArray keep = new JSONArray();
+                for (int i = 0; i < rows.length(); i++) {
+                    JSONObject m = rows.optJSONObject(i);
+                    if (m == null) continue;
+                    String pid = m.isNull("point_id") ? "" : m.optString("point_id", "");
+                    if (pid.isEmpty() || !IvaProkatPatch.hideForOwner(ans, pid)) keep.put(m);
+                }
+                rows = keep;
+            } catch (Throwable e) { rows = getArr(a, mq); }   // без SQL 10.120 — как раньше
         } else rows = getArr(a, mq);
         List<String> ids = new ArrayList<String>(), created = new ArrayList<String>();
         List<JSONObject> list = new ArrayList<JSONObject>();

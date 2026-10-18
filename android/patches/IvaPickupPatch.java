@@ -74,9 +74,9 @@ public class IvaPickupPatch {
     // 10.113 (просьба владельца 17.10.2026): «Инструменты сотрудников» — у каждого пункта своим выключателем
     // (SQL 20261104_point_staff_publish.sql); поля «Email проката» в форме больше нет.
     static final String PUB_TITLE = "Инструменты сотрудников — после моего одобрения";
-    static final String PUB_SUB = "Включено: новый инструмент, который добавит сотрудник этого пункта, клиенты увидят только "
-        + "после вашего одобрения («Настройка проката» → «На одобрении»). Выключено: сразу, без одобрения. "
-        + "Правки уже опубликованных — всегда сразу.";
+    static final String PUB_SUB = "Включено: новый инструмент и правку уже опубликованного, которые сделает сотрудник этого пункта, "
+        + "клиенты увидят только после вашего одобрения («Настройка проката» → «На одобрении»); до этого — прежний вариант. "
+        + "Выключено: сразу, без одобрения.";
     static final String NO_PUB = "Выключатель «Инструменты сотрудников» заработает после обновления базы (SQL 10.113)";
     /** В базе есть колонка staff_publish (последняя загрузка). Без SQL 10.113 — как в 10.112 (email вписываем свой). */
     static volatile boolean pubDb = true;
@@ -1103,6 +1103,39 @@ public class IvaPickupPatch {
     }
 
     /** Подсказки адреса: после паузы в наборе (от 3 букв) — список под полем; выбрали — адрес и координаты. */
+    // ───────────── 10.121: первый пункт из «Данных проката» ─────────────
+
+    /** Тело rpc/iva_pickup_first: адрес, город и координаты подсказки (если выбрана), график Пн…Вс или null. */
+    static String firstBody(String addr, Point p, int[][] hours) {
+        StringBuilder b = new StringBuilder("{\"p_address\":").append(IvaShopPatch.q(addr == null ? "" : addr.trim()));
+        b.append(",\"p_city\":").append(IvaShopPatch.q(p == null || p.city == null ? "" : p.city.trim()));
+        b.append(",\"p_lat\":").append(p == null || p.lat == null || p.lng == null ? "null" : String.valueOf(p.lat));
+        b.append(",\"p_lng\":").append(p == null || p.lat == null || p.lng == null ? "null" : String.valueOf(p.lng));
+        for (int k = 0; k < 2; k++) {
+            b.append(k == 0 ? ",\"p_open\":" : ",\"p_close\":");
+            int[] h = hours == null || hours.length < 2 ? null : hours[k];
+            if (h == null || h.length != 7) { b.append("null"); continue; }
+            b.append('[');
+            for (int i = 0; i < 7; i++) b.append(i == 0 ? "" : ",").append(h[i]);
+            b.append(']');
+        }
+        return b.append('}').toString();
+    }
+
+    /** Ответ iva_pickup_first: id созданного пункта или null (пункты уже есть / первый уже создавали). */
+    static boolean firstMade(String resp) {
+        String t = resp == null ? "" : resp.trim().replace("\"", "");
+        return t.length() >= 32 && !"null".equals(t);
+    }
+
+    /** Фон. Создаёт первый пункт, если у проката их ещё нет (один раз; дальше — «Пункты выдачи»). Имя пункта или "". */
+    static String first(Activity a, String addr, Point p, int[][] hours, String company) throws Exception {
+        String[] r = IvaClientPatch.apiCall(a, "/rest/v1/rpc/iva_pickup_first", "POST", firstBody(addr, p, hours), true);
+        if (r == null || !r[0].startsWith("2") || !firstMade(r.length > 1 ? r[1] : "")) return "";
+        String co = company == null ? "" : company.trim();
+        return co.isEmpty() ? "Пункт выдачи" : co;
+    }
+
     static void hookSuggest(final Ui u, final EditText addr, final LinearLayout sug, final Point p) {
         final Activity a = u.a;
         final Handler h = new Handler(Looper.getMainLooper());

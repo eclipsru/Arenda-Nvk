@@ -1979,7 +1979,7 @@ public final class IvaOrderPatch {
         if (call == null || !(call.getParent() instanceof ViewGroup)) return;
         ViewGroup list = (ViewGroup) call.getParent();
         View row = list.findViewWithTag(ARCH_ROW_TAG);
-        boolean client = IvaClientPatch.isClient(a);
+        boolean client = IvaClientPatch.isClient(a) && !IvaStaffPatch.staffNow;   // 10.121: у сотрудника — в «Моём пункте»
         if (row == null) {
             if (!client) return;
             row = archRowView(a);

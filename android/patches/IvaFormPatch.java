@@ -1158,5 +1158,38 @@ final class IvaFormPatch {
         if (dv != null) dv.setVisibility(View.GONE);
         mine = null;                                                                  // новый инструмент — в образцах
         mineTriedAt = 0;
+        try { resetForm(a); } catch (Throwable ignore) {}                             // 10.121: форма «Добавить» — пустая
+    }
+
+    // 10.121: штатная «Опубликовать» не очищает форму «Добавить» — после публикации в ней оставался прежний инструмент,
+    // и его «правка» там (особенно у сотрудника) публиковала второе объявление. Опубликовано — форма снова пустая.
+    static final String[] FORM_TEXTS = {"atName", "atPrice", "atDep", "atDescr", "atTerms", "atDelPrice"};
+
+    @SuppressWarnings("unchecked")
+    static void resetForm(Activity a) {
+        for (String f : FORM_TEXTS) {
+            Object o = IvaClientPatch.get(a, f);
+            if (o instanceof TextView) ((TextView) o).setText("");
+        }
+        Object pics = IvaClientPatch.get(a, "atPics");
+        if (pics instanceof ArrayList) ((ArrayList) pics).clear();
+        setField(a, "atCatKey", "");
+        setField(a, "atSubKey", "");
+        setField(a, "atDeliv", Boolean.FALSE);
+        Object c = IvaClientPatch.get(a, "atCat"), s = IvaClientPatch.get(a, "atSub");
+        if (c instanceof TextView) ((TextView) c).setText(CAT_EMPTY);
+        if (s instanceof TextView) ((TextView) s).setText(SUB_EMPTY);
+        for (String m : new String[]{"paintDelToggle", "renderAtPhotos"})
+            try { Method mm = a.getClass().getDeclaredMethod(m); mm.setAccessible(true); mm.invoke(a); } catch (Throwable ignore) {}
+        lastSaved = "";
+        picsSig = "";
+    }
+
+    static void setField(Activity a, String name, Object v) {
+        try {
+            java.lang.reflect.Field f = a.getClass().getDeclaredField(name);
+            f.setAccessible(true);
+            f.set(a, v);
+        } catch (Throwable ignore) {}
     }
 }

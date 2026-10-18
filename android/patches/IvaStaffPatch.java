@@ -939,7 +939,13 @@ public class IvaStaffPatch {
     }
 
     /** Блок над «Настройками» (или над «Инструкцией»): приглашение, «Мой пункт» или ничего. */
+    /** 10.121: вошёл сотрудник (принял приглашение) — «Архив заявок» в «Моём пункте» внизу, «Хочу сдавать» убран. */
+    static volatile boolean staffNow;
+    static volatile boolean lendHidden;
+
     static void drawMe(final Activity a, final Me m) {
+        staffNow = m != null && "active".equals(m.status);
+        try { staffRows(a); } catch (Throwable ignore) {}
         int id = a.getResources().getIdentifier("profHelp", "id", a.getPackageName());
         View help = id == 0 ? null : a.findViewById(id);
         if (help == null || !(help.getParent() instanceof LinearLayout)) return;
@@ -963,6 +969,17 @@ public class IvaStaffPatch {
         if ("invited".equals(m.status)) holder.addView(inviteCard(a, m));
         else if ("active".equals(m.status)) holder.addView(mineRow(a, m));
         else box.removeView(holder);
+    }
+
+    /** 10.121: у сотрудника в кабинете нет «Хочу сдавать инструмент» и клиентского «Архива заявок» (он — в «Моём пункте»). */
+    static void staffRows(Activity a) {
+        int lid = a.getResources().getIdentifier("profLend", "id", a.getPackageName());
+        View lend = lid == 0 ? null : a.findViewById(lid);
+        if (lend != null) {
+            if (staffNow) { if (lend.getVisibility() != View.GONE) { lend.setVisibility(View.GONE); lendHidden = true; } }
+            else if (lendHidden) { lend.setVisibility(View.VISIBLE); lendHidden = false; }
+        }
+        IvaOrderPatch.profileArchiveRow(a);
     }
 
     static List<String> names(List<IvaPickupPatch.Point> ps) {
@@ -1118,5 +1135,10 @@ public class IvaStaffPatch {
         if (IvaStaffToolsPatch.want(m.status, m.r)) {                   // 10.113: «Вид раздела с логотипом» — в самом низу
             try { IvaLogoPatch.settingsRow(a, pg.list, cText, cGray, color(a, "orange", 0xffff8f1f)); } catch (Throwable ignore) {}
         }
+        try {                                                           // 10.121: «Архив заявок» сотрудника — в самом низу «Моего пункта»
+            LinearLayout.LayoutParams al = new LinearLayout.LayoutParams(-1, -2);
+            al.topMargin = dp(a, 12);
+            pg.list.addView(IvaOrderPatch.archRowView(a), al);
+        } catch (Throwable ignore) {}
     }
 }

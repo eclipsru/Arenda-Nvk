@@ -219,6 +219,7 @@ public final class IvaPatch {
 
     public static String publishError(String msg) {
         if (msg == null) return null;
+        try { String ph = IvaStaffToolsPatch.dbPhrase(msg); if (ph != null) return ph; } catch (Throwable ignore) {}   // 10.121: тот же инструмент второй раз
         String m = msg.toLowerCase(Locale.ROOT);
         if (m.contains("row-level security") || m.contains("42501") || m.contains("permission denied")) {
             // 10.116: сотрудник — коротко здесь, причина словами окном (база говорит, чего не хватает); про арендодателя — не ему
