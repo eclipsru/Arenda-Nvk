@@ -493,10 +493,11 @@ public class IvaOrderViewPatch {
             if (i > 0) card.addView(divider(a));
             if (ps.length() > 1) {
                 String co = p.optString("company", "").trim();
+                String term = sameCompany(ps, co) ? termText(p, orderDays) : "";      // 10.123: части одного проката — по срокам
                 LinearLayout hr = new LinearLayout(a);
                 hr.setOrientation(LinearLayout.HORIZONTAL);
                 hr.setGravity(Gravity.CENTER_VERTICAL);
-                hr.addView(tx(a, co.isEmpty() ? "Прокат" : "«" + co + "»", 14f, col(a, "text", 0xfff2f4f8), true), new LinearLayout.LayoutParams(0, -2, 1f));
+                hr.addView(tx(a, (co.isEmpty() ? "Прокат" : "«" + co + "»") + term, 14f, col(a, "text", 0xfff2f4f8), true), new LinearLayout.LayoutParams(0, -2, 1f));
                 hr.addView(badge(a, kind(p.optString("status", ""), endOf(p, orderDays), now)));
                 LinearLayout.LayoutParams hl = new LinearLayout.LayoutParams(-1, -2);
                 hl.topMargin = dp(a, 10);
@@ -548,6 +549,22 @@ public class IvaOrderViewPatch {
         cl.topMargin = dp(a, 14);
         body.addView(card, cl);
         try { IvaOrderEditPatch.block(a, body, o, adm); } catch (Throwable ignore) {}   // 10.122: отмена / изменение заявки
+    }
+
+    /** 10.123: несколько частей одного проката (разные сроки после «Выдал»). */
+    static boolean sameCompany(JSONArray ps, String co) {
+        int n = 0;
+        for (int i = 0; ps != null && i < ps.length(); i++) {
+            JSONObject p = ps.optJSONObject(i);
+            if (p != null && p.optString("company", "").trim().equals(co)) n++;
+        }
+        return n > 1;
+    }
+
+    /** « · срок 3 дня» (срок части) или «». */
+    static String termText(JSONObject p, int orderDays) {
+        int d = p == null ? 0 : partDays(p.optJSONArray("items"), orderDays);
+        return d > 0 ? " · срок " + IvaOrderPatch.daysText(d) : "";
     }
 
     /** Карточка заявки у владельца (штатный список заявок клиента): плашка и «№», инструменты с фото вместо строки названий. */

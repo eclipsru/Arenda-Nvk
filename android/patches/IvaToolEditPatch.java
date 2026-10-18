@@ -27,7 +27,7 @@ public class IvaToolEditPatch {
     static final String[][] LABELS = {
         {"tePhotos", "Фотографии · до 5, первое — на обложке"}, {"teName", "Название инструмента *"}, {"teCat", "Категория *"},
         {"teSub", "Подкатегория"}, {"tePrice", "Цена за сутки, ₽ *"}, {"teDep", "Залог, ₽"}, {"teDescr", "Описание"},
-        {"teTerms", "Условия аренды"}, {"teDelPrice", "Доставка, ₽ за 1 км"},
+        {"teTerms", "Условия аренды"}, {"teDelPrice", "Доставка, ₽ за 1 км в одну сторону"},
     };
     static final String COLS = "id,cat,sub,active,name,price,deposit,descr,terms,imgs,img,delivery,delivery_price";
     static final String DEL_TEXT = "Удалить инструмент";

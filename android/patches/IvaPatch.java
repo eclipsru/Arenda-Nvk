@@ -71,6 +71,7 @@ public final class IvaPatch {
     static volatile boolean round = false;   // выбрано «туда и обратно»
     static volatile String base = null;      // последний расчёт доставки «в одну сторону»
     static volatile String shown = null;     // что мы вернули приложению (с учётом ×2)
+    static volatile String baseRound = null; // 10.123: тот же расчёт «туда и обратно»
     static boolean limitedShown = false;
 
     private IvaPatch() {}
@@ -81,7 +82,9 @@ public final class IvaPatch {
         // 10.55: доставка — средняя по ценам за км инструментов заявки (штатно — сумма)
         String one = normalize(IvaOrderPatch.onPrice(s));
         base = one;
-        String out = round ? doubled(one) : one;
+        String rt = IvaOrderPatch.lastRound;                        // 10.123: «обратно» — за каждым сроком
+        baseRound = rt != null ? normalize(rt) : doubled(one);
+        String out = round ? baseRound : one;
         shown = out;
         return out;
     }
@@ -132,9 +135,9 @@ public final class IvaPatch {
             View rg = (View) get(a, "rgMethod");
             if (rb == null || rg == null) return;
 
-            double rate = minRate(a);
+            double rate = maxRate(a);                                 // 10.123: считаем по наибольшей цене за км
             String label = rate > 0
-                ? "\u0414\u043e\u0441\u0442\u0430\u0432\u043a\u0430 \u00b7 \u043e\u0442 " + money(Math.round(rate)) + RUB + "/\u043a\u043c"  // Доставка · от N ₽/км
+                ? "Доставка · " + money(Math.round(rate)) + RUB + " за 1 км в одну сторону"
                 : "\u0414\u043e\u0441\u0442\u0430\u0432\u043a\u0430";
             if (!label.contentEquals(rb.getText())) rb.setText(label);
 
@@ -168,7 +171,8 @@ public final class IvaPatch {
             Object cur = get(a, "delivTxt");
             String b = base;
             if (b != null && cur != null && cur.equals(shown)) {
-                String out = on ? doubled(b) : b;
+                String br = baseRound;
+                String out = on ? (br != null ? br : doubled(b)) : b;
                 shown = out;
                 set(a, "delivTxt", out);
             }
@@ -176,6 +180,11 @@ public final class IvaPatch {
             m.setAccessible(true);
             m.invoke(a);
         } catch (Throwable ignore) {}
+    }
+
+    /** 10.123: наибольшая цена за км среди выбранных инструментов с доставкой (по ней считается «туда»). */
+    static double maxRate(Activity a) {
+        try { return IvaOrderPatch.maxRate(IvaOrderPatch.lines(a)); } catch (Throwable e) { return 0; }
     }
 
     /** Минимальная цена за км среди выбранных инструментов с доставкой. */

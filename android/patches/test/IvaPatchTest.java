@@ -2575,6 +2575,7 @@ public class IvaPatchTest {
         prokat120();                                                  // 10.120: страница проката, чат пункта, «На одобрении»
         v121();                                                       // 10.121: первый пункт, правки на одобрение, заявки целиком
         v122();                                                       // 10.122: удаление сотрудником, «Мой инструмент», чат, отмена заявки
+        v123();                                                       // 10.123: доставка по наибольшей цене, «обратно» за каждым сроком, карточки
         if (fail > 0) { System.out.println("ошибок: " + fail); System.exit(1); }
         System.out.println("все проверки IvaPatch пройдены");
     }
@@ -3510,5 +3511,40 @@ public class IvaPatchTest {
             "cancelled|closed|Отменена клиентом|4|Отменена клиентом|cancelled|closed");
         eq("10.122: адреса функций заявок", IvaOrderEditPatch.CANCEL_RPC + "|" + IvaOrderEditPatch.EDIT_RPC + "|" + IvaOrderEditPatch.DECIDE_RPC,
             "/rest/v1/rpc/iva_order_cancel|/rest/v1/rpc/iva_order_edit|/rest/v1/rpc/iva_order_edit_decide");
+    }
+
+    static void v123() {
+        String NB = "\u00a0";
+        java.util.List<IvaOrderPatch.Line> ls = new java.util.ArrayList<IvaOrderPatch.Line>();
+        ls.add(IvaOrderPatch.line("ta", "Дрель", 500, 0, true, 30, false, "adm@x.ru", 3));
+        ls.add(IvaOrderPatch.line("tb", "Пила", 700, 0, true, 50, false, "adm@x.ru", 5));
+        String[] d = IvaOrderPatch.delivery("960 ₽ (12.0 км)", ls);             // штатно: 12 км × (30 + 50)
+        eq("10.123: туда — км × наибольшая цена (12 × 50)", d[0], "600 ₽ (12.0 км)");
+        eq("10.123: туда и обратно, сроки разные — обратно за каждым сроком", d[1],
+            "1" + NB + "560 ₽ (туда 600 ₽; обратно за каждым сроком: 360 ₽ через 3 дня + 600 ₽ через 5 дней; 12.0 км в одну сторону)");
+        eq("10.123: итог читается по первой сумме", IvaPatch.rub(d[1]), 1560);
+        java.util.List<IvaOrderPatch.Line> same = new java.util.ArrayList<IvaOrderPatch.Line>();
+        same.add(IvaOrderPatch.line("ta", "Дрель", 500, 0, true, 30, false, "adm@x.ru", 3));
+        same.add(IvaOrderPatch.line("tb", "Пила", 700, 0, true, 50, false, "adm@x.ru", 3));
+        String[] s2 = IvaOrderPatch.delivery("1 200 ₽ (15.0 км)", same);
+        eq("10.123: срок один — туда и обратно = 2 × км × наибольшая", s2[0] + " | " + s2[1],
+            "750 ₽ (15.0 км) | 1" + NB + "500 ₽ (туда и обратно: 2 × 750 ₽, 15.0 км в одну сторону)");
+        java.util.List<IvaOrderPatch.Line> three = new java.util.ArrayList<IvaOrderPatch.Line>(ls);
+        three.add(IvaOrderPatch.line("tc", "Миксер", 300, 0, true, 40, false, "adm@x.ru", 3));
+        three.add(IvaOrderPatch.line("s1", "Услуга", 300, 0, true, 99, true, "adm@x.ru", 7));
+        String[] s3 = IvaOrderPatch.delivery("1 440 ₽ (12.0 км)", three);       // 12 × (30 + 50 + 40); услуга не считается
+        eq("10.123: в сроке — наибольшая цена этого срока, количество и услуги не считаются", s3[0] + " | " + s3[1],
+            "600 ₽ (12.0 км) | 1" + NB + "680 ₽ (туда 600 ₽; обратно за каждым сроком: 480 ₽ через 3 дня + 600 ₽ через 5 дней; 12.0 км в одну сторону)");
+        eq("10.123: без цены / не нашли адрес — как было", IvaOrderPatch.delivery("≈12.0 км — цену за километр уточнит владелец", ls) == null
+            && IvaOrderPatch.delivery("адрес не найден — уточните адрес", ls) == null && IvaOrderPatch.delivery("960 ₽ (12.0 км)", new java.util.ArrayList<IvaOrderPatch.Line>()) == null, true);
+        eq("10.123: наибольшая цена за км (подпись)", IvaOrderPatch.maxRate(three) + "|" + IvaOrderPatch.maxRate(null), "50.0|0.0");
+        eq("10.123: без окна — onPrice как было, «обратно» не задано", IvaOrderPatch.onPrice("960 ₽ (12.0 км)") + "|" + IvaOrderPatch.lastRound, "960 ₽ (12.0 км)|null");
+        IvaPatch.round = true;
+        eq("10.123: без окна — туда и обратно как раньше (×2)", IvaPatch.onPrice("600 ₽ (12.0 км)"), "1" + NB + "200 ₽ (туда и обратно: 2 × 600 ₽, 12.0 км в одну сторону)");
+        IvaPatch.round = false;
+        eq("10.123: подписи цены доставки", IvaFormPatch.HINTS[5][1] + "|" + IvaToolEditPatch.LABELS[8][1], "Доставка, ₽ за 1 км в одну сторону|Доставка, ₽ за 1 км в одну сторону");
+        eq("10.123: плашка состояния инструмента", IvaMyToolsPatch.statusKind("Опубликован") + "" + IvaMyToolsPatch.statusKind("Скрыт") + IvaMyToolsPatch.statusKind("Отклонён")
+            + IvaMyToolsPatch.statusKind("Правка отклонена") + IvaMyToolsPatch.statusKind("На одобрении") + IvaMyToolsPatch.statusKind("Ждёт удаления")
+            + IvaMyToolsPatch.statusKind(""), "0122331");
     }
 }

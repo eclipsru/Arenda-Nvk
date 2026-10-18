@@ -161,6 +161,63 @@ public final class IvaOrderPatch {
         return money(Math.round(r / (double) n)) + s.substring(i);
     }
 
+    // ── 10.123: доставка по просьбе владельца (цена за км — «в одну сторону») ──
+    //  • только «туда»: км × наибольшая цена за км среди инструментов заявки (количество не учитываем);
+    //  • туда и обратно, срок у всех один: 2 × км × наибольшая цена;
+    //  • туда и обратно, сроки разные: «туда» — км × наибольшая цена, обратно — отдельная поездка за каждым сроком
+    //    (км × наибольшая цена среди инструментов этого срока).
+    //  Км: штатная строка «N ₽ (X км)» = км × Σ цен за км (прокат в заявке один, км общие) → км = N / Σ.
+    static volatile String lastRound;      // «туда и обратно» по последнему расчёту (null — штатный ×2)
+
+    /** {туда, туда и обратно} или null (нет суммы — оставляем как было). */
+    static String[] delivery(String s, List<Line> ls) {
+        if (s == null || ls == null) return null;
+        int i = s.indexOf(IvaPatch.RUB);
+        long r = IvaPatch.rub(s);
+        if (i <= 0 || r <= 0) return null;
+        double sum = 0, max = 0;
+        java.util.TreeMap<Integer, Double> back = new java.util.TreeMap<Integer, Double>();
+        for (Line l : ls) {
+            if (l.srv || !l.deliv || l.dprice <= 0) continue;
+            sum += l.dprice;
+            max = Math.max(max, l.dprice);
+            Double m = back.get(l.days);
+            if (m == null || l.dprice > m) back.put(l.days, l.dprice);
+        }
+        if (sum <= 0 || max <= 0) return null;
+        double km = r / sum;
+        String tail = s.substring(i + IvaPatch.RUB.length()).trim();
+        String kmText = tail.startsWith("(") && tail.endsWith(")") ? tail.substring(1, tail.length() - 1).trim() : tail;
+        long there = Math.round(km * max);
+        String one = money(there) + IvaPatch.RUB + (tail.isEmpty() ? "" : " " + tail);
+        StringBuilder b = new StringBuilder();
+        if (back.size() <= 1) {
+            b.append(money(there * 2)).append(IvaPatch.RUB).append(" (туда и обратно: 2 × ").append(money(there)).append(IvaPatch.RUB);
+            if (!kmText.isEmpty()) b.append(", ").append(kmText).append(" в одну сторону");
+        } else {
+            long total = there;
+            StringBuilder bk = new StringBuilder();
+            for (Map.Entry<Integer, Double> e : back.entrySet()) {
+                long v = Math.round(km * e.getValue());
+                total += v;
+                if (bk.length() > 0) bk.append(" + ");
+                bk.append(money(v)).append(IvaPatch.RUB).append(" через ").append(daysText(e.getKey()));
+            }
+            b.append(money(total)).append(IvaPatch.RUB).append(" (туда ").append(money(there)).append(IvaPatch.RUB)
+             .append("; обратно за каждым сроком: ").append(bk);
+            if (!kmText.isEmpty()) b.append("; ").append(kmText).append(" в одну сторону");
+        }
+        b.append(')');
+        return new String[]{one, b.toString()};
+    }
+
+    /** Наибольшая цена за км среди инструментов с доставкой (подпись «Доставка · N ₽ за 1 км в одну сторону»). */
+    static double maxRate(List<Line> ls) {
+        double m = 0;
+        for (Line l : ls == null ? new ArrayList<Line>() : ls) if (!l.srv && l.deliv && l.dprice > m) m = l.dprice;
+        return m;
+    }
+
     static long delivRub(String delivTxt) {
         if (delivTxt == null || delivTxt.indexOf(IvaPatch.RUB) < 0) return 0;
         long r = IvaPatch.rub(delivTxt);
@@ -451,11 +508,14 @@ public final class IvaOrderPatch {
         });
     }
 
-    /** Из IvaPatch.onPrice: доставка — средняя по ценам за км инструментов заявки (а не сумма). */
+    /** Из IvaPatch.onPrice: «туда» — км × наибольшая цена за км (10.123); «туда и обратно» — в lastRound. */
     public static String onPrice(String s) {
+        lastRound = null;
         try {
             Activity a = act == null ? null : act.get();
             if (a == null || s == null) return s;
+            String[] d = delivery(s, lines(a));
+            if (d != null) { lastRound = d[1]; return d[0]; }
             return averaged(s, rateCount(lines(a)));
         } catch (Throwable e) {
             return s;
@@ -608,7 +668,7 @@ public final class IvaOrderPatch {
         }
         // состав доставки поменялся, а адрес уже введён — пересчитать (штатно пересчёт только при вводе адреса)
         StringBuilder sig = new StringBuilder();
-        for (Line l : ls) if (l.deliv && !l.srv) sig.append(l.key).append(';');
+        for (Line l : ls) if (l.deliv && !l.srv) sig.append(l.key).append(':').append(l.days).append(';');   // 10.123: срок меняет «обратно»
         String s = sig.toString();
         if (!s.equals(delivSig)) {
             boolean first = delivSig.isEmpty() && s.isEmpty();

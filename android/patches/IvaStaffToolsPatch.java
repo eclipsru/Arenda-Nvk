@@ -267,7 +267,7 @@ public class IvaStaffToolsPatch {
         if (cat.isEmpty()) cat = js(j, "cat");
         String kind = kindTitle == null || kindTitle.trim().isEmpty() ? js(j, "kind") : kindTitle.trim();
         String del = j.optBoolean("delivery", false)
-            ? (rub(js(j, "delivery_price")).isEmpty() ? "Есть" : "Есть, " + rub(js(j, "delivery_price")) + " за 1 км") : "Нет, только самовывоз";
+            ? (rub(js(j, "delivery_price")).isEmpty() ? "Есть" : "Есть, " + rub(js(j, "delivery_price")) + " за 1 км в одну сторону") : "Нет, только самовывоз";
         String[][] rows = {
             {"Название", js(j, "name")}, {"Категория", cat}, {"Вид", kind}, {"Модель", js(j, "model_text")},
             {"Цена", priceText(js(j, "price"))}, {"Залог", rub(js(j, "deposit"))}, {"Описание", js(j, "descr")},

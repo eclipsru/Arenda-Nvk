@@ -2749,7 +2749,41 @@ try {
     assert.ok(!/^\s{0,1}UPDATE\s+public\.tools\b/im.test(sq.replace(/--[^\n]*/g, '')) && !/UPDATE\s+public\.tools\b/i.test(rb.replace(/--[^\n]*/g, '')),
       'SQL 20261113: строки tools при применении и откате не меняются (trg_tool_owner); перенос — только функцией под входом владельца');
     assert.ok((tp.match(/eq\("10\.122: /g) || []).length >= 25 && tp.includes('v122();'), 'IvaPatchTest: проверки 10.122');
-    assert.ok(/NEW_NAME: '10\.122'/.test(wf) && /NEW_CODE: '196'/.test(wf), 'сборка 10.122 (196)');
+    assert.ok(Number((/NEW_CODE: '(\d+)'/.exec(wf) || [])[1]) >= 196, 'сборка 10.122 (196) или новее');
+  }
+  // 10.123 (просьба владельца 18.10.2026): разные сроки в одной заявке — после «Выдал» у каждого срока своя «Вернули»
+  // и таймер (делит база); доставка: «туда» — км × наибольшая цена за км, «обратно» — за каждым сроком; подпись
+  // «₽ за 1 км в одну сторону»; «Мой инструмент» — карточки с фото, ценой и состоянием
+  {
+    const strip = (t) => t.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '');
+    const wf = R('.github/workflows/build-apk.yml'), ap = R('android/patches/apply.py');
+    const op = R('android/patches/IvaOrderPatch.java'), ip = R('android/patches/IvaPatch.java'), mt = strip(R('android/patches/IvaMyToolsPatch.java'));
+    const ov = R('android/patches/IvaOrderViewPatch.java'), fp = R('android/patches/IvaFormPatch.java'), te = R('android/patches/IvaToolEditPatch.java');
+    const sk = R('android/patches/IvaStaffToolsPatch.java');
+    const sq = R('supabase/migrations/20261114_v123.sql'), rb = R('supabase/migrations/20261114_v123_rollback.sql');
+    const chk = R('tools/check.sh'), tp = R('android/patches/test/IvaPatchTest.java');
+    assert.ok(!/IvaOrderPatch|IvaMyToolsPatch|IvaOrderViewPatch/.test(ap), '10.123: без новых вставок в smali');
+    assert.ok(op.includes('String[] d = delivery(s, lines(a));') && op.includes('if (d != null) { lastRound = d[1]; return d[0]; }')
+      && op.includes('static String[] delivery(String s, List<Line> ls) {') && op.includes('double km = r / sum;')
+      && op.includes('sig.append(l.key).append(\':\').append(l.days).append(\';\');'),
+      '10.123: доставка — км из штатного расчёта, «туда» по наибольшей цене, срок меняет «обратно» (пересчёт)');
+    assert.ok(ip.includes('String rt = IvaOrderPatch.lastRound;') && ip.includes('baseRound = rt != null ? normalize(rt) : doubled(one);')
+      && ip.includes('String out = on ? (br != null ? br : doubled(b)) : b;') && ip.includes('" за 1 км в одну сторону"'),
+      '10.123: «Туда и обратно» — по срокам (без расчёта — как раньше ×2), подпись «за 1 км в одну сторону»');
+    assert.ok(fp.includes('{"atDelPrice", "Доставка, ₽ за 1 км в одну сторону"}') && te.includes('{"teDelPrice", "Доставка, ₽ за 1 км в одну сторону"}')
+      && sk.includes('" за 1 км в одну сторону")'), '10.123: подписи цены доставки — «₽ за 1 км в одну сторону»');
+    const row = mt.slice(mt.indexOf('static View row('), mt.indexOf('static void actions('));
+    assert.ok(row.includes('IvaChatPatch.toolPic(a, t.raw, t.id, 64)') && row.includes('priceText(t.price)') && row.includes('statusKind(t.status)')
+      && row.includes('actions(a, t, owner, points, reload)') && !/apiCall|new Thread\(/.test(row),
+      '10.123: «Мой инструмент» — карточка: фото, название, цена, состояние; нажатие — те же действия; без сети в строке');
+    assert.ok(ov.includes('String term = sameCompany(ps, co) ? termText(p, orderDays) : "";'), '10.123: клиент — части одного проката подписаны сроком');
+    assert.ok(sq.includes('CREATE TRIGGER trg_zzz_iva_part_split BEFORE UPDATE OF status ON public.order_parts') && sq.includes('SECURITY DEFINER')
+      && sq.includes("coalesce(old.status, '') <> 'new' or coalesce(new.status, '') <> 'rented'") && sq.includes('REVOKE ALL ON FUNCTION public.iva_part_split_trg() FROM public, anon, authenticated;')
+      && !/UPDATE\s+public\.tools\b/i.test(sq.replace(/--[^\n]*/g, '')) && !/UPDATE\s+public\./i.test(rb.replace(/--[^\n]*/g, '')),
+      'SQL 20261114: деление по срокам только при «Выдал» (new → rented), функция не вызывается напрямую, tools не трогаем');
+    assert.ok(/ОТКАТ/.test(rb) && rb.includes('DROP TRIGGER IF EXISTS trg_zzz_iva_part_split') && chk.includes('tools/v123-stand.py'), 'SQL 20261114: откат и стенд');
+    assert.ok((tp.match(/eq\("10\.123: /g) || []).length >= 11 && tp.includes('v123();'), 'IvaPatchTest: проверки 10.123');
+    assert.ok(/NEW_NAME: '10\.123'/.test(wf) && /NEW_CODE: '197'/.test(wf), 'сборка 10.123 (197)');
   }
   // 10.75 (просьба владельца 14.10.2026): в «Настройках» — кнопка «Уведомления» (с 10.97 — открывает отдельную страницу);
   // внутри сверху «Открыть настройки уведомлений Android», потом какие присылать, потом расписание, потом всё остальное

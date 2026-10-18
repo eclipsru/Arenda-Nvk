@@ -536,6 +536,17 @@ else
   skip "стенд 10.122: нет pgserver (PG_PY=<python с pgserver> bash tools/check.sh)"
 fi
 
+head_ "4.5.28. Стенд 10.123: разные сроки в одной заявке — после «Выдал» у каждого срока своя «Вернули» (локальный PostgreSQL)"
+if "$PG_PY" -c "import pgserver" >/dev/null 2>&1; then
+  if "$PG_PY" tools/v123-stand.py >/tmp/iva-test-v123.log 2>&1; then
+    ok "10.123: $(grep -c '✔' /tmp/iva-test-v123.log) проверок SQL на PostgreSQL (часть делится по срокам при «Выдал» владельцем и сотрудником; время и «кто выдал» общие; «Вернули» по одной части; комиссия по своей части; одинаковые сроки и сайт не делятся; откат)"
+  else
+    bad "стенд 10.123"; grep -E '✘|Error|ERROR' /tmp/iva-test-v123.log | head -8 | sed 's/^/      /'
+  fi
+else
+  skip "стенд 10.123: нет pgserver (PG_PY=<python с pgserver> bash tools/check.sh)"
+fi
+
 head_ "Итог"
 printf '  пройдено: %s, ошибок: %s, пропущено: %s\n' "$PASS" "$FAIL" "$SKIP"
 if [ "$FAIL" -eq 0 ]; then echo "  Можно продолжать."; exit 0; else echo "  Сначала исправляем замечания выше."; exit 1; fi

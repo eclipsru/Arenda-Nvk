@@ -287,39 +287,81 @@ public class IvaMyToolsPatch {
         }
     }
 
+    /** 10.123: цвет плашки состояния: 0 — опубликован (зелёный), 1 — скрыт (серый), 2 — отклонён (красный), 3 — ждёт (жёлтый). */
+    static int statusKind(String status) {
+        String st = status == null ? "" : status.trim();
+        if ("Опубликован".equals(st)) return 0;
+        if (st.isEmpty() || "Скрыт".equals(st)) return 1;
+        if (st.contains("тклон")) return 2;
+        return 3;
+    }
+
+    static final int[] KIND_COLOR = {0xff4caf50, 0xff9aa1b0, 0xffff8a80, 0xffffb74d};
+    static final int[] KIND_BG = {0x264caf50, 0x269aa1b0, 0x26ff8a80, 0x26ffb74d};
+
+    /** 10.123 (просьба владельца): инструмент — карточкой: фото, название, цена, состояние; нажатие — действия. */
     static View row(final Activity a, final Item t, final boolean owner, final List<IvaPickupPatch.Point> points,
                     final Runnable reload, int cText, int cGray, int cOrange) {
         LinearLayout r = new LinearLayout(a);
-        r.setOrientation(LinearLayout.VERTICAL);
-        r.setPadding(0, dp(a, 10), 0, dp(a, 4));
-        View line = new View(a);
-        line.setBackgroundColor(IvaStaffPatch.color(a, "line", 0xff262b35));
-        r.addView(line, new LinearLayout.LayoutParams(-1, Math.max(1, dp(a, 1))));
-        LinearLayout top = new LinearLayout(a);
-        top.setOrientation(LinearLayout.HORIZONTAL);
-        top.setGravity(Gravity.CENTER_VERTICAL);
-        top.setPadding(0, dp(a, 10), 0, 0);
-        top.addView(IvaChiefPatch.text(a, t.name.isEmpty() ? "Без названия" : t.name, 15f, cText, true), new LinearLayout.LayoutParams(0, -2, 1f));
-        TextView s = IvaChiefPatch.text(a, t.status, 12f, t.warn ? cOrange : cGray, t.warn);
-        s.setPadding(dp(a, 8), 0, 0, 0);
-        top.addView(s);
-        r.addView(top);
+        r.setOrientation(LinearLayout.HORIZONTAL);
+        r.setGravity(Gravity.CENTER_VERTICAL);
+        r.setPadding(dp(a, 10), dp(a, 10), dp(a, 10), dp(a, 10));
+        android.graphics.drawable.GradientDrawable bg = new android.graphics.drawable.GradientDrawable();
+        bg.setColor(IvaStaffPatch.color(a, "bg", 0xff101217));
+        bg.setStroke(Math.max(1, dp(a, 1)), IvaStaffPatch.color(a, "line", 0xff262b35));
+        bg.setCornerRadius(dp(a, 14));
+        r.setBackground(bg);
+        View pic = null;
+        try { pic = IvaChatPatch.toolPic(a, t.raw, t.id, 64); } catch (Throwable ignore) {}
+        if (pic != null) {
+            LinearLayout.LayoutParams pl = new LinearLayout.LayoutParams(dp(a, 64), dp(a, 64));
+            pl.rightMargin = dp(a, 12);
+            r.addView(pic, pl);
+        }
+        LinearLayout col = new LinearLayout(a);
+        col.setOrientation(LinearLayout.VERTICAL);
+        TextView nm = IvaChiefPatch.text(a, t.name.isEmpty() ? "Без названия" : t.name, 15f, cText, true);
+        nm.setMaxLines(2);
+        nm.setEllipsize(android.text.TextUtils.TruncateAt.END);
+        col.addView(nm);
         String pr = priceText(t.price);
         if (!pr.isEmpty()) {
-            TextView x = IvaChiefPatch.text(a, pr, 14f, cGray, false);
-            x.setPadding(0, dp(a, 2), 0, 0);
-            r.addView(x);
+            TextView x = IvaChiefPatch.text(a, pr, 14f, cOrange, true);
+            x.setPadding(0, dp(a, 3), 0, 0);
+            col.addView(x);
+        }
+        if (!t.status.isEmpty()) {
+            int k = statusKind(t.status);
+            TextView b = IvaChiefPatch.text(a, t.status, 12f, KIND_COLOR[k], true);
+            android.graphics.drawable.GradientDrawable g = new android.graphics.drawable.GradientDrawable();
+            g.setColor(KIND_BG[k]);
+            g.setCornerRadius(dp(a, 10));
+            b.setBackground(g);
+            b.setPadding(dp(a, 10), dp(a, 3), dp(a, 10), dp(a, 3));
+            LinearLayout.LayoutParams bl = new LinearLayout.LayoutParams(-2, -2);
+            bl.topMargin = dp(a, 6);
+            col.addView(b, bl);
         }
         if (!t.hint.isEmpty()) {
-            TextView x = IvaChiefPatch.text(a, t.hint, 13f, cGray, false);
-            x.setPadding(0, dp(a, 2), 0, 0);
-            r.addView(x);
+            TextView x = IvaChiefPatch.text(a, t.hint, 12f, cGray, false);
+            x.setPadding(0, dp(a, 4), 0, 0);
+            col.addView(x);
         }
+        r.addView(col, new LinearLayout.LayoutParams(0, -2, 1f));
+        TextView more = IvaChiefPatch.text(a, "›", 22f, cGray, false);
+        more.setPadding(dp(a, 8), 0, 0, 0);
+        r.addView(more);
         r.setClickable(true);
+        r.setContentDescription((t.name.isEmpty() ? "Инструмент" : t.name) + (t.status.isEmpty() ? "" : ", " + t.status) + " — действия");
         r.setOnClickListener(new View.OnClickListener() {
             @Override public void onClick(View v) { actions(a, t, owner, points, reload); }
         });
-        return r;
+        LinearLayout wrap = new LinearLayout(a);
+        wrap.setOrientation(LinearLayout.VERTICAL);
+        LinearLayout.LayoutParams wl = new LinearLayout.LayoutParams(-1, -2);
+        wl.topMargin = dp(a, 10);
+        wrap.addView(r, wl);
+        return wrap;
     }
 
     static void actions(final Activity a, final Item t, final boolean owner, final List<IvaPickupPatch.Point> points, final Runnable reload) {

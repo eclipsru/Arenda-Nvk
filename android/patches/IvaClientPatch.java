@@ -3210,7 +3210,7 @@ public final class IvaClientPatch {
             if (to == null) text = "Есть доставка: пункт выдачи не удалось определить — стоимость подтвердит арендодатель";
             else {
                 long km = (long) routeDistanceKm(a, from, to); long rate = Math.round(item.optDouble("delivery_price", 40)); if (rate <= 0) rate = 40;
-                text = "Доставка до вашего адреса: " + km + " км × " + rate + " ₽/км ≈ " + (km * rate) + " ₽";
+                text = "Доставка до вашего адреса: " + km + " км × " + rate + " ₽ за 1 км ≈ " + (km * rate) + " ₽ в одну сторону";
             }
             a.runOnUiThread(new Runnable() { @Override public void run() {
                 deliveryEstimateLoading = false;
