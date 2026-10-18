@@ -2681,8 +2681,10 @@ try {
       '10.121: таймер и «Подробнее» — под заявкой целиком');
     assert.ok(op.includes('pt = IvaOrderViewPatch.pointTel(ordVal(r.get("id")));') && sq.includes('iva_point_tel'),
       '10.121: «Позвонить» в заявке — телефон пункта (нет сотрудника и номера — телефон проката)');
-    assert.ok(so.includes('IvaOrderViewPatch.load(u.a, "staff");') && so.includes('items = IvaOrderViewPatch.staffItems(a, p.id);')
-      && so.includes('IvaOrderViewPatch.badge(a, IvaOrderViewPatch.kind(p.status, IvaOrderViewPatch.partEnd(p.id), System.currentTimeMillis()))')
+    assert.ok(so.includes('IvaOrderViewPatch.load(u.a, "staff");') && (so.includes('items = IvaOrderViewPatch.staffItems(a, p.id);') || so.includes('items = IvaOrderViewPatch.staffItems(a, p.id, p.act ? new Runnable() {'))
+      && (so.includes('IvaOrderViewPatch.badge(a, IvaOrderViewPatch.kind(p.status, IvaOrderViewPatch.partEnd(p.id), System.currentTimeMillis()))')
+          || (so.includes('int kd = IvaOrderViewPatch.kind(p.status, IvaOrderViewPatch.partEnd(p.id), System.currentTimeMillis());')   // 10.124: та же плашка + подсветка
+              && so.includes('top.addView(IvaOrderViewPatch.badge(a, kd));')))
       && so.includes('IvaRentPatch.timerView(a, es, 13f, true)'),
       '10.121: сотруднику — инструменты с фото, пункт, плашка и таймер');
     assert.ok(sh.includes('L_PICK = "Адрес пункта выдачи"') && pk.includes('"/rest/v1/rpc/iva_pickup_first"') && sq.includes('iva_pickup_first')
@@ -2783,7 +2785,55 @@ try {
       'SQL 20261114: деление по срокам только при «Выдал» (new → rented), функция не вызывается напрямую, tools не трогаем');
     assert.ok(/ОТКАТ/.test(rb) && rb.includes('DROP TRIGGER IF EXISTS trg_zzz_iva_part_split') && chk.includes('tools/v123-stand.py'), 'SQL 20261114: откат и стенд');
     assert.ok((tp.match(/eq\("10\.123: /g) || []).length >= 11 && tp.includes('v123();'), 'IvaPatchTest: проверки 10.123');
-    assert.ok(/NEW_NAME: '10\.123'/.test(wf) && /NEW_CODE: '197'/.test(wf), 'сборка 10.123 (197)');
+    assert.ok(Number((/NEW_CODE: '(\d+)'/.exec(wf) || [])[1]) >= 197, 'сборка 10.123 (197) или новее');
+  }
+  // 10.124 (просьба владельца 18.10.2026): карточки заявок у владельца и сотрудника слегка подсвечены — зелёным новые,
+  // жёлтым выданные, красным просроченные; закрытые без подсветки
+  {
+    const wf = R('.github/workflows/build-apk.yml'), ap = R('android/patches/apply.py'), tp = R('android/patches/test/IvaPatchTest.java');
+    const ov = R('android/patches/IvaOrderViewPatch.java'), op = R('android/patches/IvaOrderPatch.java'), so = R('android/patches/IvaStaffOrdersPatch.java');
+    assert.ok(!/IvaOrderViewPatch|IvaStaffOrdersPatch/.test(ap), '10.124: без новых вставок в smali');
+    assert.ok(ov.includes('static final int[] TINT = {0xff4caf50, 0xffffb74d, 0, 0xffff8a80, 0};') && ov.includes('if (card.getBackground() != o) card.setBackground(o);'),
+      '10.124: цвета — зелёный (новая), жёлтый (выдана), красный (срок вышел); закрытая и отменённая — прежний фон');
+    assert.ok(op.includes('try { admTint(a, cards, (List<?>) parts, keys, mine); } catch (Throwable ignore) {}')
+      && so.includes('try { IvaOrderViewPatch.tint(a, c, kd); } catch (Throwable ignore) {}'), '10.124: подсветка у владельца и у сотрудника, безопасно');
+    for (const c of ['0xff3ddc84', '0xffff5a5a']) assert.ok(!ov.includes(c), `10.124: запрещённый цвет ${c}`);
+    // сроки внутри одной заявки: группы, чек, «Вернули» у срока (сеть — только в IvaStaffOrdersPatch.send)
+    const strip = (t) => t.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '');
+    const rp = R('android/patches/IvaRentPatch.java');
+    assert.ok(ov.includes('static double[] termItems(final Activity a, LinearLayout box, JSONObject p, int orderDays, boolean big, final String partId, final Runnable after) {')
+      && ov.includes('if (gs.size() < 2) return items(a, box, items, orderDays, big);')
+      && ov.includes('termItems(a, box, p, orderDays, false, partId, new Runnable() { @Override public void run() { admReload(fa); } });')
+      && ov.includes('double[] s = termItems(a, card, p, orderDays, true, null, null);') && ov.includes('double[] s = termItems(a, c, p, orderDays, false, null, null);')
+      && ov.includes('double[] s = termItems(a, box, p, intOf(o.opt("days"), 0), false, partId, after);'),
+      '10.124: заявка одна — внутри по срокам (у владельца и сотрудника с «Вернули», у клиента и в подробностях — без кнопок)');
+    assert.ok(ov.includes('IvaStaffOrdersPatch.returnTerm(a, partId, g.days, g.names.toString(), last, b, after);') && ov.includes('if (per && after != null')
+      && ov.includes('if (terms(partId)) hideNativeReturn(card);') && ov.includes('if (v == null || VIEW_TAG.equals(v.getTag())) return;')
+      && !/removeView|addView\(old|\.getParent\(\)\)\.remove/.test(strip(ov.slice(ov.indexOf('static void hideNativeReturn('), ov.indexOf('static void hideNativeReturn(') + 700))),
+      '10.124: «Вернули» у срока — только когда база умеет (returned_at); штатная «Вернули» прячется, не переносится');
+    assert.ok((strip(ov).match(/IvaClientPatch\.apiCall\(/g) || []).length === 1 && (strip(ov).match(/new Thread\(/g) || []).length === 1,
+      '10.124: в IvaOrderViewPatch по-прежнему одна загрузка и один поток');
+    assert.ok(so.includes('static final String RETURN_RPC = "/rest/v1/rpc/iva_staff_return";') && so.includes('if (!id.matches("[0-9]{1,18}") || days < 1 || days > 365) return null;')
+      && so.includes('if (i == 0) send(a, RETURN_RPC, body, btn, "Готово: отмечено «Вернули»", after);')
+      && so.includes('if (p.act && !next(p.status).isEmpty() && !terms) {') && so.includes('} else if (p.mine && !p.act && !next(p.status).isEmpty()) {'),
+      '10.124: сотрудник — «Вернули» у каждого срока (с подтверждением), общая кнопка прячется только при сроках');
+    assert.ok(ov.includes('List<IvaNotifyPatch.RentEnd> es = termEnds(p, intOf(o.opt("days"), 0), pid, oid, at);')
+      && ov.includes('e.key = "r" + (pid == null ? "" : pid.trim()) + "@" + e.end;')
+      && rp.includes('if (terms) { if (old != null && old.getParent() == card) card.removeView(old); return; }'),
+      '10.124: таймеры — по срокам (ключи как у напоминаний), общий таймер карточки не дублирует сроки');
+    const sq = R('supabase/migrations/20261115_v124.sql'), rb = R('supabase/migrations/20261115_v124_rollback.sql'), chk = R('tools/check.sh');
+    const sc = sq.replace(/--[^\n]*/g, '');
+    assert.ok(sc.includes('DROP TRIGGER IF EXISTS trg_zzz_iva_part_split ON public.order_parts;') && sc.includes('CREATE OR REPLACE FUNCTION public.iva_staff_return(p_part bigint, p_days integer)')
+      && sc.includes("not public.iva_staff_right(pt.point_id, 'issue')") && sc.includes('if pt.client = me and not coalesce(slf, false) then')
+      && sc.includes("return 'partial';") && sc.includes("return 'closed';") && sc.includes('REVOKE ALL ON FUNCTION public.iva_staff_return(bigint, integer) FROM public, anon;')
+      && !/returned_by'\s*,\s*e\.v/.test(sc) && !/UPDATE\s+public\.tools\b/i.test(sc) && !/UPDATE\s+public\./i.test(rb.replace(/--[^\n]*/g, ''))
+      && !/DROP TABLE|TRUNCATE|DELETE FROM|ALTER TABLE|POLICY|CREATE TABLE/i.test(sc),
+      'SQL 20261115: деления нет; «Вернули» по сроку — владелец или сотрудник с «Выдачей» (своя заявка — как в 1029); клиенту не отдаём, кто принял; tools не трогаем');
+    const ph = (so.match(/DB_PHRASES = \{([\s\S]*?)\};/) || ['', ''])[1];
+    for (const m of sc.match(/raise exception '([^']+)'/g) || []) assert.ok(ph.includes(m.slice(17, -1)), `SQL 20261115: фраза «${m.slice(17, -1)}» — нет в DB_PHRASES приложения`);
+    assert.ok(/ОТКАТ/.test(rb) && rb.includes('DROP FUNCTION IF EXISTS public.iva_staff_return(bigint, integer);') && chk.includes('tools/v124-stand.py'), 'SQL 20261115: откат и стенд');
+    assert.ok((tp.match(/eq\("10\.124: /g) || []).length >= 7 && tp.includes('v124();'), 'IvaPatchTest: проверки 10.124');
+    assert.ok(/NEW_NAME: '10\.124'/.test(wf) && /NEW_CODE: '198'/.test(wf), 'сборка 10.124 (198)');
   }
   // 10.75 (просьба владельца 14.10.2026): в «Настройках» — кнопка «Уведомления» (с 10.97 — открывает отдельную страницу);
   // внутри сверху «Открыть настройки уведомлений Android», потом какие присылать, потом расписание, потом всё остальное

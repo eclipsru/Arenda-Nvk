@@ -330,13 +330,17 @@ public class IvaStaffOrdersPatch {
         String w = when(p.created);
         top.addView(IvaChiefPatch.text(a, "Заявка №" + p.order + (w.isEmpty() ? "" : " · " + w), 15f, u.cText, true),
             new LinearLayout.LayoutParams(0, -2, 1f));
-        top.addView(IvaOrderViewPatch.badge(a, IvaOrderViewPatch.kind(p.status, IvaOrderViewPatch.partEnd(p.id), System.currentTimeMillis())));   // 10.121
+        int kd = IvaOrderViewPatch.kind(p.status, IvaOrderViewPatch.partEnd(p.id), System.currentTimeMillis());
+        top.addView(IvaOrderViewPatch.badge(a, kd));   // 10.121
         c.addView(top);
+        try { IvaOrderViewPatch.tint(a, c, kd); } catch (Throwable ignore) {}   // 10.124: зелёный — новая, жёлтый — выдана, красный — срок вышел
         String sp = "";
         try { sp = IvaOrderViewPatch.staffPoint(p.id); } catch (Throwable ignore) {}
         if (!sp.isEmpty() || !p.point.isEmpty()) c.addView(line(u, "Пункт: " + (sp.isEmpty() ? p.point : sp), u.cGray));
         View items = null;
-        try { items = IvaOrderViewPatch.staffItems(a, p.id); } catch (Throwable ignore) {}   // 10.121: инструменты с фото и ценой
+        try {                                                         // 10.121: инструменты с фото и ценой; 10.124: по срокам, «Вернули» у срока
+            items = IvaOrderViewPatch.staffItems(a, p.id, p.act ? new Runnable() { @Override public void run() { reload(u); } } : null);
+        } catch (Throwable ignore) {}
         if (items != null) c.addView(items);
         else if (!p.tools.isEmpty()) c.addView(line(u, p.tools, u.cText));
         if (!p.name.isEmpty()) c.addView(line(u, "Клиент: " + p.name + (p.mine ? " (это вы)" : ""), u.cText));
@@ -357,7 +361,10 @@ public class IvaStaffOrdersPatch {
             if (ch != null) c.addView(ch);
         } catch (Throwable ignore) {}
         String r = when(p.rented);
-        if ("rented".equals(p.status) && !r.isEmpty()) {
+        boolean terms = false;                                        // 10.124: сроки внутри заявки — свои таймеры и «Вернули»
+        try { terms = "rented".equals(p.status) && IvaOrderViewPatch.terms(p.id); } catch (Throwable ignore) {}
+        if (terms && !r.isEmpty()) c.addView(line(u, "Выдана " + r, u.cGray));
+        else if ("rented".equals(p.status) && !r.isEmpty()) {
             c.addView(line(u, "Выдана " + r + (p.days > 0 ? " · на " + daysText(p.days) : ""), u.cGray));
             List<IvaNotifyPatch.RentEnd> es = IvaRentPatch.byPart.get(p.id);   // 10.121: таймер, как у владельца
             if (es != null && !es.isEmpty()) {
@@ -367,7 +374,7 @@ public class IvaStaffOrdersPatch {
             }
         }
         else if (p.days > 0 && !"closed".equals(p.status)) c.addView(line(u, "Срок: " + daysText(p.days), u.cGray));
-        if (p.act && !next(p.status).isEmpty()) {
+        if (p.act && !next(p.status).isEmpty() && !terms) {
             final TextView b = IvaPickupPatch.addButton(a, u.cOrange);
             b.setText(actionText(p.status));
             LinearLayout.LayoutParams bl = new LinearLayout.LayoutParams(-1, -2);
@@ -379,7 +386,7 @@ public class IvaStaffOrdersPatch {
                         new IvaClientPatch.Choice() { @Override public void pick(int i) { if (i == 0) mark(u, p, b); } });
                 }
             });
-        } else if (p.mine && !next(p.status).isEmpty()) {
+        } else if (p.mine && !p.act && !next(p.status).isEmpty()) {
             c.addView(line(u, "Свою заявку отмечает другой сотрудник или владелец", u.cGray));
         }
         return c;
@@ -388,23 +395,51 @@ public class IvaStaffOrdersPatch {
     static void mark(final Ui u, final Part p, final TextView btn) {
         final String body = markBody(p.id, next(p.status));
         if (body == null) return;
-        btn.setEnabled(false);
-        btn.setAlpha(0.6f);
+        send(u.a, MARK_RPC, body, btn, "new".equals(p.status) ? "Готово: заявка выдана" : "Готово: заявка закрыта",
+            new Runnable() { @Override public void run() { reload(u); } });   // перечитать: состояние могло смениться
+    }
+
+    // ── 10.124: «Вернули» по одному сроку заявки (у владельца и у сотрудника с правом «Выдача») ──
+    static final String RETURN_RPC = "/rest/v1/rpc/iva_staff_return";
+
+    /** {"p_part":123,"p_days":3} — номер из цифр, срок 1…365; иначе null. */
+    static String returnBody(String partId, int days) {
+        String id = partId == null ? "" : partId.trim();
+        if (!id.matches("[0-9]{1,18}") || days < 1 || days > 365) return null;
+        return "{\"p_part\":" + id + ",\"p_days\":" + days + "}";
+    }
+
+    /** Нажали «Вернули» у срока: подтвердить, отметить в базе, потом after (перечитать). */
+    static void returnTerm(final Activity a, String partId, int days, String names, boolean last, final View btn, final Runnable after) {
+        final String body = returnBody(partId, days);
+        if (body == null) return;
+        String t = IvaNotifyPatch.oneLine(names, 120);
+        String what = last ? "Это последний срок — заявка закроется." : "Остальные инструменты заявки остаются в аренде.";
+        IvaClientPatch.styledChoice(a, "Отметить «Вернули»?", (t.isEmpty() ? "" : t + "\n") + "Срок " + daysText(days) + ". " + what,
+            new String[]{"Вернули"}, new IvaClientPatch.Choice() {
+                @Override public void pick(int i) {
+                    if (i == 0) send(a, RETURN_RPC, body, btn, "Готово: отмечено «Вернули»", after);
+                }
+            });
+    }
+
+    /** Отметка в базе — в потоке; кнопка на время запроса неактивна; потом сообщение и after на главном потоке. */
+    static void send(final Activity a, final String rpc, final String body, final View btn, final String ok, final Runnable after) {
+        if (btn != null) { btn.setEnabled(false); btn.setAlpha(0.6f); }
         new Thread(new Runnable() {
             @Override public void run() {
                 String e;
                 try {
-                    String[] r = IvaClientPatch.apiCall(u.a, MARK_RPC, "POST", body, true);
+                    String[] r = IvaClientPatch.apiCall(a, rpc, "POST", body, true);
                     e = r == null ? dbError("", "") : dbError(r[0], r.length > 1 ? r[1] : "");
                 } catch (Throwable x) { e = dbError("", ""); }
                 final String fe = e;
-                u.a.runOnUiThread(new Runnable() {
+                a.runOnUiThread(new Runnable() {
                     @Override public void run() {
                         try {
-                            btn.setEnabled(true);
-                            btn.setAlpha(1f);
-                            IvaStaffPatch.toast(u.a, fe.isEmpty() ? ("new".equals(p.status) ? "Готово: заявка выдана" : "Готово: заявка закрыта") : fe);
-                            reload(u);                                       // перечитать: состояние могло смениться
+                            if (btn != null) { btn.setEnabled(true); btn.setAlpha(1f); }
+                            IvaStaffPatch.toast(a, fe.isEmpty() ? ok : fe);
+                            if (after != null) after.run();
                         } catch (Throwable ignore) {}
                     }
                 });

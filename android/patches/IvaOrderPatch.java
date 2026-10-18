@@ -1887,6 +1887,34 @@ public final class IvaOrderPatch {
                 try { IvaRentPatch.admCard(a, cards.get(i), part); } catch (Throwable ignore) {}   // 10.77
             }
         }
+        try { admTint(a, cards, (List<?>) parts, keys, mine); } catch (Throwable ignore) {}   // 10.124: подсветка по состоянию
+    }
+
+    /** 10.124: подсветка карточек владельца — заявка (у клиента) или клиент целиком (самое срочное из его заявок). */
+    static void admTint(Activity a, List<LinearLayout> cards, List<?> parts, List<String> keys, List<Integer> mine) {
+        List<List<Integer>> idx = new ArrayList<List<Integer>>();
+        if (mine != null) {
+            for (Integer i : mine) idx.add(java.util.Collections.singletonList(i));
+        } else {
+            LinkedHashMap<String, List<Integer>> groups = new LinkedHashMap<String, List<Integer>>();
+            for (int i = 0; i < keys.size(); i++) {
+                String k = keys.get(i) == null ? "" : keys.get(i);
+                List<Integer> g = groups.get(k);
+                if (g == null) { g = new ArrayList<Integer>(); groups.put(k, g); }
+                g.add(i);
+            }
+            idx.addAll(groups.values());
+        }
+        if (idx.size() != cards.size()) return;
+        long now = System.currentTimeMillis();
+        for (int c = 0; c < cards.size(); c++) {
+            List<Integer> ks = new ArrayList<Integer>();
+            for (Integer i : idx.get(c)) {
+                Object o = i < parts.size() ? parts.get(i) : null;
+                ks.add(IvaOrderViewPatch.partKind(o instanceof JSONObject ? (JSONObject) o : null, now));
+            }
+            IvaOrderViewPatch.tint(a, cards.get(c), IvaOrderViewPatch.groupKind(ks));
+        }
     }
 
     /** Заявки клиента у владельца: только вертикальные карточки (не «‹ Все клиенты», не подписи). */

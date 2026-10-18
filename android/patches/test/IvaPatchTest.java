@@ -2576,6 +2576,7 @@ public class IvaPatchTest {
         v121();                                                       // 10.121: первый пункт, правки на одобрение, заявки целиком
         v122();                                                       // 10.122: удаление сотрудником, «Мой инструмент», чат, отмена заявки
         v123();                                                       // 10.123: доставка по наибольшей цене, «обратно» за каждым сроком, карточки
+        v124();                                                       // 10.124: подсветка карточек заявок
         if (fail > 0) { System.out.println("ошибок: " + fail); System.exit(1); }
         System.out.println("все проверки IvaPatch пройдены");
     }
@@ -3546,5 +3547,26 @@ public class IvaPatchTest {
         eq("10.123: плашка состояния инструмента", IvaMyToolsPatch.statusKind("Опубликован") + "" + IvaMyToolsPatch.statusKind("Скрыт") + IvaMyToolsPatch.statusKind("Отклонён")
             + IvaMyToolsPatch.statusKind("Правка отклонена") + IvaMyToolsPatch.statusKind("На одобрении") + IvaMyToolsPatch.statusKind("Ждёт удаления")
             + IvaMyToolsPatch.statusKind(""), "0122331");
+    }
+
+    static void v124() {
+        long now = 1000000L;
+        eq("10.124: состояние → подсветка (новая, выдана, закрыта, срок вышел, отменена)",
+            Integer.toHexString(IvaOrderViewPatch.tintFor(IvaOrderViewPatch.kind("new", 0, now))) + "|" + Integer.toHexString(IvaOrderViewPatch.tintFor(IvaOrderViewPatch.kind("rented", now + 5, now)))
+            + "|" + IvaOrderViewPatch.tintFor(IvaOrderViewPatch.kind("closed", 0, now)) + "|" + Integer.toHexString(IvaOrderViewPatch.tintFor(IvaOrderViewPatch.kind("rented", now - 5, now)))
+            + "|" + IvaOrderViewPatch.tintFor(IvaOrderViewPatch.kind("cancelled", 0, now)),
+            "ff4caf50|ffffb74d|0|ffff8a80|0");
+        eq("10.124: выдана без срока — жёлтая", IvaOrderViewPatch.kind("rented", 0, now), 1);
+        eq("10.124: клиент целиком — самое срочное", IvaOrderViewPatch.groupKind(java.util.Arrays.asList(1, 0, 2)) + "" + IvaOrderViewPatch.groupKind(java.util.Arrays.asList(0, 3))
+            + IvaOrderViewPatch.groupKind(java.util.Arrays.asList(2, 1)) + IvaOrderViewPatch.groupKind(java.util.Arrays.asList(2, 4)) + IvaOrderViewPatch.groupKind(null), "03122");
+        eq("10.124: слегка — 12 % цвета к фону карточки", Integer.toHexString(IvaOrderViewPatch.mix(0xff1a1d24, 0xff4caf50, 0.12f)) + "|"
+            + Integer.toHexString(IvaOrderViewPatch.mix(0xff1a1d24, 0xffffffff, 0f)), "ff202f29|ff1a1d24");
+        eq("10.124: «Вернули» по сроку — номер из цифр и срок 1…365", IvaStaffOrdersPatch.returnBody(" 123 ", 3) + "|" + IvaStaffOrdersPatch.returnBody("1;drop", 3)
+            + "|" + IvaStaffOrdersPatch.returnBody("5", 0) + "|" + IvaStaffOrdersPatch.returnBody("5", 366) + "|" + IvaStaffOrdersPatch.returnBody(null, 3),
+            "{\"p_part\":123,\"p_days\":3}|null|null|null|null");
+        eq("10.124: чек инструмента — цена × сутки = сумма", IvaOrderViewPatch.checkLine(3, 400, 2000) + "|" + IvaOrderViewPatch.checkLine(1, 99.5, 0),
+            "400\u00a0₽ × 3 суток = 1\u00a0200\u00a0₽ · залог 2\u00a0000\u00a0₽|99,50\u00a0₽ × 1 сутки = 99,50\u00a0₽");
+        eq("10.124: нет цены — строка как раньше", IvaOrderViewPatch.checkLine(3, Double.NaN, 0) + "|" + IvaOrderViewPatch.checkLine(0, 400, 0),
+            IvaOrderViewPatch.itemLine(3, Double.NaN, 0) + "|" + IvaOrderViewPatch.itemLine(0, 400, 0));
     }
 }

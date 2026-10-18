@@ -334,6 +334,9 @@ public class IvaRentPatch {
         if (part == null) return;
         List<IvaNotifyPatch.RentEnd> es = "rented".equalsIgnoreCase(part.optString("status", "").trim()) ? byPart.get(part.optString("id", "").trim()) : null;
         View old = card.findViewWithTag(TIMER_TAG);
+        boolean terms = false;                                          // 10.124: сроки внутри заявки — таймер у каждого срока
+        try { terms = IvaOrderViewPatch.terms(part.optString("id", "")); } catch (Throwable ignore) {}
+        if (terms) { if (old != null && old.getParent() == card) card.removeView(old); return; }
         if (old != null) {
             if (es != null && sig(es).equals(shown.get(old))) return;           // тот же срок — таймер уже тикает
             card.removeView(old);

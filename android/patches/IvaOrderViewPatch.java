@@ -74,6 +74,296 @@ public class IvaOrderViewPatch {
     static final int[] KIND_COLOR = {0xffff8f1f, 0xffffb74d, 0xff4caf50, 0xffff8a80, 0xff9aa1b0};
     static final int[] KIND_BG = {0xff2a2013, 0x26ffb74d, 0x264caf50, 0x26ff8a80, 0x269aa1b0};
 
+    // ── 10.124 (просьба владельца): карточки заявок у владельца и сотрудника слегка подсвечены по состоянию ──
+    //  зелёным — новые, жёлтым — выданные, красным — срок вышел; закрытые (и отменённые) — без подсветки.
+    static final int[] TINT = {0xff4caf50, 0xffffb74d, 0, 0xffff8a80, 0};
+    static final Map<View, android.graphics.drawable.Drawable> origBg = new java.util.WeakHashMap<View, android.graphics.drawable.Drawable>();
+
+    /** Цвет подсветки по kind() или 0 — без подсветки. */
+    static int tintFor(int k) { return k >= 0 && k < TINT.length ? TINT[k] : 0; }
+
+    /** Несколько заявок в одной карточке (клиент у владельца): срок вышел → новая → выдана → без подсветки. */
+    static int groupKind(List<Integer> ks) {
+        if (ks == null) return 2;
+        if (ks.contains(3)) return 3;
+        if (ks.contains(0)) return 0;
+        if (ks.contains(1)) return 1;
+        return 2;
+    }
+
+    /** Смесь цветов (f — доля второго), непрозрачная. */
+    static int mix(int base, int c, float f) {
+        int r = Math.round(((base >> 16) & 0xff) * (1 - f) + ((c >> 16) & 0xff) * f);
+        int g = Math.round(((base >> 8) & 0xff) * (1 - f) + ((c >> 8) & 0xff) * f);
+        int b = Math.round((base & 0xff) * (1 - f) + (c & 0xff) * f);
+        return 0xff000000 | (r << 16) | (g << 8) | b;
+    }
+
+    /** Состояние части для подсветки: статус и конец аренды (заявка целиком, иначе сроки таймера). */
+    static int partKind(JSONObject part, long now) {
+        if (part == null) return 2;
+        String id = part.optString("id", part.optString("part_id", "")).trim();
+        long end = partEnd(id);
+        if (end <= 0) {
+            List<IvaNotifyPatch.RentEnd> l = IvaRentPatch.byPart.get(id);
+            if (l != null) synchronized (IvaRentPatch.byPart) { for (IvaNotifyPatch.RentEnd e : l) end = Math.max(end, e.end); }
+        }
+        return kind(part.optString("status", ""), end, now);
+    }
+
+    /** Фон карточки — как bg_card (16dp, рамка 1dp), но чуть в цвет состояния; без подсветки — прежний фон. */
+    static void tint(Activity a, View card, int k) {
+        if (card == null) return;
+        int c = tintFor(k);
+        if (!origBg.containsKey(card)) origBg.put(card, card.getBackground());
+        if (c == 0) {
+            android.graphics.drawable.Drawable o = origBg.get(card);
+            if (card.getBackground() != o) card.setBackground(o);
+            return;
+        }
+        GradientDrawable g = new GradientDrawable();
+        g.setColor(mix(col(a, "card", 0xff1a1d24), c, 0.12f));
+        g.setStroke(Math.max(1, dp(a, 1)), (c & 0x00ffffff) | 0x99000000);
+        g.setCornerRadius(dp(a, 16));
+        int l = card.getPaddingLeft(), t = card.getPaddingTop(), r = card.getPaddingRight(), b = card.getPaddingBottom();
+        card.setBackground(g);
+        card.setPadding(l, t, r, b);
+    }
+
+    // ── 10.124 (просьба владельца 18.10.2026): разные сроки — внутри ОДНОЙ заявки, по срокам ──
+    //  У каждого срока: свои инструменты с чеком (цена × сутки = сумма), «Итого по сроку», своя подсветка, таймер и
+    //  «Вернули» (владелец и сотрудник с правом «Выдача»; SQL 20261115_v124.sql). Без SQL — сроки и чеки видны,
+    //  «Вернули» одна на всю заявку, как раньше.
+    static final class Grp {
+        int days;
+        final JSONArray items = new JSONArray();
+        final StringBuilder names = new StringBuilder();
+        boolean returned = true;
+        long returnedAt;
+    }
+
+    /** Срок инструмента — как в базе (iva_item_days): свой 1…365, иначе срок заявки, иначе 1. */
+    static int itemDays(JSONObject it, int orderDays) {
+        int d = it == null ? 0 : intOf(it.opt("days"), 0);
+        if (d < 1) d = orderDays;
+        return Math.max(1, Math.min(365, d));
+    }
+
+    /** Время возврата инструмента (0 — ещё не вернули). */
+    static long returnedAt(JSONObject it) {
+        if (it == null || it.isNull("returned_at")) return 0;
+        String v = it.optString("returned_at", "").trim();
+        if (v.isEmpty() || "null".equals(v)) return 0;
+        long t = IvaChatPatch.parseIso(v);
+        return t > 0 ? t : 1;
+    }
+
+    /** Инструменты по срокам (по возрастанию срока). */
+    static List<Grp> groups(JSONArray items, int orderDays) {
+        java.util.TreeMap<Integer, Grp> m = new java.util.TreeMap<Integer, Grp>();
+        for (int i = 0; items != null && i < items.length(); i++) {
+            JSONObject it = items.optJSONObject(i);
+            if (it == null) continue;
+            int d = itemDays(it, orderDays);
+            Grp g = m.get(d);
+            if (g == null) { g = new Grp(); g.days = d; m.put(d, g); }
+            g.items.put(it);
+            String nm = it.optString("name", "").trim();
+            if (g.names.length() > 0) g.names.append(", ");
+            g.names.append(nm.isEmpty() || "null".equals(nm) ? "Инструмент" : nm);
+            long r = returnedAt(it);
+            if (r <= 0) g.returned = false; else g.returnedAt = Math.max(g.returnedAt, r);
+        }
+        List<Grp> out = new ArrayList<Grp>(m.values());
+        for (Grp g : out) if (!g.returned) g.returnedAt = 0;
+        return out;
+    }
+
+    /** База умеет «Вернули» по сроку (SQL 20261115 отдаёт у инструментов returned_at). */
+    static boolean perTerm(JSONArray items) {
+        JSONObject it = items == null || items.length() == 0 ? null : items.optJSONObject(0);
+        return it != null && it.has("returned_at");
+    }
+
+    /** Состояние срока: новая / в аренде / срок вышел; вернули — без подсветки (как закрытая). */
+    static int termKind(String status, Grp g, long rentedAt, IvaRentPatch.Rule rule, long now) {
+        String st = norm(status);
+        if (!"rented".equals(st)) return kind(st, 0, now);
+        if (g.returned) return 2;
+        long end = rentedAt > 0 ? IvaRentPatch.end(rentedAt, g.days, rule) : 0;
+        return kind(st, end, now);
+    }
+
+    /** Ближайший конец аренды среди ещё не возвращённых сроков (0 — нет). */
+    static long nearestEnd(JSONObject p, int orderDays) {
+        if (p == null) return 0;
+        long at = IvaChatPatch.parseIso(p.optString("rented_at", ""));
+        if (at <= 0) return 0;
+        IvaRentPatch.Rule rule = IvaRentPatch.ruleOf(p);
+        long best = 0;
+        for (Grp g : groups(p.optJSONArray("items"), orderDays)) {
+            if (g.returned) continue;
+            long e = IvaRentPatch.end(at, g.days, rule);
+            if (e > 0 && (best == 0 || e < best)) best = e;
+        }
+        return best;
+    }
+
+    /** Сроки выданной части для таймера: по сроку на строку, вернули — не считаем; null — данных по срокам нет. */
+    static List<IvaNotifyPatch.RentEnd> termEnds(JSONObject p, int orderDays, String pid, String oid, long at) {
+        JSONArray items = p == null ? null : p.optJSONArray("items");
+        if (!perTerm(items) || at <= 0) return null;
+        List<IvaNotifyPatch.RentEnd> out = new ArrayList<IvaNotifyPatch.RentEnd>();
+        IvaRentPatch.Rule rule = IvaRentPatch.ruleOf(p);
+        for (Grp g : groups(items, orderDays)) {
+            if (g.returned) continue;
+            IvaNotifyPatch.RentEnd e = new IvaNotifyPatch.RentEnd();
+            e.end = IvaRentPatch.end(at, g.days, rule);
+            e.key = "r" + (pid == null ? "" : pid.trim()) + "@" + e.end;
+            e.order = oid == null ? "" : oid.trim();
+            e.names = g.names.toString();
+            out.add(e);
+        }
+        return out;
+    }
+
+    /** Часть у владельца / сотрудника выдана, сроков несколько и база умеет «Вернули» по сроку. */
+    static boolean terms(String partId) {
+        JSONObject o = part(partId);
+        JSONArray ps = o == null ? null : o.optJSONArray("parts");
+        JSONObject p = ps == null || ps.length() == 0 ? null : ps.optJSONObject(0);
+        if (p == null || !"rented".equals(norm(p.optString("status", "")))) return false;
+        JSONArray items = p.optJSONArray("items");
+        return perTerm(items) && groups(items, intOf(o.opt("days"), 0)).size() > 1;
+    }
+
+    /** «400 ₽ × 3 суток = 1 200 ₽ · залог 2 000 ₽» — чек инструмента; нет цены — как раньше (itemLine). */
+    static String checkLine(int d, double price, double deposit) {
+        double s = itemSum(d, price);
+        if (Double.isNaN(s)) return itemLine(d, price, deposit);
+        String z = deposit > 0 ? money(deposit) : "";
+        return money(price) + " × " + days(d) + " = " + money(s) + (z.isEmpty() ? "" : " · залог " + z);
+    }
+
+    /** Фон срока внутри карточки: лёгкий цвет состояния; вернули / закрыта — только рамка. */
+    static void termBg(Activity a, View v, int k) {
+        int c = tintFor(k);
+        GradientDrawable g = new GradientDrawable();
+        g.setCornerRadius(dp(a, 12));
+        if (c == 0) {
+            g.setColor(0);
+            g.setStroke(Math.max(1, dp(a, 1)), col(a, "line", 0xff262b35));
+        } else {
+            g.setColor((c & 0x00ffffff) | 0x1f000000);
+            g.setStroke(Math.max(1, dp(a, 1)), (c & 0x00ffffff) | 0x99000000);
+        }
+        v.setBackground(g);
+        v.setPadding(dp(a, 12), dp(a, 8), dp(a, 12), dp(a, 12));
+    }
+
+    static final java.text.SimpleDateFormat DT = new java.text.SimpleDateFormat("dd.MM HH:mm", Locale.ROOT);
+
+    static String dt(long ms) { synchronized (DT) { return DT.format(new java.util.Date(ms)); } }
+
+    /**
+     * Инструменты части по срокам (если сроков больше одного; иначе — как раньше, строками). partId и after — у кого
+     * есть «Вернули» по сроку (владелец, сотрудник с правом «Выдача»): после отметки вызывается after. {сумма, залог}.
+     */
+    static double[] termItems(final Activity a, LinearLayout box, JSONObject p, int orderDays, boolean big, final String partId, final Runnable after) {
+        JSONArray items = p == null ? null : p.optJSONArray("items");
+        List<Grp> gs = groups(items, orderDays);
+        if (gs.size() < 2) return items(a, box, items, orderDays, big);
+        double sum = 0, dep = 0;
+        boolean sumOk = true, per = perTerm(items);
+        String st = norm(p.optString("status", ""));
+        long at = IvaChatPatch.parseIso(p.optString("rented_at", "")), now = System.currentTimeMillis();
+        IvaRentPatch.Rule rule = IvaRentPatch.ruleOf(p);
+        int open = 0;
+        for (Grp g : gs) if (!g.returned) open++;
+        int cText = col(a, "text", 0xfff2f4f8), cGray = col(a, "gray", 0xff9aa1b0);
+        for (final Grp g : gs) {
+            int k = termKind(st, g, at, rule, now);
+            LinearLayout sub = new LinearLayout(a);
+            sub.setOrientation(LinearLayout.VERTICAL);
+            termBg(a, sub, k);
+            LinearLayout hr = new LinearLayout(a);
+            hr.setOrientation(LinearLayout.HORIZONTAL);
+            hr.setGravity(Gravity.CENTER_VERTICAL);
+            hr.addView(tx(a, "Срок " + days(g.days), big ? 15f : 14f, cText, true), new LinearLayout.LayoutParams(0, -2, 1f));
+            boolean back = g.returned && ("rented".equals(st) || "closed".equals(st));
+            hr.addView(back ? badge(a, 2, "Вернули") : badge(a, k));
+            sub.addView(hr);
+            double[] s = items(a, sub, g.items, orderDays, big);
+            if (Double.isNaN(s[0])) sumOk = false; else sum += s[0];
+            dep += s[1];
+            if (!Double.isNaN(s[0])) {
+                LinearLayout tr = new LinearLayout(a);
+                tr.setOrientation(LinearLayout.HORIZONTAL);
+                tr.addView(tx(a, "Итого по сроку", 13f, cGray, false), new LinearLayout.LayoutParams(0, -2, 1f));
+                tr.addView(tx(a, money(s[0]), 14f, cText, true));
+                LinearLayout.LayoutParams tl = new LinearLayout.LayoutParams(-1, -2);
+                tl.topMargin = dp(a, 8);
+                sub.addView(tr, tl);
+            }
+            if (back && g.returnedAt > 1) {
+                TextView t = tx(a, "Вернули " + dt(g.returnedAt), 12f, cGray, false);
+                t.setPadding(0, dp(a, 6), 0, 0);
+                sub.addView(t);
+            } else if ("rented".equals(st) && at > 0) {
+                long end = IvaRentPatch.end(at, g.days, rule);
+                TextView t = tx(a, "Вернуть до " + dt(end), 12f, cGray, false);
+                t.setPadding(0, dp(a, 6), 0, 0);
+                sub.addView(t);
+                if (per && end > 0) try {
+                    IvaNotifyPatch.RentEnd e = new IvaNotifyPatch.RentEnd();
+                    e.end = end;
+                    e.key = "r" + partId + "@" + end;
+                    LinearLayout.LayoutParams ml = new LinearLayout.LayoutParams(-2, -2);
+                    ml.topMargin = dp(a, 2);
+                    sub.addView(IvaRentPatch.timerView(a, Collections.singletonList(e), 13f, false), ml);
+                } catch (Throwable ignore) {}
+                if (per && after != null && partId != null && !partId.trim().isEmpty()) {
+                    final boolean last = open <= 1;
+                    final TextView b = IvaPickupPatch.addButton(a, col(a, "orange", 0xffff8f1f));
+                    b.setText("Вернули");
+                    b.setOnClickListener(new View.OnClickListener() {
+                        @Override public void onClick(View v) {
+                            try { IvaStaffOrdersPatch.returnTerm(a, partId, g.days, g.names.toString(), last, b, after); } catch (Throwable ignore) {}
+                        }
+                    });
+                    LinearLayout.LayoutParams bl = new LinearLayout.LayoutParams(-1, -2);
+                    bl.topMargin = dp(a, 10);
+                    sub.addView(b, bl);
+                }
+            }
+            LinearLayout.LayoutParams sl = new LinearLayout.LayoutParams(-1, -2);
+            sl.topMargin = dp(a, 10);
+            box.addView(sub, sl);
+        }
+        return new double[]{sumOk ? sum : Double.NaN, dep};
+    }
+
+    /** Владелец отметил «Вернули» по сроку: перечитать заявки целиком, сроки таймера и штатный список. */
+    static void admReload(Activity a) {
+        admAt = 0;
+        IvaRentPatch.admAt = 0;
+        try { IvaOrderPatch.callNative(a, "loadOrders"); } catch (Throwable ignore) {}
+    }
+
+    /** Штатная «Вернули» у карточки владельца — прячем (сроки — свои кнопки); штатные строки не переносим. */
+    static void hideNativeReturn(View v) {
+        if (v == null || VIEW_TAG.equals(v.getTag())) return;
+        if (v instanceof TextView) {
+            String t = String.valueOf(((TextView) v).getText()).trim();
+            if (t.startsWith("Вернули")) v.setVisibility(View.GONE);
+            return;
+        }
+        if (v instanceof android.view.ViewGroup) {
+            android.view.ViewGroup g = (android.view.ViewGroup) v;
+            for (int i = 0; i < g.getChildCount(); i++) hideNativeReturn(g.getChildAt(i));
+        }
+    }
+
     /** Общее состояние заявки из частей: есть новая — «Новая», иначе есть в аренде — «В аренде», иначе «Закрыта». */
     static String orderStatus(List<String> parts) {
         if (parts == null || parts.isEmpty()) return "new";
@@ -211,7 +501,8 @@ public class IvaOrderViewPatch {
                 if (at <= 0) continue;
                 String pid = p.optString("part_id", ""), oid = p.optString("order_id", o.optString("order_id", ""));
                 int d = partDays(p.optJSONArray("items"), intOf(o.opt("days"), 0));
-                List<IvaNotifyPatch.RentEnd> es = IvaNotifyPatch.rentEnds(pid, oid, p.optString("tools_text", ""), d, at, IvaRentPatch.ruleOf(p));
+                List<IvaNotifyPatch.RentEnd> es = termEnds(p, intOf(o.opt("days"), 0), pid, oid, at);   // 10.124: по срокам
+                if (es == null) es = IvaNotifyPatch.rentEnds(pid, oid, p.optString("tools_text", ""), d, at, IvaRentPatch.ruleOf(p));
                 if (es.isEmpty()) continue;
                 if (client) {
                     synchronized (IvaRentPatch.byOrder) {
@@ -269,8 +560,10 @@ public class IvaOrderViewPatch {
     static TextView tx(Activity a, String s, float sp, int color, boolean bold) { return IvaChiefPatch.text(a, s, sp, color, bold); }
 
     /** Плашка состояния, как на сайте: цвет текста и мягкий фон того же цвета, скругление 10. */
-    static TextView badge(Activity a, int k) {
-        TextView b = tx(a, KIND_TEXT[k], 12f, KIND_COLOR[k], true);
+    static TextView badge(Activity a, int k) { return badge(a, k, KIND_TEXT[k]); }
+
+    static TextView badge(Activity a, int k, String text) {
+        TextView b = tx(a, text, 12f, KIND_COLOR[k], true);
         GradientDrawable g = new GradientDrawable();
         g.setColor(KIND_BG[k]);
         g.setCornerRadius(dp(a, 10));
@@ -283,6 +576,8 @@ public class IvaOrderViewPatch {
     static long endOf(JSONObject p, int orderDays) {
         if (p == null || !"rented".equals(norm(p.optString("status", "")))) return 0;
         long at = IvaChatPatch.parseIso(p.optString("rented_at", ""));
+        long near = nearestEnd(p, orderDays);                          // 10.124: ближайший невозвращённый срок
+        if (near > 0) return near;
         int d = partDays(p.optJSONArray("items"), orderDays);
         return IvaRentPatch.end(at, d, IvaRentPatch.ruleOf(p));
     }
@@ -327,7 +622,7 @@ public class IvaOrderViewPatch {
             c.setOrientation(LinearLayout.VERTICAL);
             String nm = it.optString("name", "").trim();
             c.addView(tx(a, nm.isEmpty() || "null".equals(nm) ? "Инструмент" : nm, big ? 15f : 14f, cText, true));
-            String l = itemLine(d, price, deposit);
+            String l = checkLine(d, price, deposit);                  // 10.124: чек — цена × сутки = сумма
             if (!l.isEmpty()) {
                 TextView lt = tx(a, l, 12f, cGray, false);
                 lt.setPadding(0, dp(a, 2), 0, 0);
@@ -424,7 +719,7 @@ public class IvaOrderViewPatch {
         c.setTag(VIEW_TAG);
         c.addView(head(a, kind(st, end, now), IvaOrderPatch.ordNice(a, o.optString("created_at", "")), o.optString("order_id", "")));
         double sum = 0, dep = 0;
-        boolean sumOk = true;
+        boolean sumOk = true, terms = false;
         int cGray = col(a, "gray", 0xff9aa1b0);
         for (int i = 0; i < ps.length(); i++) {
             JSONObject p = ps.optJSONObject(i);
@@ -440,9 +735,10 @@ public class IvaOrderViewPatch {
                 hl.topMargin = dp(a, 12);
                 c.addView(h, hl);
             }
-            double[] s = items(a, c, p.optJSONArray("items"), orderDays, false);
+            double[] s = termItems(a, c, p, orderDays, false, null, null);   // 10.124: разные сроки — по срокам
             if (Double.isNaN(s[0])) sumOk = false; else sum += s[0];
             dep += s[1];
+            if (groups(p.optJSONArray("items"), orderDays).size() > 1 && perTerm(p.optJSONArray("items"))) terms = true;
             String pt = pointText(p, false);
             if (!pt.isEmpty()) {
                 TextView t = tx(a, "Пункт выдачи: " + pt, 12f, cGray, false);
@@ -456,7 +752,7 @@ public class IvaOrderViewPatch {
             g.setPadding(0, dp(a, 4), 0, 0);
             c.addView(g);
         }
-        if (!archived) try { IvaRentPatch.clientCard(a, c, r); } catch (Throwable ignore) {}   // таймер «дд.чч.мм»
+        if (!archived && !terms) try { IvaRentPatch.clientCard(a, c, r); } catch (Throwable ignore) {}   // таймер «дд.чч.мм» (по срокам — у каждого свой)
         c.addView(divider(a));
         LinearLayout foot = new LinearLayout(a);
         foot.setOrientation(LinearLayout.HORIZONTAL);
@@ -503,7 +799,7 @@ public class IvaOrderViewPatch {
                 hl.topMargin = dp(a, 10);
                 card.addView(hr, hl);
             }
-            double[] s = items(a, card, p.optJSONArray("items"), orderDays, true);
+            double[] s = termItems(a, card, p, orderDays, true, null, null);   // 10.124: разные сроки — по срокам
             if (Double.isNaN(s[0])) sumOk = false; else sum += s[0];
             dep += s[1];
             field(a, card, "Пункт выдачи", pointText(p, true), false);
@@ -517,7 +813,8 @@ public class IvaOrderViewPatch {
                 String when = new java.text.SimpleDateFormat("dd.MM.yyyy HH:mm", Locale.ROOT).format(new java.util.Date(rented));
                 long e = endOf(p, orderDays);
                 String until = e > 0 ? new java.text.SimpleDateFormat("dd.MM.yyyy HH:mm", Locale.ROOT).format(new java.util.Date(e)) : "";
-                field(a, card, "Выдано", when + (until.isEmpty() || !"rented".equals(norm(p.optString("status", ""))) ? "" : " · вернуть до " + until), false);
+                boolean many = groups(p.optJSONArray("items"), orderDays).size() > 1;   // 10.124: «вернуть до» — у каждого срока
+                field(a, card, "Выдано", when + (many || until.isEmpty() || !"rented".equals(norm(p.optString("status", ""))) ? "" : " · вернуть до " + until), false);
             }
             if (adm && p.has("fee") && !p.isNull("fee")) {
                 double fee = num(p.opt("fee"));
@@ -581,7 +878,8 @@ public class IvaOrderViewPatch {
         box.setOrientation(LinearLayout.VERTICAL);
         box.setTag(VIEW_TAG);
         box.addView(head(a, kind(p.optString("status", ""), endOf(p, orderDays), System.currentTimeMillis()), String.valueOf(date.getText()), o.optString("order_id", "")));
-        items(a, box, p.optJSONArray("items"), orderDays, false);
+        final Activity fa = a;                                          // 10.124: разные сроки — по срокам, «Вернули» у срока
+        termItems(a, box, p, orderDays, false, partId, new Runnable() { @Override public void run() { admReload(fa); } });
         String pt = pointText(p, false);
         if (!pt.isEmpty()) {
             TextView t = tx(a, "Пункт выдачи: " + pt, 12f, col(a, "gray", 0xff9aa1b0), false);
@@ -591,12 +889,16 @@ public class IvaOrderViewPatch {
         try { TextView pl = IvaOrderEditPatch.pendingLine(a, p); if (pl != null) box.addView(pl); } catch (Throwable ignore) {}   // 10.122
         date.setVisibility(View.GONE);                                  // штатные строки не переносим — прячем, наши — вместо них
         names.setVisibility(View.GONE);
+        if (terms(partId)) hideNativeReturn(card);                      // 10.124: «Вернули» — у каждого срока своя
         card.addView(box, 2, new LinearLayout.LayoutParams(-1, -2));
         return true;
     }
 
     /** «Заявки пункта» у сотрудника: инструменты с фото и пункт с адресом вместо строки названий. */
-    static View staffItems(Activity a, String partId) {
+    static View staffItems(Activity a, String partId) { return staffItems(a, partId, null); }
+
+    /** 10.124: after — у сотрудника с правом «Выдача»: «Вернули» у каждого срока, потом after (перечитать). */
+    static View staffItems(Activity a, String partId, Runnable after) {
         JSONObject o = part(partId);
         JSONArray ps = o == null ? null : o.optJSONArray("parts");
         JSONObject p = ps == null || ps.length() == 0 ? null : ps.optJSONObject(0);
@@ -604,7 +906,7 @@ public class IvaOrderViewPatch {
         LinearLayout box = new LinearLayout(a);
         box.setOrientation(LinearLayout.VERTICAL);
         box.setTag(VIEW_TAG);
-        double[] s = items(a, box, p.optJSONArray("items"), intOf(o.opt("days"), 0), false);
+        double[] s = termItems(a, box, p, intOf(o.opt("days"), 0), false, partId, after);
         if (!Double.isNaN(s[0]) && s[0] > 0) {
             TextView t = tx(a, "Итого " + money(s[0]) + (s[1] > 0 ? " · залог " + money(s[1]) : ""), 13f, col(a, "text", 0xfff2f4f8), true);
             t.setPadding(0, dp(a, 8), 0, 0);
