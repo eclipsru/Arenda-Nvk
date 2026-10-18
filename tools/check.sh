@@ -514,6 +514,17 @@ else
   skip "стенд «Страница проката и чат пункта»: нет pgserver (PG_PY=<python с pgserver> bash tools/check.sh)"
 fi
 
+head_ "4.5.26. Стенд 10.121: первый пункт, телефон пункта, правки сотрудников на одобрение, заявки целиком (локальный PostgreSQL)"
+if "$PG_PY" -c "import pgserver" >/dev/null 2>&1; then
+  if "$PG_PY" tools/v121-stand.py >/tmp/iva-test-v121.log 2>&1; then
+    ok "10.121: $(grep -c '✔' /tmp/iva-test-v121.log) проверок SQL на PostgreSQL (первый пункт — один раз; «Позвонить» — номер проката, пока нет сотрудника; правка сотрудника ждёт владельца, клиенты видят прежнюю; не второе объявление; заявки — каждому своё; откат)"
+  else
+    bad "стенд 10.121"; grep -E '✘|Error|ERROR' /tmp/iva-test-v121.log | head -8 | sed 's/^/      /'
+  fi
+else
+  skip "стенд 10.121: нет pgserver (PG_PY=<python с pgserver> bash tools/check.sh)"
+fi
+
 head_ "Итог"
 printf '  пройдено: %s, ошибок: %s, пропущено: %s\n' "$PASS" "$FAIL" "$SKIP"
 if [ "$FAIL" -eq 0 ]; then echo "  Можно продолжать."; exit 0; else echo "  Сначала исправляем замечания выше."; exit 1; fi
