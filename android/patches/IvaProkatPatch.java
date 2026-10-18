@@ -53,7 +53,7 @@ final class IvaProkatPatch {
     static final String TOGGLE_TITLE = "Чаты пунктов у меня";
     static final String TOGGLE_ON = "Вопросы клиентов пунктам видите вы и сотрудники пункта с правом «Отвечает в чате»";
     static final String TOGGLE_OFF = "Выключено: вопросы пунктам видят сотрудники пункта с правом «Отвечает в чате»; где таких нет — вы";
-    static final long FRESH_MS = 5 * 60_000L, NO_DB_MS = 10 * 60_000L;
+    static final long FRESH_MS = 30_000L, NO_DB_MS = 10 * 60_000L;   // 10.125: было 5 мин — новый телефон пункта не появлялся
 
     // ════════════════════════════════ чистая логика (IvaPatchTest) ════════════════════════════════
 
@@ -167,6 +167,9 @@ final class IvaProkatPatch {
     static final Map<String, List<PP>> cache = new HashMap<String, List<PP>>();
     static final Map<String, Long> cacheAt = new HashMap<String, Long>();
     static volatile long noDbUntil = 0;
+
+    /** 10.125: пункт или данные проката изменили — перечитать при следующем открытии. */
+    static void forget() { synchronized (cache) { cacheAt.clear(); } }
 
     static List<PP> cached(String pid) {
         synchronized (cache) {
@@ -302,6 +305,7 @@ final class IvaProkatPatch {
             } catch (Throwable ignore) {}
         }
         final String pid = IvaToolPointPatch.pointOf(it).toLowerCase(Locale.ROOT);
+        try { callButton(a, null); } catch (Throwable ignore) {}              // 10.125: пока не знаем пункт — как в приложении
         if (!IvaToolPointPatch.uuid(pid)) return;                              // без пункта — штатная строка
         List<PP> ps = cached(pid);
         if (ps != null) { paint(a, it, pid, ps); return; }
@@ -335,12 +339,51 @@ final class IvaProkatPatch {
             f.addView(iv, new FrameLayout.LayoutParams(-1, -1));
             IvaChatPatch.loadPhoto(a, iv, p.avatar, "prk" + Integer.toHexString(p.avatar.hashCode()));
         }
+        try { callButton(a, p); } catch (Throwable ignore) {}                 // 10.125: «Позвонить» — телефон пункта
         Object row = IvaClientPatch.get(a, "detSeller");
         if (row instanceof View) {
             ((View) row).setOnClickListener(new View.OnClickListener() {
                 @Override public void onClick(View v) { try { openPage(a, pid, owner); } catch (Throwable ignore) {} }
             });
         }
+    }
+
+    // ── 10.125: кнопка «Позвонить: 8 (908) …» в карточке инструмента — в приложении 10.14 номер вшит. У инструмента
+    //  с пунктом — телефон пункта (как на странице проката: пункта, иначе проката); телефона нет — кнопку прячем
+    //  (есть «Спросить»). Без пункта — как было (текст и номер приложения). Кнопку не переносим, только текст и нажатие.
+    static volatile String callTel = "", nativeCall = null;
+    static WeakReference<View> callView = new WeakReference<View>(null);
+
+    /** «Позвонить: 8 (908) 173-24-75» → «tel:89081732475» (номер приложения — для инструментов без пункта). */
+    static String nativeTel(String text) { return telUri(text == null ? "" : text.replaceAll("^[^0-9+]*", "")); }
+
+    static String callText(String tel) { return CALL + ": " + (tel == null ? "" : tel.trim()); }
+
+    static void callButton(final Activity a, PP p) {
+        View v = a.findViewById(IvaClientPatch.id(a, "detCall"));
+        if (!(v instanceof TextView)) return;
+        final TextView b = (TextView) v;
+        if (callView.get() != b) {                                            // кнопка этого окна — своё нажатие (один раз)
+            if (nativeCall == null) nativeCall = String.valueOf(b.getText());
+            callView = new WeakReference<View>(b);
+            b.setOnClickListener(new View.OnClickListener() {
+                @Override public void onClick(View x) {
+                    String t = callTel.isEmpty() ? nativeTel(nativeCall) : telUri(callTel);
+                    String shown = callTel.isEmpty() ? nativeCall : callTel;
+                    try { a.startActivity(new Intent(Intent.ACTION_DIAL, Uri.parse(t))); }
+                    catch (Throwable e) { Toast.makeText(a, "Нечем позвонить — наберите " + shown, Toast.LENGTH_LONG).show(); }
+                }
+            });
+        }
+        String tel = p == null ? "" : p.tel;
+        if (p != null && telUri(tel).isEmpty()) {                             // у пункта телефона нет — только «Спросить»
+            callTel = "";
+            b.setVisibility(View.GONE);
+            return;
+        }
+        callTel = p == null ? "" : tel.trim();
+        b.setText(p == null ? nativeCall : callText(tel));
+        b.setVisibility(View.VISIBLE);
     }
 
     // ════════════════════════════════ страница проката ════════════════════════════════
@@ -363,17 +406,24 @@ final class IvaProkatPatch {
     static int c(Activity a, String n, int f) { return IvaClientPatch.navColor(a, n, f); }
     static int dp(Activity a, float v) { return IvaChiefPatch.dp(a, v); }
 
-    static void openPage(final Activity a, final String pid, final String owner) {
+    static void openPage(final Activity a, final String pid, final String owner) { openPage(a, pid, owner, pid); }
+
+    /**
+     * 10.125: q — пункт, по которому спрашиваем базу (пункт инструмента из карточки). Переход в другой пункт проката
+     * («Пункты выдачи» → «Перейти») открывает ту же страницу с его данными и инструментами; база отдаёт все пункты
+     * проката по q, поэтому и пункт без инструментов открывается («Инструментов в этом пункте пока нет»).
+     */
+    static void openPage(final Activity a, final String pid, final String owner, final String q) {
         final IvaChiefPatch.Page pg = IvaChiefPatch.page(a, LABEL, null, false);
         track(pg);
         final TextView st = IvaChiefPatch.text(a, "Загружаем…", 13f, c(a, "gray", 0xff9aa1b0), false);
         st.setPadding(dp(a, 2), dp(a, 8), 0, 0);
         pg.list.addView(st, new LinearLayout.LayoutParams(-1, -2));
-        List<PP> ps = cached(pid);
-        if (ps != null) { draw(a, pg, pid, owner, ps); return; }
+        List<PP> ps = cached(q);
+        if (ps != null && find(ps, pid) != null) { draw(a, pg, pid, owner, q, ps); return; }
         new Thread(new Runnable() {
             @Override public void run() {
-                final List<PP> got = fetch(a, pid);
+                final List<PP> got = fetch(a, q);
                 a.runOnUiThread(new Runnable() {
                     @Override public void run() {
                         try {
@@ -383,7 +433,7 @@ final class IvaProkatPatch {
                                 st.setTextColor(c(a, "orange", 0xffff8f1f));
                                 return;
                             }
-                            draw(a, pg, pid, owner, got);
+                            draw(a, pg, pid, owner, q, got);
                         } catch (Throwable ignore) {}
                     }
                 });
@@ -391,7 +441,7 @@ final class IvaProkatPatch {
         }).start();
     }
 
-    static void draw(final Activity a, final IvaChiefPatch.Page pg, final String pid, final String owner, final List<PP> ps) {
+    static void draw(final Activity a, final IvaChiefPatch.Page pg, final String pid, final String owner, final String q, final List<PP> ps) {
         final int cText = c(a, "text", 0xfff2f4f8), cGray = c(a, "gray", 0xff9aa1b0), cOrange = c(a, "orange", 0xffff8f1f);
         final PP p = find(ps, pid);
         LinearLayout list = pg.list;
@@ -459,15 +509,15 @@ final class IvaProkatPatch {
         pts.setPadding(dp(a, 14), dp(a, 12), dp(a, 14), dp(a, 12));
         list.addView(pts, new LinearLayout.LayoutParams(bl));
         pts.setOnClickListener(new View.OnClickListener() {
-            @Override public void onClick(View v) { try { openPoints(a, pg, pid, owner, ps); } catch (Throwable ignore) {} }
+            @Override public void onClick(View v) { try { openPoints(a, pg, pid, owner, q, ps); } catch (Throwable ignore) {} }
         });
         // инструменты пункта
         TextView h = IvaChiefPatch.text(a, "Инструменты пункта", 16f, cText, true);
         h.setPadding(dp(a, 2), dp(a, 20), 0, dp(a, 2));
         list.addView(h, new LinearLayout.LayoutParams(-1, -2));
-        Object full = IvaSearchPatch.fullTools;
-        List<?> all = full instanceof List && !((List) full).isEmpty() ? (List<?>) full
-            : IvaClientPatch.get(a, "tools") instanceof List ? (List<?>) IvaClientPatch.get(a, "tools") : null;
+        List<?> all = null;                                                // 10.125: весь каталог — без города и фильтров поиска
+        try { all = IvaSearchPatch.allTools(a); } catch (Throwable ignore) {}
+        if (all == null || all.isEmpty()) all = IvaClientPatch.get(a, "tools") instanceof List ? (List<?>) IvaClientPatch.get(a, "tools") : null;
         List<JSONObject> ts = toolsOf(all, pid);
         if (ts.isEmpty()) {
             TextView e = IvaChiefPatch.text(a, "Инструментов в этом пункте пока нет", 13f, cGray, false);
@@ -529,7 +579,7 @@ final class IvaProkatPatch {
     }
 
     /** «Пункты выдачи»: карточки, как у владельца, с «Перейти». */
-    static void openPoints(final Activity a, final IvaChiefPatch.Page parent, final String pid, final String owner, List<PP> ps) {
+    static void openPoints(final Activity a, final IvaChiefPatch.Page parent, final String pid, final String owner, final String q, List<PP> ps) {
         final int cText = c(a, "text", 0xfff2f4f8), cGray = c(a, "gray", 0xff9aa1b0), cOrange = c(a, "orange", 0xffff8f1f);
         PP me = find(ps, pid);
         final IvaChiefPatch.Page pg = IvaChiefPatch.page(a, POINTS, me == null || me.company.isEmpty() ? null : me.company, false);
@@ -569,7 +619,7 @@ final class IvaProkatPatch {
                         if (p.id.equalsIgnoreCase(pid)) { pg.d.dismiss(); return; }      // этот пункт уже открыт
                         pg.d.dismiss();
                         if (parent != null && parent.open()) parent.d.dismiss();
-                        openPage(a, p.id, owner);
+                        openPage(a, p.id, owner, q);                     // 10.125: та же страница «Прокат» другого пункта
                     } catch (Throwable ignore) {}
                 }
             });

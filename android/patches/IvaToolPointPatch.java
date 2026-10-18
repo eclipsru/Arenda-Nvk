@@ -38,7 +38,7 @@ final class IvaToolPointPatch {
     static final String TAG = "iva_tool_point";
     static final String LABEL = "Пункт выдачи";
     static final String RPC = "/rest/v1/rpc/iva_tool_points";
-    static final long MINE_FRESH_MS = 2 * 60_000L, CARD_FRESH_MS = 10 * 60_000L;
+    static final long MINE_FRESH_MS = 2 * 60_000L, CARD_FRESH_MS = 30_000L;   // 10.125: было 10 мин — новый телефон пункта не появлялся
     static final int MAX_IDS = 200;
     // 10.114 (просьба владельца 17.10.2026): пунктов два и больше — пункт в «Добавить инструмент» выбирают сами, заранее
     // ничего не выбрано; без выбора «Опубликовать» не проходит (решение владельца: на прежнем месте; и у владельца, и
@@ -543,6 +543,9 @@ final class IvaToolPointPatch {
         JSONObject j = (JSONObject) it;
         return j.isNull("point_id") ? "" : IvaKindPatch.clean(j.optString("point_id", ""));
     }
+
+    /** 10.125: пункт изменили — данные карточек перечитать. */
+    static void forget() { synchronized (cards) { cardsAt.clear(); } }
 
     static void onDetail(final Activity a) {
         final Object it = IvaClientPatch.get(a, "detItem");

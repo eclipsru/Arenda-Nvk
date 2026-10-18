@@ -709,6 +709,12 @@ public class IvaPickupPatch {
             });
     }
 
+    /** 10.125: пункт сохранён — карточки инструментов и страница проката перечитают его при следующем открытии. */
+    static void forgetCards() {
+        try { IvaProkatPatch.forget(); } catch (Throwable ignore) {}
+        try { IvaToolPointPatch.forget(); } catch (Throwable ignore) {}
+    }
+
     static void write(final Ui u, final String method, final String path, final String body, final String done) {
         u.status.setText("Сохраняем…");
         u.status.setTextColor(u.cGray);
@@ -724,6 +730,7 @@ public class IvaPickupPatch {
                     @Override public void run() {
                         if (!ferr.isEmpty()) { u.status.setText(ferr); u.status.setTextColor(u.cOrange); toast(u.a, ferr); return; }
                         toast(u.a, done);
+                        forgetCards();                               // 10.125: телефон, адрес, график — в карточках сразу
                         u.form.removeAllViews();
                         u.form.setVisibility(View.GONE);
                         u.editClose = null;

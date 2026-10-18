@@ -2577,6 +2577,7 @@ public class IvaPatchTest {
         v122();                                                       // 10.122: удаление сотрудником, «Мой инструмент», чат, отмена заявки
         v123();                                                       // 10.123: доставка по наибольшей цене, «обратно» за каждым сроком, карточки
         v124();                                                       // 10.124: подсветка карточек заявок
+        v125();                                                       // 10.125: телефон пункта в карточке, другой пункт проката
         if (fail > 0) { System.out.println("ошибок: " + fail); System.exit(1); }
         System.out.println("все проверки IvaPatch пройдены");
     }
@@ -3568,5 +3569,13 @@ public class IvaPatchTest {
             "400\u00a0₽ × 3 суток = 1\u00a0200\u00a0₽ · залог 2\u00a0000\u00a0₽|99,50\u00a0₽ × 1 сутки = 99,50\u00a0₽");
         eq("10.124: нет цены — строка как раньше", IvaOrderViewPatch.checkLine(3, Double.NaN, 0) + "|" + IvaOrderViewPatch.checkLine(0, 400, 0),
             IvaOrderViewPatch.itemLine(3, Double.NaN, 0) + "|" + IvaOrderViewPatch.itemLine(0, 400, 0));
+    }
+
+    static void v125() {
+        eq("10.125: «Позвонить» без пункта — номер приложения из текста кнопки", IvaProkatPatch.nativeTel("Позвонить: 8 (908) 173-24-75") + "|" + IvaProkatPatch.nativeTel(null),
+            "tel:89081732475|");
+        eq("10.125: «Позвонить» с пунктом — телефон пункта", IvaProkatPatch.callText(" +7 383 111-22-33 ") + "|" + IvaProkatPatch.telUri("+7 383 111-22-33") + "|" + IvaProkatPatch.telUri("12"),
+            "Позвонить: +7 383 111-22-33|tel:+73831112233|");
+        eq("10.125: пункт перечитывается через 30 с (было 5 и 10 мин)", IvaProkatPatch.FRESH_MS + "|" + IvaToolPointPatch.CARD_FRESH_MS, "30000|30000");
     }
 }

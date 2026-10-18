@@ -833,6 +833,7 @@ public class IvaShopPatch {
                         }
                         u.d.hoursRaw = hoursText(u.d.days, u.d.from, u.d.to, u.d.hoursRaw);
                         syncNative(a, u.d);
+                        IvaPickupPatch.forgetCards();                // 10.125: телефон проката (у пункта без своего) — сразу
                         u.status.setText("Сохранено");
                         u.status.setTextColor(u.cGray);
                         toast(a, fmade.isEmpty() ? "Данные проката сохранены"

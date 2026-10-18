@@ -2833,7 +2833,32 @@ try {
     for (const m of sc.match(/raise exception '([^']+)'/g) || []) assert.ok(ph.includes(m.slice(17, -1)), `SQL 20261115: фраза «${m.slice(17, -1)}» — нет в DB_PHRASES приложения`);
     assert.ok(/ОТКАТ/.test(rb) && rb.includes('DROP FUNCTION IF EXISTS public.iva_staff_return(bigint, integer);') && chk.includes('tools/v124-stand.py'), 'SQL 20261115: откат и стенд');
     assert.ok((tp.match(/eq\("10\.124: /g) || []).length >= 7 && tp.includes('v124();'), 'IvaPatchTest: проверки 10.124');
-    assert.ok(/NEW_NAME: '10\.124'/.test(wf) && /NEW_CODE: '198'/.test(wf), 'сборка 10.124 (198)');
+    assert.ok(Number((/NEW_CODE: '(\d+)'/.exec(wf) || [])[1]) >= 198, 'сборка 10.124 (198) или новее');
+  }
+  // 10.125 (просьба владельца 18.10.2026): изменённый телефон пункта — в карточке инструмента и на странице «Прокат»;
+  // «Пункты выдачи» → «Перейти» — та же страница «Прокат» другого пункта (его данные и инструменты)
+  {
+    const strip = (t) => t.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '');
+    const wf = R('.github/workflows/build-apk.yml'), ap = R('android/patches/apply.py'), tp = R('android/patches/test/IvaPatchTest.java');
+    const pk = strip(R('android/patches/IvaProkatPatch.java')), tpp = R('android/patches/IvaToolPointPatch.java');
+    const pp = R('android/patches/IvaPickupPatch.java'), sh = R('android/patches/IvaShopPatch.java');
+    assert.ok(!/IvaProkatPatch|IvaToolPointPatch/.test(ap), '10.125: без новых вставок в smali');
+    const cb = pk.slice(pk.indexOf('static void callButton('), pk.indexOf('static void openPage('));
+    assert.ok(cb.includes('a.findViewById(IvaClientPatch.id(a, "detCall"))') && cb.includes('if (callView.get() != b) {')
+      && cb.includes('String t = callTel.isEmpty() ? nativeTel(nativeCall) : telUri(callTel);') && cb.includes('b.setVisibility(View.GONE);')
+      && !/removeView|addView|0x7f030048|9081732475/.test(cb),
+      '10.125: «Позвонить» в карточке — телефон пункта (нет — кнопка скрыта), без пункта — номер из текста кнопки; кнопку не переносим');
+    assert.ok(pk.includes('try { callButton(a, null); } catch (Throwable ignore) {}') && pk.includes('try { callButton(a, p); } catch (Throwable ignore) {}'),
+      '10.125: каждая карточка сначала — как в приложении, потом телефон своего пункта');
+    assert.ok(pk.includes('static final long FRESH_MS = 30_000L,') && tpp.includes('CARD_FRESH_MS = 30_000L;')
+      && pp.includes('forgetCards();') && sh.includes('IvaPickupPatch.forgetCards();')
+      && pk.includes('static void forget() { synchronized (cache) { cacheAt.clear(); } }') && tpp.includes('static void forget() { synchronized (cards) { cardsAt.clear(); } }'),
+      '10.125: пункт или данные проката сохранили — карточки перечитывают их; у клиентов — не дольше 30 с');
+    assert.ok(pk.includes('openPage(a, p.id, owner, q);') && pk.includes('final List<PP> got = fetch(a, q);')
+      && pk.includes('try { all = IvaSearchPatch.allTools(a); } catch (Throwable ignore) {}'),
+      '10.125: другой пункт — та же страница по пункту инструмента (пункт без инструментов тоже открывается), инструменты — из всего каталога');
+    assert.ok((tp.match(/eq\("10\.125: /g) || []).length >= 3 && tp.includes('v125();'), 'IvaPatchTest: проверки 10.125');
+    assert.ok(/NEW_NAME: '10\.125'/.test(wf) && /NEW_CODE: '199'/.test(wf), 'сборка 10.125 (199)');
   }
   // 10.75 (просьба владельца 14.10.2026): в «Настройках» — кнопка «Уведомления» (с 10.97 — открывает отдельную страницу);
   // внутри сверху «Открыть настройки уведомлений Android», потом какие присылать, потом расписание, потом всё остальное
