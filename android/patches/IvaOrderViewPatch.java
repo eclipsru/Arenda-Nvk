@@ -272,7 +272,7 @@ public class IvaOrderViewPatch {
     static double[] termItems(final Activity a, LinearLayout box, JSONObject p, int orderDays, boolean big, final String partId, final Runnable after) {
         JSONArray items = p == null ? null : p.optJSONArray("items");
         List<Grp> gs = groups(items, orderDays);
-        if (gs.size() < 2) return items(a, box, items, orderDays, big);
+        if (gs.size() < 2) return items(a, box, items, orderDays, big, p);
         double sum = 0, dep = 0;
         boolean sumOk = true, per = perTerm(items);
         String st = norm(p.optString("status", ""));
@@ -293,7 +293,7 @@ public class IvaOrderViewPatch {
             boolean back = g.returned && ("rented".equals(st) || "closed".equals(st));
             hr.addView(back ? badge(a, 2, "Вернули") : badge(a, k));
             sub.addView(hr);
-            double[] s = items(a, sub, g.items, orderDays, big);
+            double[] s = items(a, sub, g.items, orderDays, big, p);
             if (Double.isNaN(s[0])) sumOk = false; else sum += s[0];
             dep += s[1];
             if (!Double.isNaN(s[0])) {
@@ -597,8 +597,40 @@ public class IvaOrderViewPatch {
         return row;
     }
 
+    // ── 10.125 (просьба владельца 18.10.2026): чек по факту — у выданной заявки каждый инструмент по НАЧАТЫМ суткам
+    //  от «Выдал» до «Вернули» (запас 1 час, минимум 1 сутки, просрочка досчитывается). Вернули — сутки из базы
+    //  (used_days, SQL 20261116); ещё в аренде и срок прошёл — сколько набежало сейчас; иначе — по брони.
+
+    /** Начатые сутки из базы (1…365) или 0 — ещё не посчитаны. */
+    static int usedOf(JSONObject it) {
+        int u = it == null ? 0 : intOf(it.opt("used_days"), 0);
+        return u >= 1 && u <= 365 ? u : 0;
+    }
+
+    /** Сутки в чеке: посчитанные базой; в аренде — не меньше брони и сколько уже набежало; иначе — бронь. */
+    static int billDays(int booked, int used, boolean open, long rentedAt, long now, IvaRentPatch.Rule r) {
+        if (used > 0) return used;
+        if (open && rentedAt > 0) return Math.max(booked, IvaRentPatch.usedDays(rentedAt, now, r));
+        return booked;
+    }
+
+    /** Строка под чеком, если сутки не равны брони. */
+    static String billNote(int booked, int bill, boolean open) {
+        if (booked <= 0 || bill <= 0 || bill == booked) return "";
+        if (bill < booked) return "Бронь " + days(booked) + " · вернули раньше — " + days(bill);
+        return "Бронь " + days(booked) + (open ? " · просрочка: уже +" : " · вернули позже — +") + days(bill - booked);
+    }
+
     /** Инструменты строками: фото 48, название, «срок · цена · залог», справа сумма. Возвращает {сумма, залог}. */
     static double[] items(Activity a, LinearLayout box, JSONArray items, int orderDays, boolean big) {
+        return items(a, box, items, orderDays, big, null);
+    }
+
+    /** 10.125: p — часть заявки (статус, «Выдал», правило срока) — для чека по начатым суткам; null — по брони. */
+    static double[] items(Activity a, LinearLayout box, JSONArray items, int orderDays, boolean big, JSONObject p) {
+        boolean rented = p != null && "rented".equals(norm(p.optString("status", "")));
+        long at = p == null ? 0 : IvaChatPatch.parseIso(p.optString("rented_at", "")), now = System.currentTimeMillis();
+        IvaRentPatch.Rule rule = p == null ? null : IvaRentPatch.ruleOf(p);
         double sum = 0, dep = 0;
         boolean sumOk = items != null && items.length() > 0;
         int cText = col(a, "text", 0xfff2f4f8), cGray = col(a, "gray", 0xff9aa1b0);
@@ -608,7 +640,10 @@ public class IvaOrderViewPatch {
             int d = intOf(it.opt("days"), 0);
             if (d <= 0) d = orderDays;
             double price = num(it.opt("price")), deposit = num(it.opt("deposit"));
-            double s = itemSum(d, price);
+            boolean open = rented && returnedAt(it) <= 0;
+            int bill = billDays(d, usedOf(it), open, at, now, rule);       // 10.125: чек по начатым суткам
+            String note = billNote(d, bill, open);
+            double s = itemSum(bill, price);
             if (Double.isNaN(s)) sumOk = false; else sum += s;
             if (!Double.isNaN(deposit) && deposit > 0) dep += deposit;
             LinearLayout row = new LinearLayout(a);
@@ -622,11 +657,16 @@ public class IvaOrderViewPatch {
             c.setOrientation(LinearLayout.VERTICAL);
             String nm = it.optString("name", "").trim();
             c.addView(tx(a, nm.isEmpty() || "null".equals(nm) ? "Инструмент" : nm, big ? 15f : 14f, cText, true));
-            String l = checkLine(d, price, deposit);                  // 10.124: чек — цена × сутки = сумма
+            String l = checkLine(bill, price, deposit);               // 10.124: чек — цена × сутки = сумма
             if (!l.isEmpty()) {
                 TextView lt = tx(a, l, 12f, cGray, false);
                 lt.setPadding(0, dp(a, 2), 0, 0);
                 c.addView(lt);
+            }
+            if (!note.isEmpty()) {                                      // 10.125: «Бронь 2 суток · вернули раньше — 1 сутки»
+                TextView nt = tx(a, note, 12f, bill > d ? col(a, "orange", 0xffff8f1f) : cGray, false);
+                nt.setPadding(0, dp(a, 2), 0, 0);
+                c.addView(nt);
             }
             LinearLayout.LayoutParams cl = new LinearLayout.LayoutParams(0, -2, 1f);
             cl.leftMargin = dp(a, 12);

@@ -2802,7 +2802,7 @@ try {
     const strip = (t) => t.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '');
     const rp = R('android/patches/IvaRentPatch.java');
     assert.ok(ov.includes('static double[] termItems(final Activity a, LinearLayout box, JSONObject p, int orderDays, boolean big, final String partId, final Runnable after) {')
-      && ov.includes('if (gs.size() < 2) return items(a, box, items, orderDays, big);')
+      && /if \(gs\.size\(\) < 2\) return items\(a, box, items, orderDays, big(, p)?\);/.test(ov)
       && ov.includes('termItems(a, box, p, orderDays, false, partId, new Runnable() { @Override public void run() { admReload(fa); } });')
       && ov.includes('double[] s = termItems(a, card, p, orderDays, true, null, null);') && ov.includes('double[] s = termItems(a, c, p, orderDays, false, null, null);')
       && ov.includes('double[] s = termItems(a, box, p, intOf(o.opt("days"), 0), false, partId, after);'),
@@ -2858,7 +2858,29 @@ try {
       && pk.includes('try { all = IvaSearchPatch.allTools(a); } catch (Throwable ignore) {}'),
       '10.125: другой пункт — та же страница по пункту инструмента (пункт без инструментов тоже открывается), инструменты — из всего каталога');
     assert.ok((tp.match(/eq\("10\.125: /g) || []).length >= 3 && tp.includes('v125();'), 'IvaPatchTest: проверки 10.125');
-    assert.ok(/NEW_NAME: '10\.125'/.test(wf) && /NEW_CODE: '199'/.test(wf), 'сборка 10.125 (199)');
+    assert.ok(Number((/NEW_CODE: '(\d+)'/.exec(wf) || [])[1]) >= 199, 'сборка 10.125 (199) или новее');
+  }
+  // 10.126 (просьба владельца 18.10.2026): чек заявки по начатым суткам от «Выдал» до «Вернули» (запас 1 час, минимум
+  // 1 сутки, просрочка досчитывается) — во всех заявках; база (SQL 20261116) и приложение считают одинаково
+  {
+    const strip = (t) => t.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '');
+    const wf = R('.github/workflows/build-apk.yml'), ap = R('android/patches/apply.py'), tp = R('android/patches/test/IvaPatchTest.java');
+    const ov = strip(R('android/patches/IvaOrderViewPatch.java')), rp = strip(R('android/patches/IvaRentPatch.java'));
+    const sq = R('supabase/migrations/20261116_v125.sql'), rb = R('supabase/migrations/20261116_v125_rollback.sql');
+    assert.ok(!/IvaOrderViewPatch|IvaRentPatch\.usedDays/.test(ap), '10.126: без новых вставок в smali');
+    assert.ok(rp.includes('static final long GRACE_MS = 60L * 60 * 1000;') && rp.includes('if (ret <= e + GRACE_MS) break;')
+      && sq.includes("exit when p_ret <= e + interval '1 hour'"), '10.126: запас на возврат — 1 час, в приложении и в базе одинаково');
+    assert.ok(ov.includes('int bill = billDays(d, usedOf(it), open, at, now, rule);') && ov.includes('double s = itemSum(bill, price);')
+      && ov.includes('String l = checkLine(bill, price, deposit);') && (ov.match(/items\(a, (box|sub), (g\.)?items, orderDays, big, p\)/g) || []).length === 2,
+      '10.126: чек и «Итого» — по начатым суткам во всех заявках (один срок и сроки внутри)');
+    assert.ok(/'used_days', public\.iva_part_used_days\(pt\.owner, pt\.point_id, pt\.rented_at, now\(\)\)/.test(sq)
+      && sq.includes("coalesce(sum((e->>'price')::numeric * public.iva_bill_days(e, od)), 0)")
+      && sq.includes("'used_days', e.v -> 'used_days'") && sq.includes("iva.part_cancel") && sq.includes("iva.part_took")
+      && !/UPDATE\s+public\.tools/i.test(sq + rb),
+      '10.126: SQL — «Вернули» по сроку и закрытие считают начатые сутки, статусы как в 10.122, инструменты не трогает');
+    assert.ok(rb.includes('DROP FUNCTION IF EXISTS public.iva_used_days(') && !rb.includes('iva_bill_days(e'), '10.126: откат — чек по брони');
+    assert.ok((tp.match(/eq\("10\.125: /g) || []).length >= 7 && tp.includes('v125();'), 'IvaPatchTest: проверки 10.126');
+    assert.ok(/NEW_NAME: '10\.126'/.test(wf) && /NEW_CODE: '200'/.test(wf), 'сборка 10.126 (200)');
   }
   // 10.75 (просьба владельца 14.10.2026): в «Настройках» — кнопка «Уведомления» (с 10.97 — открывает отдельную страницу);
   // внутри сверху «Открыть настройки уведомлений Android», потом какие присылать, потом расписание, потом всё остальное

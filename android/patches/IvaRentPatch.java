@@ -139,6 +139,25 @@ public class IvaRentPatch {
         return plain;
     }
 
+    /** 10.125: запас на возврат — 1 час (ответ владельца 18.10.2026). */
+    static final long GRACE_MS = 60L * 60 * 1000;
+
+    /**
+     * 10.125: начатые сутки — как в базе (iva_used_days): сколько концов срока (end) прошло до возврата + 1 час запаса;
+     * минимум 1, не больше 365. Совпадающие концы («до закрытия пункта», после дня выдачи выходной) — один раз.
+     */
+    static int usedDays(long rentedAt, long ret, Rule r) {
+        if (rentedAt <= 0 || ret <= 0) return 0;
+        long prev = Long.MIN_VALUE;
+        int n = 0;
+        for (int k = 1; k <= 365; k++) {
+            long e = end(rentedAt, k, r);
+            if (e > prev) { n++; prev = e; }
+            if (ret <= e + GRACE_MS) break;
+        }
+        return Math.max(1, Math.min(365, n));
+    }
+
     /** 10.78: сколько секунд показывать: до конца — с округлением вверх (00.00.00 ровно в срок), после — сколько прошло. */
     static long seconds(long end, long now) { return now < end ? (end - now + 999) / 1000 : (now - end) / 1000; }
 

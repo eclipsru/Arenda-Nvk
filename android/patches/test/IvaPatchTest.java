@@ -3577,5 +3577,21 @@ public class IvaPatchTest {
         eq("10.125: «Позвонить» с пунктом — телефон пункта", IvaProkatPatch.callText(" +7 383 111-22-33 ") + "|" + IvaProkatPatch.telUri("+7 383 111-22-33") + "|" + IvaProkatPatch.telUri("12"),
             "Позвонить: +7 383 111-22-33|tel:+73831112233|");
         eq("10.125: пункт перечитывается через 30 с (было 5 и 10 мин)", IvaProkatPatch.FRESH_MS + "|" + IvaToolPointPatch.CARD_FRESH_MS, "30000|30000");
+        long at = 1792227600000L, H = 3600000L;                       // сб 17.10.2026 12:00 МСК
+        IvaRentPatch.Rule day = IvaRentPatch.rule("day", "", "");
+        eq("10.125: начатые сутки — 20 ч / 24 ч 59 мин (запас час) / 25 ч 01 мин / 3 суток 2 ч / через час",
+            IvaRentPatch.usedDays(at, at + 20 * H, day) + "|" + IvaRentPatch.usedDays(at, at + 25 * H - 60000, day) + "|"
+            + IvaRentPatch.usedDays(at, at + 25 * H + 60000, day) + "|" + IvaRentPatch.usedDays(at, at + 74 * H, day) + "|"
+            + IvaRentPatch.usedDays(at, at + H, day) + "|" + IvaRentPatch.usedDays(0, at, day), "1|1|2|4|1|0");
+        IvaRentPatch.Rule sun = IvaRentPatch.rule("close", "[1140,1140,1140,1140,1140,1140,-1]", "Europe/Moscow");
+        eq("10.125: «до закрытия пункта», вс выходной — пн 19:30 → 1, пн 20:01 → 2, ср 19:00 → 3 (как в базе)",
+            IvaRentPatch.usedDays(at, 1792427400000L, sun) + "|" + IvaRentPatch.usedDays(at, 1792429260000L, sun) + "|"
+            + IvaRentPatch.usedDays(at, 1792598400000L, sun), "1|2|3");
+        eq("10.125: сутки в чеке — из базы / в аренде с просрочкой / в аренде в срок / вернули без расчёта",
+            IvaOrderViewPatch.billDays(2, 1, false, at, at + 30 * H, day) + "|" + IvaOrderViewPatch.billDays(1, 0, true, at, at + 30 * H, day) + "|"
+            + IvaOrderViewPatch.billDays(3, 0, true, at, at + 30 * H, day) + "|" + IvaOrderViewPatch.billDays(3, 0, false, at, at + 30 * H, day), "1|2|3|3");
+        eq("10.125: строка под чеком", IvaOrderViewPatch.billNote(2, 1, false) + "|" + IvaOrderViewPatch.billNote(2, 4, false) + "|"
+            + IvaOrderViewPatch.billNote(1, 2, true) + "|" + IvaOrderViewPatch.billNote(3, 3, false),
+            "Бронь 2 суток · вернули раньше — 1 сутки|Бронь 2 суток · вернули позже — +2 суток|Бронь 1 сутки · просрочка: уже +1 сутки|");
     }
 }
