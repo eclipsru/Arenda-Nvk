@@ -235,7 +235,8 @@ public class IvaShopPatch {
     /** 10.121: то же + адрес пункта выдачи (admins.address — штатная колонка, есть всегда). */
     static String withPick(String body, String pick) {
         if (body == null || !body.endsWith("}")) return body;
-        return body.substring(0, body.length() - 1) + ",\"address\":" + q(clean(pick)) + "}";
+        String head = body.substring(0, body.length() - 1).trim();
+        return head + (head.endsWith("{") ? "" : ",") + "\"address\":" + q(clean(pick)) + "}";
     }
 
     /** 10.121: график для первого пункта из «Данных проката»: Пн…Вс, выходной — -1; время не выбрано или дней нет — null. */

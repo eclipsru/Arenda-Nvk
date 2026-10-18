@@ -342,6 +342,8 @@ public class IvaRentPatch {
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-2, -2);
         lp.topMargin = IvaOrderPatch.dp(a, 6);
         int at = card.getChildAt(0) instanceof TextView ? 2 : 1;
+        View rich = card.findViewWithTag(IvaOrderViewPatch.VIEW_TAG);   // 10.121: под заявкой целиком
+        if (rich != null && rich.getParent() == card) at = card.indexOfChild(rich) + 1;
         View t = timerView(a, es, 13f, true);
         shown.put(t, sig(es));
         card.addView(t, Math.min(at, card.getChildCount()), lp);

@@ -261,6 +261,7 @@ public class IvaStaffOrdersPatch {
                     String[] r = IvaClientPatch.apiCall(u.a, PARTS_RPC, "POST", "{}", true);
                     err = r == null ? dbError("", "") : dbError(r[0], r.length > 1 ? r[1] : "");
                     if (err.isEmpty()) got = parse(r.length > 1 ? r[1] : "");
+                    if (got != null) IvaOrderViewPatch.load(u.a, "staff");   // 10.121: инструменты с фото, пункт, сроки (нет SQL — как было)
                 } catch (Throwable e) { err = dbError("", ""); }
                 final List<Part> fp = got;
                 final String fe = err;
@@ -329,10 +330,15 @@ public class IvaStaffOrdersPatch {
         String w = when(p.created);
         top.addView(IvaChiefPatch.text(a, "Заявка №" + p.order + (w.isEmpty() ? "" : " · " + w), 15f, u.cText, true),
             new LinearLayout.LayoutParams(0, -2, 1f));
-        top.addView(IvaChiefPatch.text(a, statusText(p.status), 12f, "new".equals(p.status) ? u.cOrange : u.cGray, "new".equals(p.status)));
+        top.addView(IvaOrderViewPatch.badge(a, IvaOrderViewPatch.kind(p.status, IvaOrderViewPatch.partEnd(p.id), System.currentTimeMillis())));   // 10.121
         c.addView(top);
-        if (!p.point.isEmpty()) c.addView(line(u, "Пункт: " + p.point, u.cGray));
-        if (!p.tools.isEmpty()) c.addView(line(u, p.tools, u.cText));
+        String sp = "";
+        try { sp = IvaOrderViewPatch.staffPoint(p.id); } catch (Throwable ignore) {}
+        if (!sp.isEmpty() || !p.point.isEmpty()) c.addView(line(u, "Пункт: " + (sp.isEmpty() ? p.point : sp), u.cGray));
+        View items = null;
+        try { items = IvaOrderViewPatch.staffItems(a, p.id); } catch (Throwable ignore) {}   // 10.121: инструменты с фото и ценой
+        if (items != null) c.addView(items);
+        else if (!p.tools.isEmpty()) c.addView(line(u, p.tools, u.cText));
         if (!p.name.isEmpty()) c.addView(line(u, "Клиент: " + p.name + (p.mine ? " (это вы)" : ""), u.cText));
         if (!p.tel.isEmpty()) {
             TextView t = line(u, p.tel, u.cOrange);
@@ -347,7 +353,15 @@ public class IvaStaffOrdersPatch {
         if (!p.get.isEmpty()) c.addView(line(u, "Получение: " + p.get, u.cGray));
         if (!p.comment.isEmpty()) c.addView(line(u, "Комментарий: " + p.comment, u.cGray));
         String r = when(p.rented);
-        if ("rented".equals(p.status) && !r.isEmpty()) c.addView(line(u, "Выдана " + r + (p.days > 0 ? " · на " + daysText(p.days) : ""), u.cGray));
+        if ("rented".equals(p.status) && !r.isEmpty()) {
+            c.addView(line(u, "Выдана " + r + (p.days > 0 ? " · на " + daysText(p.days) : ""), u.cGray));
+            List<IvaNotifyPatch.RentEnd> es = IvaRentPatch.byPart.get(p.id);   // 10.121: таймер, как у владельца
+            if (es != null && !es.isEmpty()) {
+                LinearLayout.LayoutParams tl = new LinearLayout.LayoutParams(-2, -2);
+                tl.topMargin = dp(a, 4);
+                c.addView(IvaRentPatch.timerView(a, es, 13f, true), tl);
+            }
+        }
         else if (p.days > 0 && !"closed".equals(p.status)) c.addView(line(u, "Срок: " + daysText(p.days), u.cGray));
         if (p.act && !next(p.status).isEmpty()) {
             final TextView b = IvaPickupPatch.addButton(a, u.cOrange);

@@ -1153,6 +1153,7 @@ public final class IvaOrderPatch {
                     } catch (Throwable ignore) {}
                     ordLoadProkat(a, ordOwnersOf(rows));
                     IvaRentPatch.loadMine(a);          // 10.77: выданные инструменты — для таймера (нет SQL — без таймера)
+                    IvaOrderViewPatch.load(a, "client");   // 10.121: заявки целиком (и сроки для таймера); нет SQL — как в 10.120
                 }
                 final List<Map<String, String>> got = rows;
                 final java.util.Set<String> fa = arch;
@@ -1590,6 +1591,14 @@ public final class IvaOrderPatch {
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2);
         lp.bottomMargin = dp(a, 10);
         card.setLayoutParams(lp);
+        LinearLayout rich = null;                                      // 10.121: заявка целиком, как на сайте
+        try { rich = IvaOrderViewPatch.clientCard(a, r, archived); } catch (Throwable ignore) { rich = null; }
+        if (rich != null) {
+            card.setOrientation(LinearLayout.VERTICAL);
+            card.addView(rich, new LinearLayout.LayoutParams(-1, -2));
+            ordCardClicks(a, card, r, archived);
+            return card;
+        }
         LinearLayout c = new LinearLayout(a);
         c.setOrientation(LinearLayout.VERTICAL);
         card.addView(c, new LinearLayout.LayoutParams(0, -2, 1f));
@@ -1641,6 +1650,11 @@ public final class IvaOrderPatch {
         LinearLayout.LayoutParams fl = new LinearLayout.LayoutParams(-1, -2);
         fl.topMargin = dp(a, 6);
         c.addView(foot, fl);
+        ordCardClicks(a, card, r, archived);
+        return card;
+    }
+
+    static void ordCardClicks(final Activity a, View card, final Map<String, String> r, final boolean archived) {
         card.setClickable(true);
         card.setOnClickListener(new View.OnClickListener() {
             @Override public void onClick(View v) { try { ordOpenRow(a, r, archived); } catch (Throwable ignore) {} }
@@ -1648,7 +1662,6 @@ public final class IvaOrderPatch {
         card.setOnLongClickListener(new View.OnLongClickListener() {
             @Override public boolean onLongClick(View v) { try { ordAskArchive(a, r, !archived); } catch (Throwable ignore) {} return true; }
         });
-        return card;
     }
 
     // ── 10.66: картинки инструментов на карточке заявки (просьба владельца 14.10.2026) ──
@@ -1791,19 +1804,32 @@ public final class IvaOrderPatch {
             tools.add(j.optString("tools_text", ""));
             owners.add(j.optString("owner_email", ""));
         }
+        // 10.121: сроки и заявки целиком — грузим всегда (раньше — только если карточки сопоставились, и таймер пропадал)
+        try { IvaRentPatch.admNeed(a, (List<?>) parts); } catch (Throwable ignore) {}   // 10.77: сроки выданных — для таймера
+        try { IvaOrderViewPatch.admNeed(a, (List<?>) parts); } catch (Throwable ignore) {}
         boolean drill = Boolean.TRUE.equals(get(a, "admDrill"));
         List<Map<String, String>> rows = admPicRows(keys, tools, owners, drill, String.valueOf(get(a, "admClientKey")));
         List<LinearLayout> cards = admCards((ViewGroup) ol);
+        if (drill && cards.size() != rows.size()) cards = admDrillCards(cards);   // 10.121: лишние строки — не карточки заявок
         if (rows.isEmpty() || cards.size() != rows.size()) return;
         List<Integer> mine = drill ? admDrillIdx(keys, String.valueOf(get(a, "admClientKey"))) : null;
         for (int i = 0; i < cards.size(); i++) {
-            try { admPicCard(a, cards.get(i), rows.get(i), drill); } catch (Throwable ignore) {}
-            if (mine != null && i < mine.size()) {   // 10.68: нажатие на заявку — подробности
-                try { admMore(a, cards.get(i), (JSONObject) ((List<?>) parts).get(mine.get(i))); } catch (Throwable ignore) {}
-                try { IvaRentPatch.admCard(a, cards.get(i), (JSONObject) ((List<?>) parts).get(mine.get(i))); } catch (Throwable ignore) {}   // 10.77
+            JSONObject part = mine != null && i < mine.size() ? (JSONObject) ((List<?>) parts).get(mine.get(i)) : null;
+            boolean rich = false;
+            if (part != null) try { rich = IvaOrderViewPatch.admCard(a, cards.get(i), part.optString("id", "")); } catch (Throwable ignore) {}
+            if (!rich) try { admPicCard(a, cards.get(i), rows.get(i), drill); } catch (Throwable ignore) {}
+            if (part != null) {   // 10.68: нажатие на заявку — подробности
+                try { admMore(a, cards.get(i), part); } catch (Throwable ignore) {}
+                try { IvaRentPatch.admCard(a, cards.get(i), part); } catch (Throwable ignore) {}   // 10.77
             }
         }
-        try { IvaRentPatch.admNeed(a, (List<?>) parts); } catch (Throwable ignore) {}   // 10.77: сроки выданных — для таймера
+    }
+
+    /** Заявки клиента у владельца: только вертикальные карточки (не «‹ Все клиенты», не подписи). */
+    static List<LinearLayout> admDrillCards(List<LinearLayout> cards) {
+        List<LinearLayout> out = new ArrayList<LinearLayout>();
+        for (LinearLayout c : cards) if (c.getOrientation() == LinearLayout.VERTICAL) out.add(c);
+        return out;
     }
 
     /** Номера частей (в admParts) одного клиента — в порядке штатных карточек его заявок. */
@@ -2156,9 +2182,15 @@ public final class IvaOrderPatch {
         sh.addView(sc, new LinearLayout.LayoutParams(-1, 0, 1f));
         String nice = r.containsKey(ORD_NICE) ? r.get(ORD_NICE) : ordNice(a, r.get("created_at"));
         final boolean adm = r.containsKey(ADM_ROW);           // 10.68: заявка у админа — вместо «Прокат» блок «Клиент»
-        for (String[] f : adm ? admFields(r, nice) : ordFields(r, nice)) ordFieldView(a, body, f, "Статус".equals(f[0]));
+        boolean rich = false;
+        try { rich = IvaOrderViewPatch.has(r, adm); } catch (Throwable ignore) {}
+        for (String[] f : adm ? admFields(r, nice) : ordFields(r, nice)) {
+            if (rich && ("Инструменты".equals(f[0]) || "Получение".equals(f[0]))) continue;   // 10.121: они — в «Составе заявки»
+            ordFieldView(a, body, f, "Статус".equals(f[0]));
+        }
         try { IvaRentPatch.sheet(a, body, r, adm, archived); } catch (Throwable ignore) {}   // 10.77: «До конца аренды» — живой таймер
-        try { IvaOrderPointPatch.sheet(a, body, r, adm); } catch (Throwable ignore) {}       // 10.102: пункт выдачи части / частей
+        if (rich) try { IvaOrderViewPatch.sheet(a, body, r, adm); } catch (Throwable ignore) {}   // 10.121: инструменты с фото, пункт, итог
+        else try { IvaOrderPointPatch.sheet(a, body, r, adm); } catch (Throwable ignore) {}       // 10.102: пункт выдачи части / частей
         try { IvaStaffJournalPatch.sheet(a, body, r, adm); } catch (Throwable ignore) {}     // 10.107: «Выдал» / «Принял» (админу)
         ordNoAddr = false;
         try { ordNoAddr = !adm && IvaOrderPointPatch.clientHas(ordVal(r.get("id"))); } catch (Throwable ignore) {}
@@ -2292,7 +2324,9 @@ public final class IvaOrderPatch {
         });
         call.setOnClickListener(new View.OnClickListener() {
             @Override public void onClick(View v) {
-                String uri = dialUri(ordContact(adm, r, owners, ordProkat)[1]);
+                String pt = "";
+                if (!adm) try { pt = IvaOrderViewPatch.pointTel(ordVal(r.get("id"))); } catch (Throwable ignore) {}   // 10.121: телефон пункта
+                String uri = dialUri(pt.isEmpty() ? ordContact(adm, r, owners, ordProkat)[1] : pt);
                 if (uri.isEmpty()) { Toast.makeText(a, adm ? CONTACT_NO_PHONE_CLIENT : CONTACT_NO_PHONE_PROKAT, Toast.LENGTH_LONG).show(); return; }
                 try { a.startActivity(new android.content.Intent(android.content.Intent.ACTION_DIAL, android.net.Uri.parse(uri))); }
                 catch (Throwable e) { Toast.makeText(a, "Не удалось открыть набор номера", Toast.LENGTH_SHORT).show(); }
@@ -2506,6 +2540,8 @@ public final class IvaOrderPatch {
         LinearLayout.LayoutParams ml = new LinearLayout.LayoutParams(-2, -2);
         ml.topMargin = dp(a, 6);
         int at = card.getChildAt(0) instanceof TextView ? 2 : 1;      // после даты и названий (или их строки с картинками)
+        View rich = card.findViewWithTag(IvaOrderViewPatch.VIEW_TAG);  // 10.121: после заявки целиком
+        if (rich != null && rich.getParent() == card) at = card.indexOfChild(rich) + 1;
         card.addView(more, Math.min(at, card.getChildCount()), ml);
     }
 }

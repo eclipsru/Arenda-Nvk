@@ -2573,6 +2573,7 @@ public class IvaPatchTest {
         try118();                                                     // 10.118: пробная запись называет причину отказа
         mail119();                                                    // 10.119: почта — из ключа входа
         prokat120();                                                  // 10.120: страница проката, чат пункта, «На одобрении»
+        v121();                                                       // 10.121: первый пункт, правки на одобрение, заявки целиком
         if (fail > 0) { System.out.println("ошибок: " + fail); System.exit(1); }
         System.out.println("все проверки IvaPatch пройдены");
     }
@@ -3347,5 +3348,79 @@ public class IvaPatchTest {
             "2000 ₽|13 ₽||||");
         eq("10.120: адреса функций", IvaProkatPatch.RPC + "|" + IvaStaffToolsPatch.CARD_RPC + "|" + IvaStaffChatPatch.P_CHATS_RPC,
             "/rest/v1/rpc/iva_prokat_points|/rest/v1/rpc/iva_tool_pending_card|/rest/v1/rpc/iva_staff_point_chats");
+    }
+
+    static void v121() {
+        // «Данные проката» → «Адрес пункта выдачи»
+        eq("10.121: адрес пункта выдачи уходит в admins.address", IvaShopPatch.withPick("{\"company\":\"Ива\"}", "  Нск,  Ленина 1 ") + "|"
+            + IvaShopPatch.withPick("{}", "") + "|" + IvaShopPatch.withPick(null, "x"),
+            "{\"company\":\"Ива\",\"address\":\"Нск, Ленина 1\"}|{\"address\":\"\"}|null");
+        int[][] h = IvaShopPatch.pickHours(1 | 2 | 4 | 8 | 16, 540, 1140);
+        eq("10.121: график первого пункта из «Данных проката»", java.util.Arrays.toString(h[0]) + java.util.Arrays.toString(h[1]) + "|"
+            + (IvaShopPatch.pickHours(31, -1, 1140) == null) + "|" + (IvaShopPatch.pickHours(0, 540, 1140) == null) + "|"
+            + (IvaShopPatch.pickHours(31, 600, 600) == null) + "|" + IvaShopPatch.pickHours(64, 600, 1440)[1][6],
+            "[540, 540, 540, 540, 540, -1, -1][1140, 1140, 1140, 1140, 1140, -1, -1]|true|true|true|1439");
+        IvaPickupPatch.Point pt = new IvaPickupPatch.Point();
+        pt.city = "Новосибирск"; pt.lat = 55.0; pt.lng = 82.9;
+        eq("10.121: тело iva_pickup_first", IvaPickupPatch.firstBody(" ул. Ленина, 1 ", pt, new int[][]{{540, 540, 540, 540, 540, -1, -1}, {1140, 1140, 1140, 1140, 1140, -1, -1}}),
+            "{\"p_address\":\"ул. Ленина, 1\",\"p_city\":\"Новосибирск\",\"p_lat\":55.0,\"p_lng\":82.9,\"p_open\":[540,540,540,540,540,-1,-1],\"p_close\":[1140,1140,1140,1140,1140,-1,-1]}");
+        eq("10.121: без подсказки и графика — null", IvaPickupPatch.firstBody("Ленина 1", new IvaPickupPatch.Point(), null),
+            "{\"p_address\":\"Ленина 1\",\"p_city\":\"\",\"p_lat\":null,\"p_lng\":null,\"p_open\":null,\"p_close\":null}");
+        eq("10.121: ответ — создан ли пункт", IvaPickupPatch.firstMade("\"0b7113d1-7e62-431a-8192-5f27b473843b\"") + "|" + IvaPickupPatch.firstMade("null")
+            + "|" + IvaPickupPatch.firstMade("") + "|" + IvaPickupPatch.firstMade(null), "true|false|false|false");
+        // правки сотрудников на одобрение
+        eq("10.121: состояние правки у сотрудника", IvaStaffToolsPatch.statusText("", true, "pending") + "|" + IvaStaffToolsPatch.statusText("", false, "rejected")
+            + "|" + IvaStaffToolsPatch.statusText("pending", true, "pending") + "|" + IvaStaffToolsPatch.statusText("", true, "") + "|" + IvaStaffToolsPatch.statusText("", false, null),
+            "Правка на одобрении|Правка отклонена|На одобрении|Опубликован|Скрыт");
+        eq("10.121: подсказки правки", IvaStaffToolsPatch.statusHint("", "pending") + "|" + IvaStaffToolsPatch.statusHint("", "rejected").startsWith("Владелец отклонил правку")
+            + "|" + IvaStaffToolsPatch.statusHint("rejected", "pending").equals(IvaStaffToolsPatch.statusHint("rejected")) + "|" + IvaStaffToolsPatch.statusHint("", ""),
+            "Клиенты видят прежний вариант, пока владелец не одобрит правку|true|true|");
+        eq("10.121: что изменилось — подписи карточки", IvaStaffToolsPatch.changedText(java.util.Arrays.asList("price", "imgs", "img", "cat_label", "cat", "descr")) + "|"
+            + IvaStaffToolsPatch.changedText(new java.util.ArrayList<String>()) + "|" + IvaStaffToolsPatch.changedLabels(null).size(),
+            "Правка опубликованного инструмента. Изменено: Категория, Цена, Описание, Фото|Правка опубликованного инструмента|0");
+        eq("10.121: «Отклонить» и итог — для правки свои слова", IvaStaffToolsPatch.rejectTitle(true) + "|" + IvaStaffToolsPatch.rejectTitle(false) + "|"
+            + IvaStaffToolsPatch.reviewDone(true, true) + "|" + IvaStaffToolsPatch.reviewDone(false, true) + "|" + IvaStaffToolsPatch.reviewDone(true, false),
+            "Отклонить правку?|Отклонить инструмент?|Правка опубликована — клиенты видят новый вариант|Опубликовано — клиенты видят|Правка отклонена — клиенты видят прежний вариант");
+        eq("10.121: второй раз тот же инструмент — понятная фраза", IvaStaffToolsPatch.dbPhrase("{\"message\":\"" + IvaStaffToolsPatch.DUP_PHRASE + "\"}") + "|"
+            + IvaStaffToolsPatch.dbPhrase("other") + "|" + IvaPatch.publishError("x " + IvaStaffToolsPatch.DUP_PHRASE).equals(IvaStaffToolsPatch.DUP_PHRASE)
+,
+            IvaStaffToolsPatch.DUP_PHRASE + "|null|true");
+        eq("10.121: форма «Добавить» очищает все поля", String.join(",", IvaFormPatch.FORM_TEXTS), "atName,atPrice,atDep,atDescr,atTerms,atDelPrice");
+        // переписка пункта без сотрудника — у владельца
+        IvaStaffPatch.Staff s1 = new IvaStaffPatch.Staff(), s2 = new IvaStaffPatch.Staff(), s3 = new IvaStaffPatch.Staff();
+        s1.status = "active"; s1.r = new boolean[]{true, false, true, false}; s1.points.add("aaa");
+        s2.status = "invited"; s2.r = new boolean[]{true, true, true, true}; s2.points.add("bbb");
+        s3.status = "active"; s3.r = new boolean[]{true, true, false, true}; s3.points.add("ccc");
+        java.util.Set<String> ans = IvaProkatPatch.answeredFrom(java.util.Arrays.asList(s1, s2, s3));
+        eq("10.121: кто отвечает в чате пункта", new java.util.TreeSet<String>(ans) + "|" + IvaProkatPatch.hideForOwner(ans, "AAA") + "|"
+            + IvaProkatPatch.hideForOwner(ans, "bbb") + "|" + IvaProkatPatch.hideForOwner(null, "bbb") + "|" + IvaProkatPatch.answeredFrom(null).size(),
+            "[aaa]|true|false|true|0");
+        // заявки целиком
+        eq("10.121: тело iva_order_cards", IvaOrderViewPatch.body("client") + "|" + IvaOrderViewPatch.body("staff") + "|" + IvaOrderViewPatch.body("x"),
+            "{\"p_scope\":\"client\"}|{\"p_scope\":\"staff\"}|null");
+        eq("10.121: сутки", IvaOrderViewPatch.days(1) + "|" + IvaOrderViewPatch.days(2) + "|" + IvaOrderViewPatch.days(5) + "|" + IvaOrderViewPatch.days(11)
+            + "|" + IvaOrderViewPatch.days(21), "1 сутки|2 суток|5 суток|11 суток|21 сутки");
+        eq("10.121: деньги", IvaOrderViewPatch.money(1200) + "|" + IvaOrderViewPatch.money(400) + "|" + IvaOrderViewPatch.money(1234567) + "|"
+            + IvaOrderViewPatch.money(99.5) + "|" + IvaOrderViewPatch.money(-1) + "|" + IvaOrderViewPatch.money(Double.NaN),
+            "1\u00a0200\u00a0₽|400\u00a0₽|1\u00a0234\u00a0567\u00a0₽|99,50\u00a0₽||");
+        eq("10.121: строка инструмента и сумма", IvaOrderViewPatch.itemLine(3, 400, 2000) + "|" + IvaOrderViewPatch.itemLine(1, 400, Double.NaN) + "|"
+            + IvaOrderViewPatch.itemLine(0, Double.NaN, 0) + "|" + IvaOrderViewPatch.itemSum(3, 400) + "|" + IvaOrderViewPatch.itemSum(0, 400),
+            "3 суток · 400\u00a0₽/сутки · залог 2\u00a0000\u00a0₽|1 сутки · 400\u00a0₽/сутки||1200.0|NaN");
+        long now = 1_000_000L;
+        eq("10.121: плашка состояния", IvaOrderViewPatch.kind("new", 0, now) + "|" + IvaOrderViewPatch.kind("rented", now + 1, now) + "|"
+            + IvaOrderViewPatch.kind("rented", now, now) + "|" + IvaOrderViewPatch.kind("closed", 0, now) + "|" + IvaOrderViewPatch.kind(null, 0, now)
+            + "|" + IvaOrderViewPatch.kind("rented", 0, now), "0|1|3|2|0|1");
+        eq("10.121: состояние заявки из частей", IvaOrderViewPatch.orderStatus(java.util.Arrays.asList("closed", "rented")) + "|"
+            + IvaOrderViewPatch.orderStatus(java.util.Arrays.asList("closed", "new", "rented")) + "|" + IvaOrderViewPatch.orderStatus(java.util.Arrays.asList("closed"))
+            + "|" + IvaOrderViewPatch.orderStatus(null), "rented|new|closed|new");
+        eq("10.121: пункт выдачи строкой", IvaOrderViewPatch.pointLine("Склад", "ул. Ленина, 1", "Новосибирск") + "|"
+            + IvaOrderViewPatch.pointLine("Склад", "Новосибирск, ул. Ленина, 1", "Новосибирск") + "|" + IvaOrderViewPatch.pointLine("", "Ленина 1", "") + "|"
+            + IvaOrderViewPatch.pointLine("Склад", "", ""), "Склад · Новосибирск, ул. Ленина, 1|Склад · Новосибирск, ул. Ленина, 1|Ленина 1|Склад");
+        int[] op = {540, 540, 540, 540, 540, 600, -1}, cl = {1140, 1140, 1140, 1140, 1140, 900, -1};
+        eq("10.121: график пункта на сегодня", IvaOrderViewPatch.today(op, cl, 0) + "|" + IvaOrderViewPatch.today(op, cl, 5) + "|" + IvaOrderViewPatch.today(op, cl, 6)
+            + "|" + IvaOrderViewPatch.today(null, cl, 0) + "|" + IvaOrderViewPatch.today(op, cl, 7), "сегодня 9:00–19:00|сегодня 10:00–15:00|сегодня выходной||");
+        eq("10.121: число из базы", IvaOrderViewPatch.intOf("3", 0) + "|" + IvaOrderViewPatch.intOf(null, 7) + "|" + IvaOrderViewPatch.intOf("x", 1) + "|"
+            + IvaOrderViewPatch.intOf(2.6, 0), "3|7|1|3");
+        eq("10.121: адрес функции заявок", IvaOrderViewPatch.RPC, "/rest/v1/rpc/iva_order_cards");
     }
 }
