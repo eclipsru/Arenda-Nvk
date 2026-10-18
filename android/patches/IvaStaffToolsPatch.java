@@ -50,6 +50,7 @@ public class IvaStaffToolsPatch {
     static final String LIST_RPC = "/rest/v1/rpc/iva_staff_tools", PENDING_RPC = "/rest/v1/rpc/iva_tools_pending",
         REVIEW_RPC = "/rest/v1/rpc/iva_tool_review", MODE_RPC = "/rest/v1/rpc/iva_staff_publish",
         CARD_RPC = "/rest/v1/rpc/iva_tool_pending_card",
+        DEL_REVIEW_RPC = "/rest/v1/rpc/iva_tool_delete_review",
         MODE_SET_RPC = "/rest/v1/rpc/iva_staff_publish_set";
     static final String TITLE = "Инструменты пункта", ADD = "Добавить инструмент";
     static final String REVIEW_TITLE = "На одобрении", MODE_TITLE = "Инструменты сотрудников", OPEN = "review";
@@ -87,6 +88,7 @@ public class IvaStaffToolsPatch {
     // 10.121: правка уже опубликованного инструмента (режим «после моего одобрения») — edit_state из iva_staff_tools
     static String statusText(String review, boolean active, String edit) {
         if (review != null && !review.isEmpty()) return statusText(review, active);
+        if ("delete".equals(edit)) return "Ждёт удаления";                    // 10.122: попросил удалить — решает владелец
         if ("pending".equals(edit)) return "Правка на одобрении";
         if ("rejected".equals(edit)) return "Правка отклонена";
         return statusText(review, active);
@@ -94,6 +96,7 @@ public class IvaStaffToolsPatch {
 
     static String statusHint(String review, String edit) {
         if (review != null && !review.isEmpty()) return statusHint(review);
+        if ("delete".equals(edit)) return "Вы попросили удалить инструмент. Пока владелец не решит, клиенты его видят";
         if ("pending".equals(edit)) return "Клиенты видят прежний вариант, пока владелец не одобрит правку";
         if ("rejected".equals(edit)) return "Владелец отклонил правку — клиенты видят прежний вариант. Исправьте и сохраните снова";
         return "";
@@ -221,6 +224,7 @@ public class IvaStaffToolsPatch {
     static final class Pending {
         String id = "", name = "", price = "", point = "", staff = "", key = "";
         boolean edit;                                  // 10.121: правка опубликованного (ключ уведомления — id@edit_at)
+        boolean del;                                   // 10.122: сотрудник просит удалить (ключ — id@del@время)
     }
 
     // ── 10.120: «На одобрении» → нажатие на карточку — инструмент целиком (просьба владельца 18.10.2026) ──
@@ -288,7 +292,8 @@ public class IvaStaffToolsPatch {
             p.point = str(o, "point_name");
             p.staff = str(o, "staff_name");
             p.edit = o.optBoolean("edit", false);
-            p.key = p.edit ? p.id + "@" + str(o, "edit_at") : p.id;
+            p.del = o.optBoolean("del", false);
+            p.key = p.del ? p.id + "@del@" + str(o, "edit_at") : p.edit ? p.id + "@" + str(o, "edit_at") : p.id;
             if (!p.id.isEmpty()) out.add(p);
         }
         return out;
@@ -541,6 +546,11 @@ public class IvaStaffToolsPatch {
     static void draw(final Ui u, List<Tool> tools) {
         final Activity a = u.a;
         u.items.removeAllViews();
+        if (u.page == null && u.hubGen >= 0) {                 // 10.122: раздел логотипа — пункты → инструменты, как у владельца
+            u.status.setVisibility(View.GONE);
+            IvaMyToolsPatch.drawStaff(a, u.items, tools, new Runnable() { @Override public void run() { reload(u); } });
+            return;
+        }
         for (final Tool t : tools) {
             LinearLayout c = IvaChiefPatch.card(a);
             LinearLayout top = new LinearLayout(a);
@@ -737,8 +747,16 @@ public class IvaStaffToolsPatch {
             LinearLayout c = IvaChiefPatch.card(a);
             c.addView(IvaChiefPatch.text(a, p.name.isEmpty() ? "Без названия" : p.name, 15f, u.cText, true));
             c.setClickable(true);                                          // 10.120: нажатие — инструмент целиком
-            c.setOnClickListener(new View.OnClickListener() { @Override public void onClick(View v) { try { openCard(u, p); } catch (Throwable ignore) {} } });
-            TextView more = IvaChiefPatch.text(a, p.edit ? "Правка — нажмите, чтобы посмотреть, что изменилось" : "Нажмите, чтобы посмотреть целиком", 12f, u.cOrange, false);
+            c.setOnClickListener(new View.OnClickListener() {
+                @Override public void onClick(View v) {
+                    try {
+                        if (p.del) { IvaMyToolsPatch.Item it = new IvaMyToolsPatch.Item(); it.id = p.id; it.name = p.name; IvaMyToolsPatch.view(a, it); }
+                        else openCard(u, p);
+                    } catch (Throwable ignore) {}
+                }
+            });
+            TextView more = IvaChiefPatch.text(a, p.del ? "Сотрудник просит удалить — нажмите, чтобы посмотреть инструмент"
+                : p.edit ? "Правка — нажмите, чтобы посмотреть, что изменилось" : "Нажмите, чтобы посмотреть целиком", 12f, u.cOrange, false);
             more.setPadding(0, dp(a, 2), 0, 0);
             c.addView(more);
             String l2 = line2(p.price, p.point);
@@ -748,7 +766,7 @@ public class IvaStaffToolsPatch {
                 c.addView(x);
             }
             if (!p.staff.isEmpty()) {
-                TextView x = IvaChiefPatch.text(a, (p.edit ? "Изменил(а): " : "Добавил(а): ") + p.staff, 13f, u.cGray, false);
+                TextView x = IvaChiefPatch.text(a, (p.del ? "Просит удалить: " : p.edit ? "Изменил(а): " : "Добавил(а): ") + p.staff, 13f, u.cGray, false);
                 x.setPadding(0, dp(a, 4), 0, 0);
                 c.addView(x);
             }
@@ -756,17 +774,24 @@ public class IvaStaffToolsPatch {
             btns.setOrientation(LinearLayout.HORIZONTAL);
             btns.setPadding(0, dp(a, 12), 0, 0);
             final TextView yes = IvaPickupPatch.addButton(a, u.cOrange);
-            yes.setText("Опубликовать");
-            final TextView no = IvaSearchPatch.chip(a, "Отклонить", false, false);
+            yes.setText(p.del ? "Удалить" : "Опубликовать");
+            final TextView no = IvaSearchPatch.chip(a, p.del ? "Оставить" : "Отклонить", false, false);
             no.setGravity(Gravity.CENTER);
             LinearLayout.LayoutParams yl = new LinearLayout.LayoutParams(0, -2, 1f);
             yl.rightMargin = dp(a, 8);
             btns.addView(yes, yl);
             btns.addView(no, new LinearLayout.LayoutParams(0, -1, 1f));
             c.addView(btns);
-            yes.setOnClickListener(new View.OnClickListener() { @Override public void onClick(View v) { review(u, p, true, yes); } });
+            yes.setOnClickListener(new View.OnClickListener() {
+                @Override public void onClick(View v) {
+                    if (!p.del) { review(u, p, true, yes); return; }
+                    IvaClientPatch.styledChoice(a, "Удалить инструмент?", "«" + p.name + "» исчезнет из каталога. Это нельзя отменить.",
+                        new String[]{"Удалить"}, new IvaClientPatch.Choice() { @Override public void pick(int i) { if (i == 0) review(u, p, true, yes); } });
+                }
+            });
             no.setOnClickListener(new View.OnClickListener() {
                 @Override public void onClick(View v) {
+                    if (p.del) { review(u, p, false, no); return; }
                     IvaClientPatch.styledChoice(a, rejectTitle(p.edit), rejectText(p.edit),
                         new String[]{"Отклонить"}, new IvaClientPatch.Choice() { @Override public void pick(int i) { if (i == 0) review(u, p, false, no); } });
                 }
@@ -937,6 +962,12 @@ public class IvaStaffToolsPatch {
             : "Клиенты его не увидят. Сотрудник увидит «Отклонён» и сможет исправить.";
     }
 
+    // 10.122: запрос сотрудника на удаление
+    static String reviewDone(boolean edit, boolean del, boolean ok) {
+        if (del) return ok ? "Инструмент удалён" : "Инструмент оставлен в каталоге";
+        return reviewDone(edit, ok);
+    }
+
     static String reviewDone(boolean edit, boolean ok) {
         return ok ? (edit ? "Правка опубликована — клиенты видят новый вариант" : "Опубликовано — клиенты видят")
             : (edit ? "Правка отклонена — клиенты видят прежний вариант" : "Отклонено");
@@ -953,8 +984,9 @@ public class IvaStaffToolsPatch {
             @Override public void run() {
                 String e;
                 try {
-                    String[] r = IvaClientPatch.apiCall(u.a, REVIEW_RPC, "POST", body, true);
-                    e = r == null ? dbError("", "") : dbError(r[0], r.length > 1 ? r[1] : "");
+                    String[] r = IvaClientPatch.apiCall(u.a, p.del ? DEL_REVIEW_RPC : REVIEW_RPC, "POST", body, true);
+                    e = r == null ? dbError("", "") : p.del ? IvaMyToolsPatch.errText(r[0], r.length > 1 ? r[1] : "", "Не получилось")
+                        : dbError(r[0], r.length > 1 ? r[1] : "");
                 } catch (Throwable x) { e = dbError("", ""); }
                 final String fe = e;
                 u.a.runOnUiThread(new Runnable() {
@@ -962,7 +994,7 @@ public class IvaStaffToolsPatch {
                         try {
                             btn.setEnabled(true);
                             btn.setAlpha(1f);
-                            IvaStaffPatch.toast(u.a, fe.isEmpty() ? reviewDone(p.edit, ok) : fe);
+                            IvaStaffPatch.toast(u.a, fe.isEmpty() ? reviewDone(p.edit, p.del, ok) : fe);
                             if (fe.isEmpty()) try { IvaNotifyPatch.call(u.a, "loadCatalog"); } catch (Throwable ignore) {}   // каталог — с новым
                             if (fe.isEmpty() && done != null) done.run();     // 10.120: со страницы инструмента — назад к списку
                             reloadReview(u);

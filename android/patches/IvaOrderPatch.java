@@ -1337,19 +1337,23 @@ public final class IvaOrderPatch {
         }
         if (ps.contains("new")) return "new";
         if (ps.contains("rented")) return "rented";
-        return "closed";
+        for (String p : ps) if (!"cancelled".equals(p)) return "closed";
+        return "cancelled";                                          // 10.122: все части отменил клиент
     }
 
     /** Статус словами как на сайте: new — «Новая», rented — «В аренде», иначе — «Закрыта». */
     static String ordStatus(String st) {
         String s = st == null || st.trim().isEmpty() ? "new" : st.trim();
-        return "new".equals(s) ? "Новая" : "rented".equals(s) ? "В аренде" : "Закрыта";
+        return "new".equals(s) ? "Новая" : "rented".equals(s) ? "В аренде" : "cancelled".equals(s) ? IvaOrderEditPatch.CANCELLED : "Закрыта";
     }
 
     static String ordStatusOf(Map<String, String> r) { return ordEffStatus(r.get("status"), r.get(ORD_PARTS)); }
 
     /** В архив — только закрытые (решение владельца 14.10.2026). То же правило в iva_archive_order. */
-    static boolean ordClosed(Map<String, String> r) { return "Закрыта".equals(ordStatus(ordStatusOf(r))); }
+    static boolean ordClosed(Map<String, String> r) {
+        String s = ordStatus(ordStatusOf(r));
+        return "Закрыта".equals(s) || IvaOrderEditPatch.CANCELLED.equals(s);      // 10.122: отменённую тоже можно в архив
+    }
 
     /** Строки шторки о заявке; данных клиента (имя, телефон, адрес) нет — решение владельца 14.10.2026. */
     static List<String[]> ordFields(Map<String, String> r, String nice) {
@@ -2276,7 +2280,8 @@ public final class IvaOrderPatch {
 
     /** Активная заявка — новая или в аренде, не в архиве (у админа — статус его части заявки). */
     static boolean ordActive(Map<String, String> r, boolean archived) {
-        return r != null && !archived && !"Закрыта".equals(ordStatus(ordStatusOf(r)));
+        return r != null && !archived && !"Закрыта".equals(ordStatus(ordStatusOf(r)))
+            && !IvaOrderEditPatch.CANCELLED.equals(ordStatus(ordStatusOf(r)));          // 10.122: отменённая — тоже не активна
     }
 
     /**

@@ -201,6 +201,7 @@ public final class IvaPatch {
         try { condRows(a); } catch (Throwable ignore) {}      // 10.66: «Состояние» — Новый / Хорошее / Рабочее
         try { pickColors(a); } catch (Throwable ignore) {}    // 10.67: выбранная (под)категория — белым, не серым
         try { IvaKindPatch.onHub(a); } catch (Throwable ignore) {}        // 10.79: поле «Вид инструмента» в форме
+        try { IvaMyToolsPatch.later(a); } catch (Throwable ignore) {}     // 10.122: «Мой инструмент» — пункты и их инструменты
         try {
             Object lim = get(a, "meLimited");
             if (!(lim instanceof Boolean) || !((Boolean) lim) || limitedShown) return;
@@ -433,6 +434,9 @@ public final class IvaPatch {
         try { IvaPhotoPatch.onTab(a); } catch (Throwable ignore) {}         // 10.109: «+» в правке инструмента — галерея, а не проводник
         try { IvaShopPatch.onTab(a, tab); } catch (Throwable ignore) {}     // 10.98: «Мои данные» — только ФИО, телефон, мессенджеры
         try { IvaStaffToolsPatch.onTab(a, tab); } catch (Throwable ignore) {}   // 10.105: сотрудник «Каталог» — форма без вкладок, возврат
+        try { IvaToolEditPatch.onTab(a, tab); } catch (Throwable ignore) {}     // 10.122: правка целиком, подписи полей, удаление сотрудником
+        try { IvaMyToolsPatch.onTab(a, tab); } catch (Throwable ignore) {}      // 10.122: вернулись в кабинет — список заново
+        try { IvaOrderEditPatch.onTab(a, tab); } catch (Throwable ignore) {}    // 10.122: «Вы в итоге взяли инструмент?» после отмены
         try {
             String t = tab == null ? "" : tab;
             int orange = navColor(a, "orange", 0xffff9800);

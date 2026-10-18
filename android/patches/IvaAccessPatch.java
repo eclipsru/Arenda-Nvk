@@ -387,11 +387,14 @@ public final class IvaAccessPatch {
         IvaStaffPatch.meFor = me;
         final int ch = staffChange(was == null ? "" : was.status, m == null ? "" : m.status);
         final boolean rights = ch == STAFF_SAME && was != null && m != null && "active".equals(m.status)
-            && rightsChanged(was.r, was.self, m.r, m.self);
+            && (rightsChanged(was.r, was.self, m.r, m.self) || was.del != m.del);   // 10.122: + «Удаляет инструмент»
         // 10.115: пункты (убрали / добавили) и данные пункта — тоже сразу и с подсказкой
         final boolean live = ch == STAFF_SAME && was != null && m != null && "active".equals(m.status);
         final boolean moved = live && IvaStaffPatch.pointsMoved(was.points, m.points);
-        final String hint = live ? IvaStaffPatch.staffHint(was.r, was.self, was.points, m.r, m.self, m.points) : "";
+        final String hint0 = live ? IvaStaffPatch.staffHint(was.r, was.self, was.points, m.r, m.self, m.points) : "";
+        // 10.122: «Удаляет инструмент» — тоже права
+        final String hint = live && was.del != m.del && !hint0.contains(IvaStaffPatch.RIGHTS_HINT)
+            ? (hint0.isEmpty() ? IvaStaffPatch.RIGHTS_HINT : hint0 + ". " + IvaStaffPatch.RIGHTS_HINT) : hint0;
         final boolean popup = m != null && "invited".equals(m.status) && !inviteShown(a, m.id);
         if (ch == STAFF_SAME && body.equals(oldBody) && !popup) return;
         final IvaStaffPatch.Me fm = m;
@@ -479,7 +482,7 @@ public final class IvaAccessPatch {
         prefs(a).edit().putBoolean(inviteKey(m.id), true).apply();
         final Dialog d = new Dialog(a);
         LinearLayout card = card(a, d, INVITE_TITLE, IvaStaffPatch.inviteText(m.company, IvaStaffPatch.names(m.points))
-            + "\n\nПрава: " + IvaStaffPatch.rightsText(m.r));
+            + "\n\nПрава: " + IvaStaffPatch.rightsText(m.r) + (m.del && m.r[1] ? " · " + IvaStaffPatch.DEL : ""));
         final TextView yes = bubble(a, card, INVITE_YES, true, 16);
         final TextView no = bubble(a, card, INVITE_NO, false, 8);
         TextView later = bubble(a, card, INVITE_LATER, false, 8);

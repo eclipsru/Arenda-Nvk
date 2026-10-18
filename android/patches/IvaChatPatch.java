@@ -753,6 +753,18 @@ final class IvaChatPatch {
         handler.postDelayed(DEBOUNCED, DEBOUNCE_MS);
     }
 
+    static IvaChatWhoPatch.Box who;               // 10.122: подсказка «Отвечает Иван» (только у проката)
+
+    /** 10.122: переписка проката с клиентом (не «Хочу сдавать») — отмечаемся и показываем, кто ещё отвечает. */
+    static void whoSync(Activity a) {
+        if (who == null) return;
+        String th = "";
+        if (!openPartner.isEmpty() && !isLend(openTool) && isAdmin(a)) th = IvaChatWhoPatch.thread(openTool, IvaChatWhoPatch.md5(openPartner));
+        IvaChatWhoPatch.setThread(who, th);
+        Object in = IvaClientPatch.get(a, "chatInput");
+        if (in instanceof EditText) IvaChatWhoPatch.watch(who, (EditText) in);
+    }
+
     static void buildRoot(Activity a, LinearLayout pg, View sc) {
         View old = pg.findViewWithTag(ROOT_TAG);
         if (old != null) pg.removeView(old);
@@ -790,6 +802,14 @@ final class IvaChatPatch {
         pg.addView(r, Math.max(0, idx), new LinearLayout.LayoutParams(-1, 0, 1f));
         root = r; header = h; scroll = s; body = b;
         renderedSig = "";
+        // 10.122: кто из проката сейчас отвечает — строка прямо над штатным полем ввода
+        try {
+            if (who != null) IvaChatWhoPatch.setThread(who, "");
+            final Activity fa = a;
+            who = IvaChatWhoPatch.attach(a, r, r.getChildCount(), new IvaChatWhoPatch.Alive() {
+                @Override public boolean ok() { return "chat".equals(str(IvaClientPatch.get(fa, "curTab"))) && !openPartner.isEmpty(); }
+            });
+        } catch (Throwable e) { who = null; }
     }
 
     /** Наш слой не построился/упал — показываем штатный чат. */
@@ -1001,6 +1021,12 @@ final class IvaChatPatch {
     }
 
     static void send(final Activity a) {
+        // 10.122: сейчас отвечает другой сотрудник/владелец — сначала предупредить
+        if (IvaChatWhoPatch.confirmSend(who, new Runnable() { @Override public void run() { try { sendNow(a); } catch (Throwable ignore) {} } })) return;
+        sendNow(a);
+    }
+
+    static void sendNow(final Activity a) {
         Object in = IvaClientPatch.get(a, "chatInput");
         final String partner = clean(str(IvaClientPatch.get(a, "chatWith")));
         if (!loggedIn(a) || !(in instanceof EditText) || partner.isEmpty()) { callNative(a, "sendChat"); return; }
@@ -1450,6 +1476,7 @@ final class IvaChatPatch {
         }
         root.setVisibility(View.VISIBLE);
         if (sc instanceof View) ((View) sc).setVisibility(View.GONE);
+        try { whoSync(a); } catch (Throwable ignore) {}           // 10.122: «Отвечает Иван» над полем ввода
         try { applyNote(a); } catch (Throwable ignore) {}
         String sig = signature(a);
         if (sig.equals(renderedSig)) return;

@@ -443,6 +443,7 @@ public class IvaStaffChatPatch {
         TextView send, status;
         List<Msg> shown;
         boolean busy, sending, marked;
+        IvaChatWhoPatch.Box who;                      // 10.122: «Отвечает Иван»
     }
 
     static void openThread(final Ui u, final Chat c) {
@@ -480,11 +481,22 @@ public class IvaStaffChatPatch {
         bar.addView(t.send, sl);
         if (root != null) root.addView(bar, new LinearLayout.LayoutParams(-1, -2));
         else t.page.list.addView(bar);
+        try {                                            // 10.122: кто ещё отвечает — над строкой ввода
+            ViewGroup bp = (ViewGroup) bar.getParent();
+            if (bp instanceof LinearLayout) {
+                t.who = IvaChatWhoPatch.attach(a, (LinearLayout) bp, bp.indexOfChild(bar), new IvaChatWhoPatch.Alive() {
+                    @Override public boolean ok() { return t.page.open(); }
+                });
+                IvaChatWhoPatch.setThread(t.who, IvaChatWhoPatch.thread(c.tool, c.peer));
+                IvaChatWhoPatch.watch(t.who, t.input);
+            }
+        } catch (Throwable ignore) { t.who = null; }
         t.send.setOnClickListener(new View.OnClickListener() { @Override public void onClick(View v) { send(t); } });
         openChat = c;
         t.page.d.setOnDismissListener(new DialogInterface.OnDismissListener() {
             @Override public void onDismiss(DialogInterface d) {
                 if (openChat == c) openChat = null;
+                try { IvaChatWhoPatch.setThread(t.who, ""); } catch (Throwable ignore) {}
                 if (u.page.open()) reload(u);                   // вернулись к списку — счётчики заново
             }
         });
@@ -612,6 +624,11 @@ public class IvaStaffChatPatch {
     }
 
     static void send(final Th t) {
+        if (!t.sending && IvaChatWhoPatch.confirmSend(t.who, new Runnable() { @Override public void run() { try { sendNow(t); } catch (Throwable ignore) {} } })) return;
+        sendNow(t);
+    }
+
+    static void sendNow(final Th t) {
         final Activity a = t.u.a;
         if (t.sending) return;
         final String text = t.input.getText().toString().trim();

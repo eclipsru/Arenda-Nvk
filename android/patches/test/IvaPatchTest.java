@@ -2574,6 +2574,7 @@ public class IvaPatchTest {
         mail119();                                                    // 10.119: почта — из ключа входа
         prokat120();                                                  // 10.120: страница проката, чат пункта, «На одобрении»
         v121();                                                       // 10.121: первый пункт, правки на одобрение, заявки целиком
+        v122();                                                       // 10.122: удаление сотрудником, «Мой инструмент», чат, отмена заявки
         if (fail > 0) { System.out.println("ошибок: " + fail); System.exit(1); }
         System.out.println("все проверки IvaPatch пройдены");
     }
@@ -3422,5 +3423,92 @@ public class IvaPatchTest {
         eq("10.121: число из базы", IvaOrderViewPatch.intOf("3", 0) + "|" + IvaOrderViewPatch.intOf(null, 7) + "|" + IvaOrderViewPatch.intOf("x", 1) + "|"
             + IvaOrderViewPatch.intOf(2.6, 0), "3|7|1|3");
         eq("10.121: адрес функции заявок", IvaOrderViewPatch.RPC, "/rest/v1/rpc/iva_order_cards");
+    }
+
+    static void v122() {
+        String u1 = "11111111-2222-3333-4444-555555555555", u2 = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee";
+        // право «Удаляет инструмент»
+        boolean[] cat = {false, true, false, false}, noCat = {true, false, false, false};
+        eq("10.122: iva_staff_save + p_delete (без «Выкладывает» — false)",
+            IvaStaffPatch.saveBody(null, "a@b.ru", "Иван", "", null, cat, false, true).endsWith(",\"p_self\":false,\"p_delete\":true}") + "|"
+            + IvaStaffPatch.saveBody(null, "a@b.ru", "Иван", "", null, noCat, false, true).endsWith(",\"p_delete\":false}") + "|"
+            + IvaStaffPatch.saveBody(null, "a@b.ru", "Иван", "", null, cat, false, false).endsWith(",\"p_delete\":false}"), "true|true|true");
+        eq("10.122: статус «Ждёт удаления»", IvaStaffToolsPatch.statusText("", true, "delete") + "|" + IvaStaffToolsPatch.statusText("pending", true, "delete")
+            + "|" + IvaStaffToolsPatch.statusText("", true, "pending"), "Ждёт удаления|" + IvaStaffToolsPatch.statusText("pending", true) + "|Правка на одобрении");
+        eq("10.122: решение об удалении — тексты", IvaStaffToolsPatch.reviewDone(false, true, true) + "|" + IvaStaffToolsPatch.reviewDone(false, true, false)
+            + "|" + IvaStaffToolsPatch.reviewDone(true, false, true).equals(IvaStaffToolsPatch.reviewDone(true, true)),
+            "Инструмент удалён|Инструмент оставлен в каталоге|true");
+        eq("10.122: адрес решения об удалении", IvaStaffToolsPatch.DEL_REVIEW_RPC + "|" + IvaToolEditPatch.DEL_RPC,
+            "/rest/v1/rpc/iva_tool_delete_review|/rest/v1/rpc/iva_staff_tool_delete");
+        eq("10.122: запрос на удаление — тело", IvaToolEditPatch.delBody(" " + u1.toUpperCase() + " ") + "|" + IvaToolEditPatch.delBody("x") + "|" + IvaToolEditPatch.delBody(null),
+            "{\"p_id\":\"" + u1 + "\"}|null|null");
+        eq("10.122: кнопка «Удалить инструмент» узнаётся по тексту", IvaToolEditPatch.isDelete(" Удалить инструмент ") + "|" + IvaToolEditPatch.isDelete("Удалить")
+            + "|" + IvaToolEditPatch.isDelete(null), "true|false|false");
+        // «Мой инструмент»
+        IvaPickupPatch.Point p1 = new IvaPickupPatch.Point(); p1.id = u1.toUpperCase(); p1.name = "Склад";
+        IvaPickupPatch.Point p2 = new IvaPickupPatch.Point(); p2.id = u2; p2.name = "Центр";
+        java.util.List<IvaMyToolsPatch.Item> its = new java.util.ArrayList<IvaMyToolsPatch.Item>();
+        String[][] raw = {{"Перфоратор", u1}, {"бетономешалка", u1}, {"Лестница", ""}, {"Пила", "99999999-2222-3333-4444-555555555555"}};
+        for (String[] r : raw) { IvaMyToolsPatch.Item x = new IvaMyToolsPatch.Item(); x.name = r[0]; x.point = r[1]; its.add(x); }
+        StringBuilder g = new StringBuilder();
+        for (IvaMyToolsPatch.Group gr : IvaMyToolsPatch.groups(java.util.Arrays.asList(p1, p2), its)) {
+            g.append(gr.name).append(':');
+            for (IvaMyToolsPatch.Item x : gr.items) g.append(x.name).append(',');
+            g.append(';');
+        }
+        eq("10.122: пункты → инструменты (по названию; без пункта — в конце)", g, "Склад:бетономешалка,Перфоратор,;Центр:;Пункт не выбран:Лестница,Пила,;");
+        eq("10.122: сколько инструментов", IvaMyToolsPatch.countText(0) + "|" + IvaMyToolsPatch.countText(1) + "|" + IvaMyToolsPatch.countText(3) + "|"
+            + IvaMyToolsPatch.countText(11) + "|" + IvaMyToolsPatch.countText(22) + "|" + IvaMyToolsPatch.countText(25),
+            "Нет инструментов|1 инструмент|3 инструмента|11 инструментов|22 инструмента|25 инструментов");
+        eq("10.122: цена", IvaMyToolsPatch.priceText("400.0") + "|" + IvaMyToolsPatch.priceText("") + "|" + IvaMyToolsPatch.priceText(null) + "|" + IvaMyToolsPatch.priceText("null"),
+            "400 ₽/сутки|||");
+        eq("10.122: перенос — тело", IvaMyToolsPatch.moveBody(u1, u2.toUpperCase()) + "|" + IvaMyToolsPatch.moveBody(u1, "") + "|" + IvaMyToolsPatch.moveBody("x", u2),
+            "{\"p_id\":\"" + u1 + "\",\"p_point\":\"" + u2 + "\"}|null|null");
+        eq("10.122: ошибка базы — нет SQL / успех", IvaMyToolsPatch.errText("404", "", "x") + "|" + IvaMyToolsPatch.errText("200", "", "x").isEmpty(),
+            "Нужен SQL 10.122 — владелец применяет его в Supabase|true");
+        IvaStaffToolsPatch.Tool t1 = new IvaStaffToolsPatch.Tool(); t1.id = u1; t1.name = "Пила"; t1.edit = "delete"; t1.active = true;
+        IvaStaffToolsPatch.Tool t2 = new IvaStaffToolsPatch.Tool(); t2.id = u2; t2.name = "Дрель"; t2.active = true;
+        java.util.List<IvaMyToolsPatch.Item> fs = IvaMyToolsPatch.fromStaff(java.util.Arrays.asList(t1, t2));
+        eq("10.122: инструменты сотрудника → «Мой инструмент»", fs.size() + "|" + fs.get(0).status + "|" + fs.get(0).warn + "|" + fs.get(1).warn + "|" + fs.get(1).point.isEmpty(),
+            "2|Удаление на одобрении|true|false|true");
+        // кто отвечает в чате
+        eq("10.122: md5 почты клиента (как md5(lower(btrim())) в базе)", IvaChatWhoPatch.md5(" Test@Mail.RU ") + "|" + IvaChatWhoPatch.md5(""),
+            "cb69cd596f305fa5f24a998a817a160a|d41d8cd98f00b204e9800998ecf8427e");
+        String pe = IvaChatWhoPatch.md5("test@mail.ru");
+        eq("10.122: переписка — инструмент / пункт", IvaChatWhoPatch.thread(u1.toUpperCase(), pe) + "|" + IvaChatWhoPatch.thread("pt:" + u2, pe) + "|"
+            + IvaChatWhoPatch.thread("lend", pe) + "|" + IvaChatWhoPatch.thread(u1, "abc") + "|" + IvaChatWhoPatch.thread(null, pe),
+            "t:" + u1 + ":" + pe + "|p:" + u2 + ":" + pe + "|||");
+        eq("10.122: тела iva_chat_mark / iva_chat_who", IvaChatWhoPatch.body("t:x", "open") + "|" + IvaChatWhoPatch.body("t:x", null) + "|" + IvaChatWhoPatch.body("", "open"),
+            "{\"p_thread\":\"t:x\",\"p_state\":\"open\"}|{\"p_thread\":\"t:x\"}|null");
+        eq("10.122: предупреждение перед отправкой", IvaChatWhoPatch.warnText("Иван (сотрудник)"), "Сейчас отвечает Иван (сотрудник). Всё равно отправить?");
+        // отмена и изменение заявки
+        eq("10.122: отмена — тело", IvaOrderEditPatch.cancelBody("12", "  Нашёл   \"дешевле\" ") + "|" + IvaOrderEditPatch.cancelBody("12", " a ") + "|"
+            + IvaOrderEditPatch.cancelBody("x", "Передумал"), "{\"p_order\":12,\"p_reason\":\"Нашёл \\\"дешевле\\\"\"}|null|null");
+        java.util.List<String[]> keep = new java.util.ArrayList<String[]>();
+        keep.add(new String[]{u1, "3"});
+        eq("10.122: изменение — тело", IvaOrderEditPatch.editBody("7", keep, null, true) + "|" + IvaOrderEditPatch.editBody("7", keep, "Позвоните\n", false),
+            "{\"p_part\":7,\"p_items\":[{\"id\":\"" + u1 + "\",\"days\":3}],\"p_comment\":null,\"p_pickup\":true}|"
+            + "{\"p_part\":7,\"p_items\":[{\"id\":\"" + u1 + "\",\"days\":3}],\"p_comment\":\"Позвоните\",\"p_pickup\":false}");
+        java.util.List<String[]> bad = new java.util.ArrayList<String[]>();
+        bad.add(new String[]{u1, "0"});
+        eq("10.122: изменение — неверное не отправляем", IvaOrderEditPatch.editBody("7", bad, null, false) + "|" + IvaOrderEditPatch.editBody("7", new java.util.ArrayList<String[]>(), null, false)
+            + "|" + IvaOrderEditPatch.editBody("x", keep, null, false), "null|null|null");
+        eq("10.122: решение / ответ — тела", IvaOrderEditPatch.decideBody("5", true) + "|" + IvaOrderEditPatch.decideBody("", false) + "|"
+            + IvaOrderEditPatch.answerBody("9", "took") + "|" + IvaOrderEditPatch.answerBody("9", "maybe"),
+            "{\"p_change\":5,\"p_ok\":true}|null|{\"p_id\":9,\"p_answer\":\"took\"}|null");
+        eq("10.122: отменить можно, пока ничего не выдано", IvaOrderEditPatch.canCancel(java.util.Arrays.asList("new", "new")) + "|"
+            + IvaOrderEditPatch.canCancel(java.util.Arrays.asList("new", "rented")) + "|" + IvaOrderEditPatch.canCancel(java.util.Arrays.asList("cancelled"))
+            + "|" + IvaOrderEditPatch.canCancel(java.util.Arrays.asList("new", "cancelled")) + "|" + IvaOrderEditPatch.canCancel(null), "true|false|false|true|false");
+        eq("10.122: ответы базы — тексты", IvaOrderEditPatch.decideDone("\"issued\"") + "|" + IvaOrderEditPatch.decideDone("\"accepted\"") + "|"
+            + IvaOrderEditPatch.answerDone("\"took\"") + "|" + IvaOrderEditPatch.answerDone("\"gone\""),
+            "Инструмент уже выдан — изменение не применено|Изменение принято — заявка обновлена|Спасибо! Заявка отмечена как выполненная|Вопрос уже не актуален");
+        eq("10.122: доля отмен и тревога", IvaOrderEditPatch.share(3, 20) + "|" + IvaOrderEditPatch.share(0, 0) + "|" + IvaOrderEditPatch.alarm(3, 10) + "|"
+            + IvaOrderEditPatch.alarm(2, 4) + "|" + IvaOrderEditPatch.alarm(3, 11), "3 из 20 (15 %)|заявок нет|true|false|false");
+        eq("10.122: статус «Отменена клиентом»", IvaOrderPatch.ordEffStatus("new", "cancelled,cancelled") + "|" + IvaOrderPatch.ordEffStatus("new", "cancelled,closed")
+            + "|" + IvaOrderPatch.ordStatus("cancelled") + "|" + IvaOrderViewPatch.kind("cancelled", 0, 1) + "|" + IvaOrderViewPatch.KIND_TEXT[4] + "|"
+            + IvaOrderViewPatch.orderStatus(java.util.Arrays.asList("cancelled")) + "|" + IvaOrderViewPatch.orderStatus(java.util.Arrays.asList("cancelled", "closed")),
+            "cancelled|closed|Отменена клиентом|4|Отменена клиентом|cancelled|closed");
+        eq("10.122: адреса функций заявок", IvaOrderEditPatch.CANCEL_RPC + "|" + IvaOrderEditPatch.EDIT_RPC + "|" + IvaOrderEditPatch.DECIDE_RPC,
+            "/rest/v1/rpc/iva_order_cancel|/rest/v1/rpc/iva_order_edit|/rest/v1/rpc/iva_order_edit_decide");
     }
 }

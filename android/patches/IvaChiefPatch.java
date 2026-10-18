@@ -347,6 +347,13 @@ public final class IvaChiefPatch {
             lp.topMargin = dp(a, i == 0 ? 4 : 10);
             p.list.addView(r, lp);
         }
+        // 10.122: отмены заявок клиентами — журнал и доля по прокатам
+        View cr = rowView(a, null, "Отмены заявок", "Журнал отмен клиентами и доля отмен по прокатам", "ic_receipt", new Runnable() {
+            @Override public void run() { IvaOrderEditPatch.openChief(a); }
+        });
+        LinearLayout.LayoutParams cl = new LinearLayout.LayoutParams(-1, -2);
+        cl.topMargin = dp(a, 10);
+        p.list.addView(cr, cl);
     }
 
     static void openSection(Activity a, int k) {

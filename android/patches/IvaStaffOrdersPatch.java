@@ -59,7 +59,7 @@ public class IvaStaffOrdersPatch {
     static String actionText(String st) { return "new".equals(st) ? "Выдал" : "rented".equals(st) ? "Вернули" : ""; }
 
     static String statusText(String st) {
-        return "new".equals(st) ? "Новая" : "rented".equals(st) ? "Выдана" : "closed".equals(st) ? "Закрыта" : st == null ? "" : st;
+        return "new".equals(st) ? "Новая" : "rented".equals(st) ? "Выдана" : "closed".equals(st) ? "Закрыта" : "cancelled".equals(st) ? IvaOrderEditPatch.CANCELLED : st == null ? "" : st;
     }
 
     static String confirmTitle(String st) { return "new".equals(st) ? "Отметить «Выдал»?" : "Отметить «Вернули»?"; }
@@ -352,6 +352,10 @@ public class IvaStaffOrdersPatch {
         }
         if (!p.get.isEmpty()) c.addView(line(u, "Получение: " + p.get, u.cGray));
         if (!p.comment.isEmpty()) c.addView(line(u, "Комментарий: " + p.comment, u.cGray));
+        try {                                                         // 10.122: клиент просит изменить — решить здесь
+            View ch = p.act ? IvaOrderEditPatch.staffBlock(a, p.id, new Runnable() { @Override public void run() { reload(u); } }) : null;
+            if (ch != null) c.addView(ch);
+        } catch (Throwable ignore) {}
         String r = when(p.rented);
         if ("rented".equals(p.status) && !r.isEmpty()) {
             c.addView(line(u, "Выдана " + r + (p.days > 0 ? " · на " + daysText(p.days) : ""), u.cGray));

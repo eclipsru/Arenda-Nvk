@@ -58,6 +58,10 @@ public class IvaStaffPatch {
     static final String RIGHTS_LABEL = "Права — можно выбрать оба набора или отметить по одному";
     static final String SELF = "Может выдавать заявки самому себе",
         SELF_SUB = "Если сотрудник сам берёт инструмент в аренду. Выключено — «Выдал» и «Вернули» по его заявке отмечает другой";
+    // 10.122: отдельное право (решение владельца) — удаление всегда ждёт владельца в «На одобрении»
+    static final String DEL = "Удаляет инструмент",
+        DEL_SUB = "Удаление всегда ждёт вашего одобрения в «На одобрении», даже при «Публиковать сразу»",
+        DEL_OFF = "Сначала включите «Выкладывает инструмент»";
     static final long ME_EVERY_MS = 60000L;
     static final int MAX = 50;
 
@@ -66,7 +70,7 @@ public class IvaStaffPatch {
     static final class Staff {
         String id = "", email = "", name = "", tel = "", status = "invited";
         boolean[] r = new boolean[4];
-        boolean self;
+        boolean self, del;
         List<String> points = new ArrayList<String>();
     }
 
@@ -151,6 +155,13 @@ public class IvaStaffPatch {
             + ",\"p_points\":[" + ps + "]"
             + ",\"p_issue\":" + x[0] + ",\"p_catalog\":" + x[1] + ",\"p_chat\":" + x[2] + ",\"p_notify\":" + x[3]
             + ",\"p_self\":" + self + "}";
+    }
+
+    /** 10.122: + «Удаляет инструмент» (без «Выкладывает инструмент» — всегда false, как и в базе). */
+    static String saveBody(String id, String email, String name, String tel, List<String> points, boolean[] r, boolean self, boolean del) {
+        String b = saveBody(id, email, name, tel, points, r, self);
+        boolean cat = r != null && r.length == 4 && r[1];
+        return b.substring(0, b.length() - 1) + ",\"p_delete\":" + (del && cat) + "}";
     }
 
     static String idBody(String id) { return IvaToolPointPatch.uuid(id) ? "{\"p_id\":" + jsonStr(id.toLowerCase(Locale.ROOT)) + "}" : null; }
@@ -331,6 +342,7 @@ public class IvaStaffPatch {
             s.status = o.optString("status", "invited");
             s.r = new boolean[]{o.optBoolean("can_issue"), o.optBoolean("can_catalog"), o.optBoolean("can_chat"), o.optBoolean("can_notify")};
             s.self = o.optBoolean("self_issue");
+            s.del = o.optBoolean("can_delete");
             JSONArray ps = o.optJSONArray("point_ids");
             for (int j = 0; ps != null && j < ps.length(); j++) s.points.add(ps.optString(j, "").toLowerCase(Locale.ROOT));
             out.add(s);
@@ -504,7 +516,7 @@ public class IvaStaffPatch {
             List<String> more = pointNames(u.all, s.points, u.point.id);
             if (!more.isEmpty()) c.addView(line(a, "Ещё пункты: " + join(more), u.cGray, 4));
         }
-        c.addView(line(a, rightsText(s.r) + (s.self ? " · сам себе — можно" : ""), u.cGray, 6));
+        c.addView(line(a, rightsText(s.r) + (s.del && s.r[1] ? " · " + DEL : "") + (s.self ? " · сам себе — можно" : ""), u.cGray, 6));
         return c;
     }
 
@@ -770,6 +782,25 @@ public class IvaStaffPatch {
         LinearLayout sc = IvaChiefPatch.card(a);
         box.addView(sc);
         final Switch fSelf = sw(a, sc, SELF, SELF_SUB, s.self, u.cText, u.cGray, u.cOrange);
+        LinearLayout dc = IvaChiefPatch.card(a);
+        box.addView(dc);
+        final Switch fDel = sw(a, dc, DEL, DEL_SUB, s.del && s.r[1], u.cText, u.cGray, u.cOrange);
+        final Runnable delPaint = new Runnable() {
+            @Override public void run() {
+                fDel.setEnabled(s.r[1]);
+                fDel.setAlpha(s.r[1] ? 1f : 0.45f);
+                if (!s.r[1] && fDel.isChecked()) fDel.setChecked(false);
+            }
+        };
+        delPaint.run();
+        rs[1].setOnCheckedChangeListener(new CompoundButton.OnCheckedChangeListener() {
+            @Override public void onCheckedChanged(CompoundButton b, boolean v) { s.r[1] = v; if (paint[0] != null) paint[0].run(); delPaint.run(); }
+        });
+        fDel.setOnCheckedChangeListener(new CompoundButton.OnCheckedChangeListener() {
+            @Override public void onCheckedChanged(CompoundButton b, boolean v) {
+                if (v && !s.r[1]) { b.setChecked(false); Toast.makeText(a, DEL_OFF, Toast.LENGTH_SHORT).show(); }
+            }
+        });
 
         if (u.all.size() >= 2) {
             box.addView(label(a, "Пункты выдачи", u.cGray));
@@ -814,7 +845,7 @@ public class IvaStaffPatch {
                 String e = formErr(isNew, em, IvaPickupPatch.me(a), fName.getText().toString(), fTel.getText().toString(), s.points.size(), s.r);
                 IvaPickupPatch.setErr(err, e);
                 if (!e.isEmpty()) return;
-                final String body = saveBody(isNew ? null : s.id, em, fName.getText().toString(), fTel.getText().toString(), s.points, s.r, fSelf.isChecked());
+                final String body = saveBody(isNew ? null : s.id, em, fName.getText().toString(), fTel.getText().toString(), s.points, s.r, fSelf.isChecked(), fDel.isChecked());
                 final String who = fName.getText().toString().trim();
                 write(u, pg, err, save, SAVE_RPC, body, isNew ? "Приглашение готово: пусть «" + who + "» войдёт в приложение под этой почтой" : "Сохранено");
             }
@@ -872,7 +903,7 @@ public class IvaStaffPatch {
     static final class Me {
         String id = "", status = "", company = "";
         boolean[] r = new boolean[4];
-        boolean self;
+        boolean self, del;
         List<IvaPickupPatch.Point> points = new ArrayList<IvaPickupPatch.Point>();
     }
 
@@ -888,6 +919,7 @@ public class IvaStaffPatch {
         m.company = o.optString("company", "");
         m.r = new boolean[]{o.optBoolean("can_issue"), o.optBoolean("can_catalog"), o.optBoolean("can_chat"), o.optBoolean("can_notify")};
         m.self = o.optBoolean("self_issue");
+        m.del = o.optBoolean("can_delete");
         Object ps = o.opt("points");
         m.points = IvaPickupPatch.parse(ps == null ? "[]" : ps.toString());
         return IvaToolPointPatch.uuid(m.id) ? m : null;
@@ -996,7 +1028,7 @@ public class IvaStaffPatch {
         TextView t = IvaChiefPatch.text(a, inviteText(m.company, names(m.points)), 14f, cText, false);
         t.setPadding(0, dp(a, 6), 0, 0);
         c.addView(t);
-        TextView r = IvaChiefPatch.text(a, "Права: " + rightsText(m.r), 13f, cGray, false);
+        TextView r = IvaChiefPatch.text(a, "Права: " + rightsText(m.r) + (m.del && m.r[1] ? " · " + DEL : ""), 13f, cGray, false);
         r.setPadding(0, dp(a, 4), 0, 0);
         c.addView(r);
         LinearLayout btns = new LinearLayout(a);
@@ -1127,6 +1159,11 @@ public class IvaStaffPatch {
             TextView t = IvaChiefPatch.text(a, (m.r[i] ? "✓ " : "— ") + RIGHTS[i], 14f, m.r[i] ? cText : cGray, false);
             t.setPadding(0, dp(a, 6), 0, 0);
             r.addView(t);
+        }
+        if (m.r[1]) {
+            TextView d = IvaChiefPatch.text(a, (m.del ? "✓ " : "— ") + DEL + (m.del ? " (после одобрения владельца)" : ""), 14f, m.del ? cText : cGray, false);
+            d.setPadding(0, dp(a, 6), 0, 0);
+            r.addView(d);
         }
         TextView s = IvaChiefPatch.text(a, m.self ? "Свои заявки можете выдавать сами" : "Свои заявки выдаёт другой сотрудник", 13f, cGray, false);
         s.setPadding(0, dp(a, 8), 0, 0);

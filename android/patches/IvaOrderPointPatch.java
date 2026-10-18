@@ -252,23 +252,30 @@ final class IvaOrderPointPatch {
             if (!found) sel = "";
         }
         paintChips(a, on);
-        if (!on || sel.isEmpty()) {
+        boolean anyCancelled = false;                                 // 10.122: отменённые клиентом — не в списке проката
+        for (Object o : full) if (cancelled(o)) anyCancelled = true;
+        if ((!on || sel.isEmpty()) && !anyCancelled) {
             if (!ours) return false;
             mineList = null; mineSig = "";
             IvaClientPatch.set(a, "admParts", full);
             render(a);
             return true;
         }
-        List<String> ids = new ArrayList<String>();
-        for (Object o : full) ids.add(o instanceof JSONObject ? ((JSONObject) o).optString("id", "") : "");
         ArrayList<Object> f = new ArrayList<Object>();
-        synchronized (partPoint) { for (Integer i : keep(ids, partPoint, sel)) f.add(full.get(i)); }
+        if (on && !sel.isEmpty()) {
+            List<String> ids = new ArrayList<String>();
+            for (Object o : full) ids.add(o instanceof JSONObject ? ((JSONObject) o).optString("id", "") : "");
+            synchronized (partPoint) { for (Integer i : keep(ids, partPoint, sel)) f.add(full.get(i)); }
+        } else f.addAll(full);
+        for (int i = f.size() - 1; i >= 0; i--) if (cancelled(f.get(i))) f.remove(i);
         if (ours && sig(f).equals(mineSig)) return false;             // уже отобрано
         mineList = f; mineSig = sig(f);
         IvaClientPatch.set(a, "admParts", f);
         render(a);
         return true;
     }
+
+    static boolean cancelled(Object o) { return o instanceof JSONObject && "cancelled".equals(((JSONObject) o).optString("status", "").trim()); }
 
     static void render(Activity a) {
         try {

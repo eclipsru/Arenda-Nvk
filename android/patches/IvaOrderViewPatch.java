@@ -58,31 +58,33 @@ public class IvaOrderViewPatch {
 
     static String norm(String st) {
         String s = st == null ? "" : st.trim().toLowerCase(Locale.ROOT);
-        return "rented".equals(s) || "closed".equals(s) ? s : "new";
+        return "rented".equals(s) || "closed".equals(s) || "cancelled".equals(s) ? s : "new";
     }
 
     /** Состояние для плашки: 0 — новая, 1 — в аренде, 2 — закрыта, 3 — срок вышел (в аренде, конец прошёл). */
     static int kind(String st, long end, long now) {
         String s = norm(st);
         if ("closed".equals(s)) return 2;
+        if ("cancelled".equals(s)) return 4;                        // 10.122: отменил клиент
         if ("rented".equals(s)) return end > 0 && now >= end ? 3 : 1;
         return 0;
     }
 
-    static final String[] KIND_TEXT = {"Новая", "В аренде", "Закрыта", "Срок вышел"};
-    static final int[] KIND_COLOR = {0xffff8f1f, 0xffffb74d, 0xff4caf50, 0xffff8a80};
-    static final int[] KIND_BG = {0xff2a2013, 0x26ffb74d, 0x264caf50, 0x26ff8a80};
+    static final String[] KIND_TEXT = {"Новая", "В аренде", "Закрыта", "Срок вышел", "Отменена клиентом"};
+    static final int[] KIND_COLOR = {0xffff8f1f, 0xffffb74d, 0xff4caf50, 0xffff8a80, 0xff9aa1b0};
+    static final int[] KIND_BG = {0xff2a2013, 0x26ffb74d, 0x264caf50, 0x26ff8a80, 0x269aa1b0};
 
     /** Общее состояние заявки из частей: есть новая — «Новая», иначе есть в аренде — «В аренде», иначе «Закрыта». */
     static String orderStatus(List<String> parts) {
         if (parts == null || parts.isEmpty()) return "new";
-        boolean rented = false, open = false;
+        boolean rented = false, open = false, done = false;
         for (String p : parts) {
             String s = norm(p);
             if ("new".equals(s)) open = true;
             else if ("rented".equals(s)) rented = true;
+            else if ("closed".equals(s)) done = true;
         }
-        return open ? "new" : rented ? "rented" : "closed";
+        return open ? "new" : rented ? "rented" : done ? "closed" : "cancelled";   // 10.122: все части отменены — «Отменена клиентом»
     }
 
     /** 1 сутки, 2 суток, 5 суток, 21 сутки. */
@@ -545,6 +547,7 @@ public class IvaOrderViewPatch {
         LinearLayout.LayoutParams cl = new LinearLayout.LayoutParams(-1, -2);
         cl.topMargin = dp(a, 14);
         body.addView(card, cl);
+        try { IvaOrderEditPatch.block(a, body, o, adm); } catch (Throwable ignore) {}   // 10.122: отмена / изменение заявки
     }
 
     /** Карточка заявки у владельца (штатный список заявок клиента): плашка и «№», инструменты с фото вместо строки названий. */
@@ -568,6 +571,7 @@ public class IvaOrderViewPatch {
             t.setPadding(0, dp(a, 8), 0, 0);
             box.addView(t);
         }
+        try { TextView pl = IvaOrderEditPatch.pendingLine(a, p); if (pl != null) box.addView(pl); } catch (Throwable ignore) {}   // 10.122
         date.setVisibility(View.GONE);                                  // штатные строки не переносим — прячем, наши — вместо них
         names.setVisibility(View.GONE);
         card.addView(box, 2, new LinearLayout.LayoutParams(-1, -2));
