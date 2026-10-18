@@ -182,6 +182,26 @@ final class IvaChatPatch {
         return LEND.equals(clean(tool));
     }
 
+    // ── 10.120: переписка с пунктом выдачи («Спросить в чате» на странице проката, IvaProkatPatch) ──
+    // В базе — app_messages.point_id (SQL 20261111); внутри приложения «инструмент» переписки — «pt:<пункт>».
+    static final String MSG_SELECT_POINT = MSG_SELECT_TOPIC + ",point_id";
+    static boolean pointColumn = true;     // колонки point_id ещё нет (SQL не применён) — переписка пункта идёт в общий чат
+    static long pointAt;
+    static boolean pointTagMissing = false;
+
+    static boolean isPoint(String tool) { return IvaProkatPatch.isKey(clean(tool)); }
+
+    static boolean isPointObj(Object o) {
+        return o instanceof JSONObject && IvaToolPointPatch.uuid(((JSONObject) o).optString("iva_point", ""));
+    }
+
+    /** «Инструмент» сообщения: tool_id, иначе пункт (point_id → «pt:…»), иначе тема, иначе общий чат. */
+    static String msgTool(String toolId, String topic, String pointId) {
+        if (!clean(toolId).isEmpty()) return clean(toolId);
+        String k = IvaProkatPatch.key(clean(pointId));
+        return k.isEmpty() ? msgTool(toolId, topic) : k;
+    }
+
     /** «Инструмент» сообщения из базы: tool_id, иначе тема переписки (topic = 'lend'), иначе общий чат. */
     static String msgTool(String toolId, String topic) {
         String t = clean(toolId);
@@ -215,16 +235,23 @@ final class IvaChatPatch {
     static String chatSub(String tool, String toolName) {
         if (isLend(tool)) return LEND_TITLE;
         if (clean(tool).isEmpty()) return "Общий чат";
+        if (isPoint(tool)) return clean(toolName).isEmpty() ? IvaProkatPatch.chatTitle("") : clean(toolName);
         return clean(toolName).isEmpty() ? "Инструмент" : clean(toolName);
     }
 
     /** Тело отправки текста: tool_id — переписка по инструменту, topic — «Хочу сдавать», без них — общий чат. */
     static JSONObject sendBody(String from, String to, String text, String tool, boolean toolCol, boolean topicCol) throws Exception {
+        return sendBody(from, to, text, tool, toolCol, topicCol, true);
+    }
+
+    /** 10.120: переписка пункта — point_id (без SQL — общий чат). */
+    static JSONObject sendBody(String from, String to, String text, String tool, boolean toolCol, boolean topicCol, boolean pointCol) throws Exception {
         JSONObject b = new JSONObject();
         b.put("from_email", from);
         b.put("to_email", to);
         b.put("text", text);
         if (isLend(tool)) { if (topicCol) b.put("topic", LEND); }
+        else if (isPoint(tool)) { if (pointCol) b.put("point_id", IvaProkatPatch.idOf(clean(tool))); }
         else if (!clean(tool).isEmpty() && toolCol) b.put("tool_id", tool);
         return b;
     }
@@ -862,6 +889,21 @@ final class IvaChatPatch {
         return true;
     }
 
+    /** 10.120: «Спросить в чате» на странице проката — переписка с этим пунктом выдачи. */
+    static void openPoint(Activity a, String ownerRaw, String pointId, JSONObject obj) {
+        String k = IvaProkatPatch.key(pointId);
+        if (k.isEmpty() || obj == null) return;
+        act = new WeakReference<Activity>(a);
+        if (handler == null) handler = new Handler(Looper.getMainLooper());
+        voiceStop(a);
+        toolCache.put(k, obj);
+        toolMissing.remove(k);
+        openThread(a, clean(ownerRaw), k, obj);
+        callTab(a, "chat");
+        callNative(a, "loadChat");
+        render(a);
+    }
+
     static void openThread(Activity a, String partnerRaw, String tool, JSONObject toolObj) {
         if (toolObj != null && !clean(tool).isEmpty() && !isLend(tool) && !toolCache.containsKey(tool)) toolCache.put(tool, toolObj);
         IvaClientPatch.set(a, "chatWith", partnerRaw);
@@ -979,8 +1021,13 @@ final class IvaChatPatch {
             @Override public void run() {
                 String err = null;
                 try {
-                    JSONObject b = sendBody(from, partner, text, tool, toolColumn, topicColumn);
+                    JSONObject b = sendBody(from, partner, text, tool, toolColumn, topicColumn, pointColumn);
                     String[] r = IvaClientPatch.apiCall(a, "/rest/v1/app_messages", "POST", b.toString(), true);
+                    if (!ok(r) && b.has("point_id")) {
+                        // Колонки point_id нет (SQL 10.120 не применён) — общий чат с прокатом, как раньше.
+                        b.remove("point_id");
+                        r = IvaClientPatch.apiCall(a, "/rest/v1/app_messages", "POST", b.toString(), true);
+                    }
                     if (!ok(r) && b.has("topic")) {
                         // Колонки topic нет (SQL не применён) — общий чат, как раньше.
                         b.remove("topic");
@@ -1036,7 +1083,7 @@ final class IvaChatPatch {
         }
         if (!low(with).equals(lastWith) || ct != lastToolObj) {
             JSONObject tool = ct instanceof JSONObject ? (JSONObject) ct : null;
-            String tid = isLendObj(tool) ? LEND : toolIdOf(tool);
+            String tid = isLendObj(tool) ? LEND : isPointObj(tool) ? IvaProkatPatch.key(tool.optString("iva_point", "")) : toolIdOf(tool);
             if (tool != null && !tid.isEmpty() && !isLend(tid) && !toolCache.containsKey(tid)) toolCache.put(tid, tool);
             openPartner = low(with); openPartnerRaw = with; openTool = tid;
             lastWith = low(with); lastToolObj = ct;
@@ -1068,7 +1115,7 @@ final class IvaChatPatch {
                 a.runOnUiThread(new Runnable() {
                     @Override public void run() {
                         loading = false;
-                        if (isLend(openTool) && !topicColumn) {   // SQL «Хочу сдавать» не применён — общий чат, как раньше
+                        if ((isLend(openTool) && !topicColumn) || (isPoint(openTool) && !pointColumn)) {   // SQL не применён — общий чат, как раньше
                             IvaClientPatch.set(a, "chatTool", null);
                             lastToolObj = null;
                             openTool = "";
@@ -1227,7 +1274,13 @@ final class IvaChatPatch {
         String filter = msgFilter(my, sup);
         JSONArray rows;
         if (!topicColumn && now - topicAt > HIDDEN_RETRY_MS) topicColumn = true;       // SQL могут применить в любой момент
-        try {
+        if (!pointColumn && now - pointAt > HIDDEN_RETRY_MS) pointColumn = true;
+        rows = null;
+        if (toolColumn && topicColumn && pointColumn) {                                // 10.120: с пунктом выдачи
+            try { rows = getArr(a, "/rest/v1/app_messages?select=" + MSG_SELECT_POINT + filter + "&order=created_at.desc&limit=300"); }
+            catch (Throwable e) { pointColumn = false; pointAt = now; }
+        }
+        if (rows == null) try {
             rows = getArr(a, "/rest/v1/app_messages?select=" + (!toolColumn ? MSG_SELECT_OLD : topicColumn ? MSG_SELECT_TOPIC : MSG_SELECT) + filter
                 + "&order=created_at.desc&limit=300");
         } catch (Throwable e) {
@@ -1253,20 +1306,30 @@ final class IvaChatPatch {
             asc.add(msg(o.optString("id", ""), o.optString("from_email", ""), o.optString("to_email", ""),
                 o.optString("text", ""), o.optString("img", ""), o.optString("audio", ""),
                 o.optInt("audio_dur", 0), o.optBoolean("is_read", false), o.optString("created_at", ""),
-                msgTool(o.isNull("tool_id") ? "" : o.optString("tool_id", ""), o.isNull("topic") ? "" : o.optString("topic", ""))));
+                msgTool(o.isNull("tool_id") ? "" : o.optString("tool_id", ""), o.isNull("topic") ? "" : o.optString("topic", ""),
+                    o.isNull("point_id") ? "" : o.optString("point_id", ""))));
+        }
+        if (adm && !IvaProkatPatch.ownerSees(a)) {                 // 10.120: владелец выключил «Чаты пунктов у меня»
+            ArrayList<Msg> keep = new ArrayList<Msg>();
+            for (Msg m : asc) if (!isPoint(m.tool)) keep.add(m);
+            asc = keep;
         }
         // Голосовые, записанные в открытой переписке по инструменту, — метка на телефоне и (если есть SQL) в базе.
         if (seenReady && my.equals(msgsFor)) {
             List<String> tag = voiceToTag(asc, my, partner, tool, seenIds, localTags);
             if (!tag.isEmpty()) {
                 synchronized (localTags) { for (String id : tag) localTags.put(id, tool); }
-                if (isLend(tool) ? !topicTagMissing : !tagMissing) {
+                if (isLend(tool) ? !topicTagMissing : isPoint(tool) ? !pointTagMissing : !tagMissing) {
                     try {
                         JSONObject b = new JSONObject();
                         JSONArray ids = new JSONArray();
                         for (String id : tag) ids.put(id);
                         b.put("p_ids", ids);
-                        if (isLend(tool)) {                 // «Хочу сдавать» — тема, а не инструмент (10.72)
+                        if (isPoint(tool)) {                // 10.120: переписка пункта — пункт
+                            b.put("p_point", IvaProkatPatch.idOf(clean(tool)));
+                            String[] r = IvaClientPatch.apiCall(a, "/rest/v1/rpc/iva_tag_my_point", "POST", b.toString(), true);
+                            if (r != null && "404".equals(r[0])) pointTagMissing = true;
+                        } else if (isLend(tool)) {          // «Хочу сдавать» — тема, а не инструмент (10.72)
                             b.put("p_topic", LEND);
                             String[] r = IvaClientPatch.apiCall(a, "/rest/v1/rpc/iva_tag_my_topic", "POST", b.toString(), true);
                             if (r != null && "404".equals(r[0])) topicTagMissing = true;
@@ -1283,8 +1346,18 @@ final class IvaChatPatch {
         // Инструменты переписок (название и картинка)
         HashSet<String> need = new HashSet<String>();
         Map<String, String> tools = assignTools(asc, my, adminEmails(), sup, localTags);
-        for (String t : tools.values()) if (!t.isEmpty() && !isLend(t) && !toolCache.containsKey(t) && !toolMissing.contains(t)) need.add(t);
-        if (!tool.isEmpty() && !isLend(tool) && !toolCache.containsKey(tool) && !toolMissing.contains(tool)) need.add(tool);
+        HashSet<String> needPt = new HashSet<String>();
+        for (String t : tools.values()) if (!t.isEmpty() && !isLend(t) && !toolCache.containsKey(t) && !toolMissing.contains(t)) (isPoint(t) ? needPt : need).add(t);
+        if (!tool.isEmpty() && !isLend(tool) && !toolCache.containsKey(tool) && !toolMissing.contains(tool)) (isPoint(tool) ? needPt : need).add(tool);
+        int ptLeft = 10;                                           // 10.120: название и аватарка пункта — по пунктам проката
+        for (String t : needPt) {
+            if (ptLeft-- <= 0) break;
+            String pid = IvaProkatPatch.idOf(t);
+            List<IvaProkatPatch.PP> ps = IvaProkatPatch.fetch(a, pid);
+            IvaProkatPatch.PP pp = IvaProkatPatch.find(ps, pid);
+            if (pp != null) { JSONObject o = IvaProkatPatch.chatObj(pid, pp); if (o != null) toolCache.put(t, o); }
+            else if (ps != null) toolMissing.add(t);
+        }
         if (!need.isEmpty()) {
             StringBuilder ids = new StringBuilder();
             for (String t : need) { if (ids.length() > 0) ids.append(','); ids.append(enc(t)); }
@@ -1426,8 +1499,9 @@ final class IvaChatPatch {
         } else if (!openTool.isEmpty()) {
             JSONObject t = toolCache.get(openTool);
             card.addView(toolPic(a, t, openTool, HEAD_TOOL_DP), new LinearLayout.LayoutParams(dp(a, HEAD_TOOL_DP), dp(a, HEAD_TOOL_DP)));
-            small = "Чат по инструменту · " + partnerTitle(openPartner);
-            title = t == null ? "Инструмент" : clean(t.optString("name", "Инструмент"));
+            boolean pt = isPoint(openTool);
+            small = (pt ? "Чат с пунктом выдачи · " : "Чат по инструменту · ") + partnerTitle(openPartner);
+            title = t == null ? (pt ? IvaProkatPatch.chatTitle("") : "Инструмент") : clean(t.optString("name", "Инструмент"));
         } else {
             card.addView(avatar(a, openPartner, partnerTitle(openPartner), HEAD_TOOL_DP),
                 new LinearLayout.LayoutParams(dp(a, HEAD_TOOL_DP), dp(a, HEAD_TOOL_DP)));
@@ -1478,7 +1552,9 @@ final class IvaChatPatch {
         Set<String> ad = adminEmails();
         List<Msg> list = thread(msgs, my, ad, sup, localTags, openPartner, openTool);
         if (list.isEmpty()) {
-            body.addView(hint(a, isLend(openTool) ? LEND_HINT : !openTool.isEmpty()
+            body.addView(hint(a, isLend(openTool) ? LEND_HINT : isPoint(openTool)
+                ? "Напишите вопрос пункту выдачи — ответит прокат. После первого сообщения чат появится в списке «Чаты»."
+                : !openTool.isEmpty()
                 ? "Напишите вопрос об этом инструменте — после первого сообщения чат появится в списке «Чаты»."
                 : "Сообщений пока нет. Напишите первое сообщение."));
             return;

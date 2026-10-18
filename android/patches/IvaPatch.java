@@ -427,6 +427,7 @@ public final class IvaPatch {
         try { IvaKindPatch.onTab(a, tab); } catch (Throwable ignore) {}     // 10.79: «Вид инструмента» — справочник, форма, запись
         try { IvaClientPatch.authBackup(a); } catch (Throwable ignore) {}   // 10.69: копия входа (пишется, лишь когда ключ сменился)
         try { IvaReviewPatch.onTab(a, tab); } catch (Throwable ignore) {}   // 10.70: отзывы — страница инструмента и проката
+        try { IvaProkatPatch.onTab(a, tab); } catch (Throwable ignore) {}   // 10.120: «Прокат» в карточке — страница проката и чат пункта
         try { IvaAvatarPatch.onTab(a, tab); } catch (Throwable ignore) {}   // 10.98: «Мои данные» — фото кругом, крупнее, выбор области
         try { IvaPhotoPatch.onTab(a); } catch (Throwable ignore) {}         // 10.109: «+» в правке инструмента — галерея, а не проводник
         try { IvaShopPatch.onTab(a, tab); } catch (Throwable ignore) {}     // 10.98: «Мои данные» — только ФИО, телефон, мессенджеры

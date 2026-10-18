@@ -47,6 +47,7 @@ import java.util.Set;
 public class IvaStaffToolsPatch {
     static final String LIST_RPC = "/rest/v1/rpc/iva_staff_tools", PENDING_RPC = "/rest/v1/rpc/iva_tools_pending",
         REVIEW_RPC = "/rest/v1/rpc/iva_tool_review", MODE_RPC = "/rest/v1/rpc/iva_staff_publish",
+        CARD_RPC = "/rest/v1/rpc/iva_tool_pending_card",
         MODE_SET_RPC = "/rest/v1/rpc/iva_staff_publish_set";
     static final String TITLE = "Инструменты пункта", ADD = "Добавить инструмент";
     static final String REVIEW_TITLE = "На одобрении", MODE_TITLE = "Инструменты сотрудников", OPEN = "review";
@@ -173,6 +174,56 @@ public class IvaStaffToolsPatch {
     }
 
     static final class Pending { String id = "", name = "", price = "", point = "", staff = ""; }
+
+    // ── 10.120: «На одобрении» → нажатие на карточку — инструмент целиком (просьба владельца 18.10.2026) ──
+
+    static String js(JSONObject j, String k) {
+        if (j == null || !j.has(k) || j.isNull(k)) return "";
+        String v = j.optString(k, "").trim();
+        return "null".equals(v) ? "" : v;
+    }
+
+    /** Фото инструмента: img, затем imgs (без повторов и пустых). */
+    static List<String> photos(JSONObject j) {
+        List<String> out = new ArrayList<String>();
+        String one = js(j, "img");
+        if (one.startsWith("http")) out.add(one);
+        JSONArray arr = j == null ? null : j.optJSONArray("imgs");
+        if (arr != null) for (int i = 0; i < arr.length(); i++) {
+            String u = arr.optString(i, "").trim();
+            if (u.startsWith("http") && !out.contains(u)) out.add(u);
+        }
+        return out;
+    }
+
+    /** «2 000 ₽» из числа; не число — «». */
+    static String rub(String raw) {
+        String s = raw == null ? "" : raw.trim().replace(',', '.');
+        if (s.isEmpty() || "null".equals(s)) return "";
+        try {
+            double d = Double.parseDouble(s);
+            if (Double.isNaN(d) || Double.isInfinite(d) || d < 0) return "";
+            return Math.round(d) + " ₽";
+        } catch (Throwable e) { return ""; }
+    }
+
+    /** Строки карточки «подпись — значение» (пустые поля не показываем). catTitle / kindTitle — названия из справочников. */
+    static List<String[]> cardRows(JSONObject j, String catTitle, String kindTitle) {
+        List<String[]> out = new ArrayList<String[]>();
+        if (j == null) return out;
+        String cat = catTitle == null || catTitle.trim().isEmpty() ? js(j, "cat_label") : catTitle.trim();
+        if (cat.isEmpty()) cat = js(j, "cat");
+        String kind = kindTitle == null || kindTitle.trim().isEmpty() ? js(j, "kind") : kindTitle.trim();
+        String del = j.optBoolean("delivery", false)
+            ? (rub(js(j, "delivery_price")).isEmpty() ? "Есть" : "Есть, " + rub(js(j, "delivery_price")) + " за 1 км") : "Нет, только самовывоз";
+        String[][] rows = {
+            {"Название", js(j, "name")}, {"Категория", cat}, {"Вид", kind}, {"Модель", js(j, "model_text")},
+            {"Цена", priceText(js(j, "price"))}, {"Залог", rub(js(j, "deposit"))}, {"Описание", js(j, "descr")},
+            {"Условия аренды", js(j, "terms")}, {"Доставка", del}, {"Пункт выдачи", js(j, "point_name")},
+            {"Добавил(а)", js(j, "staff_name")}};
+        for (String[] r : rows) if (!r[1].isEmpty()) out.add(r);
+        return out;
+    }
 
     static List<Pending> parsePending(String body) throws Exception {
         List<Pending> out = new ArrayList<Pending>();
@@ -635,6 +686,11 @@ public class IvaStaffToolsPatch {
         for (final Pending p : ps) {
             LinearLayout c = IvaChiefPatch.card(a);
             c.addView(IvaChiefPatch.text(a, p.name.isEmpty() ? "Без названия" : p.name, 15f, u.cText, true));
+            c.setClickable(true);                                          // 10.120: нажатие — инструмент целиком
+            c.setOnClickListener(new View.OnClickListener() { @Override public void onClick(View v) { try { openCard(u, p); } catch (Throwable ignore) {} } });
+            TextView more = IvaChiefPatch.text(a, "Нажмите, чтобы посмотреть целиком", 12f, u.cOrange, false);
+            more.setPadding(0, dp(a, 2), 0, 0);
+            c.addView(more);
             String l2 = line2(p.price, p.point);
             if (!l2.isEmpty()) {
                 TextView x = IvaChiefPatch.text(a, l2, 14f, u.cGray, false);
@@ -674,7 +730,120 @@ public class IvaStaffToolsPatch {
         u.status.setVisibility(ps.isEmpty() ? View.VISIBLE : View.GONE);
     }
 
-    static void review(final Rev u, final Pending p, final boolean ok, final TextView btn) {
+    /** Страница инструмента на одобрении: фото, все поля, внизу «Опубликовать» / «Отклонить». */
+    static void openCard(final Rev u, final Pending p) {
+        final Activity a = u.a;
+        final IvaChiefPatch.Page pg = IvaChiefPatch.page(a, REVIEW_TITLE, p.name.isEmpty() ? null : p.name, false);
+        final TextView st = IvaChiefPatch.text(a, "Загружаем…", 13f, u.cGray, false);
+        st.setPadding(dp(a, 2), dp(a, 4), 0, 0);
+        pg.list.addView(st, new LinearLayout.LayoutParams(-1, -2));
+        new Thread(new Runnable() {
+            @Override public void run() {
+                JSONObject got = null;
+                String err = "";
+                try {
+                    String[] r = IvaClientPatch.apiCall(a, CARD_RPC, "POST", "{\"p_id\":\"" + p.id.trim().toLowerCase(Locale.ROOT) + "\"}", true);
+                    String b = r != null && r.length > 1 && r[1] != null ? r[1].trim() : "";
+                    if (r != null && r[0] != null && r[0].startsWith("2") && b.startsWith("{")) got = new JSONObject(b);
+                    else if (r != null && ("404".equals(r[0]) || b.contains("PGRST202"))) err = "Целиком покажем после обновления базы (SQL 10.120) — пока главное:";
+                    else if (b.contains("Инструмент не найден")) err = "Инструмент уже не ждёт одобрения — список обновлён";
+                    else err = r == null ? "Не загрузилось — нет связи с сервером" : "Не загрузилось (ответ " + r[0] + ")";
+                } catch (Throwable e) { err = "Не загрузилось — нет связи с сервером"; }
+                final JSONObject fj = got;
+                final String fe = err;
+                a.runOnUiThread(new Runnable() {
+                    @Override public void run() {
+                        try {
+                            if (!pg.open()) return;
+                            JSONObject j = fj;
+                            if (j == null) {                                // без SQL — то, что уже знаем
+                                j = new JSONObject();
+                                j.put("name", p.name); j.put("price", p.price); j.put("point_name", p.point); j.put("staff_name", p.staff);
+                            }
+                            drawCard(u, pg, p, j, fe);
+                        } catch (Throwable ignore) {}
+                    }
+                });
+            }
+        }).start();
+    }
+
+    static void drawCard(final Rev u, final IvaChiefPatch.Page pg, final Pending p, JSONObject j, String note) {
+        final Activity a = u.a;
+        LinearLayout list = pg.list;
+        list.removeAllViews();
+        if (note != null && !note.isEmpty()) {
+            TextView n = IvaChiefPatch.text(a, note, 13f, u.cOrange, false);
+            n.setPadding(dp(a, 2), dp(a, 4), 0, dp(a, 6));
+            list.addView(n, new LinearLayout.LayoutParams(-1, -2));
+        }
+        List<String> ph = photos(j);
+        if (!ph.isEmpty()) {
+            android.widget.HorizontalScrollView hs = new android.widget.HorizontalScrollView(a);
+            hs.setHorizontalScrollBarEnabled(false);
+            LinearLayout row = new LinearLayout(a);
+            row.setOrientation(LinearLayout.HORIZONTAL);
+            for (int i = 0; i < ph.size(); i++) {
+                final String url = ph.get(i);
+                android.widget.ImageView iv = new android.widget.ImageView(a);
+                iv.setScaleType(android.widget.ImageView.ScaleType.CENTER_CROP);
+                IvaChatPatch.setBg(a, iv, "bg_photo");
+                IvaChatPatch.round(iv, dp(a, 12), false);
+                IvaChatPatch.loadPhoto(a, iv, url, "rev" + p.id + "_" + i);
+                iv.setOnClickListener(new View.OnClickListener() { @Override public void onClick(View v) { IvaStaffChatPatch.view(a, url, "image/" + "*"); } });
+                LinearLayout.LayoutParams il = new LinearLayout.LayoutParams(dp(a, ph.size() == 1 ? 300 : 220), dp(a, 180));
+                if (i > 0) il.leftMargin = dp(a, 8);
+                row.addView(iv, il);
+            }
+            hs.addView(row);
+            list.addView(hs, new LinearLayout.LayoutParams(-1, -2));
+        }
+        String cat = js(j, "cat"), sub = js(j, "sub"), catTitle = "", kindTitle = "";
+        try {
+            String ct = cat.isEmpty() ? null : IvaKindPatch.nativeTitle(a, "cats", null, cat);
+            String sc = sub.isEmpty() ? null : IvaKindPatch.nativeTitle(a, "subcats", cat, sub);
+            catTitle = (ct == null ? "" : ct) + (sc == null || sc.isEmpty() ? "" : (ct == null ? "" : " · ") + sc);
+            kindTitle = IvaKindPatch.titleOf(IvaKindPatch.list(), js(j, "kind"));
+        } catch (Throwable ignore) {}
+        LinearLayout card = IvaChiefPatch.card(a);
+        boolean first = true;
+        for (String[] r : cardRows(j, catTitle, kindTitle)) {
+            TextView l = IvaChiefPatch.text(a, r[0], 12f, u.cGray, false);
+            if (!first) l.setPadding(0, dp(a, 10), 0, 0);
+            card.addView(l);
+            TextView v = IvaChiefPatch.text(a, r[1], 15f, u.cText, "Название".equals(r[0]));
+            v.setPadding(0, dp(a, 2), 0, 0);
+            card.addView(v);
+            first = false;
+        }
+        LinearLayout.LayoutParams cl = new LinearLayout.LayoutParams(-1, -2);
+        cl.topMargin = dp(a, 12);
+        list.addView(card, cl);
+        LinearLayout btns = new LinearLayout(a);
+        btns.setOrientation(LinearLayout.HORIZONTAL);
+        btns.setPadding(0, dp(a, 14), 0, 0);
+        final TextView yes = IvaPickupPatch.addButton(a, u.cOrange);
+        yes.setText("Опубликовать");
+        final TextView no = IvaSearchPatch.chip(a, "Отклонить", false, false);
+        no.setGravity(Gravity.CENTER);
+        LinearLayout.LayoutParams yl = new LinearLayout.LayoutParams(0, -2, 1f);
+        yl.rightMargin = dp(a, 8);
+        btns.addView(yes, yl);
+        btns.addView(no, new LinearLayout.LayoutParams(0, -1, 1f));
+        list.addView(btns, new LinearLayout.LayoutParams(-1, -2));
+        final Runnable close = new Runnable() { @Override public void run() { try { if (pg.open()) pg.d.dismiss(); } catch (Throwable ignore) {} } };
+        yes.setOnClickListener(new View.OnClickListener() { @Override public void onClick(View v) { review(u, p, true, yes, close); } });
+        no.setOnClickListener(new View.OnClickListener() {
+            @Override public void onClick(View v) {
+                IvaClientPatch.styledChoice(a, "Отклонить инструмент?", "Клиенты его не увидят. Сотрудник увидит «Отклонён» и сможет исправить.",
+                    new String[]{"Отклонить"}, new IvaClientPatch.Choice() { @Override public void pick(int i) { if (i == 0) review(u, p, false, no, close); } });
+            }
+        });
+    }
+
+    static void review(final Rev u, final Pending p, final boolean ok, final TextView btn) { review(u, p, ok, btn, null); }
+
+    static void review(final Rev u, final Pending p, final boolean ok, final TextView btn, final Runnable done) {
         final String body = reviewBody(p.id, ok);
         if (body == null) return;
         btn.setEnabled(false);
@@ -694,6 +863,7 @@ public class IvaStaffToolsPatch {
                             btn.setAlpha(1f);
                             IvaStaffPatch.toast(u.a, fe.isEmpty() ? (ok ? "Опубликовано — клиенты видят" : "Отклонено") : fe);
                             if (fe.isEmpty()) try { IvaNotifyPatch.call(u.a, "loadCatalog"); } catch (Throwable ignore) {}   // каталог — с новым
+                            if (fe.isEmpty() && done != null) done.run();     // 10.120: со страницы инструмента — назад к списку
                             reloadReview(u);
                             if (u.changed != null) u.changed.run();
                         } catch (Throwable ignore) {}

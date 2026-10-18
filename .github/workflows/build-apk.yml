@@ -62,11 +62,11 @@ concurrency:
 env:
   SRC_APK: ProkatInstrumenta-10.14.apk
   OLD_NAME: '10.14'
-  NEW_NAME: '10.119'
-  NEW_CODE: '193'
+  NEW_NAME: '10.120'
+  NEW_CODE: '194'
   APKTOOL_VER: '2.10.0'
   # Тестовый канал (жёлтая карточка владельца на сайте): описание сборки для app-test.json
-  TEST_NOTES: 'Тестовая сборка 10.119. Вход: в профиле больше не остаётся почта прежнего аккаунта — почта всегда берётся из ключа входа (после входа, при запуске, раз в минуту и в фоне); если вход слетел сам, прежние почта, имя и телефон стираются, как после «Выйти». Уже испорченный профиль исправится сам при запуске. SQL не нужен. Ставится поверх.'
+  TEST_NOTES: 'Тестовая сборка 10.120. В карточке инструмента вместо «Продавец» — «Прокат» с аватаркой проката; нажатие открывает страницу проката: пункт выдачи, «Спросить в чате», «Позвонить» (телефон пункта), «Пункты выдачи» с «Перейти», инструменты пункта. Вопрос в чате приходит пункту: владельцу и сотрудникам с правом чата этого пункта. В «Настройке проката» — выключатель «Чаты пунктов у меня». «На одобрении»: нажатие открывает инструмент целиком. Нужен SQL 20261111.'
   TEST_REINSTALL: 'false'  # 10.15–10.57 подписаны одним ключом №6 — ставится поверх, удалять не нужно
   # Эталон ключа №6 (решение №22, 05.10.2026) — тот же, что в keystore-check.yml и docs/КЛЮЧ-ПОДПИСИ.md
   EXPECTED: 5D2B9F8BB54AD0B816A779B5991746957EBD6FA056D8A63D1D1635077BED5DDE
@@ -128,7 +128,7 @@ jobs:
           mkdir -p "$C"
           # Ошибки компилятора и проваленные проверки дублируются в аннотации задачи.
           fail() { grep -E "$2" "$1" 2>/dev/null | while IFS= read -r l; do echo "::error title=$3::$l"; done; exit 1; }
-          if ! javac -encoding UTF-8 -source 8 -target 8 -nowarn -bootclasspath "$ANDROID_JAR" -d "$C" android/patches/IvaPatch.java android/patches/IvaClientPatch.java android/patches/IvaSearchPatch.java android/patches/IvaChatPatch.java android/patches/IvaOrderPatch.java android/patches/IvaNotifyPatch.java android/patches/IvaReviewPatch.java android/patches/IvaPushPatch.java android/patches/IvaRentPatch.java android/patches/IvaKindPatch.java android/patches/IvaModelPatch.java android/patches/IvaFormPatch.java android/patches/IvaPhotoPatch.java android/patches/IvaCensorPatch.java android/patches/IvaChiefPatch.java android/patches/IvaTestPatch.java android/patches/IvaPickupPatch.java android/patches/IvaAvatarPatch.java android/patches/IvaShopPatch.java android/patches/IvaSoundPatch.java android/patches/IvaToolPointPatch.java android/patches/IvaOrderPointPatch.java android/patches/IvaStaffPatch.java android/patches/IvaStaffOrdersPatch.java android/patches/IvaStaffToolsPatch.java android/patches/IvaStaffChatPatch.java android/patches/IvaStaffJournalPatch.java android/patches/IvaAdminsPatch.java android/patches/IvaAccessPatch.java android/patches/IvaRealtimePatch.java android/patches/IvaLogoPatch.java 2>&1 | tee "$RUNNER_TEMP/j1.log"; then
+          if ! javac -encoding UTF-8 -source 8 -target 8 -nowarn -bootclasspath "$ANDROID_JAR" -d "$C" android/patches/IvaPatch.java android/patches/IvaClientPatch.java android/patches/IvaSearchPatch.java android/patches/IvaChatPatch.java android/patches/IvaOrderPatch.java android/patches/IvaNotifyPatch.java android/patches/IvaReviewPatch.java android/patches/IvaPushPatch.java android/patches/IvaRentPatch.java android/patches/IvaKindPatch.java android/patches/IvaModelPatch.java android/patches/IvaFormPatch.java android/patches/IvaPhotoPatch.java android/patches/IvaCensorPatch.java android/patches/IvaChiefPatch.java android/patches/IvaTestPatch.java android/patches/IvaPickupPatch.java android/patches/IvaAvatarPatch.java android/patches/IvaShopPatch.java android/patches/IvaSoundPatch.java android/patches/IvaToolPointPatch.java android/patches/IvaOrderPointPatch.java android/patches/IvaStaffPatch.java android/patches/IvaStaffOrdersPatch.java android/patches/IvaStaffToolsPatch.java android/patches/IvaStaffChatPatch.java android/patches/IvaStaffJournalPatch.java android/patches/IvaAdminsPatch.java android/patches/IvaAccessPatch.java android/patches/IvaRealtimePatch.java android/patches/IvaLogoPatch.java android/patches/IvaProkatPatch.java 2>&1 | tee "$RUNNER_TEMP/j1.log"; then
             fail "$RUNNER_TEMP/j1.log" 'error:|ошибка:' 'Компиляция IvaPatch'
           fi
           T="$RUNNER_TEMP/tcls"

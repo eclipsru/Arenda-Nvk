@@ -401,6 +401,7 @@ public class IvaShopPatch {
         try { IvaStaffPatch.settingsRow(a, list, cText, cGray, cOrange); } catch (Throwable ignore) {}           // 10.115: «Сотрудники» — третьим
         try { IvaRentPatch.settingsSection(a, list, cText, cGray, cOrange); } catch (Throwable ignore) {}
         try { IvaStaffToolsPatch.settingsSection(a, list, cText, cGray, cOrange); } catch (Throwable ignore) {}   // 10.105
+        try { IvaProkatPatch.settingsRow(a, list, cText, cGray, cOrange); } catch (Throwable ignore) {}         // 10.120: «Чаты пунктов у меня»
         try { IvaStaffJournalPatch.settingsRow(a, list, cText, cGray, cOrange); } catch (Throwable ignore) {}    // 10.107: «Сводка по пунктам»
         try { IvaLogoPatch.settingsRow(a, list, cText, cGray, cOrange); } catch (Throwable ignore) {}            // 10.113: в самом низу
     }

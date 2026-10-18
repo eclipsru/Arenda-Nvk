@@ -46,6 +46,10 @@ import java.util.TimeZone;
 public class IvaStaffChatPatch {
     static final String CHATS_RPC = "/rest/v1/rpc/iva_staff_chats", THREAD_RPC = "/rest/v1/rpc/iva_staff_chat";
     static final String READ_RPC = "/rest/v1/rpc/iva_staff_chat_read", SEND_RPC = "/rest/v1/rpc/iva_staff_chat_send";
+    // 10.120: переписки с пунктом выдачи («Спросить в чате» на странице проката, SQL 20261111) — «pt:<пункт>»
+    static final String P_CHATS_RPC = "/rest/v1/rpc/iva_staff_point_chats", P_THREAD_RPC = "/rest/v1/rpc/iva_staff_point_chat";
+    static final String P_READ_RPC = "/rest/v1/rpc/iva_staff_point_chat_read", P_SEND_RPC = "/rest/v1/rpc/iva_staff_point_chat_send";
+    static final String POINT_ASK = "Вопрос пункту";
     static final String TITLE = "Чат пункта", OPEN = "staffchat";
     static final String NO_DB = "Чат пункта заработает после обновления базы (SQL 10.106)";
     static final int ID_NOTE = 7207, MAX_LEN = 2000;
@@ -62,8 +66,19 @@ public class IvaStaffChatPatch {
 
     static boolean isPeer(String p) { return p != null && p.trim().matches("[0-9a-f]{32}"); }
 
+    /** Переписка: по инструменту (uuid) или с пунктом («pt:uuid», 10.120). */
+    static boolean isThread(String t) { return isTool(t) || IvaProkatPatch.isKey(t == null ? "" : t.trim()); }
+
+    static boolean isPt(String t) { return t != null && IvaProkatPatch.isKey(t.trim()); }
+
+    static String threadRpc(String t) { return isPt(t) ? P_THREAD_RPC : THREAD_RPC; }
+    static String readRpc(String t) { return isPt(t) ? P_READ_RPC : READ_RPC; }
+    static String sendRpc(String t) { return isPt(t) ? P_SEND_RPC : SEND_RPC; }
+
     /** {"p_tool":"…","p_peer":"…"} — только номер инструмента (uuid) и метка клиента (md5); иначе null. */
     static String threadBody(String tool, String peer) {
+        if (isPt(tool) && isPeer(peer))
+            return "{\"p_point\":\"" + IvaProkatPatch.idOf(tool.trim()) + "\",\"p_peer\":\"" + peer.trim() + "\"}";
         if (!isTool(tool) || !isPeer(peer)) return null;
         return "{\"p_tool\":\"" + tool.trim().toLowerCase(Locale.ROOT) + "\",\"p_peer\":\"" + peer.trim() + "\"}";
     }
@@ -105,14 +120,14 @@ public class IvaStaffChatPatch {
     }
 
     /** Цель уведомления: «инструмент|метка»; разбор — {инструмент, метка} или null. */
-    static String target(String tool, String peer) { return isTool(tool) && isPeer(peer) ? tool.trim() + "|" + peer.trim() : ""; }
+    static String target(String tool, String peer) { return isThread(tool) && isPeer(peer) ? tool.trim() + "|" + peer.trim() : ""; }
 
     static String[] parseTarget(String t) {
         if (t == null) return null;
         int i = t.indexOf('|');
         if (i <= 0) return null;
         String tool = t.substring(0, i), peer = t.substring(i + 1);
-        return isTool(tool) && isPeer(peer) ? new String[]{tool.trim(), peer.trim()} : null;
+        return isThread(tool) && isPeer(peer) ? new String[]{tool.trim(), peer.trim()} : null;
     }
 
     /** Последние сообщения клиентов в переписках с непрочитанными — о них уведомление. */
@@ -185,9 +200,35 @@ public class IvaStaffChatPatch {
             c.lastMine = o.optBoolean("last_mine");
             c.unread = o.optInt("unread", 0);
             c.lastClient = str(o, "last_client_id");
-            if (isTool(c.tool) && isPeer(c.peer)) out.add(c);
+            if (c.tool.isEmpty()) {                                       // 10.120: переписка с пунктом
+                c.tool = IvaProkatPatch.key(str(o, "point_id"));
+                c.toolName = POINT_ASK;
+            }
+            if (isThread(c.tool) && isPeer(c.peer)) out.add(c);
         }
         return out;
+    }
+
+    /** По инструментам + с пунктом; новые сверху (время из базы — одного вида, сравнимо как строка). */
+    static List<Chat> merge(List<Chat> a, List<Chat> b) {
+        List<Chat> out = new ArrayList<Chat>();
+        if (a != null) out.addAll(a);
+        if (b != null) out.addAll(b);
+        java.util.Collections.sort(out, new java.util.Comparator<Chat>() {
+            @Override public int compare(Chat x, Chat y) {
+                long tx = IvaChatPatch.parseIso(x.at), ty = IvaChatPatch.parseIso(y.at);
+                return tx == ty ? 0 : tx > ty ? -1 : 1;
+            }
+        });
+        return out;
+    }
+
+    /** Переписки пунктов (без SQL 10.120 — пусто, не ошибка). */
+    static List<Chat> pointChats(String[] r) {
+        try {
+            if (r == null || r[0] == null || !r[0].startsWith("2")) return new ArrayList<Chat>();
+            return parseChats(r.length > 1 ? r[1] : "");
+        } catch (Throwable e) { return new ArrayList<Chat>(); }
     }
 
     static List<Msg> parseThread(String body) throws Exception {
@@ -230,6 +271,13 @@ public class IvaStaffChatPatch {
             return;
         }
         List<Chat> cs = parseChats(r.length > 1 ? r[1] : "");
+        if (now >= sp.getLong("pchat_nodb_" + email, 0L)) {                          // 10.120: и переписки пунктов
+            String[] pr = null;
+            try { pr = IvaNotifyPatch.api(c, P_CHATS_RPC, "POST", "{}"); } catch (Throwable ignore) {}
+            if (pr != null && !pr[0].startsWith("2") && NO_DB.equals(dbError(pr[0], pr.length > 1 ? pr[1] : "")))
+                sp.edit().putLong("pchat_nodb_" + email, now + NO_DB_PAUSE_MS).apply();
+            cs = merge(cs, pointChats(pr));
+        }
         List<String> ids = notifyIds(cs);
         SharedPreferences p = IvaNotifyPatch.prefs(c);
         String k = IvaNotifyPatch.key("seen_sc", email);
@@ -281,7 +329,7 @@ public class IvaStaffChatPatch {
         u.cGray = IvaStaffPatch.color(a, "gray", 0xff9aa1b0);
         u.cOrange = IvaStaffPatch.color(a, "orange", 0xffff8f1f);
         String c = company == null || company.trim().isEmpty() ? "Прокат" : company.trim();
-        u.page = IvaChiefPatch.page(a, TITLE, "«" + c + "»: вопросы клиентов по инструментам ваших пунктов. Клиент видит ответ от проката.", false);
+        u.page = IvaChiefPatch.page(a, TITLE, "«" + c + "»: вопросы клиентов вашим пунктам и по их инструментам. Клиент видит ответ от проката.", false);
         u.status = IvaChiefPatch.text(a, "Загружаем…", 13f, u.cGray, false);
         u.status.setPadding(dp(a, 2), dp(a, 4), 0, 0);
         u.page.list.addView(u.status, new LinearLayout.LayoutParams(-1, -2));
@@ -301,7 +349,12 @@ public class IvaStaffChatPatch {
                 try {
                     String[] r = IvaClientPatch.apiCall(u.a, CHATS_RPC, "POST", "{}", true);
                     err = r == null ? dbError("", "") : dbError(r[0], r.length > 1 ? r[1] : "");
-                    if (err.isEmpty()) got = parseChats(r.length > 1 ? r[1] : "");
+                    if (err.isEmpty()) {
+                        got = parseChats(r.length > 1 ? r[1] : "");
+                        String[] pr = null;
+                        try { pr = IvaClientPatch.apiCall(u.a, P_CHATS_RPC, "POST", "{}", true); } catch (Throwable ignore) {}
+                        got = merge(got, pointChats(pr));                       // 10.120: и переписки пунктов
+                    }
                 } catch (Throwable e) { err = dbError("", ""); }
                 final List<Chat> fc = got;
                 final String fe = err;
@@ -332,7 +385,7 @@ public class IvaStaffChatPatch {
         final Activity a = u.a;
         u.items.removeAllViews();
         u.status.setTextColor(u.cGray);
-        u.status.setText(cs.isEmpty() ? "Пока никто не писал. Здесь появятся вопросы клиентов об инструментах ваших пунктов." : "");
+        u.status.setText(cs.isEmpty() ? "Пока никто не писал. Здесь появятся вопросы клиентов вашим пунктам и об их инструментах." : "");
         u.status.setVisibility(cs.isEmpty() ? View.VISIBLE : View.GONE);
         Chat jump = null;
         for (final Chat c : cs) {
@@ -458,12 +511,12 @@ public class IvaStaffChatPatch {
                 List<Msg> got = null;
                 String err;
                 try {
-                    String[] r = IvaClientPatch.apiCall(t.u.a, THREAD_RPC, "POST", body, true);
+                    String[] r = IvaClientPatch.apiCall(t.u.a, threadRpc(t.c.tool), "POST", body, true);
                     err = r == null ? dbError("", "") : dbError(r[0], r.length > 1 ? r[1] : "");
                     if (err.isEmpty()) got = parseThread(r.length > 1 ? r[1] : "");
                     boolean unread = false;
                     if (got != null) for (Msg m : got) if (!m.mine && !m.read) unread = true;
-                    if (unread) IvaClientPatch.apiCall(t.u.a, READ_RPC, "POST", body, true);   // открыл — прочитано (и у владельца)
+                    if (unread) IvaClientPatch.apiCall(t.u.a, readRpc(t.c.tool), "POST", body, true);   // открыл — прочитано (и у владельца)
                 } catch (Throwable e) { err = dbError("", ""); }
                 final List<Msg> fm = got;
                 final String fe = err;
@@ -574,7 +627,7 @@ public class IvaStaffChatPatch {
             @Override public void run() {
                 String err;
                 try {
-                    String[] r = IvaClientPatch.apiCall(a, SEND_RPC, "POST", body, true);
+                    String[] r = IvaClientPatch.apiCall(a, sendRpc(t.c.tool), "POST", body, true);
                     err = r == null ? dbError("", "") : dbError(r[0], r.length > 1 ? r[1] : "");
                 } catch (Throwable x) { err = dbError("", ""); }
                 final String fe = err;

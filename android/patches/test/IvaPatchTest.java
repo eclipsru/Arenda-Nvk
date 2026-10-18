@@ -2572,6 +2572,7 @@ public class IvaPatchTest {
         cab117();                                                     // 10.117: комиссия без скачков, роль и архив в кабинете
         try118();                                                     // 10.118: пробная запись называет причину отказа
         mail119();                                                    // 10.119: почта — из ключа входа
+        prokat120();                                                  // 10.120: страница проката, чат пункта, «На одобрении»
         if (fail > 0) { System.out.println("ошибок: " + fail); System.exit(1); }
         System.out.println("все проверки IvaPatch пройдены");
     }
@@ -3296,5 +3297,55 @@ public class IvaPatchTest {
         eq("проба 10.118: без причины — общая фраза называет 20261108",
             IvaStaffToolsPatch.WHY_UNKNOWN.contains("20261108_staff_publish_probe.sql"), true);
         eq("проба 10.118: адрес функции", IvaStaffToolsPatch.TRY_RPC, "/rest/v1/rpc/iva_staff_publish_try");
+    }
+
+    static void prokat120() {
+        String id = "0F8FAD5B-D9CB-469F-A165-70867728950E", low = id.toLowerCase();
+        eq("прокат 10.120: тело запроса пунктов — только uuid", IvaProkatPatch.body(" " + id + " ") + "|" + IvaProkatPatch.body("x") + "|" + IvaProkatPatch.body(null),
+            "{\"p_point\":\"" + low + "\"}|null|null");
+        eq("прокат 10.120: «Позвонить» — цифры и ведущий плюс; меньше 5 цифр — кнопки нет",
+            IvaProkatPatch.telUri("+7 (383) 111-22-33") + "|" + IvaProkatPatch.telUri("8 913 000 11 22 доб. 5") + "|" + IvaProkatPatch.telUri("12-34")
+            + "|" + IvaProkatPatch.telUri("") + "|" + IvaProkatPatch.telUri(null) + "|" + IvaProkatPatch.telUri("1+2345"),
+            "tel:+73831112233|tel:891300011225||||tel:12345");
+        eq("прокат 10.120: ключ переписки пункта «pt:uuid» и обратно",
+            IvaProkatPatch.key(id) + "|" + IvaProkatPatch.isKey("pt:" + low) + "|" + IvaProkatPatch.isKey("pt:x") + "|" + IvaProkatPatch.isKey(low)
+            + "|" + IvaProkatPatch.idOf("pt:" + low) + "|" + IvaProkatPatch.idOf(low) + "|" + IvaProkatPatch.key("x"),
+            "pt:" + low + "|true|false|false|" + low + "||");
+        eq("прокат 10.120: подписи", IvaProkatPatch.chatTitle(" Склад ") + "|" + IvaProkatPatch.chatTitle("") + "|" + IvaProkatPatch.toolsText(0) + "|"
+            + IvaProkatPatch.toolsText(3) + "|" + IvaProkatPatch.pointsText(1) + "|" + IvaProkatPatch.pointsText(4),
+            "Пункт выдачи «Склад»|Пункт выдачи|Инструментов пока нет|Инструментов: 3|Пункты выдачи|Пункты выдачи · 4");
+        IvaProkatPatch.PP p = new IvaProkatPatch.PP();
+        p.address = "Новосибирск, улица Ленина, 5"; p.tel = "+7 383 111-22-33";
+        p.open = new int[]{540, 540, 540, 540, 540, -1, -1}; p.close = new int[]{1080, 1080, 1080, 1080, 1080, -1, -1};
+        String info = IvaProkatPatch.infoText(p);
+        eq("прокат 10.120: карточка пункта — адрес, время работы, телефон (почты нет)",
+            info.startsWith("Новосибирск, улица Ленина, 5\nВремя работы: ") + "|" + info.endsWith("\nТелефон: +7 383 111-22-33") + "|" + info.contains("@")
+            + "|" + IvaProkatPatch.infoText(new IvaProkatPatch.PP()).isEmpty() + "|" + IvaProkatPatch.infoText(null).isEmpty(), "true|true|false|true|true");
+        eq("прокат 10.120: без инструментов в каталоге — пустой список", IvaProkatPatch.toolsOf(null, low).size() + "|"
+            + IvaProkatPatch.toolsOf(new java.util.ArrayList<Object>(), low).size(), "0|0");
+        eq("чат 10.120: сообщение с пунктом — переписка «pt:…»; инструмент важнее; без пункта — как раньше",
+            IvaChatPatch.msgTool("", "", id) + "|" + IvaChatPatch.msgTool("t1", "", id) + "|" + IvaChatPatch.msgTool("", "lend", "") + "|"
+            + IvaChatPatch.msgTool("", "", "") + "|" + IvaChatPatch.msgTool("", "", "bad"), "pt:" + low + "|t1|lend||");
+        eq("чат 10.120: переписка пункта — не инструмент и не «Хочу сдавать»; подпись в списке",
+            IvaChatPatch.isPoint("pt:" + low) + "|" + IvaChatPatch.isPoint(low) + "|" + IvaChatPatch.isLend("pt:" + low) + "|"
+            + IvaChatPatch.chatSub("pt:" + low, "Пункт выдачи «Склад»") + "|" + IvaChatPatch.chatSub("pt:" + low, ""),
+            "true|false|false|Пункт выдачи «Склад»|Пункт выдачи");
+        String peer = "0123456789abcdef0123456789abcdef";
+        eq("чат пункта 10.120: сотруднику — тело и функции переписки пункта",
+            IvaStaffChatPatch.threadBody("pt:" + low, peer) + "|" + IvaStaffChatPatch.threadRpc("pt:" + low) + "|" + IvaStaffChatPatch.readRpc("pt:" + low)
+            + "|" + IvaStaffChatPatch.sendRpc("pt:" + low),
+            "{\"p_point\":\"" + low + "\",\"p_peer\":\"" + peer + "\"}|/rest/v1/rpc/iva_staff_point_chat|/rest/v1/rpc/iva_staff_point_chat_read|/rest/v1/rpc/iva_staff_point_chat_send");
+        eq("чат пункта 10.120: переписка по инструменту — как в 10.106",
+            IvaStaffChatPatch.threadBody(low, peer) + "|" + IvaStaffChatPatch.threadRpc(low) + "|" + IvaStaffChatPatch.sendRpc(low),
+            "{\"p_tool\":\"" + low + "\",\"p_peer\":\"" + peer + "\"}|/rest/v1/rpc/iva_staff_chat|/rest/v1/rpc/iva_staff_chat_send");
+        String[] tg = IvaStaffChatPatch.parseTarget(IvaStaffChatPatch.target("pt:" + low, peer));
+        eq("чат пункта 10.120: уведомление ведёт в переписку пункта; чужое — нет",
+            (tg == null ? "null" : tg[0] + "|" + tg[1]) + "|" + IvaStaffChatPatch.target("pt:x", peer) + "|" + IvaStaffChatPatch.parseTarget("pt:x|" + peer)
+            + "|" + IvaStaffChatPatch.threadBody("pt:x", peer), "pt:" + low + "|" + peer + "||null|null");
+        eq("«На одобрении» 10.120: залог и доставка — рубли", IvaStaffToolsPatch.rub("2000") + "|" + IvaStaffToolsPatch.rub("12,6") + "|"
+            + IvaStaffToolsPatch.rub("") + "|" + IvaStaffToolsPatch.rub("-1") + "|" + IvaStaffToolsPatch.rub("abc") + "|" + IvaStaffToolsPatch.rub(null),
+            "2000 ₽|13 ₽||||");
+        eq("10.120: адреса функций", IvaProkatPatch.RPC + "|" + IvaStaffToolsPatch.CARD_RPC + "|" + IvaStaffChatPatch.P_CHATS_RPC,
+            "/rest/v1/rpc/iva_prokat_points|/rest/v1/rpc/iva_tool_pending_card|/rest/v1/rpc/iva_staff_point_chats");
     }
 }

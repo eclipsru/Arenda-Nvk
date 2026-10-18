@@ -636,8 +636,12 @@ public final class IvaNotifyPatch {
      *  собеседником или список чатов (оба обновляются сами, 10.57). Письмо от другого при открытом чате — уведомление. */
     static void checkMessages(Context a, String email, boolean admin, String openWith) throws Exception {
         if (quiet(a, admin)) return;         // 10.73: вне расписания — ничего не запоминаем, покажем позже
-        JSONArray rows = getArr(a, "/rest/v1/app_messages?select=id,from_email,text,img,audio,created_at&to_email=eq." + enc(email)
-            + "&is_read=eq.false&order=created_at.desc&limit=50");
+        String mq = "/rest/v1/app_messages?select=id,from_email,text,img,audio,created_at&to_email=eq." + enc(email)
+            + "&is_read=eq.false&order=created_at.desc&limit=50";
+        JSONArray rows;
+        if (admin && !IvaProkatPatch.ownerSees(a)) {   // 10.120: «Чаты пунктов у меня» выключены — о переписках пунктов не сообщаем
+            try { rows = getArr(a, mq + "&point_id=is.null"); } catch (Throwable e) { rows = getArr(a, mq); }   // без SQL 10.120 — как раньше
+        } else rows = getArr(a, mq);
         List<String> ids = new ArrayList<String>(), created = new ArrayList<String>();
         List<JSONObject> list = new ArrayList<JSONObject>();
         for (int i = 0; i < rows.length(); i++) {
