@@ -480,8 +480,14 @@ select.inp{cursor:pointer;appearance:none;
   .box{padding:15px}
   .spec{flex-direction:column;gap:2px}
   .spec dt{min-width:0;font-size:12.5px}
-  .toolbar .sort{margin-left:0;width:100%}
-  .toolbar select{flex:1;min-width:0}
+  /* Этап E: «Фильтры» и сортировка — одной строкой и прилипают к верху при прокрутке каталога */
+  .toolbar{position:sticky;top:0;z-index:30;background:var(--bg);box-shadow:0 1px 0 var(--line);
+    margin:0 -16px 12px;padding:8px 16px;gap:8px 10px;flex-wrap:wrap}
+  .toolbar .f-mob-btn{flex-shrink:0}
+  .toolbar .sort{margin-left:0;flex:1;min-width:0}
+  .toolbar .sort span{display:none}
+  .toolbar select{flex:1;min-width:0;padding-top:10px;padding-bottom:10px}
+  .toolbar .found{order:3;flex-basis:100%;font-size:12.5px}
   .foot .cols{gap:24px}
 }
 

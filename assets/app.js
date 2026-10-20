@@ -347,6 +347,15 @@ function applyFilters(list, f){
 
 function sortAds(list, mode){
   const a = list.slice();
+  /* Этап E (20.10.2026): сортировки, которых ждут на площадках аренды — свежие, цена, рейтинг */
+  const fresh = (x, y) => (x.days || 0) - (y.days || 0);
+  if (mode === 'fresh')  return a.sort(fresh);
+  if (mode === 'cheap')  return a.sort((x, y) => (Number(x.price) || 0) - (Number(y.price) || 0) || fresh(x, y));
+  if (mode === 'dear')   return a.sort((x, y) => (Number(y.price) || 0) - (Number(x.price) || 0) || fresh(x, y));
+  if (mode === 'rating') return a.sort((x, y) => (Number(y.reviews_count) > 0) - (Number(x.reviews_count) > 0) ||
+                                                 (Number(y.rating) || 0) - (Number(x.rating) || 0) ||
+                                                 (Number(y.reviews_count) || 0) - (Number(x.reviews_count) || 0) || fresh(x, y));
+  /* прежние ссылки ?sort=new|good|work — выбранное состояние первым */
   // Выбранное состояние идёт первым; внутри группы — свежие объявления.
   const order = ['new', 'good', 'work'];
   if (order.indexOf(mode) !== -1) {

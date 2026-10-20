@@ -8,7 +8,7 @@
 <meta name="description" content="Каталог инструмента в аренду: фильтры по цене, категории, городу и состоянию. Цена за сутки, возвратный залог.">
 <meta name="theme-color" content="#101217">
 <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
-<link rel="stylesheet" href="assets/theme.css?v=20261020-c">
+<link rel="stylesheet" href="assets/theme.css?v=20261020-e">
 <link rel="stylesheet" href="assets/geo.css?v=20260923-photon">
 </head>
 <body>
@@ -37,10 +37,11 @@
           <span class="found" id="found"></span>
           <div class="sort">
             <span>Сортировка</span>
-            <select class="inp" id="sort" aria-label="Сначала по состоянию инструмента">
-              <option value="new">Новые</option>
-              <option value="good">Хорошие</option>
-              <option value="work">Рабочие</option>
+            <select class="inp" id="sort" aria-label="Сортировка объявлений">
+              <option value="fresh">Сначала новые</option>
+              <option value="cheap">Сначала дешевле</option>
+              <option value="dear">Сначала дороже</option>
+              <option value="rating">По рейтингу</option>
             </select>
           </div>
         </div>
@@ -60,7 +61,7 @@
 <script src="assets/sb.js?v=20260923-photon"></script>
 <script src="assets/models.js?v=20261020-power"></script>
 <script src="assets/app-release.js?v=20261009-rel"></script>
-<script src="assets/app.js?v=20261020-d"></script>
+<script src="assets/app.js?v=20261020-e"></script>
 <script src="assets/clicks.js?v=20261001-p4"></script>
 <script>
 (function(){
@@ -117,8 +118,10 @@
     var rows = byKind(sortAds(applyFilters(ADS, F), SORT), F);
     return rows.filter(function(r){ return r.st === 1; }).concat(rows.filter(function(r){ return r.st === 0; }));
   }
-  var SORT = p.get('sort') || 'new';
-  if (['new','good','work'].indexOf(SORT) === -1) SORT = 'new';
+  /* Этап E (20.10.2026): настоящая сортировка — по свежести, цене и рейтингу. Состояние инструмента — это фильтр
+     «Состояние» слева; старые ?sort=new|good|work открываются как «Сначала новые объявления». */
+  var SORT = p.get('sort') || 'fresh';
+  if (['fresh','cheap','dear','rating'].indexOf(SORT) === -1) SORT = 'fresh';
 
   setCity(F.city,p.has('city')); F.city=getCity(); // Город в ссылке имеет приоритет над сохранённым.
   mountChrome('catalog', F.q);
@@ -134,7 +137,7 @@
     if (F.priceTo) u.set('to', F.priceTo);
     if (F.conds.length) u.set('cond', F.conds.join(','));
     if (F.delivery) u.set('delivery', '1');
-    if (SORT !== 'new') u.set('sort', SORT);
+    if (SORT !== 'fresh') u.set('sort', SORT);
     if (F.kind){
       u.set('kind', F.kind);
       Object.keys(F.specs).forEach(function(k){ u.set('s.' + k, F.specs[k]); });
@@ -379,6 +382,7 @@
       plural(list.length, 'объявление', 'объявления', 'объявлений');
 
     $('chips').innerHTML = chipsHTML();
+    var shOk = $('shOk'); if (shOk) shOk.textContent = showNText(list.length);
 
     /* Счётчик активных фильтров на мобильной кнопке */
     var n = (F.cat?1:0) + (F.sub?1:0) + (F.city?1:0) + (F.priceFrom?1:0) +
@@ -442,11 +446,17 @@
   $('sort').value = SORT;
   $('sort').addEventListener('change', function(){ SORT = this.value; render(); });
 
+  /* «Показать 12» — сколько найдётся, видно прямо в шторке фильтров (этап E) */
+  function showNText(n){
+    if (n == null) n = results().length;
+    return n ? 'Показать ' + n : 'Ничего не найдено';
+  }
+
   /* ---------- Мобильная шторка фильтров ---------- */
   $('fMob').addEventListener('click', function(){
     openSheet('Фильтры', filtersHTML(),
-      '<button class="btn sec" id="shReset" style="flex:1">Сбросить</button>' +
-      '<button class="btn" id="shOk" style="flex:2">Показать</button>');
+      '<button class="btn sec" id="shReset" style="flex:0 0 auto;padding-left:18px;padding-right:18px">Сбросить</button>' +
+      '<button class="btn" id="shOk" style="flex:1">' + showNText() + '</button>');
 
     bindFilters($1('#sheet .sheet-b'));
 
