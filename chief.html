@@ -7,7 +7,7 @@
 <meta name="robots" content="noindex, nofollow">
 <meta name="theme-color" content="#101217">
 <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
-<link rel="stylesheet" href="assets/theme.css?v=20261005-rel">
+<link rel="stylesheet" href="assets/theme.css?v=20261020-lend">
 <style>
 .kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:12px;margin-bottom:22px}
 .kpi{background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:16px}
@@ -96,8 +96,8 @@
 <script src="assets/geo.js?v=20260923-photon"></script>
 <script src="assets/email-guard.js?v=20260926-email"></script><script src="assets/sb.js?v=20260926-email"></script>
 <script src="assets/app-release.js?v=20261009-rel"></script>
-<script src="assets/app.js?v=20261009-rel"></script>
-<script src="assets/partners.js?v=20261003-p6-texts"></script>
+<script src="assets/app.js?v=20261020-lend"></script>
+<script src="assets/partners.js?v=20261020-lend"></script>
 <script src="assets/model-proposals.js?v=20261018-stage4"></script>
 <script>
 (function(){
@@ -299,6 +299,45 @@
   }
 
   /* ---------- Таблица арендодателей ---------- */
+  /* 20.10.2026 (решение владельца): клиент сам сдавать не может — пишет владельцу в чат,
+     владелец после разговора добавляет его здесь по почте аккаунта. Как «Добавить» в приложении (IvaAdminsPatch):
+     сначала iva_admin_add (SQL 20261102), без него — обычная вставка в admins. */
+  function admAddBar(){
+    return '<div class="box" style="padding:16px;margin-bottom:14px">' +
+      '<b style="font-size:15px">Добавить арендодателя</b>' +
+      '<p class="small muted" style="margin:4px 0 12px;line-height:1.5">Почта, с которой человек зарегистрировался на сайте или в приложении. ' +
+        'После добавления у него появятся «Мои объявления» и «Добавить».</p>' +
+      '<div style="display:flex;gap:8px;flex-wrap:wrap">' +
+        '<label for="admAddEmail" style="position:absolute;left:-9999px">Почта арендодателя</label>' +
+        '<input class="inp" id="admAddEmail" type="email" autocomplete="off" placeholder="ivan@mail.ru" style="flex:1;min-width:200px">' +
+        '<button class="btn" id="admAddGo">Добавить</button>' +
+      '</div></div>';
+  }
+  async function admAdd(btn){
+    const inp = $('admAddEmail');
+    const em = (inp.value || '').trim().toLowerCase();
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]{2,}$/.test(em)){ toast('Похоже, в почте ошибка (пример: ivan@mail.ru)'); inp.focus(); return; }
+    if (D.admins.some(function(x){ return (x.email || '').toLowerCase() === em && x.active !== false && !x.removed_at; })){
+      toast('Этот человек уже арендодатель'); return;
+    }
+    btn.disabled = true; btn.textContent = '…';
+    try {
+      try {
+        await api('/rest/v1/rpc/iva_admin_add', 'POST', { p_email: em });
+      } catch(err){
+        const m = String(err.message || '');
+        if (!/iva_admin_add|PGRST202|schema cache|Could not find the function|404/i.test(m)) throw err;
+        await api('/rest/v1/admins', 'POST', { email: em, role: 'admin', name: '' }, { Prefer:'return=minimal' });
+      }
+      D.admins = await loadAdmins();
+      render(); toast('Добавлен: ' + em + '. Напишите ему, что можно публиковать инструмент');
+    } catch(err){
+      btn.disabled = false; btn.textContent = 'Добавить';
+      const m = String(err.message || '');
+      toast(/duplicate|23505|already exists/i.test(m) ? 'Эта почта уже есть в списке — откройте «Настроить» и включите' : 'Не удалось: ' + m);
+    }
+  }
+
   function admTable(short){
     const rows = D.admins.map(function(a){
       const em = (a.email || '').toLowerCase();
@@ -787,7 +826,7 @@
     if (TAB === 'ord')      inner = viewOrders();
     else if (TAB === 'mod') inner = viewMod();
     else if (TAB === 'ads') inner = viewAds();
-    else if (TAB === 'adm') inner = admTable(false);
+    else if (TAB === 'adm') inner = admAddBar() + admTable(false);
     else if (TAB === 'landlords') inner = viewLandlordApplications(D.landlordApps,D.landlordError);
     else if (TAB === 'fee') inner = viewFee();
     else if (TAB === 'cat') inner = viewCats();
@@ -1067,6 +1106,8 @@
       } catch(err){ tl.disabled = false; toast('Не удалось: ' + err.message); }
       return;
     }
+
+    if (e.target.closest('#admAddGo')){ admAdd(e.target.closest('#admAddGo')); return; }
 
     /* Арендодатели */
     const ad = e.target.closest('[data-adm]');

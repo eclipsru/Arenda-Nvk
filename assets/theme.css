@@ -381,6 +381,7 @@ select.inp{cursor:pointer;appearance:none;
 .foot b{color:var(--tx);display:block;margin-bottom:9px;font-size:14px}
 .foot a{display:block;padding:3px 0;color:var(--gr)}
 .foot a:hover{color:var(--or)}
+.foot .cols span{display:block;padding:3px 0}   /* 20.10.2026: адрес и часы работы — отдельными строками (было «36Ежедневно») */
 
 /* ===================== АДАПТИВ ===================== */
 @media (max-width:1024px){
@@ -439,7 +440,7 @@ select.inp{cursor:pointer;appearance:none;
 /* ===========================================================
    ЧАТ (этап 3)
    =========================================================== */
-.chat-wrap{display:grid;grid-template-columns:320px 1fr;gap:18px;
+.chat-wrap{display:grid;grid-template-columns:320px minmax(0,1fr);gap:18px;
   align-items:start;padding-bottom:30px}
 
 /* Список диалогов */
@@ -499,6 +500,7 @@ select.inp{cursor:pointer;appearance:none;
 .tool-context-copy{display:flex;flex-direction:column;gap:2px;min-width:0}
 .tool-context-copy small{font-size:11px;color:var(--g2)}
 .tool-context-copy b{font-size:13.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tool-context.lend .tool-context-copy b{white-space:normal;line-height:1.35}
 .tool-context-arrow{margin-left:auto;color:var(--or);font-size:20px;flex-shrink:0}
 
 /* Черновик вложения: выбор фото ничего не отправляет без кнопки «Отправить». */
@@ -540,7 +542,7 @@ select.inp{cursor:pointer;appearance:none;
   display:flex;align-items:center;justify-content:center;font-size:24px}
 
 @media (max-width:860px){
-  .chat-wrap{grid-template-columns:1fr}
+  .chat-wrap{grid-template-columns:minmax(0,1fr)}
   .chat-wrap.in-thread .dlg-list{display:none}
   .chat-wrap:not(.in-thread) .thread{display:none}
   .th-head .back{display:flex}

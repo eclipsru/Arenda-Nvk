@@ -455,12 +455,18 @@ function headerHTML(active, q){
       /* Пункт «Управление» дорисовывается после проверки роли — см. paintChiefLink */
       '<a class="hlink chief-link hide' + (active === 'chief' ? ' on' : '') + '" href="chief.html">' +
         IC.chief + '<span>Управление</span></a>' +
-      '<a class="btn sm" href="new.html" style="margin-left:6px">Разместить</a>' +
+      /* 20.10.2026 (решение владельца): размещать могут только арендодатели, которых добавил владелец.
+         Клиенту и гостю кнопки нет вовсе; у арендодателя она появляется после проверки роли — см. paintChiefLink */
+      '<a class="btn sm lord-only' + (lordHint() ? '' : ' hide') + '" href="new.html" style="margin-left:6px">+ Добавить</a>' +
     '</nav>' +
   '</div></header>';
 }
 
-function bnavHTML(active){
+/* Нижнее меню (телефон). Решение владельца 20.10.2026: у клиента и гостя нет кнопки «Разместить» —
+   сдавать могут только арендодатели, которых добавил владелец. Клиент может только написать владельцу.
+     клиент и гость: Главная · Каталог · Избранное · Сообщения · Кабинет
+     арендодатель:   Главная · Заявки · (+ Добавить) · Сообщения · Кабинет */
+function bnavHTML(active, lord){
   const it = (key, href, icon, label, extra) =>
     '<a class="' + (active === key ? 'on' : '') + '" href="' + href + '"' + (extra || '') + '>' +
       icon + '<span>' + label + '</span>' +
@@ -468,14 +474,37 @@ function bnavHTML(active){
       (key === 'chat' ? '<span class="dot chat-count" style="display:none">0</span>' : '') +
     '</a>';
 
-  return '<nav class="bnav"><div class="bnav-in">' +
+  if (lord) return '<nav class="bnav" data-lord="1"><div class="bnav-in">' +
     it('home','index.html',IC.home,'Главная') +
-    it('fav','favorites.html',IC.heart,'Избранное') +
-    '<a class="mid" href="new.html">' +
-      '<span class="plus">' + IC.plus + '</span><span>Разместить</span></a>' +
+    it('orders','account.html#orders',IC.box,'Заявки') +
+    '<a class="mid' + (active === 'new' ? ' on' : '') + '" href="new.html">' +
+      '<span class="plus">' + IC.plus + '</span><span>Добавить</span></a>' +
     it('chat','chat.html',IC.chat,'Сообщения') +
     it('cab','account.html',IC.user,'Кабинет') +
   '</div></nav>';
+
+  return '<nav class="bnav" data-lord="0"><div class="bnav-in">' +
+    it('home','index.html',IC.home,'Главная') +
+    it('catalog','catalog.html',IC.search,'Каталог') +
+    it('fav','favorites.html',IC.heart,'Избранное') +
+    it('chat','chat.html',IC.chat,'Сообщения') +
+    it('cab','account.html',IC.user,'Кабинет') +
+  '</div></nav>';
+}
+
+/* Подсказка роли до проверки сессии: чтобы у арендодателя «+ Добавить» не мигало при каждом переходе.
+   Это только вид меню — права проверяет база (размещать может только активный арендодатель). */
+const LORD_HINT_KEY = 'iva_lord_hint';
+function lordHint(){ try { return localStorage.getItem(LORD_HINT_KEY) === '1'; } catch(e){ return false; } }
+function setLordHint(on){
+  try { if (on) localStorage.setItem(LORD_HINT_KEY, '1'); else localStorage.removeItem(LORD_HINT_KEY); } catch(e){}
+}
+
+/* «Написать владельцу» — единственный путь клиента к сдаче инструмента (решение владельца 20.10.2026):
+   переписка с владельцем площадки; арендодателем человека делает только владелец после разговора. */
+function lendChatHref(){
+  const owner = (typeof IVA_CREATOR_EMAIL !== 'undefined' && IVA_CREATOR_EMAIL) || 'eclips.ru@mail.ru';
+  return 'chat.html?who=' + encodeURIComponent(owner) + '&lend=1';
 }
 
 function footHTML(){
@@ -494,10 +523,10 @@ function footHTML(){
         '<a href="tel:+79081732475">+7 (908) 173-24-75</a>' +
         '<a href="privacy.html">Обработка данных</a>' +
         '<span>Новочеркасск, ул. Маресьева, 36</span>' +
-        '<span>Ежедневно 8:00–20:00</span></div>' +
+        '<span>Ежедневно 8:00–20:00</span>' +
+        '<a href="' + lendChatHref() + '">Написать владельцу площадки</a></div>' +
     '</div>' +
-    '<div class="small">© ' + new Date().getFullYear() + ' Ива — Инструмент в аренду. ' +
-      'Витрина работает на демонстрационных данных.</div>' +
+    '<div class="small">© ' + new Date().getFullYear() + ' Ива — Инструмент в аренду.</div>' +
   '</div></footer>';
 }
 
@@ -773,9 +802,11 @@ document.addEventListener('click', function(e){
 });
 
 /* ---------- Инициализация общего каркаса ---------- */
+let CHROME_ACTIVE = '';
 function mountChrome(active, q){
   const h = $('hdr');   if (h) h.innerHTML = headerHTML(active, q);
-  const b = $('bnav');  if (b) b.innerHTML = bnavHTML(active);
+  CHROME_ACTIVE = active;
+  const b = $('bnav');  if (b) b.innerHTML = bnavHTML(active, lordHint());
   const f = $('ftr');   if (f) f.innerHTML = footHTML();
 
   mountAppTopBanner(h);
@@ -807,7 +838,8 @@ function mountChrome(active, q){
 }
 
 
-/* Пункт «Управление» виден только владельцу площадки */
+/* Пункт «Управление» виден только владельцу площадки.
+   «+ Добавить» (шапка и нижнее меню) — только активному арендодателю (20.10.2026). */
 async function paintChiefLink(){
   if (typeof restoreSess !== 'function') return;
   try {
@@ -815,10 +847,22 @@ async function paintChiefLink(){
     if (typeof isChief === 'function' && isChief()){
       $$('.chief-link').forEach(function(el){ el.classList.remove('hide'); });
     }
+    paintLordChrome(isAuthed() && typeof isAdmin === 'function' && isAdmin());
     if (typeof IvaDistance !== 'undefined') IvaDistance.paintCards();
   } catch(e){}
 }
 
+
+function paintLordChrome(lord){
+  setLordHint(lord);
+  $$('.lord-only').forEach(function(el){ el.classList.toggle('hide', !lord); });
+  const b = $('bnav'), nav = b && b.querySelector('.bnav');
+  if (nav && (nav.getAttribute('data-lord') === '1') !== lord){
+    b.innerHTML = bnavHTML(CHROME_ACTIVE, lord);
+    paintFavCount();
+    paintChatBadge();
+  }
+}
 
 /* Счётчик непрочитанных сообщений в шапке и нижнем меню */
 async function paintChatBadge(){
@@ -928,9 +972,9 @@ function ivaEmptyStateHTML(o){
         '<a class="btn sec" href="' + dirHref + '">' + dirLabel + '</a>' +
         (hasFilters ? '<button class="btn sec" id="eReset">Сбросить фильтры</button>' : '') +
       '</div>' +
-      '<p class="small mute" style="margin-top:10px">Сдаёте инструмент? ' +
-        '<a href="landlord-register.html" style="color:var(--or)">Разместите объявление бесплатно</a> — ' +
-        'его увидят в вашем городе.</p>' +
+      '<p class="small mute" style="margin-top:10px">Хотите сдавать свой инструмент? ' +
+        '<a href="' + lendChatHref() + '" style="color:var(--or)">Напишите владельцу площадки</a> — ' +
+        'обсудим условия и подключим вас.</p>' +
       '<p class="small mute" style="margin-top:6px">Звонок бесплатный: мы получаем плату только ' +
         'от арендодателей, которые размещают объявления.</p>' +
     '</div>';

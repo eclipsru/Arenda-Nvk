@@ -107,11 +107,14 @@ function run() {
 
     // 5б. Бизнес-логика страницы: справочник не заменяет заказ,
     //     у каждого пункта есть приглашение подключиться, а сверху — путь в каталог.
-    const orderLinks = (html.match(/Это ваш прокат\? Подключитесь/g) || []).length;
+    //     20.10.2026 (решение владельца): сам подключиться нельзя — только написать владельцу площадки.
+    const orderLinks = (html.match(/Это ваш прокат\? Напишите нам/g) || []).length;
     assert.equal(orderLinks, cardsCount,
-      `${file}: приглашений «Это ваш прокат? Подключитесь» — ${orderLinks}, а пунктов — ${cardsCount}`);
-    assert.match(html, /href="landlord-register\.html"/,
-      `${file}: нет ссылки «Подключитесь» на форму арендодателя`);
+      `${file}: приглашений «Это ваш прокат? Напишите нам» — ${orderLinks}, а пунктов — ${cardsCount}`);
+    assert.match(html, /href="chat\.html\?who=eclips\.ru%40mail\.ru&amp;lend=1"/,
+      `${file}: нет ссылки «Написать владельцу» (чат о подключении)`);
+    assert.doesNotMatch(html, /landlord-register\.html/,
+      `${file}: осталась ссылка на самостоятельную регистрацию арендодателя`);
     assert.match(html, /href="catalog\.html\?city=/,
       `${file}: нет ссылки в каталог с выбранным городом (человек должен попадать к объявлениям, а не только к телефонам)`);
     assert.match(html, /пока не подключены к «Иве»/,

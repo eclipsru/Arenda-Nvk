@@ -8,7 +8,7 @@
 <meta name="robots" content="noindex, nofollow">
 <meta name="theme-color" content="#101217">
 <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
-<link rel="stylesheet" href="assets/theme.css?v=20261005-rel">
+<link rel="stylesheet" href="assets/theme.css?v=20261020-lend">
 <link rel="stylesheet" href="assets/profile.css?v=20260923-rental-profile">
 <style>
 .tabs{display:flex;gap:4px;border-bottom:1px solid var(--line);margin-bottom:18px;
@@ -56,6 +56,22 @@
   color:var(--red);padding:10px 13px;border-radius:var(--r-s);font-size:13.5px;
   margin-bottom:14px;display:none}
 .auth-err.show{display:block}
+.auth-ok{background:rgba(76,175,80,.12);border:1px solid rgba(76,175,80,.3);color:var(--grn);
+  padding:10px 13px;border-radius:var(--r-s);font-size:13.5px;margin-bottom:14px;display:none;line-height:1.5}
+.auth-ok.show{display:block}
+.auth-tabs{display:flex;gap:6px;background:var(--field);border:1px solid var(--line);border-radius:12px;padding:4px;margin-bottom:14px}
+.auth-tabs button{flex:1;padding:10px 0;border-radius:9px;font-weight:600;font-size:14.5px;color:var(--gr)}
+.auth-tabs button.on{background:var(--card);color:var(--or);box-shadow:0 1px 0 var(--line)}
+.auth-box .auth-consent{display:flex;gap:10px;align-items:flex-start;font-size:13px;font-weight:400;color:var(--gr);margin:4px 0 16px;line-height:1.45}
+.auth-consent input{margin-top:2px;width:18px;height:18px;flex-shrink:0;accent-color:var(--or)}
+.auth-consent a{color:var(--or)}
+.auth-fgt{text-align:right;margin:-4px 0 14px}
+.auth-fgt button{color:var(--or);font-size:13px;padding:6px 0}
+.b-cancelled{background:rgba(255,138,128,.14);color:var(--red)}
+.lend-card{display:flex;gap:14px;align-items:center;justify-content:space-between;flex-wrap:wrap;margin-top:26px;
+  padding:16px;background:var(--card);border:1px solid var(--line);border-radius:var(--r)}
+.lend-card b{font-size:15px}
+.lend-card p{color:var(--gr);font-size:13px;margin-top:4px;line-height:1.5;max-width:520px}
 
 /* KPI показатели комиссии */
 .kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-bottom:20px}
@@ -124,7 +140,7 @@
 <script src="assets/geo.js?v=20260923-photon"></script>
 <script src="assets/email-guard.js?v=20260926-email"></script><script src="assets/sb.js?v=20260926-email"></script>
 <script src="assets/app-release.js?v=20261009-rel"></script>
-<script src="assets/app.js?v=20261009-rel"></script>
+<script src="assets/app.js?v=20261020-lend"></script>
 <script src="assets/profile.js?v=20260923-photon"></script>
 <script>
 (function(){
@@ -157,58 +173,156 @@
     }
   }
 
-  /* ---------- Экран входа ---------- */
-  function screenLogin(){
+  /* ---------- Куда вернуть после входа ----------
+     ?next=chat.html?who=…&lend=1 — например, из «Написать владельцу». Только адрес этого сайта. */
+  function nextUrl(){
+    const n = new URLSearchParams(location.search).get('next') || '';
+    return /^[a-z0-9_-]+\.html([?#][^\s]*)?$/i.test(n) ? n : '';
+  }
+  function afterLogin(){
+    const n = nextUrl();
+    if (n){ location.href = n; return; }
+    boot();
+  }
+
+  /* ---------- Экран входа и регистрации ----------
+     20.10.2026: регистрация клиента перенесена сюда (страница cabinet.html зависала на заставке);
+     добавлено «Забыли пароль?». Регистрация даёт только аккаунт клиента — права арендодателя выдаёт
+     владелец площадки после переписки (решение владельца 20.10.2026). */
+  let AUTH_MODE = 'in';
+  function screenLogin(msg){
+    const up = AUTH_MODE === 'up';
     $('root').innerHTML =
       '<div class="auth-box">' +
-        '<h2>Вход</h2>' +
-        '<p>Личный кабинет площадки «Ива»</p>' +
+        '<div class="auth-tabs" role="tablist">' +
+          '<button type="button" role="tab" data-auth="in" aria-selected="' + (!up) + '" class="' + (up ? '' : 'on') + '">Вход</button>' +
+          '<button type="button" role="tab" data-auth="up" aria-selected="' + up + '" class="' + (up ? 'on' : '') + '">Регистрация</button>' +
+        '</div>' +
+        '<p>' + (up ? 'Аккаунт клиента «Ивы»: заявки, избранное и сообщения в одном месте.'
+                    : 'Личный кабинет площадки «Ива»') + '</p>' +
         '<div class="auth-err" id="aErr"></div>' +
-        '<div class="fld"><label>Почта</label>' +
-          '<input class="inp" id="lEmail" type="email" autocomplete="username" placeholder="you@mail.ru"></div>' +
-        '<div class="fld"><label>Пароль</label>' +
-          '<input class="inp" id="lPass" type="password" autocomplete="current-password" placeholder="••••••••"></div>' +
-        '<button class="btn wide" id="lGo">Войти</button>' +
+        '<div class="auth-ok" id="aOk"></div>' +
+        (up ? '<div class="fld"><label for="lName">Имя</label>' +
+          '<input class="inp" id="lName" autocomplete="given-name" maxlength="60" placeholder="Иван"></div>' : '') +
+        '<div class="fld"><label for="lEmail">Почта</label>' +
+          '<input class="inp" id="lEmail" type="email" autocomplete="' + (up ? 'email' : 'username') + '" placeholder="you@mail.ru"></div>' +
+        '<div class="fld"><label for="lPass">Пароль</label>' +
+          '<input class="inp" id="lPass" type="password" autocomplete="' + (up ? 'new-password' : 'current-password') + '" placeholder="' + (up ? 'Не менее 6 символов' : '••••••••') + '"></div>' +
+        (up ? '<div class="fld"><label for="lPass2">Повторите пароль</label>' +
+          '<input class="inp" id="lPass2" type="password" autocomplete="new-password"></div>' +
+          '<label class="auth-consent"><input type="checkbox" id="lAgree">' +
+          '<span>Согласен на <a href="privacy.html" target="_blank" rel="noopener">обработку данных аккаунта</a> (имя и почта)</span></label>'
+          : '<div class="auth-fgt"><button type="button" id="lForgot">Забыли пароль?</button></div>') +
+        '<button class="btn wide" id="lGo">' + (up ? 'Создать аккаунт' : 'Войти') + '</button>' +
         '<p style="margin:16px 0 0;font-size:13px;text-align:center">' +
-          'Нет аккаунта? <a href="cabinet.html" style="color:var(--or)">Зарегистрироваться</a></p>' +
+          (up ? 'Уже есть аккаунт? <a href="#" data-auth="in" style="color:var(--or)">Войти</a>'
+              : 'Нет аккаунта? <a href="#" data-auth="up" style="color:var(--or)">Зарегистрироваться</a>') + '</p>' +
       '</div>';
 
-    const go = $('lGo'), em = $('lEmail'), pw = $('lPass'), er = $('aErr');
+    const go = $('lGo'), em = $('lEmail'), pw = $('lPass'), er = $('aErr'), ok = $('aOk');
+    const say = function(t){ ok.classList.remove('show'); er.textContent = t; er.classList.add('show'); };
+    const good = function(t){ er.classList.remove('show'); ok.textContent = t; ok.classList.add('show'); };
+    if (msg) good(msg);
+
+    $$('[data-auth]', $('root')).forEach(function(b){
+      b.addEventListener('click', function(ev){
+        ev.preventDefault();
+        const keep = em.value;
+        AUTH_MODE = b.getAttribute('data-auth');
+        screenLogin();
+        $('lEmail').value = keep;
+      });
+    });
+
+    function addResend(){
+      if (typeof resendConfirmEmail !== 'function' || $('resendBtn')) return;
+      const rb = document.createElement('button');
+      rb.id = 'resendBtn'; rb.className = 'btn wide sec'; rb.style.marginTop = '10px';
+      rb.textContent = 'Отправить письмо ещё раз';
+      rb.addEventListener('click', async function(){
+        rb.disabled = true;
+        try {
+          await resendConfirmEmail(em.value.trim().toLowerCase(), confirmRedirect());
+          good('Письмо отправлено — проверьте ящик и папку «Спам»');
+        } catch(e2){ say(e2.message); }
+        rb.disabled = false;
+      });
+      go.insertAdjacentElement('afterend', rb);
+    }
 
     async function doLogin(){
-      er.classList.remove('show');
-      const e = em.value.trim(), p = pw.value;
-      if (!e || !p){ er.textContent = 'Введите почту и пароль'; er.classList.add('show'); return; }
+      const e = em.value.trim().toLowerCase(), p = pw.value;
+      if (!e || !p){ say('Введите почту и пароль'); return; }
       go.disabled = true; go.textContent = 'Входим…';
       try {
         await signIn(e, p);
-        boot();
+        afterLogin();
       } catch(err){
-        er.textContent = err.message;
-        er.classList.add('show');
-        if (/не подтверждена|not confirmed/i.test(err.message || '') && typeof resendConfirmEmail === 'function' && !$('resendBtn')){
-          const rb = document.createElement('button');
-          rb.id = 'resendBtn'; rb.className = 'btn wide'; rb.style.marginTop = '10px';
-          rb.textContent = 'Отправить письмо ещё раз';
-          rb.addEventListener('click', async function(){
-            rb.disabled = true;
-            try {
-              await resendConfirmEmail(em.value.trim().toLowerCase());
-              er.textContent = 'Письмо отправлено — проверьте ящик и спам';
-            } catch(e2){ er.textContent = e2.message; }
-            rb.disabled = false;
-          });
-          er.appendChild(document.createElement('br'));
-          er.appendChild(rb);
-        }
+        say(err.message);
+        if (/не подтверждена|not confirmed/i.test(err.message || '')) addResend();
         go.disabled = false; go.textContent = 'Войти';
       }
     }
-    go.addEventListener('click', doLogin);
-    [em, pw].forEach(function(i){
-      i.addEventListener('keydown', function(ev){ if (ev.key === 'Enter') doLogin(); });
+
+    async function doSignup(){
+      const name = $('lName').value.trim(), e = em.value.trim().toLowerCase(), p = pw.value;
+      if (!name){ say('Укажите имя'); return; }
+      if (typeof IvaEmailGuard !== 'undefined'){ const bad = IvaEmailGuard.check(e); if (bad){ say(bad); return; } }
+      if (p.length < 6){ say('Пароль — не короче 6 символов'); return; }
+      if (p !== $('lPass2').value){ say('Пароли не совпадают'); return; }
+      if (!$('lAgree').checked){ say('Нужно согласие на обработку данных аккаунта'); return; }
+      go.disabled = true; go.textContent = 'Создаём…';
+      try {
+        const r = await fetch(SB + '/auth/v1/signup?redirect_to=' + encodeURIComponent(confirmRedirect()), {
+          method:'POST', headers:{ apikey:KEY, 'Content-Type':'application/json' },
+          body: JSON.stringify({ email:e, password:p, data:{ name:name, full_name:name } })
+        });
+        const txt = await r.text();
+        if (!r.ok){
+          const m = sbErr(txt);
+          if (/already registered|already been registered|exists/i.test(m)) throw new Error('Такой аккаунт уже есть — войдите или нажмите «Забыли пароль?»');
+          if (/rate limit|too many/i.test(m)) throw new Error('Слишком много попыток. Подождите немного и повторите');
+          if (/password/i.test(m)) throw new Error('Пароль не подходит: не короче 6 символов');
+          throw new Error(m);
+        }
+        let j = {}; try { j = JSON.parse(txt); } catch(x){}
+        const confirmed = j.access_token && j.user && (typeof IvaEmailGuard === 'undefined' || IvaEmailGuard.isConfirmed(j.user));
+        if (confirmed){
+          A.tok = j.access_token; A.rtok = j.refresh_token; A.me = ((j.user || {}).email || e).toLowerCase(); A.uname = name;
+          applyAuthUser(j.user); saveSess(); await loadAdmin(); afterLogin(); return;
+        }
+        AUTH_MODE = 'in';
+        screenLogin('Аккаунт создан. Мы отправили письмо на ' + e + ' — откройте ссылку из письма, затем войдите здесь.');
+        $('lEmail').value = e;
+      } catch(err){
+        say(err.message);
+        go.disabled = false; go.textContent = 'Создать аккаунт';
+      }
+    }
+
+    const fg = $('lForgot');
+    if (fg) fg.addEventListener('click', async function(){
+      const e = em.value.trim().toLowerCase();
+      if (typeof IvaEmailGuard !== 'undefined'){ const bad = IvaEmailGuard.check(e); if (bad){ say('Введите почту, на которую зарегистрирован аккаунт'); em.focus(); return; } }
+      fg.disabled = true;
+      try {
+        const r = await fetch(SB + '/auth/v1/recover?redirect_to=' + encodeURIComponent(new URL('reset-password.html', location.href).href), {
+          method:'POST', headers:{ apikey:KEY, 'Content-Type':'application/json' }, body: JSON.stringify({ email:e })
+        });
+        if (!r.ok && r.status !== 429) throw new Error(sbErr(await r.text()));
+        if (r.status === 429) throw new Error('Письмо уже отправлено недавно. Подождите минуту и повторите');
+        good('Если аккаунт с почтой ' + e + ' есть, мы отправили на неё ссылку для нового пароля. Проверьте и папку «Спам».');
+      } catch(err){ say(err.message || 'Не удалось отправить письмо'); }
+      fg.disabled = false;
+    });
+
+    go.addEventListener('click', AUTH_MODE === 'up' ? doSignup : doLogin);
+    $$('input.inp', $('root')).forEach(function(i){
+      i.addEventListener('keydown', function(ev){ if (ev.key === 'Enter') go.click(); });
     });
   }
+  /* Ссылка из письма подтверждения ведёт сюда же (и сохраняет ?next=) */
+  function confirmRedirect(){ return new URL('account.html' + location.search, location.href).href; }
 
   /* ---------- Расчёт статистики по комиссии ---------- */
   function computeFeeStats(){
@@ -299,7 +413,15 @@
         '<h2>' + esc(A.uname || 'Кабинет') + '</h2>' +
         '<span class="cnt">' + esc(A.me) + (isCreator() ? ' · создатель' : isAdmin() ? ' · арендодатель' : '') + '</span>' +
       '</div></div>' +
-      '<div class="tabs">' + tabsHtml + '</div>' + inner;
+      '<div class="tabs">' + tabsHtml + '</div>' + inner + (isAdmin() ? '' : lendCardHTML());
+  }
+
+  /* Клиенту: сдавать инструмент можно только после разговора с владельцем (решение владельца 20.10.2026) */
+  function lendCardHTML(){
+    return '<div class="lend-card">' +
+      '<div><b>Хотите сдавать свой инструмент?</b>' +
+      '<p>Напишите владельцу площадки: обсудим условия, и после его одобрения вы станете арендодателем.</p></div>' +
+      '<a class="btn sec sm" href="' + lendChatHref() + '">Написать владельцу</a></div>';
   }
 
   /* ---------- Мои объявления ---------- */
@@ -389,7 +511,7 @@
     };
 
     let h = '<div class="chips" style="margin-bottom:16px">' +
-      [['all','Все'],['new','Новые'],['rented','В аренде'],['closed','Завершены'],['archived','Архив']]
+      [['all','Все'],['new','Новые'],['rented','В аренде'],['closed','Завершены'],['cancelled','Отменены'],['archived','Архив']]
         .map(function(p){
           return '<button class="chip" data-ost="' + p[0] + '"' +
                  (ordFilter === p[0] ? ' style="border-color:var(--or);color:var(--or)"' : '') +
@@ -412,11 +534,13 @@
 
       let btns = '';
       if (!isArc){
+        /* «В архив» — только у закрытой (и отменённой клиентом) заявки и с подтверждением — как в приложении */
         if (st === 'new'){
           btns += '<button class="btn sm" data-ord-do="rented" data-id="' + p.id + '">Выдал инструмент</button>';
-          btns += '<button class="btn sm sec" data-ord-do="arch" data-id="' + p.id + '">В архив</button>';
         } else if (st === 'rented'){
           btns += '<button class="btn sm" data-ord-do="closed" data-id="' + p.id + '" style="background:var(--grn);border-color:var(--grn)">Инструмент вернули</button>';
+        } else if (st === 'cancelled'){
+          btns += '<span class="badge b-cancelled" style="padding:6px 12px">Отменена клиентом · без комиссии</span>';
           btns += '<button class="btn sm sec" data-ord-do="arch" data-id="' + p.id + '">В архив</button>';
         } else {
           btns += '<span class="badge b-closed" style="padding:6px 12px">Завершена · комиссия учтена</span>';
@@ -428,7 +552,7 @@
 
       return '<div class="order-card" data-order-id="' + p.id + '">' +
         '<div class="top">' +
-          '<span class="badge b-' + st + '">' + (st === 'new' ? 'Новая заявка' : (st === 'rented' ? 'В аренде' : 'Завершена')) + '</span>' +
+          '<span class="badge b-' + st + '">' + ({ new:'Новая заявка', rented:'В аренде', cancelled:'Отменена' }[st] || 'Завершена') + '</span>' +
           '<span class="small muted">' + niceDate(p.created_at) + (p.order_id ? (' · №' + p.order_id) : '') + '</span>' +
         '</div>' +
         '<div class="title">' + esc(p.tools_text || 'Инструмент') + '</div>' +
@@ -463,7 +587,7 @@
       const st = o.status || 'new';
       return '<div class="order-card">' +
         '<div class="top">' +
-          '<span class="badge b-' + st + '">' + (st === 'new' ? 'На рассмотрении' : (st === 'rented' ? 'В аренде' : 'Завершена')) + '</span>' +
+          '<span class="badge b-' + st + '">' + ({ new:'На рассмотрении', rented:'В аренде', cancelled:'Отменена' }[st] || 'Завершена') + '</span>' +
           '<span class="small muted">' + niceDate(o.created_at) + '</span>' +
         '</div>' +
         '<div class="title">' + esc(o.tools || 'Инструмент') + '</div>' +
@@ -980,6 +1104,7 @@
 
     try {
       if (act === 'arch'){
+        if (!confirm('Переместить заявку в архив?')){ btn.disabled = false; btn.textContent = oldText; return; }
         await updateOrderPart(id, { archived: true });
         part.archived = true;
         toast('Заявка перемещена в архив');
@@ -1014,6 +1139,24 @@
   });
 
   /* ---------- Старт ---------- */
+  /* Заявки клиента со статусами частей (как в приложении): отмена клиентом живёт в order_parts.status = 'cancelled',
+     а у самой заявки статус остаётся «new» — без частей сайт показывал отменённую заявку как «На рассмотрении»/«Завершена». */
+  async function loadClientOrders(){
+    let rows;
+    try {
+      rows = await api('/rest/v1/orders?select=*,order_parts(status)&user_email=eq.' + encodeURIComponent(A.me) + '&order=id.desc&limit=50') || [];
+    } catch(e){ return await loadMySentOrders(); }
+    rows.forEach(function(o){
+      const ps = (o.order_parts || []).map(function(x){ return x.status || 'new'; });
+      if (!ps.length) return;
+      if (ps.every(function(x){ return x === 'cancelled'; })) o.status = 'cancelled';
+      else if (ps.some(function(x){ return x === 'rented'; })) o.status = 'rented';
+      else if (ps.some(function(x){ return x === 'new'; })) o.status = 'new';
+      else o.status = 'closed';
+    });
+    return rows;
+  }
+
   async function boot(){
     const showcase = hydrateShowcase(); // Избранное берём из живой витрины, а не демо-данных.
     if (isAdmin()){
@@ -1034,7 +1177,7 @@
       }
     } else if (isAuthed()){
       try {
-        ORDERS = await loadMySentOrders();
+        ORDERS = await loadClientOrders();
       } catch(e){ ORDERS = []; }
     }
     await showcase;
@@ -1043,8 +1186,17 @@
   }
 
   (async function init(){
+    /* Ссылка из письма «подтвердите почту»: #access_token=…&refresh_token=…&type=signup.
+       Ключ берём только из адреса после «#» (на сервер не уходит) и сразу убираем из строки. */
+    const hp = new URLSearchParams((location.hash || '').slice(1));
+    if (hp.get('access_token') && hp.get('refresh_token')){
+      A.tok = hp.get('access_token'); A.rtok = hp.get('refresh_token'); saveSess();
+      history.replaceState(null, '', location.pathname + location.search);
+      TAB = 'orders';
+    }
     await restoreSess();
     if (!isAuthed()){ screenLogin(); return; }
+    if (nextUrl() && hp.get('access_token')){ location.replace(nextUrl()); return; }
     boot();
   })();
 })();

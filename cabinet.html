@@ -386,6 +386,7 @@ textarea.inp{resize:vertical;min-height:70px}
       <div class="fld"><input id="aEmail" type="email" placeholder="Email" autocomplete="email"></div>
       <div class="fld"><input id="aPass" type="password" placeholder="Пароль (не менее 6 символов)" autocomplete="current-password"></div>
       <span class="fgt hide" id="fgt">Забыли пароль?</span>
+      <span class="fgt hide" id="resendLink"></span>
       <button class="big" id="authBtn">Войти</button>
       <div class="link" id="authSwitch">Создать аккаунт</div>
     </div></div>
@@ -701,9 +702,10 @@ function myTools(){var lm=S.limited||[];var city=(S.city||'').trim().toLowerCase
   if(city&&city!=='новочеркасск'){var al=cget('admins',300000)||[];
     if(al.length)return S.tools.filter(function(t){var a=adminByMail(t.owner_email);var ad=((a&&a.address)||'').toLowerCase();return lm.indexOf((t.owner_email||'').toLowerCase())<0&&ad.indexOf(city)>=0})}
   return S.tools.filter(function(t){return lm.indexOf((t.owner_email||'').toLowerCase())<0})}
-function updPlace(){var ab=document.querySelector('#tophead .place');if(!ab)return;
-  var lim=S.limited.indexOf(S.me)>=0;
-  ab.style.display=(isAdmin()&&!lim)?'':'none'}
+function updPlace(){
+  /* 20.10.2026 (решение владельца): «Разместить» — только активному арендодателю; клиенту кнопки нет нигде */
+  var lim=S.limited.indexOf(S.me)>=0,can=isAdmin()&&S.admin.active!==false&&!lim;
+  var pl=document.querySelectorAll('[data-n="plus"]');for(var i=0;i<pl.length;i++)pl[i].style.display=can?'':'none'}
 function renderCatMenu(){var mm=$('catMenu');if(!mm)return;
   var h='<button class="cm-item'+((!S.cat&&!S.favOnly)?' on':'')+'" data-c="">Весь каталог</button>';
   for(var i=0;i<S.cats.length;i++){var c=S.cats[i];var on=S.cat===c.key;
@@ -1599,10 +1601,6 @@ function vCompany(){
    Настройки профиля клиента — отдельная страница profile.html
    (раньше клиента уводило на вкладку «Профиль» в account.html). */
 function vCabUser(){ location.href='profile.html'; }
-</script>
-</body>
-</html>
-rof'; }
 </script>
 </body>
 </html>

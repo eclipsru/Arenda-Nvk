@@ -93,7 +93,7 @@ try {
       versions[m[1]].add(m[2]);
     }
   }
-  const expectedVersion = { 'partners': '20261003-p6-texts', 'landlord-register': '20261001-p6-1year' };
+  const expectedVersion = { 'partners': '20261020-lend', 'landlord-register': '20261001-p6-1year' };
   for (const asset of ['partners', 'landlord-register']) {
     assert.ok(versions[asset], `ни одна страница не подключает assets/${asset}.js`);
     assert.equal(versions[asset].size, 1,

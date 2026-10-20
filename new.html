@@ -7,7 +7,7 @@
 <meta name="robots" content="noindex, nofollow">
 <meta name="theme-color" content="#101217">
 <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
-<link rel="stylesheet" href="assets/theme.css?v=20261017-models">
+<link rel="stylesheet" href="assets/theme.css?v=20261020-lend">
 <style>
 /* ---------- Шаги ---------- */
 .steps{display:flex;gap:6px;margin:18px 0 22px;flex-wrap:wrap}
@@ -101,7 +101,7 @@ textarea.inp{resize:vertical;min-height:110px;font-family:inherit;line-height:1.
 <script src="assets/models.js?v=20261020-power"></script>
 <script src="assets/model-form.js?v=20261020-power"></script>
 <script src="assets/app-release.js?v=20261009-rel"></script>
-<script src="assets/app.js?v=20261009-rel"></script>
+<script src="assets/app.js?v=20261020-lend"></script>
 <script>
 (function(){
   mountChrome('new', '');
@@ -142,17 +142,28 @@ textarea.inp{resize:vertical;min-height:110px;font-family:inherit;line-height:1.
   }
   function dropDraft(){ if (EDIT_ID){editDirty=false;return;} try { localStorage.removeItem(DRAFT); } catch(e){} }
 
-  /* ---------- Экран «нужен вход» ---------- */
-  function screenAuth(msg){
+  /* ---------- Экран «размещение недоступно» ----------
+     Решение владельца 20.10.2026: клиент не может сдавать инструмент. Он может только написать владельцу;
+     арендодателем его делает владелец после разговора. Поэтому здесь нет ни анкеты, ни «Стать арендодателем». */
+  function screenAuth(kind){
+    const guest = kind === 'guest', paused = kind === 'paused';
+    const title = guest ? 'Размещение — только для арендодателей'
+      : paused ? 'Размещение приостановлено'
+      : 'Размещать инструмент могут только арендодатели';
+    const text = paused
+      ? 'Ваш доступ арендодателя сейчас приостановлен. Напишите владельцу площадки, чтобы узнать причину.'
+      : 'Хотите сдавать свой инструмент? Напишите владельцу площадки: обсудим условия, и после его одобрения вы станете арендодателем.' +
+        (guest ? ' Если вы уже арендодатель — войдите.' : '');
     $('root').innerHTML =
       '<div class="empty" style="padding:70px 20px">' +
         '<svg viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>' +
           '<circle cx="12" cy="7" r="4"/></svg>' +
-        '<b>' + esc(msg || 'Нужно войти') + '</b>' +
-        '<p>Размещать объявления могут только арендодатели площадки «Ива».</p>' +
+        '<b>' + esc(title) + '</b>' +
+        '<p>' + esc(text) + '</p>' +
         '<div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap">' +
-          '<a class="btn" href="account.html">Войти</a>' +
-          '<a class="btn sec" href="index.html">На главную</a>' +
+          '<a class="btn" href="' + lendChatHref() + '">Написать владельцу</a>' +
+          (guest ? '<a class="btn sec" href="account.html?next=new.html">Войти</a>'
+                 : '<a class="btn sec" href="index.html">На главную</a>') +
         '</div>' +
       '</div>';
   }
@@ -903,9 +914,9 @@ textarea.inp{resize:vertical;min-height:110px;font-family:inherit;line-height:1.
   (async function init(){
     await restoreSess();
 
-    if (!isAuthed()){ screenAuth('Нужно войти'); return; }
+    if (!isAuthed()){ screenAuth('guest'); return; }
     if (!isAdmin()){
-      screenAuth('Размещение доступно арендодателям');
+      screenAuth(A.admin ? 'paused' : 'client');
       return;
     }
 

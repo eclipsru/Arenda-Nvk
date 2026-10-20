@@ -7,7 +7,7 @@
 <meta name="robots" content="noindex, nofollow">
 <meta name="theme-color" content="#101217">
 <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
-<link rel="stylesheet" href="assets/theme.css?v=20261005-rel">
+<link rel="stylesheet" href="assets/theme.css?v=20261020-lend">
 <link rel="stylesheet" href="assets/geo.css?v=20260923-photon">
 </head>
 <body>
@@ -27,7 +27,7 @@
 <script src="assets/geo.js?v=20260923-photon"></script>
 <script src="assets/sb.js?v=20260923-photon"></script>
 <script src="assets/app-release.js?v=20261009-rel"></script>
-<script src="assets/app.js?v=20261009-rel"></script>
+<script src="assets/app.js?v=20261020-lend"></script>
 <script>
 (function(){
   mountChrome('chat', '');
@@ -38,6 +38,11 @@
   let pendingImg = '';
 
   const P = new URLSearchParams(location.search);
+  /* 20.10.2026: «Написать владельцу» (?who=владелец&lend=1) — единственный путь клиента к сдаче инструмента.
+     Арендодателем человека делает только владелец после разговора; здесь — обычная переписка с ним. */
+  const LEND_OWNER = (typeof IVA_CREATOR_EMAIL !== 'undefined' && IVA_CREATOR_EMAIL) || 'eclips.ru@mail.ru';
+  let LEND = P.get('lend') === '1';
+  function lendOn(){ return LEND && !TOOL && WHO === LEND_OWNER && A.me !== LEND_OWNER; }
 
   /* ---------- Время ---------- */
   function hhmm(s){
@@ -62,6 +67,23 @@
 
   /* ---------- Нужен вход ---------- */
   function screenAuth(){
+    if (LEND){
+      const back = 'account.html?next=' + encodeURIComponent('chat.html' + location.search);
+      $('root').innerHTML =
+        '<div class="empty" style="padding:70px 20px">' +
+          '<svg viewBox="0 0 24 24"><path d="M21 11.5a8.4 8.4 0 0 1-9 8.4 8.4 8.4 0 0 1-3.8-.9L3 21l2-5.2' +
+            'a8.4 8.4 0 0 1-.9-3.8 8.4 8.4 0 0 1 8.4-8.4h.5a8.4 8.4 0 0 1 8 8z"/></svg>' +
+          '<b>Хотите сдавать свой инструмент?</b>' +
+          '<p>Войдите или создайте аккаунт, чтобы написать владельцу площадки. ' +
+             'Обсудим условия, и после его одобрения вы станете арендодателем. ' +
+             'Можно и позвонить: +7 (908) 173-24-75.</p>' +
+          '<div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap">' +
+            '<a class="btn" href="' + back + '">Войти или создать аккаунт</a>' +
+            '<a class="btn sec" href="tel:+79081732475">Позвонить</a>' +
+          '</div>' +
+        '</div>';
+      return;
+    }
     $('root').innerHTML =
       '<div class="empty" style="padding:70px 20px">' +
         '<svg viewBox="0 0 24 24"><path d="M21 11.5a8.4 8.4 0 0 1-9 8.4 8.4 8.4 0 0 1-3.8-.9L3 21l2-5.2' +
@@ -152,7 +174,15 @@
   }
 
   /* Контекст инструмента — это карточка интерфейса, а не сообщение в базе. */
+  /* Клиенту владелец площадки подписан понятно, а не частью почты */
+  function peerTitle(){
+    return WHO === LEND_OWNER && A.me !== LEND_OWNER ? 'Владелец площадки «Ива»' : whoTitle(WHO);
+  }
   function toolContextHtml(){
+    if (lendOn()) return '<div class="tool-context lend">' +
+      '<span class="tool-context-empty">🔧</span>' +
+      '<span class="tool-context-copy"><small>Хочу сдавать инструмент</small>' +
+        '<b>Расскажите, что сдаёте, в каком городе и сколько у вас инструмента</b></span></div>';
     if (!TOOL) return '';
     const image = (TOOL.imgs && TOOL.imgs[0]) || TOOL.img || '';
     return '<a class="tool-context" href="tool.html?id=' + encodeURIComponent(TOOL.id) + '"' +
@@ -212,15 +242,17 @@
     if (!ms.length){
       body = '<div class="empty" style="margin:auto;padding:30px 20px">' +
         '<b style="font-size:15px">Сообщений пока нет</b>' +
-        '<p style="font-size:13px">Напишите первым — арендодатель увидит сообщение в кабинете.</p></div>';
+        '<p style="font-size:13px">' + (lendOn()
+          ? 'Владелец площадки ответит здесь. Подключает арендодателей только он — после разговора.'
+          : 'Напишите первым — арендодатель увидит сообщение в кабинете.') + '</p></div>';
     }
 
     box.innerHTML =
       '<div class="th-head">' +
         '<button class="back" id="thBack" aria-label="Назад">' +
           '<svg viewBox="0 0 24 24"><path d="m15 18-6-6 6-6"/></svg></button>' +
-        '<div class="ava">' + esc(initials(whoTitle(WHO))) + '</div>' +
-        '<div><div class="thnm">' + esc(whoTitle(WHO)) + '</div>' +
+        '<div class="ava">' + esc(initials(peerTitle())) + '</div>' +
+        '<div><div class="thnm">' + esc(peerTitle()) + '</div>' +
           '<div class="thsub">' + esc(WHO) + '</div></div>' +
       '</div>' +
       toolContextHtml() +
@@ -231,7 +263,7 @@
           '<button class="icon-btn" id="bPhoto" title="Фотография">' +
             '<svg viewBox="0 0 24 24"><path d="M3 9a2 2 0 0 1 2-2h2l1.5-2h7L17 7h2a2 2 0 0 1 2 2v9' +
               'a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><circle cx="12" cy="13" r="3.4"/></svg></button>' +
-          '<textarea id="thText" rows="1" placeholder="Сообщение"></textarea>' +
+          '<textarea id="thText" rows="1" placeholder="' + (lendOn() ? 'Например: сдаю перфоратор и бетономешалку в Новочеркасске' : 'Сообщение') + '"></textarea>' +
           '<button class="icon-btn" id="bMic" title="Голосовое">' +
             '<svg viewBox="0 0 24 24"><rect x="9" y="2" width="6" height="11" rx="3"/>' +
               '<path d="M5 11a7 7 0 0 0 14 0M12 18v4"/></svg></button>' +
@@ -322,8 +354,9 @@
     paintThread();
 
     try {
-      const saved = await sendMessage(WHO, Object.assign({}, payload,
-                      TOOL ? { tool_id: TOOL.id } : {}));
+      const saved = lendOn() ? await sendLendMessage(payload)
+                             : await sendMessage(WHO, Object.assign({}, payload,
+                                 TOOL ? { tool_id: TOOL.id } : {}));
       const i = MSGS.indexOf(tmp);
       if (i !== -1 && saved) MSGS[i] = saved;
       /* TOOL остаётся видимым в шапке текущего чата и не превращается в сообщение. */
@@ -422,6 +455,21 @@
     d.innerHTML = '<button class="x">×</button><img src="' + esc(src) + '" alt="">';
     d.addEventListener('click', function(){ d.remove(); });
     document.body.appendChild(d);
+  }
+
+  /* Переписка «Хочу сдавать инструмент»: в приложении она отдельная (app_messages.topic = 'lend',
+     SQL 20261014_chat_lend_topic.sql). Пока этот SQL не применён, колонки topic нет — тогда сообщение
+     уходит владельцу обычной перепиской (ничего не теряется). */
+  async function sendLendMessage(payload){
+    const row = { from_email: A.me, to_email: WHO, text: payload.text || '', img: payload.img || '',
+                  audio: payload.audio || '', audio_dur: payload.audio_dur || 0, topic: 'lend' };
+    try {
+      const r = await api('/rest/v1/app_messages', 'POST', row, { Prefer:'return=representation' });
+      return (r && r[0]) || null;
+    } catch(e){
+      if (!/topic|schema cache|PGRST204|42703/i.test(e.message || '')) throw e;
+      return await sendMessage(WHO, payload);
+    }
   }
 
   /* ---------- Открыть диалог ---------- */

@@ -44,8 +44,10 @@ try {
     assert.match(html, /pages: _cityPagesData/, `${name}: в пустое состояние передаётся не загруженный список`);
     assert.match(html, /if \(!_cityPagesData && typeof loadCityPages === 'function'\)/,
       `${name}: список городов не подгружается для ссылки`);
-    assert.match(app, /landlord-register\.html/,
-      `${name}: в пустом состоянии нет предложения арендодателю разместить объявление`);
+    assert.match(app, /'chat\.html\?who=' \+ encodeURIComponent\(owner\) \+ '&lend=1'/,
+      `${name}: в пустом состоянии нет предложения написать владельцу площадки`);
+    assert.doesNotMatch(app, /landlord-register\.html/,
+      `${name}: клиенту снова предлагают самостоятельно стать арендодателем (решение владельца 20.10.2026)`);
 
     // 3. Счётчик обращений подключён, показы на этих страницах не считаем
     assert.match(html, /<script src="assets\/clicks\.js[^"]*"><\/script>/,
