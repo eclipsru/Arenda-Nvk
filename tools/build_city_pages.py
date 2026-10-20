@@ -351,7 +351,7 @@ def hub_page(targets, cities_by_slug, allow_index=False):
 <script src="assets/geo.js?v=20260923-photon"></script>
 <script src="assets/email-guard.js?v=20260926-email"></script><script src="assets/sb.js?v=20260926-email"></script>
 <script src="assets/app-release.js?v=20261009-rel"></script>
-<script src="assets/app.js?v=20261020-c"></script>
+<script src="assets/app.js?v=20261020-d"></script>
 <script>
 (function(){{ mountChrome('catalog', ''); }})();
 </script>

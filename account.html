@@ -68,6 +68,11 @@
 .auth-fgt{text-align:right;margin:-4px 0 14px}
 .auth-fgt button{color:var(--or);font-size:13px;padding:6px 0}
 .b-cancelled{background:rgba(255,138,128,.14);color:var(--red)}
+.staff-head b{display:block;margin-top:2px}
+.staff-pts{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+.staff-pt{display:flex;flex-direction:column;background:var(--field);border:1px solid var(--line);border-radius:10px;padding:7px 11px;font-size:13px}
+.staff-pt b{margin:0;font-size:13.5px}
+.staff-pt small{color:var(--g2);font-size:12px}
 .lend-card{display:flex;gap:14px;align-items:center;justify-content:space-between;flex-wrap:wrap;margin-top:26px;
   padding:16px;background:var(--card);border:1px solid var(--line);border-radius:var(--r)}
 .lend-card b{font-size:15px}
@@ -140,7 +145,7 @@
 <script src="assets/geo.js?v=20260923-photon"></script>
 <script src="assets/email-guard.js?v=20260926-email"></script><script src="assets/sb.js?v=20260926-email"></script>
 <script src="assets/app-release.js?v=20261009-rel"></script>
-<script src="assets/app.js?v=20261020-c"></script>
+<script src="assets/app.js?v=20261020-d"></script>
 <script src="assets/profile.js?v=20260923-photon"></script>
 <script>
 (function(){
@@ -151,7 +156,9 @@
   let ORDERS = [];
   let FEES = [];
   let REVIEWS = [];
-  let SENT = [];             // этап C: заявки, которые арендодатель сам отправил как арендатор («Я арендую»)
+  let SENT = [];
+  let STAFF = null;          // этап D: сотрудник проката (iva_staff_me) — приглашение или работа
+  let SPARTS = [];           // заявки пунктов сотрудника (iva_staff_parts)             // этап C: заявки, которые арендодатель сам отправил как арендатор («Я арендую»)
   let SUB_TAB = 'all';       // фильтр по статусу объявлений
   let SUB_TAB_ORD = 'all';   // фильтр по статусу заявок
 
@@ -404,6 +411,8 @@
         '<button data-tab="sent" class="' + (TAB==='sent'?'on':'') + '">' +
           'Я арендую' + (SENT.length ? '<span class="n">' + SENT.length + '</span>' : '') + '</button>'
       :
+        (STAFF ? '<button data-tab="staff" class="' + (TAB==='staff'?'on':'') + '">' +
+          (STAFF.status === 'invited' ? 'Приглашение' : 'Работа') + staffNewBadge() + '</button>' : '') +
         '<button data-tab="orders" class="' + (TAB==='orders'?'on':'') + '">' +
           'Мои заявки' + (ORDERS.length ? '<span class="n">' + ORDERS.length + '</span>' : '') + '</button>'
       ) +
@@ -422,7 +431,7 @@
             (ivaMode() === 'rent' ? 'как у клиента — каталог и избранное' : 'арендодателя — заявки и «+ Добавить»') + '</span></div>'
         : '') +
       '</div>' +
-      '<div class="tabs">' + tabsHtml + '</div>' + inner + (isAdmin() ? '' : lendCardHTML());
+      '<div class="tabs">' + tabsHtml + '</div>' + inner + (isAdmin() || STAFF ? '' : lendCardHTML());
   }
 
   /* Клиенту: сдавать инструмент можно только после разговора с владельцем (решение владельца 20.10.2026) */
@@ -918,6 +927,118 @@
     return '<div class="grid">' + list.map(adCard).join('') + '</div>';
   }
 
+  /* ---------- Сотрудник проката на сайте (этап D, 20.10.2026) ----------
+     Как в приложении (IvaStaffPatch / IvaStaffOrdersPatch) и теми же функциями базы:
+       iva_staff_me — приглашение или работа; iva_staff_answer — «Принять» / «Отказаться»;
+       iva_staff_parts — заявки ТОЛЬКО своих пунктов (без денег и почты клиента);
+       iva_staff_set_status — «Выдал» / «Вернули» (право «Выдача», свой пункт, new → rented → closed).
+     Без SQL сотрудников (20261028/1029) функции не найдутся — вкладка просто не появится. */
+  async function loadStaff(){
+    STAFF = null; SPARTS = [];
+    try {
+      const r = await api('/rest/v1/rpc/iva_staff_me', 'POST', {});
+      STAFF = (Array.isArray(r) ? r[0] : r) || null;
+    } catch(e){ STAFF = null; }
+    try { if (STAFF) localStorage.setItem('iva_staff_hint', '1'); else localStorage.removeItem('iva_staff_hint'); } catch(e){}
+    if (STAFF && STAFF.status === 'active' && (STAFF.can_issue || STAFF.can_notify)){
+      try { SPARTS = await api('/rest/v1/rpc/iva_staff_parts', 'POST', {}) || []; } catch(e){ SPARTS = []; }
+    }
+  }
+  function staffNewBadge(){
+    if (!STAFF) return '';
+    if (STAFF.status === 'invited') return '<span class="n warn">!</span>';
+    const n = SPARTS.filter(function(p){ return p.status === 'new'; }).length;
+    return n ? '<span class="n">' + n + '</span>' : '';
+  }
+  function staffRights(st){
+    const r = [];
+    if (st.can_issue)   r.push('выдаёт и принимает инструмент');
+    if (st.can_catalog) r.push('добавляет инструмент');
+    if (st.can_chat)    r.push('отвечает в чате пункта');
+    if (st.can_notify)  r.push('получает уведомления о заявках');
+    if (st.can_delete)  r.push('удаляет инструмент (с одобрения владельца)');
+    return r;
+  }
+  function staffPoints(st){
+    const pts = Array.isArray(st.points) ? st.points : [];
+    if (!pts.length) return '<span class="muted">пункт не назначен</span>';
+    return pts.map(function(p){
+      return '<span class="staff-pt"><b>' + esc(p.name || 'Пункт') + '</b>' +
+        (p.address ? '<small>' + esc(p.address) + '</small>' : '') + '</span>';
+    }).join('');
+  }
+  function viewStaff(){
+    const st = STAFF;
+    if (!st) return '';
+    const rights = staffRights(st);
+    const head = '<div class="box staff-head">' +
+      '<div class="small muted">' + (st.status === 'invited' ? 'Приглашение в прокат' : 'Вы — сотрудник проката') + '</div>' +
+      '<b style="font-size:17px">«' + esc(st.company || 'Прокат') + '»</b>' +
+      '<div class="staff-pts">' + staffPoints(st) + '</div>' +
+      (rights.length ? '<div class="small" style="color:var(--gr);margin-top:10px;line-height:1.55">Права: ' + esc(rights.join(', ')) + '</div>' : '') +
+      '</div>';
+    if (st.status === 'invited'){
+      return head + '<div class="box" style="margin-top:12px">' +
+        '<p style="line-height:1.6;color:var(--gr)">Владелец проката добавил вас сотрудником. Примите приглашение, чтобы видеть заявки своих пунктов ' +
+        'и отмечать «Выдал» / «Вернули». Отказаться можно сейчас; позже убрать вас сможет только владелец проката.</p>' +
+        '<div style="display:flex;gap:10px;margin-top:14px;flex-wrap:wrap">' +
+          '<button class="btn" data-staff-ans="1">Принять приглашение</button>' +
+          '<button class="btn sec" data-staff-ans="0">Отказаться</button>' +
+        '</div></div>';
+    }
+    let h = head;
+    const app = [];
+    if (st.can_catalog) app.push('добавление инструмента');
+    if (st.can_chat) app.push('чат пункта');
+    if (app.length) h += '<p class="small muted" style="margin:10px 2px 0">' + esc(app.join(' и ')).replace(/^./, function(c){ return c.toUpperCase(); }) +
+      ' — пока в приложении «Ива» для Android.</p>';
+    if (!st.can_issue && !st.can_notify){
+      return h + '<div class="empty" style="margin-top:14px"><b>Заявки вам не показываются</b>' +
+        '<p>Владелец проката не дал право «Выдача» или «Уведомления о заявках».</p></div>';
+    }
+    h += '<div class="sect-h" style="margin:18px 0 10px"><h2 style="font-size:17px">Заявки ваших пунктов</h2>' +
+      '<button class="btn sec sm" data-staff-reload="1">Обновить</button></div>';
+    if (!SPARTS.length){
+      return h + '<div class="empty"><b>Заявок нет</b><p>Новые, выданные и закрытые за 7 дней заявки ваших пунктов появятся здесь.</p></div>';
+    }
+    const groups = [['new','Новые'],['rented','В аренде'],['closed','Закрыты за 7 дней'],['cancelled','Отменены клиентом']];
+    groups.forEach(function(g){
+      const list = SPARTS.filter(function(p){ return (p.status || 'new') === g[0]; });
+      if (!list.length) return;
+      h += '<div class="small muted" style="margin:16px 2px 8px;font-weight:600;text-transform:uppercase;letter-spacing:.5px">' + g[1] + ' · ' + list.length + '</div>';
+      h += list.map(staffPartCard).join('');
+    });
+    return h;
+  }
+  function staffPartCard(p){
+    const st = p.status || 'new';
+    const days = Number(p.days) || 1;
+    let due = '';
+    if (st === 'rented' && p.rented_at){
+      const end = new Date(new Date(p.rented_at).getTime() + days * 86400000);
+      const late = Date.now() > end.getTime();
+      due = '<div class="hint"' + (late ? ' style="color:var(--red)"' : '') + '>Выдан ' + niceDate(p.rented_at) +
+        ' · вернуть до ' + niceDate(end.toISOString()) + (late ? ' — просрочено' : '') + '</div>';
+    }
+    const tel = String(p.client_tel || '').replace(/[^\d+]/g, '');
+    let btns = '';
+    if (p.can_act && st === 'new')    btns = '<button class="btn sm" data-staff-do="rented" data-id="' + esc(p.part_id) + '">Выдал</button>';
+    if (p.can_act && st === 'rented') btns = '<button class="btn sm" style="background:var(--grn);border-color:var(--grn)" data-staff-do="closed" data-id="' + esc(p.part_id) + '">Вернули</button>';
+    if (!p.can_act && p.mine && (st === 'new' || st === 'rented')) btns = '<span class="small muted">Это ваша заявка — отмечает другой сотрудник или владелец</span>';
+    return '<div class="order-card">' +
+      '<div class="top"><span class="badge b-' + st + '">' + ({ new:'Новая', rented:'В аренде', closed:'Закрыта', cancelled:'Отменена' }[st] || st) + '</span>' +
+        '<span class="small muted">' + niceDate(p.created_at) + ' · №' + esc(p.order_id) + '</span></div>' +
+      '<div class="title">' + esc(p.tools_text || 'Инструмент') + '</div>' +
+      '<div class="hint">Пункт: ' + esc(p.point_name || '—') + ' · срок ' + days + ' ' + plural(days, 'сутки', 'суток', 'суток') + '</div>' +
+      due +
+      (p.client_name || tel ? '<div class="hint">Клиент: ' + esc(p.client_name || '—') +
+        (tel ? ' · <a href="tel:' + esc(tel) + '" style="color:var(--or)">' + esc(p.client_tel) + '</a>' : '') + '</div>' : '') +
+      (p.get_method ? '<div class="hint">Получение: ' + esc(p.get_method) + '</div>' : '') +
+      (p.comment ? '<div class="hint" style="margin-top:6px;background:var(--field);padding:8px 10px;border-radius:8px;font-size:12.5px">' + esc(p.comment) + '</div>' : '') +
+      (btns ? '<div class="acts" style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap">' + btns + '</div>' : '') +
+    '</div>';
+  }
+
   /* ---------- Сообщения ---------- */
   function viewMsg(){
     return '<div class="empty">' +
@@ -977,6 +1098,7 @@
     else if (TAB === 'orders')   inner = viewOrders();
     else if (TAB === 'reviews')  inner = viewReviews();
     else if (TAB === 'sent')     inner = viewTenantOrders(SENT);
+    else if (TAB === 'staff')    inner = viewStaff();
     else if (TAB === 'fav')      inner = viewFav();
     else if (TAB === 'msg')      inner = viewMsg();
     else if (TAB === 'prof')     inner = viewProf();
@@ -1006,7 +1128,7 @@
 
     const out = $('bOut');
     if (out) out.addEventListener('click', function(){
-      signOut();
+      signOut(); try { localStorage.removeItem("iva_staff_hint"); localStorage.removeItem("iva_lord_hint"); } catch(x){}
       toast('Вы вышли');
       screenLogin();
     });
@@ -1024,6 +1146,35 @@
 
     const st = e.target.closest('[data-st]');
     if (st){ SUB_TAB = st.getAttribute('data-st'); render(); return; }
+
+    const sAns = e.target.closest('[data-staff-ans]');
+    if (sAns && STAFF){
+      const yes = sAns.getAttribute('data-staff-ans') === '1';
+      if (!yes && !confirm('Отказаться от приглашения в прокат «' + (STAFF.company || '') + '»?')) return;
+      sAns.disabled = true;
+      api('/rest/v1/rpc/iva_staff_answer', 'POST', { p_id: STAFF.id, p_accept: yes }).then(async function(){
+        toast(yes ? 'Готово: вы сотрудник проката' : 'Вы отказались от приглашения');
+        await loadStaff(); if (!STAFF) TAB = 'orders'; render();
+      }).catch(function(err){ sAns.disabled = false; toast('Не удалось: ' + err.message); });
+      return;
+    }
+    const sDo = e.target.closest('[data-staff-do]');
+    if (sDo){
+      const act = sDo.getAttribute('data-staff-do'), id = sDo.getAttribute('data-id');
+      if (!/^\d{1,18}$/.test(id || '')) return;
+      if (!confirm(act === 'rented' ? 'Отметить «Выдал»? Срок аренды пойдёт с этой минуты.'
+                                    : 'Отметить «Вернули»? Заявка закроется целиком (все инструменты в ней).')) return;
+      sDo.disabled = true; sDo.textContent = '…';
+      api('/rest/v1/rpc/iva_staff_set_status', 'POST', { p_part: Number(id), p_status: act }).then(async function(){
+        toast(act === 'rented' ? 'Готово: заявка выдана' : 'Готово: заявка закрыта');
+        await loadStaff(); render();
+      }).catch(async function(err){ toast('Не удалось: ' + err.message); await loadStaff(); render(); });
+      return;
+    }
+    if (e.target.closest('[data-staff-reload]')){
+      loadStaff().then(function(){ render(); toast('Обновлено'); });
+      return;
+    }
 
     const ost = e.target.closest('[data-ost]');
     if (ost){ SUB_TAB_ORD = ost.getAttribute('data-ost'); render(); return; }
@@ -1195,9 +1346,11 @@
       try {
         ORDERS = await loadClientOrders();
       } catch(e){ ORDERS = []; }
+      await loadStaff();
     }
     await showcase;
-    if (!isAdmin() && (TAB === 'ads' || TAB === 'sent')) TAB = 'orders';
+    if (!isAdmin() && (TAB === 'ads' || TAB === 'sent')) TAB = STAFF ? 'staff' : 'orders';
+    if (TAB === 'staff' && !STAFF) TAB = 'orders';
     render();
   }
 

@@ -903,9 +903,11 @@ function acctMenuHTML(){
   const lord = typeof isAdmin === 'function' && isAdmin();
   const chief = typeof isChief === 'function' && isChief();
   const lend = lord && ivaMode() === 'lend';
+  /* сотрудник проката — подсказка из кабинета (account.html → iva_staff_me) */
+  let staff = false; try { staff = !lord && localStorage.getItem('iva_staff_hint') === '1'; } catch(e){}
   const name = (typeof A !== 'undefined' && A.uname) || 'Кабинет';
   const me = (typeof A !== 'undefined' && A.me) || '';
-  const role = chief ? 'Владелец площадки' : lord ? 'Арендодатель' : 'Клиент';
+  const role = chief ? 'Владелец площадки' : lord ? 'Арендодатель' : staff ? 'Сотрудник проката' : 'Клиент';
   const a = (href, label, extra) => '<a role="menuitem" href="' + href + '">' + label + (extra || '') + '</a>';
   let h = '<div class="acct-head"><span class="acct-ava">' + esc(initials(name)) + '</span>' +
     '<span style="min-width:0"><b>' + esc(name) + '</b><small>' + esc(me) + '</small>' +
@@ -916,6 +918,7 @@ function acctMenuHTML(){
          a('account.html#fee', 'Комиссия и оплата') + a('account.html#reviews', 'Отзывы') +
          a('new.html', '+ Добавить инструмент');
   } else if (!lord){
+    if (staff) h += a('account.html#staff', 'Работа в прокате');
     h += a('account.html#orders', 'Мои заявки');
   } else {
     h += a('catalog.html', 'Каталог') + a('account.html#sent', 'Я арендую — мои заявки');
@@ -924,7 +927,7 @@ function acctMenuHTML(){
        a('chat.html', 'Сообщения', '<span class="acct-n chat-count" style="display:none">0</span>') +
        a(lord ? 'account.html#prof' : 'profile.html', 'Профиль и настройки');
   if (chief) h += '<div class="acct-sep"></div>' + a('chief.html', 'Управление площадкой');
-  if (!lord) h += '<div class="acct-sep"></div>' + a(lendChatHref(), 'Хочу сдавать инструмент');
+  if (!lord && !staff) h += '<div class="acct-sep"></div>' + a(lendChatHref(), 'Хочу сдавать инструмент');
   h += '<div class="acct-sep"></div><button type="button" role="menuitem" class="acct-out" id="acctOut">Выйти</button>';
   return h;
 }
@@ -967,6 +970,7 @@ document.addEventListener('click', function(e){
   if (e.target.closest && e.target.closest('#acctOut')){
     if (typeof signOut === 'function') signOut();
     setLordHint(false);
+    try { localStorage.removeItem('iva_staff_hint'); } catch(err){}
     location.href = 'index.html';
     return;
   }

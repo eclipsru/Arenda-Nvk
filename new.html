@@ -101,7 +101,7 @@ textarea.inp{resize:vertical;min-height:110px;font-family:inherit;line-height:1.
 <script src="assets/models.js?v=20261020-power"></script>
 <script src="assets/model-form.js?v=20261020-power"></script>
 <script src="assets/app-release.js?v=20261009-rel"></script>
-<script src="assets/app.js?v=20261020-c"></script>
+<script src="assets/app.js?v=20261020-d"></script>
 <script>
 (function(){
   mountChrome('new', '');
@@ -146,10 +146,20 @@ textarea.inp{resize:vertical;min-height:110px;font-family:inherit;line-height:1.
      Решение владельца 20.10.2026: клиент не может сдавать инструмент. Он может только написать владельцу;
      арендодателем его делает владелец после разговора. Поэтому здесь нет ни анкеты, ни «Стать арендодателем». */
   function screenAuth(kind){
-    const guest = kind === 'guest', paused = kind === 'paused';
+    const guest = kind === 'guest', paused = kind === 'paused', staff = kind === 'staff';
     const title = guest ? 'Размещение — только для арендодателей'
       : paused ? 'Размещение приостановлено'
+      : staff ? 'Сотрудники добавляют инструмент в приложении'
       : 'Размещать инструмент могут только арендодатели';
+    if (staff){
+      /* этап D: у сотрудника с правом «Добавляет инструмент» на сайте пока нет выбора пункта и одобрения владельцем */
+      $('root').innerHTML = '<div class="empty" style="padding:70px 20px"><b>' + esc(title) + '</b>' +
+        '<p>Добавление инструмента сотрудником (с выбором пункта и одобрением владельца проката) пока работает в приложении «Ива» для Android. ' +
+        'Заявки своих пунктов можно вести и здесь — в кабинете, вкладка «Работа».</p>' +
+        '<div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap">' +
+          '<a class="btn" href="app.html">Скачать приложение</a><a class="btn sec" href="account.html#staff">Открыть «Работа»</a></div></div>';
+      return;
+    }
     const text = paused
       ? 'Ваш доступ арендодателя сейчас приостановлен. Напишите владельцу площадки, чтобы узнать причину.'
       : 'Хотите сдавать свой инструмент? Напишите владельцу площадки: обсудим условия, и после его одобрения вы станете арендодателем.' +
@@ -916,7 +926,12 @@ textarea.inp{resize:vertical;min-height:110px;font-family:inherit;line-height:1.
 
     if (!isAuthed()){ screenAuth('guest'); return; }
     if (!isAdmin()){
-      screenAuth(A.admin ? 'paused' : 'client');
+      let staff = false;
+      if (!A.admin){
+        try { const r = await api('/rest/v1/rpc/iva_staff_me', 'POST', {}); const st = Array.isArray(r) ? r[0] : r;
+              staff = !!(st && st.status === 'active'); } catch(e){}
+      }
+      screenAuth(A.admin ? 'paused' : staff ? 'staff' : 'client');
       return;
     }
 
