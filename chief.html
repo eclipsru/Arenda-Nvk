@@ -7,7 +7,7 @@
 <meta name="robots" content="noindex, nofollow">
 <meta name="theme-color" content="#101217">
 <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
-<link rel="stylesheet" href="assets/theme.css?v=20261020-b">
+<link rel="stylesheet" href="assets/theme.css?v=20261020-c">
 <style>
 .kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:12px;margin-bottom:22px}
 .kpi{background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:16px}
@@ -31,6 +31,20 @@
 .tabs button.on{color:var(--or);border-bottom-color:var(--or);font-weight:600}
 .tabs button .n{margin-left:6px;font-size:11.5px;background:var(--or);color:#fff;
   border-radius:9px;padding:1px 6px;font-weight:700}
+.chief-nav .cn-g{display:none}
+.chief-main{min-width:0}
+@media (min-width:1100px){
+  .chief-layout{display:grid;grid-template-columns:230px minmax(0,1fr);gap:24px;align-items:start}
+  .chief-nav{flex-direction:column;gap:2px;border-bottom:0;margin:0;overflow:visible;padding:10px;
+    background:var(--card);border:1px solid var(--line);border-radius:var(--r);position:sticky;top:14px}
+  .chief-nav .cn-g{display:block;font-size:11px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;
+    color:var(--g2);padding:12px 10px 4px}
+  .chief-nav .cn-g:first-child{padding-top:4px}
+  .chief-nav button{display:flex;align-items:center;justify-content:space-between;text-align:left;width:100%;
+    border-bottom:0;margin:0;border-radius:9px;padding:9px 10px;font-size:14px}
+  .chief-nav button:hover{background:var(--field)}
+  .chief-nav button.on{background:var(--or-soft);color:var(--or)}
+}
 
 .tbl{width:100%;border-collapse:collapse;font-size:14px}
 .tbl th{text-align:left;padding:10px 12px;color:var(--g2);font-size:12px;font-weight:600;
@@ -96,7 +110,7 @@
 <script src="assets/geo.js?v=20260923-photon"></script>
 <script src="assets/email-guard.js?v=20260926-email"></script><script src="assets/sb.js?v=20260926-email"></script>
 <script src="assets/app-release.js?v=20261009-rel"></script>
-<script src="assets/app.js?v=20261020-lend"></script>
+<script src="assets/app.js?v=20261020-c"></script>
 <script src="assets/partners.js?v=20261020-lend"></script>
 <script src="assets/model-proposals.js?v=20261018-stage4"></script>
 <script>
@@ -139,23 +153,30 @@
         '<a class="btn sm" href="ProkatInstrumenta-10.14.apk" data-app-dl="Скачать Android {v}" download>Скачать Android 10.14</a>' +
         '<span class="cnt">' + esc(A.me) + (isCreator() ? ' · создатель' : ' · владелец') + '</span>' +
       '</div></div>' +
-      '<div class="tabs">' +
+      /* Этап C сайта (20.10.2026): на компьютере разделы — боковым меню по группам (10 вкладок в строку не помещались),
+         на телефоне — прежняя прокручиваемая строка. data-tab и обработчики не менялись. */
+      '<div class="chief-layout"><nav class="tabs chief-nav" aria-label="Разделы управления">' +
+        '<span class="cn-g">Площадка</span>' +
         '<button data-tab="dash" class="' + (TAB==='dash'?'on':'') + '">Сводка</button>' +
         '<button data-tab="ord" class="'  + (TAB==='ord'?'on':'')  + '">Заявки</button>' +
         '<button data-tab="mod" class="'  + (TAB==='mod'?'on':'')  + '">Модерация' +
           (nMod ? '<span class="n">' + nMod + '</span>' : '') + '</button>' +
         '<button data-tab="ads" class="'  + (TAB==='ads'?'on':'')  + '">Объявления</button>' +
+        '<span class="cn-g">Люди</span>' +
         '<button data-tab="adm" class="'  + (TAB==='adm'?'on':'')  + '">Арендодатели</button>' +
         '<button data-tab="landlords" class="' + (TAB==='landlords'?'on':'') + '">Заявки арендодателей' +
           (D.landlordApps.filter(a=>a.status==='pending').length ? '<span class="n">' + D.landlordApps.filter(a=>a.status==='pending').length + '</span>' : '') + '</button>' +
+        '<span class="cn-g">Деньги</span>' +
         '<button data-tab="fee" class="'  + (TAB==='fee'?'on':'')  + '">Комиссия' +
           (nFee ? '<span class="n">' + nFee + '</span>' : '') + '</button>' +
+        '<span class="cn-g">Справочники</span>' +
         '<button data-tab="cat" class="'  + (TAB==='cat'?'on':'')  + '">Категории</button>' +
         /* 10.84: предложенные админами модели справочника */
         '<button data-tab="models" class="' + (TAB==='models'?'on':'') + '">Модели' +
           (D.props && ivaPropPending(D.props) ? '<span class="n">' + ivaPropPending(D.props) + '</span>' : '') + '</button>' +
+        '<span class="cn-g">Рост</span>' +
         '<button data-tab="outreach" class="' + (TAB==='outreach'?'on':'') + '">🚀 Рассылка по РФ</button>' +
-      '</div>' + inner;
+      '</nav><div class="chief-main">' + inner + '</div></div>';
   }
 
   /* ---------- Сводка ---------- */
@@ -835,6 +856,9 @@
     else                    inner = viewDash();
 
     $('root').innerHTML = shell(inner);
+    /* выбранная вкладка видна и на узком экране (строка вкладок прокручивается) */
+    (function(){ const tb = document.querySelector('.tabs'), on = tb && tb.querySelector('button.on');
+      if (on && tb.scrollWidth > tb.clientWidth) tb.scrollLeft = on.offsetLeft - tb.offsetLeft - (tb.clientWidth - on.offsetWidth) / 2; })();
     if (TAB === 'mod') paintFlags();
     if ($('apkCards')) mountAppCards($('apkCards'));
     ivaPaintReleaseLinks($('root'));

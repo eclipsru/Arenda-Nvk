@@ -8,7 +8,7 @@
 <meta name="robots" content="noindex, nofollow">
 <meta name="theme-color" content="#101217">
 <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
-<link rel="stylesheet" href="assets/theme.css?v=20261020-b">
+<link rel="stylesheet" href="assets/theme.css?v=20261020-c">
 <link rel="stylesheet" href="assets/profile.css?v=20260923-rental-profile">
 <style>
 .tabs{display:flex;gap:4px;border-bottom:1px solid var(--line);margin-bottom:18px;
@@ -140,7 +140,7 @@
 <script src="assets/geo.js?v=20260923-photon"></script>
 <script src="assets/email-guard.js?v=20260926-email"></script><script src="assets/sb.js?v=20260926-email"></script>
 <script src="assets/app-release.js?v=20261009-rel"></script>
-<script src="assets/app.js?v=20261020-lend"></script>
+<script src="assets/app.js?v=20261020-c"></script>
 <script src="assets/profile.js?v=20260923-photon"></script>
 <script>
 (function(){
@@ -151,6 +151,7 @@
   let ORDERS = [];
   let FEES = [];
   let REVIEWS = [];
+  let SENT = [];             // этап C: заявки, которые арендодатель сам отправил как арендатор («Я арендую»)
   let SUB_TAB = 'all';       // фильтр по статусу объявлений
   let SUB_TAB_ORD = 'all';   // фильтр по статусу заявок
 
@@ -399,7 +400,9 @@
         '<button data-tab="fee" class="' + (TAB==='fee'?'on':'') + '">' +
           'Комиссия и оплата' + (fStat.debt > 0 ? '<span class="n warn">!</span>' : '') + '</button>' +
         '<button data-tab="reviews" class="' + (TAB==='reviews'?'on':'') + '">' +
-          'Отзывы' + (REVIEWS.length ? '<span class="n">' + REVIEWS.length + '</span>' : '') + '</button>'
+          'Отзывы' + (REVIEWS.length ? '<span class="n">' + REVIEWS.length + '</span>' : '') + '</button>' +
+        '<button data-tab="sent" class="' + (TAB==='sent'?'on':'') + '">' +
+          'Я арендую' + (SENT.length ? '<span class="n">' + SENT.length + '</span>' : '') + '</button>'
       :
         '<button data-tab="orders" class="' + (TAB==='orders'?'on':'') + '">' +
           'Мои заявки' + (ORDERS.length ? '<span class="n">' + ORDERS.length + '</span>' : '') + '</button>'
@@ -412,7 +415,13 @@
     return '<div class="sect" style="padding-bottom:0"><div class="sect-h">' +
         '<h2>' + esc(A.uname || 'Кабинет') + '</h2>' +
         '<span class="cnt">' + esc(A.me) + (isCreator() ? ' · создатель' : isAdmin() ? ' · арендодатель' : '') + '</span>' +
-      '</div></div>' +
+      '</div>' +
+      /* Переключатель «Арендую / Сдаю» (этап C сайта): на телефоне меню аккаунта в шапке нет — он здесь */
+      (isAdmin() && typeof modeSwitchHTML === 'function'
+        ? '<div class="acct-mode-cab">' + modeSwitchHTML() + '<span class="small muted">Меню сайта: ' +
+            (ivaMode() === 'rent' ? 'как у клиента — каталог и избранное' : 'арендодателя — заявки и «+ Добавить»') + '</span></div>'
+        : '') +
+      '</div>' +
       '<div class="tabs">' + tabsHtml + '</div>' + inner + (isAdmin() ? '' : lendCardHTML());
   }
 
@@ -573,8 +582,9 @@
     return h;
   }
 
-  function viewTenantOrders(){
-    if (!ORDERS.length){
+  function viewTenantOrders(list){
+    list = list || ORDERS;
+    if (!list.length){
       return '<div class="empty">' +
         '<svg viewBox="0 0 24 24"><path d="M7 4h-2l-1 2H2v13a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V6h-2l-1-2h-2l1 2H6zM5 8h14v11H5zm4 2h6v2H9z"/></svg>' +
         '<b>Заявок пока нет</b>' +
@@ -583,7 +593,7 @@
       '</div>';
     }
 
-    return ORDERS.map(function(o){
+    return list.map(function(o){
       const st = o.status || 'new';
       return '<div class="order-card">' +
         '<div class="top">' +
@@ -966,6 +976,7 @@
     if (TAB === 'fee')           inner = viewFee();
     else if (TAB === 'orders')   inner = viewOrders();
     else if (TAB === 'reviews')  inner = viewReviews();
+    else if (TAB === 'sent')     inner = viewTenantOrders(SENT);
     else if (TAB === 'fav')      inner = viewFav();
     else if (TAB === 'msg')      inner = viewMsg();
     else if (TAB === 'prof')     inner = viewProf();
@@ -973,6 +984,9 @@
 
     $('root').innerHTML = shell(inner);
     paintFavCount();
+    /* выбранная вкладка видна и на узком экране (строка вкладок прокручивается) */
+    (function(){ const tb = document.querySelector('.tabs'), on = tb && tb.querySelector('button.on');
+      if (on && tb.scrollWidth > tb.clientWidth) tb.scrollLeft = on.offsetLeft - tb.offsetLeft - (tb.clientWidth - on.offsetWidth) / 2; })();
 
     if ($('btnPayFeeTop')) $('btnPayFeeTop').onclick = openPayModal;
     if ($('btnPayFeeCard')) $('btnPayFeeCard').onclick = openPayModal;
@@ -1161,12 +1175,14 @@
     const showcase = hydrateShowcase(); // Избранное берём из живой витрины, а не демо-данных.
     if (isAdmin()){
       try {
-        const [myTools, myParts, myFees, myReviews] = await Promise.allSettled([
+        const [myTools, myParts, myFees, myReviews, mySent] = await Promise.allSettled([
           loadMyTools(),
           loadMyOrderParts(),
           loadMyFeePayments(),
-          loadLandlordReviews(A.me)
+          loadLandlordReviews(A.me),
+          loadClientOrders()
         ]);
+        SENT = mySent.status === 'fulfilled' ? (mySent.value || []) : [];
         MY = myTools.status === 'fulfilled' ? (myTools.value || []) : [];
         ORDERS = myParts.status === 'fulfilled' ? (myParts.value || []) : [];
         FEES = myFees.status === 'fulfilled' ? (myFees.value || []) : [];
@@ -1181,7 +1197,7 @@
       } catch(e){ ORDERS = []; }
     }
     await showcase;
-    if (!isAdmin() && TAB === 'ads') TAB = 'orders';
+    if (!isAdmin() && (TAB === 'ads' || TAB === 'sent')) TAB = 'orders';
     render();
   }
 

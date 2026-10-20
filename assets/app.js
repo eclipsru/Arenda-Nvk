@@ -450,14 +450,19 @@ function headerHTML(active, q){
       '<a class="hlink' + (active === 'chat' ? ' on' : '') + '" href="chat.html">' +
         IC.chat + '<span>Сообщения</span>' +
         '<span class="dot chat-count" style="display:none">0</span></a>' +
-      '<a class="hlink' + (active === 'cab' ? ' on' : '') + '" href="account.html">' +
-        IC.user + '<span>Кабинет</span></a>' +
+      /* Меню аккаунта (этап C сайта, 20.10.2026): у вошедшего — выпадающее меню с разделами по роли
+         и переключателем «Арендую / Сдаю» у арендодателя; у гостя — просто вход. См. paintAcct */
+      '<div class="acct" id="acct">' +
+        '<a class="hlink' + (active === 'cab' ? ' on' : '') + '" id="acctBtn" href="account.html">' +
+          '<span class="acct-ic">' + IC.user + '</span><span>Кабинет</span></a>' +
+        '<div class="acct-menu hide" id="acctMenu" role="menu" aria-label="Меню аккаунта"></div>' +
+      '</div>' +
       /* Пункт «Управление» дорисовывается после проверки роли — см. paintChiefLink */
       '<a class="hlink chief-link hide' + (active === 'chief' ? ' on' : '') + '" href="chief.html">' +
         IC.chief + '<span>Управление</span></a>' +
       /* 20.10.2026 (решение владельца): размещать могут только арендодатели, которых добавил владелец.
          Клиенту и гостю кнопки нет вовсе; у арендодателя она появляется после проверки роли — см. paintChiefLink */
-      '<a class="btn sm lord-only' + (lordHint() ? '' : ' hide') + '" href="new.html" style="margin-left:6px">+ Добавить</a>' +
+      '<a class="btn sm lord-only' + (lordHint() && ivaMode() === 'lend' ? '' : ' hide') + '" href="new.html" style="margin-left:6px">+ Добавить</a>' +
     '</nav>' +
   '</div></header>';
 }
@@ -806,7 +811,7 @@ let CHROME_ACTIVE = '';
 function mountChrome(active, q){
   const h = $('hdr');   if (h) h.innerHTML = headerHTML(active, q);
   CHROME_ACTIVE = active;
-  const b = $('bnav');  if (b) b.innerHTML = bnavHTML(active, lordHint());
+  const b = $('bnav');  if (b) b.innerHTML = bnavHTML(active, lordHint() && ivaMode() === 'lend');
   const f = $('ftr');   if (f) f.innerHTML = footHTML();
 
   mountAppTopBanner(h);
@@ -856,13 +861,118 @@ async function paintChiefLink(){
 function paintLordChrome(lord){
   setLordHint(lord);
   $$('.lord-only').forEach(function(el){ el.classList.toggle('hide', !lord); });
+  const lendView = lord && ivaMode() === 'lend';
+  $$('.lord-only').forEach(function(el){ el.classList.toggle('hide', !lendView); });
   const b = $('bnav'), nav = b && b.querySelector('.bnav');
-  if (nav && (nav.getAttribute('data-lord') === '1') !== lord){
-    b.innerHTML = bnavHTML(CHROME_ACTIVE, lord);
+  if (nav && (nav.getAttribute('data-lord') === '1') !== lendView){
+    b.innerHTML = bnavHTML(CHROME_ACTIVE, lendView);
     paintFavCount();
     paintChatBadge();
   }
+  paintAcct();
 }
+
+/* ---------- Режим арендодателя «Арендую / Сдаю» (как «Режим хозяина» у Airbnb) ----------
+   Арендодатель тоже берёт инструмент в аренду. В режиме «Арендую» сайт выглядит как у клиента
+   (каталог, избранное), в режиме «Сдаю» — меню арендодателя (заявки, «+ Добавить»).
+   Это только вид меню: права по-прежнему проверяет база. Клиенту переключатель не показывается. */
+const MODE_KEY = 'iva_mode';
+function ivaMode(){ try { return localStorage.getItem(MODE_KEY) === 'rent' ? 'rent' : 'lend'; } catch(e){ return 'lend'; } }
+function setIvaMode(m, go){
+  try { localStorage.setItem(MODE_KEY, m === 'rent' ? 'rent' : 'lend'); } catch(e){}
+  paintLordChrome(lordHint());
+  toast(m === 'rent' ? 'Режим «Арендую»: каталог и избранное' : 'Режим «Сдаю»: объявления и заявки');
+  if (go) location.href = m === 'rent' ? 'catalog.html' : 'account.html#ads';
+}
+function modeSwitchHTML(){
+  const m = ivaMode();
+  return '<div class="acct-mode" role="group" aria-label="Режим">' +
+    '<button type="button" data-mode="rent" class="' + (m === 'rent' ? 'on' : '') + '" aria-pressed="' + (m === 'rent') + '">Арендую</button>' +
+    '<button type="button" data-mode="lend" class="' + (m === 'lend' ? 'on' : '') + '" aria-pressed="' + (m === 'lend') + '">Сдаю</button>' +
+  '</div>';
+}
+document.addEventListener('click', function(e){
+  const mb = e.target.closest ? e.target.closest('[data-mode]') : null;
+  if (!mb || mb.classList.contains('on')) return;
+  e.preventDefault();
+  setIvaMode(mb.getAttribute('data-mode'), true);
+});
+
+/* ---------- Меню аккаунта в шапке ---------- */
+function acctMenuHTML(){
+  const lord = typeof isAdmin === 'function' && isAdmin();
+  const chief = typeof isChief === 'function' && isChief();
+  const lend = lord && ivaMode() === 'lend';
+  const name = (typeof A !== 'undefined' && A.uname) || 'Кабинет';
+  const me = (typeof A !== 'undefined' && A.me) || '';
+  const role = chief ? 'Владелец площадки' : lord ? 'Арендодатель' : 'Клиент';
+  const a = (href, label, extra) => '<a role="menuitem" href="' + href + '">' + label + (extra || '') + '</a>';
+  let h = '<div class="acct-head"><span class="acct-ava">' + esc(initials(name)) + '</span>' +
+    '<span style="min-width:0"><b>' + esc(name) + '</b><small>' + esc(me) + '</small>' +
+    '<span class="acct-role">' + role + '</span></span></div>';
+  if (lord) h += modeSwitchHTML();
+  if (lend){
+    h += a('account.html#ads', 'Мои объявления') + a('account.html#orders', 'Заявки на мой инструмент') +
+         a('account.html#fee', 'Комиссия и оплата') + a('account.html#reviews', 'Отзывы') +
+         a('new.html', '+ Добавить инструмент');
+  } else if (!lord){
+    h += a('account.html#orders', 'Мои заявки');
+  } else {
+    h += a('catalog.html', 'Каталог') + a('account.html#sent', 'Я арендую — мои заявки');
+  }
+  h += a('favorites.html', 'Избранное', '<span class="acct-n fav-count" style="display:none">0</span>') +
+       a('chat.html', 'Сообщения', '<span class="acct-n chat-count" style="display:none">0</span>') +
+       a(lord ? 'account.html#prof' : 'profile.html', 'Профиль и настройки');
+  if (chief) h += '<div class="acct-sep"></div>' + a('chief.html', 'Управление площадкой');
+  if (!lord) h += '<div class="acct-sep"></div>' + a(lendChatHref(), 'Хочу сдавать инструмент');
+  h += '<div class="acct-sep"></div><button type="button" role="menuitem" class="acct-out" id="acctOut">Выйти</button>';
+  return h;
+}
+function closeAcct(){
+  const m = $('acctMenu'), b = $('acctBtn');
+  if (m) m.classList.add('hide');
+  if (b) b.setAttribute('aria-expanded', 'false');
+}
+function paintAcct(){
+  const btn = $('acctBtn'), menu = $('acctMenu');
+  if (!btn || !menu) return;
+  const authed = typeof isAuthed === 'function' && isAuthed();
+  const ic = btn.querySelector('.acct-ic');
+  if (!authed){
+    if (ic) ic.innerHTML = IC.user;
+    btn.removeAttribute('aria-haspopup'); btn.removeAttribute('aria-expanded');
+    btn.lastChild.textContent = 'Войти';
+    menu.classList.add('hide');
+    return;
+  }
+  btn.setAttribute('aria-haspopup', 'menu');
+  if (!btn.hasAttribute('aria-expanded')) btn.setAttribute('aria-expanded', 'false');
+  btn.lastChild.textContent = 'Кабинет';
+  if (ic) ic.innerHTML = '<span class="acct-ini">' + esc(initials((A && A.uname) || (A && A.me) || '?')) + '</span>';
+  if (!menu.classList.contains('hide')) menu.innerHTML = acctMenuHTML();
+}
+document.addEventListener('click', function(e){
+  const btn = e.target.closest ? e.target.closest('#acctBtn') : null;
+  const menu = $('acctMenu');
+  if (btn && menu && btn.getAttribute('aria-haspopup') === 'menu'){
+    e.preventDefault();
+    if (menu.classList.contains('hide')){
+      menu.innerHTML = acctMenuHTML();
+      menu.classList.remove('hide');
+      btn.setAttribute('aria-expanded', 'true');
+      paintFavCount(); paintChatBadge();
+    } else closeAcct();
+    return;
+  }
+  if (e.target.closest && e.target.closest('#acctOut')){
+    if (typeof signOut === 'function') signOut();
+    setLordHint(false);
+    location.href = 'index.html';
+    return;
+  }
+  if (menu && !menu.classList.contains('hide') && !(e.target.closest && e.target.closest('#acct'))) closeAcct();
+});
+document.addEventListener('keydown', function(e){ if (e.key === 'Escape') closeAcct(); });
 
 /* Счётчик непрочитанных сообщений в шапке и нижнем меню */
 async function paintChatBadge(){
