@@ -8,7 +8,7 @@
 <meta name="robots" content="noindex, nofollow">
 <meta name="theme-color" content="#101217">
 <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
-<link rel="stylesheet" href="assets/theme.css?v=20261020-e">
+<link rel="stylesheet" href="assets/theme.css?v=20261020-f">
 <link rel="stylesheet" href="assets/profile.css?v=20260923-rental-profile">
 <style>
 .tabs{display:flex;gap:4px;border-bottom:1px solid var(--line);margin-bottom:18px;
@@ -145,7 +145,7 @@
 <script src="assets/geo.js?v=20260923-photon"></script>
 <script src="assets/email-guard.js?v=20260926-email"></script><script src="assets/sb.js?v=20260926-email"></script>
 <script src="assets/app-release.js?v=20261009-rel"></script>
-<script src="assets/app.js?v=20261020-e"></script>
+<script src="assets/app.js?v=20261020-f"></script>
 <script src="assets/profile.js?v=20260923-photon"></script>
 <script>
 (function(){
@@ -591,8 +591,298 @@
     return h;
   }
 
+  /* ---------- Этап F сайта (20.10.2026): заявки клиента — как в приложении ----------
+     Одна функция базы iva_order_cards('client') (та же, что у приложения): прокат, пункт с телефоном, инструменты со сроками,
+     время выдачи, причина отмены, ожидающее изменение. Если функции в базе ещё нет — остаётся прежний простой список.
+     Отмена — iva_order_cancel (пока ничего не выдано, с причиной, без комиссии); вопрос «Вы взяли инструмент?» — iva_order_followups. */
+  let CCARDS = null;         // карточки заявок клиента (iva_order_cards) или null — тогда прежний список
+  let CFOLLOW = [];          // вопросы «Вы в итоге взяли инструмент?»
+  let CO_F = '';             // фильтр: active | done | cancelled | all
+  const CO_REASONS = ['Передумал(а)', 'Нашёл(ла) в другом месте', 'Изменились планы', 'Ошибся(лась) в заявке'];
+
+  async function loadClientCards(){
+    try {
+      const r = await api('/rest/v1/rpc/iva_order_cards', 'POST', { p_scope: 'client' });
+      CCARDS = Array.isArray(r) ? r.map(function(x){ return x && x.iva_order_cards ? x.iva_order_cards : x; }).filter(Boolean) : null;
+    } catch(e){ CCARDS = null; }
+    try {
+      const f = await api('/rest/v1/rpc/iva_order_followups', 'POST', {});
+      CFOLLOW = Array.isArray(f) ? f : [];
+    } catch(e){ CFOLLOW = []; }
+  }
+
+  /* часовой пояс проката → время */
+  function coParts(ms, tz){
+    const o = {};
+    try {
+      new Intl.DateTimeFormat('en-CA', { timeZone: tz, hourCycle: 'h23', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })
+        .formatToParts(new Date(ms)).forEach(function(p){ o[p.type] = Number(p.value); });
+    } catch(e){ const d = new Date(ms); return { year: d.getFullYear(), month: d.getMonth() + 1, day: d.getDate(), hour: d.getHours(), minute: d.getMinutes() }; }
+    return o;
+  }
+  function coZoned(y, m, d, min, tz){
+    const guess = Date.UTC(y, m - 1, d, 0, min);
+    const p = coParts(guess, tz);
+    return guess - (Date.UTC(p.year, p.month - 1, p.day, p.hour % 24, p.minute) - guess);
+  }
+  /* то же правило, что iva_rent_end в базе: «сутки» — выдача + N × 24 ч; «до закрытия пункта» — закрытие N-го дня (выходные пропускаются) */
+  function coRentEnd(at, days, mode, close, tz){
+    const t = Date.parse(at);
+    if (!t || !(days > 0)) return 0;
+    const ok = mode === 'close' && Array.isArray(close) && close.length === 7 && close.some(function(c){ return c != null && c >= 0; });
+    if (!ok) return t + days * 864e5;
+    const p = coParts(t, tz);
+    const base = Date.UTC(p.year, p.month - 1, p.day) + days * 864e5;
+    for (let i = 0; i < 7; i++){
+      const dt = new Date(base + i * 864e5);
+      const m = close[(dt.getUTCDay() || 7) - 1];
+      if (m != null && m >= 0) return coZoned(dt.getUTCFullYear(), dt.getUTCMonth() + 1, dt.getUTCDate(), m, tz);
+    }
+    return t + days * 864e5;
+  }
+  function coWhen(ms, tz){
+    try { return new Date(ms).toLocaleString('ru-RU', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', timeZone: tz || 'Europe/Moscow' }); }
+    catch(e){ return new Date(ms).toLocaleString('ru-RU', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }); }
+  }
+  function coSpan(ms){
+    const m = Math.max(1, Math.round(Math.abs(ms) / 60000)), d = Math.floor(m / 1440), h = Math.floor((m % 1440) / 60), mi = m % 60;
+    if (d) return d + ' д' + (h ? ' ' + h + ' ч' : '');
+    if (h) return h + ' ч' + (mi ? ' ' + mi + ' мин' : '');
+    return mi + ' мин';
+  }
+  function coTimer(end){
+    const left = end - Date.now();
+    return left > 0 ? 'осталось ' + coSpan(left) : 'просрочено на ' + coSpan(left);
+  }
+  function coDays(it, orderDays){
+    const d = parseInt(it && it.days, 10);
+    if (d >= 1) return Math.min(365, d);
+    return Math.max(1, Math.min(365, parseInt(orderDays, 10) || 1));
+  }
+  function coOrderStatus(c){
+    const ps = (c.parts || []).map(function(p){ return p.status || 'new'; });
+    if (!ps.length) return 'new';
+    if (ps.every(function(x){ return x === 'cancelled'; })) return 'cancelled';
+    if (ps.some(function(x){ return x === 'rented'; })) return 'rented';
+    if (ps.some(function(x){ return x === 'new'; })) return 'new';
+    return 'closed';
+  }
+  function coOwnerMap(rows){
+    const m = {};
+    (rows || []).forEach(function(o){ (o.order_parts || []).forEach(function(p){ if (p && p.id != null && p.owner_email) m[String(p.id)] = p.owner_email; }); });
+    return m;
+  }
+  function coSteps(st){
+    const n = st === 'new' ? 1 : st === 'rented' ? 2 : 3;
+    return '<div class="co-steps" aria-label="Ход заявки">' +
+      ['Отправлена', 'Выдана', 'Возвращена'].map(function(t, i){
+        return '<span class="co-step' + (i < n ? ' on' : '') + (i === n - 1 && st !== 'closed' ? ' cur' : '') + '"><i></i>' + t + '</span>';
+      }).join('') + '</div>';
+  }
+
+  function coPartHTML(c, p, owners){
+    const st = p.status || 'new';
+    const items = Array.isArray(p.items) ? p.items : [];
+    const tz = p.tz || 'Europe/Moscow';
+    let late = false;
+    /* сроки (у разных инструментов может быть свой) — у выданной части таймер на каждый срок */
+    const terms = {};
+    items.forEach(function(it){ if (!it.returned_at){ const d = coDays(it, c.days); terms[d] = true; } });
+    let termsHTML = '';
+    if (st === 'rented' && p.rented_at){
+      Object.keys(terms).map(Number).sort(function(a, b){ return a - b; }).forEach(function(d){
+        const end = coRentEnd(p.rented_at, d, p.rent_mode, p.close_min, tz);
+        if (!end) return;
+        if (end < Date.now()) late = true;
+        termsHTML += '<div class="co-term' + (end < Date.now() ? ' late' : '') + '">' +
+          (Object.keys(terms).length > 1 ? '<b>' + d + ' ' + plural(d, 'сутки', 'суток', 'суток') + ':</b> ' : '') +
+          'вернуть до <b>' + esc(coWhen(end, tz)) + '</b> · <span data-co-end="' + end + '">' + coTimer(end) + '</span></div>';
+      });
+      if (!items.length){
+        const d = coDays({}, c.days), end = coRentEnd(p.rented_at, d, p.rent_mode, p.close_min, tz);
+        if (end){ if (end < Date.now()) late = true;
+          termsHTML += '<div class="co-term' + (end < Date.now() ? ' late' : '') + '">вернуть до <b>' + esc(coWhen(end, tz)) + '</b> · <span data-co-end="' + end + '">' + coTimer(end) + '</span></div>'; }
+      }
+    }
+    const tint = st === 'cancelled' || st === 'closed' ? 'off' : (late ? 'late' : st);
+    const badge = st === 'new' ? 'На рассмотрении' : st === 'rented' ? (late ? 'Просрочена' : 'В аренде') : st === 'cancelled' ? 'Отменена' : 'Завершена';
+    const bcls = st === 'rented' && late ? 'b-cancelled' : 'b-' + st;
+
+    /* инструменты и «чек»: цена × сутки; после возврата — начатые сутки (считает база) */
+    let sum = 0, dep = 0, fact = false;
+    const list = items.map(function(it){
+      const price = Number(it.price) || 0, plan = coDays(it, c.days);
+      const used = parseInt(it.used_days, 10) >= 1 ? parseInt(it.used_days, 10) : 0;
+      const d = used || plan;
+      if (used) fact = true;
+      sum += price * d; dep += Number(it.deposit) || 0;
+      const img = /^https:\/\//.test(it.img || '') ? '<img src="' + esc(it.img) + '" alt="" loading="lazy">' : '<span class="co-noimg"></span>';
+      const name = esc(it.name || 'Инструмент');
+      return '<div class="co-item">' + img + '<div class="co-item-t">' +
+        (it.id ? '<a href="tool.html?id=' + encodeURIComponent(it.id) + '">' + name + '</a>' : '<b>' + name + '</b>') +
+        '<span>' + (price ? rub(price) + ' × ' : '') + d + ' ' + plural(d, 'сутки', 'суток', 'суток') + (used && used !== plan ? ' (по факту, было ' + plan + ')' : '') +
+        (price ? ' = <b>' + rub(price * d) + '</b>' : '') + '</span>' +
+        (it.returned_at && st === 'rented' ? '<span class="co-ok">возвращён ' + esc(coWhen(Date.parse(it.returned_at), tz)) + '</span>' : '') +
+        '</div></div>';
+    }).join('');
+
+    const pt = p.point || null;
+    const tel = (pt && pt.tel) || p.prokat_tel || '';
+    const addr = pt ? [pt.city, pt.address].filter(Boolean).join(', ') : (p.prokat_addr || '');
+    const owner = owners[String(p.part_id)] || '';
+    const firstTool = items.length && items[0].id ? '&tool=' + encodeURIComponent(items[0].id) : '';
+
+    let acts = '';
+    if (st !== 'cancelled'){
+      if (tel) acts += '<a class="btn sm sec" href="tel:' + esc(String(tel).replace(/[^\d+]/g, '')) + '">Позвонить</a>';
+      if (owner) acts += '<a class="btn sm sec" href="chat.html?who=' + encodeURIComponent(owner) + firstTool + '">Написать</a>';
+      if (addr && st !== 'closed') acts += '<a class="btn sm sec" target="_blank" rel="noopener noreferrer" href="https://yandex.ru/maps/?text=' + encodeURIComponent(addr) + '">Как добраться ↗</a>';
+    }
+
+    const ch = p.change || null, cn = p.cancel || null;
+    return '<div class="co-part t-' + tint + '">' +
+      '<div class="co-part-h"><b>' + esc(p.company || 'Прокат') + '</b><span class="badge ' + bcls + '">' + badge + '</span></div>' +
+      (st !== 'cancelled' ? coSteps(st) : '') +
+      (addr ? '<div class="hint">' + (pt && pt.name ? esc(pt.name) + ' — ' : 'Адрес: ') + esc(addr) + (p.work_hours ? ' · ' + esc(p.work_hours) : '') + '</div>' : '') +
+      (st === 'rented' && p.rented_at ? '<div class="hint">Выдан ' + esc(coWhen(Date.parse(p.rented_at), tz)) + '</div>' : '') +
+      termsHTML +
+      (list ? '<div class="co-items">' + list + '</div>' : (p.tools_text ? '<div class="hint">' + esc(p.tools_text) + '</div>' : '')) +
+      (sum && st !== 'cancelled' ? '<div class="co-sum"><span>' + (st === 'closed' ? 'Итого за аренду' : 'Аренда по заявке') + '</span><b>' + rub(sum) + '</b></div>' : '') +
+      (dep && st !== 'closed' && st !== 'cancelled' ? '<div class="co-sum sm"><span>Залог (вернут после возврата инструмента)</span><b>' + rub(dep) + '</b></div>' : '') +
+      (sum && st === 'rented' ? '<div class="hint">Итог считает прокат при возврате: начатые сутки от выдачи (час запаса).</div>' : '') +
+      (fact && st === 'closed' ? '<div class="hint">Посчитано по факту: начатые сутки от выдачи до возврата.</div>' : '') +
+      (ch && ch.state === 'pending' ? '<div class="co-note">Вы попросили изменить заявку — ждём ответа проката.</div>' : '') +
+      (ch && ch.state === 'approved' ? '<div class="co-note ok">Прокат принял изменение заявки.</div>' : '') +
+      (ch && ch.state === 'rejected' ? '<div class="co-note">Прокат не принял изменение — действует прежняя заявка.</div>' : '') +
+      (st === 'cancelled' && cn && cn.reason ? '<div class="hint">Причина отмены: ' + esc(cn.reason) + '</div>' : '') +
+      (acts ? '<div class="acts">' + acts + '</div>' : '') +
+    '</div>';
+  }
+
+  function coCardHTML(c, owners){
+    const parts = c.parts || [];
+    const st = coOrderStatus(c);
+    const canCancel = parts.some(function(p){ return (p.status || 'new') === 'new'; }) &&
+                      !parts.some(function(p){ return p.status === 'rented' || p.status === 'closed'; });
+    return '<div class="order-card co-card">' +
+      '<div class="top"><b>Заявка №' + esc(c.order_id) + '</b><span class="small muted">' + niceDate(c.created_at) + '</span></div>' +
+      (parts.length ? parts.map(function(p){ return coPartHTML(c, p, owners); }).join('')
+                    : '<div class="title">' + esc(c.tools || 'Инструмент') + '</div>') +
+      (c.get_method ? '<div class="hint">Получение: ' + esc(c.get_method) + '</div>' : '') +
+      (c.comment ? '<details class="co-more"><summary>Подробности заявки</summary><div>' + esc(c.comment) + '</div></details>' : '') +
+      (canCancel ? '<div class="acts"><button class="btn sm sec co-cancel" data-co-cancel="' + esc(c.order_id) + '">Отменить заявку</button>' +
+        '<span class="small muted">Изменить состав или срок — в приложении или напишите в прокат</span></div>' : '') +
+      (st === 'closed' && parts.some(function(p){ return (p.items || []).length; }) ? '<div class="small muted" style="margin-top:8px">Оцените инструмент — откройте его карточку и оставьте отзыв.</div>' : '') +
+    '</div>';
+  }
+
+  function coFollowHTML(){
+    return CFOLLOW.map(function(f){
+      return '<div class="box co-follow">' +
+        '<b>Вы в итоге взяли инструмент?</b>' +
+        '<p class="small muted">Вы отменили заявку №' + esc(f.order_id) + (f.company ? ' в прокате «' + esc(f.company) + '»' : '') + (f.tools_text ? ' (' + esc(f.tools_text) + ')' : '') + '.</p>' +
+        '<div class="acts"><button class="btn sm" data-co-follow="took" data-id="' + esc(f.id) + '">Да, взял(а)</button>' +
+        '<button class="btn sm sec" data-co-follow="not" data-id="' + esc(f.id) + '">Нет</button>' +
+        '<button class="btn sm sec" data-co-follow="later" data-id="' + esc(f.id) + '">Спросить позже</button></div>' +
+      '</div>';
+    }).join('');
+  }
+
+  function viewClientCards(rows){
+    const owners = coOwnerMap(rows);
+    const all = CCARDS || [];
+    const grp = function(c){ const s = coOrderStatus(c); return s === 'new' || s === 'rented' ? 'active' : s === 'cancelled' ? 'cancelled' : 'done'; };
+    const cnt = { all: all.length, active: 0, done: 0, cancelled: 0 };
+    all.forEach(function(c){ cnt[grp(c)]++; });
+    if (!CO_F) CO_F = cnt.active ? 'active' : 'all';
+    const list = CO_F === 'all' ? all : all.filter(function(c){ return grp(c) === CO_F; });
+    let h = coFollowHTML();
+    h += '<div class="chips" style="margin-bottom:14px">' +
+      [['active', 'Активные'], ['done', 'Завершённые'], ['cancelled', 'Отменённые'], ['all', 'Все']].map(function(x){
+        return '<button class="chip' + (CO_F === x[0] ? ' on' : '') + '" data-co-f="' + x[0] + '"' +
+          (CO_F === x[0] ? ' style="border-color:var(--or);color:var(--or)"' : '') + '>' + x[1] + ' · ' + cnt[x[0]] + '</button>';
+      }).join('') + '</div>';
+    if (!list.length){
+      return h + '<div class="empty"><b>' + (all.length ? 'Здесь пусто' : 'Заявок пока нет') + '</b>' +
+        '<p>' + (all.length ? 'Переключитесь на другую вкладку.' : 'Выберите подходящий инструмент в каталоге и нажмите «Оформить заявку».') + '</p>' +
+        '<a class="btn" href="catalog.html">Перейти в каталог</a></div>';
+    }
+    return h + list.map(function(c){ return coCardHTML(c, owners); }).join('');
+  }
+
+  /* таймеры «осталось / просрочено» обновляются раз в минуту без перерисовки страницы */
+  setInterval(function(){
+    document.querySelectorAll('[data-co-end]').forEach(function(el){
+      const end = Number(el.getAttribute('data-co-end'));
+      if (end) el.textContent = coTimer(end);
+    });
+  }, 60000);
+
+  function coCancel(orderId){
+    openSheet('Отмена заявки №' + esc(orderId),
+      '<p class="small muted" style="line-height:1.6;margin-bottom:10px">Отменить можно, пока инструмент не выдан. Комиссия с проката не берётся.</p>' +
+      '<label class="small" style="display:block;margin-bottom:8px">Почему отменяете? Прокат увидит причину</label>' +
+      '<div class="chips" style="margin-bottom:10px">' + CO_REASONS.map(function(r){ return '<button class="chip" type="button" data-co-why="' + esc(r) + '">' + esc(r) + '</button>'; }).join('') + '</div>' +
+      '<textarea id="coWhy" class="inp" rows="3" maxlength="300" placeholder="Причина" style="width:100%"></textarea>' +
+      '<p class="small muted" style="margin-top:8px">Через пару дней спросим, взяли ли вы всё же инструмент в этом прокате.</p>' +
+      '<p class="small" id="coErr" style="color:var(--red);display:none;margin-top:8px"></p>',
+      '<button class="btn sec" id="coNo" style="flex:1">Не отменять</button>' +
+      '<button class="btn" id="coYes" style="flex:1">Отменить</button>');
+    document.querySelectorAll('[data-co-why]').forEach(function(b){
+      b.addEventListener('click', function(){ $('coWhy').value = b.getAttribute('data-co-why'); $('coWhy').focus(); });
+    });
+    $('coNo').addEventListener('click', function(){ closeSheet(); });
+    $('coYes').addEventListener('click', async function(){
+      const why = ($('coWhy').value || '').replace(/\s+/g, ' ').trim();
+      const err = $('coErr');
+      if (why.length < 2){ err.textContent = 'Укажите причину отмены'; err.style.display = 'block'; return; }
+      const btn = this; btn.disabled = true; btn.textContent = 'Отменяем…';
+      try {
+        await api('/rest/v1/rpc/iva_order_cancel', 'POST', { p_order: Number(orderId), p_reason: why });
+        closeSheet();
+        toast('Заявка отменена. Прокат увидит причину');
+        await coReload();
+      } catch(e){
+        btn.disabled = false; btn.textContent = 'Отменить';
+        const msg = String(e && e.message || '');
+        err.textContent = /iva_order_cancel|PGRST202|Could not find|schema cache/i.test(msg)
+          ? 'Отмена на сайте заработает после обновления базы. Пока напишите или позвоните в прокат.'
+          : 'Не удалось отменить: ' + msg;
+        err.style.display = 'block';
+      }
+    });
+  }
+
+  async function coReload(){
+    try {
+      const rows = await loadClientOrders();
+      if (isAdmin()) SENT = rows || []; else ORDERS = rows || [];
+    } catch(e){}
+    await loadClientCards();
+    render();
+  }
+
+  document.addEventListener('click', function(e){
+    const f = e.target.closest('[data-co-f]');
+    if (f){ CO_F = f.getAttribute('data-co-f'); render(); return; }
+    const c = e.target.closest('[data-co-cancel]');
+    if (c){ const id = c.getAttribute('data-co-cancel'); if (/^\d{1,18}$/.test(id || '')) coCancel(id); return; }
+    const fu = e.target.closest('[data-co-follow]');
+    if (fu){
+      const ans = fu.getAttribute('data-co-follow'), id = fu.getAttribute('data-id');
+      if (!/^\d{1,18}$/.test(id || '')) return;
+      if (ans === 'took' && !confirm('Отметить, что вы взяли инструмент в этом прокате? Заявка станет завершённой.')) return;
+      fu.disabled = true;
+      api('/rest/v1/rpc/iva_order_followup_answer', 'POST', { p_id: Number(id), p_answer: ans }).then(function(){
+        toast(ans === 'took' ? 'Спасибо! Заявка завершена' : ans === 'not' ? 'Спасибо за ответ' : 'Спросим завтра');
+        return coReload();
+      }).catch(function(err){ fu.disabled = false; toast('Не удалось: ' + err.message); });
+    }
+  });
+
   function viewTenantOrders(list){
     list = list || ORDERS;
+    if (CCARDS) return viewClientCards(list);
     if (!list.length){
       return '<div class="empty">' +
         '<svg viewBox="0 0 24 24"><path d="M7 4h-2l-1 2H2v13a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V6h-2l-1-2h-2l1 2H6zM5 8h14v11H5zm4 2h6v2H9z"/></svg>' +
@@ -1309,8 +1599,11 @@
   async function loadClientOrders(){
     let rows;
     try {
-      rows = await api('/rest/v1/orders?select=*,order_parts(status)&user_email=eq.' + encodeURIComponent(A.me) + '&order=id.desc&limit=50') || [];
-    } catch(e){ return await loadMySentOrders(); }
+      rows = await api('/rest/v1/orders?select=*,order_parts(id,owner_email,status)&user_email=eq.' + encodeURIComponent(A.me) + '&order=id.desc&limit=50') || [];
+    } catch(e){
+      try { rows = await api('/rest/v1/orders?select=*,order_parts(status)&user_email=eq.' + encodeURIComponent(A.me) + '&order=id.desc&limit=50') || []; }
+      catch(e2){ return await loadMySentOrders(); }
+    }
     rows.forEach(function(o){
       const ps = (o.order_parts || []).map(function(x){ return x.status || 'new'; });
       if (!ps.length) return;
@@ -1331,7 +1624,8 @@
           loadMyOrderParts(),
           loadMyFeePayments(),
           loadLandlordReviews(A.me),
-          loadClientOrders()
+          loadClientOrders(),
+          loadClientCards()
         ]);
         SENT = mySent.status === 'fulfilled' ? (mySent.value || []) : [];
         MY = myTools.status === 'fulfilled' ? (myTools.value || []) : [];
@@ -1344,7 +1638,8 @@
       }
     } else if (isAuthed()){
       try {
-        ORDERS = await loadClientOrders();
+        const both = await Promise.all([loadClientOrders(), loadClientCards()]);
+        ORDERS = both[0] || [];
       } catch(e){ ORDERS = []; }
       await loadStaff();
     }
