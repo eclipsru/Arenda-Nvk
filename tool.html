@@ -6,7 +6,7 @@
 <title>Объявление — Ива, аренда инструмента</title>
 <meta name="theme-color" content="#101217">
 <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
-<link rel="stylesheet" href="assets/theme.css?v=20261020-lend">
+<link rel="stylesheet" href="assets/theme.css?v=20261020-b">
 <link rel="stylesheet" href="assets/profile.css?v=20260923-rental-profile">
 <link rel="stylesheet" href="assets/geo.css?v=20260923-photon">
 <style>
@@ -90,7 +90,9 @@
   specRows += '<div class="spec"><dt>Категория</dt><dd>' + esc(catTitle(ad.cat)) +
               (ad.sub ? ' · ' + esc(subTitle(ad.sub)) : '') + '</dd></div>';
   specRows += '<div class="spec" id="specCond"><dt>Состояние</dt><dd>' + esc(condTitle(ad.cond)) + '</dd></div>';
-  Object.keys(ad.specs).forEach(function(k){
+  /* «Доставка» и «Минимальный срок» есть и в ad.specs (sb.js buildSpecs) — раньше показывались дважды */
+  Object.keys(ad.specs || {}).forEach(function(k){
+    if (k === 'Доставка' || k === 'Минимальный срок') return;
     specRows += '<div class="spec"><dt>' + esc(k) + '</dt><dd>' + esc(ad.specs[k]) + '</dd></div>';
   });
   specRows += '<div class="spec"><dt>Доставка</dt><dd>' +
@@ -304,6 +306,32 @@
       x0 = null;
     }, {passive:true});
   }
+
+  /* ---------- Липкая панель заявки на телефоне (этап B сайта, 20.10.2026) ----------
+     На узком экране правая колонка с ценой и «Оформить заявку» уезжает под фото, описание и характеристики —
+     человек листает несколько экранов, чтобы заказать. Панель внизу появляется, пока основная кнопка не видна,
+     и нажимает те же кнопки (вся логика заявки и чата — прежняя). */
+  (function(){
+    if ((ad.owner || '').toLowerCase() === (A.me || '').toLowerCase() && A.me) return;
+    var bar = document.createElement('div');
+    bar.className = 'tool-cta';
+    bar.id = 'toolCta';
+    bar.innerHTML =
+      '<div class="tool-cta-price"><b>' + rub(ad.price) + ' <small>/ сутки</small></b><span>залог ' + rub(dep) + '</span></div>' +
+      '<button class="btn sec tool-cta-write" type="button" aria-label="Написать арендодателю">' +
+        '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 11.5a8.4 8.4 0 0 1-9 8.4 8.4 8.4 0 0 1-3.8-.9L3 21l2-5.2a8.4 8.4 0 0 1-.9-3.8 8.4 8.4 0 0 1 8.4-8.4h.5a8.4 8.4 0 0 1 8 8z"/></svg>' +
+      '</button>' +
+      '<button class="btn tool-cta-order" type="button"><span class="l">Оформить заявку</span><span class="s">Оформить</span></button>';
+    document.body.appendChild(bar);
+    document.body.classList.add('has-tool-cta');
+    bar.querySelector('.tool-cta-order').addEventListener('click', function(){ $('orderBtn').click(); });
+    bar.querySelector('.tool-cta-write').addEventListener('click', function(){ $('writeBtn').click(); });
+    if ('IntersectionObserver' in window){
+      new IntersectionObserver(function(es){
+        bar.classList.toggle('show', !es[0].isIntersecting);
+      }).observe($('orderBtn'));
+    } else bar.classList.add('show');
+  })();
 
   /* ---------- Кнопка «Оформить заявку» ---------- */
   $('orderBtn').addEventListener('click', async function(){
@@ -679,7 +707,7 @@
         'пользователям — так арендодатель видит, кому отвечает. ' +
         'Можно и просто позвонить: ' + esc(owner.phone) + '.</p>',
         '<a class="btn sec" href="tel:' + owner.phone.replace(/[^\d+]/g,'') + '" style="flex:1">Позвонить</a>' +
-        '<a class="btn" href="account.html" style="flex:1">Войти</a>');
+        '<a class="btn" href="account.html?next=' + encodeURIComponent('chat.html?who=' + encodeURIComponent(ad.owner) + '&tool=' + encodeURIComponent(ad.id)) + '" style="flex:1">Войти</a>');
       return;
     }
     if ((ad.owner || '').toLowerCase() === A.me){
