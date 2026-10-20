@@ -5,6 +5,7 @@
   python3 tools/cat-cut.py --trim-right welding    + отрезать тонкий «хвост» справа (кабель сварочника)
   python3 tools/cat-cut.py --keep-all sub/x         оставить все крупные части предмета (ручку на тонкой шейке)
   python3 tools/cat-cut.py --crop=0.25,0,0.68,0.95 sub/cut-chasers   сначала обрезать кадр (доли), если нейросеть теряет часть предмета
+  python3 tools/cat-cut.py --keep-all --extra=0,0,0.5,0.3 sub/gen-light   часть кадра посмотреть ещё раз отдельно (можно несколько --extra)
 
 Нужно: pip install onnxruntime numpy pillow scipy  и модель ISNet (медленная, ~88 МБ, в репозиторий НЕ кладём):
   npm pack @imgly/background-removal-node@1.4.5 && tar xzf imgly-*.tgz
@@ -24,6 +25,7 @@ if len(sys.argv) == 3 and sys.argv[1] == '--extract-model':
     print('модель:', MODEL, os.path.getsize(MODEL)); sys.exit(0)
 import onnxruntime as ort
 CROP = None
+EXTRA = []
 KEEP_ALL = False   # --keep-all: оставить все крупные части (ручка штробореза отделена тонкой шейкой)
 s = ort.InferenceSession(MODEL)
 def mask(im):
@@ -35,6 +37,9 @@ def cut(name, src, out):
     if CROP:   # --crop=x0,y0,x1,y1 (доли кадра): нейросеть видит предмет крупнее и не теряет тёмные части
         W0, H0 = im.size; im = im.crop((int(W0*CROP[0]), int(H0*CROP[1]), int(W0*CROP[2]), int(H0*CROP[3])))
     a = mask(im); H, W = a.shape
+    for ex in EXTRA:   # --extra=x0,y0,x1,y1: эту часть кадра нейросеть смотрит ещё раз отдельно (тёмные фонари на штативе)
+        ex0, ey0, ex1, ey1 = int(W*ex[0]), int(H*ex[1]), int(W*ex[2]), int(H*ex[3])
+        a[ey0:ey1, ex0:ex1] = np.maximum(a[ey0:ey1, ex0:ex1], mask(im.crop((ex0, ey0, ex1, ey1))))
     a = np.clip((a-0.12)/0.76, 0, 1)
     solid = a > 0.5
     # «толстая» часть предмета: тонкие кабели и шланги отрезаются открытием
@@ -86,6 +91,7 @@ if __name__ == '__main__':
     args = sys.argv[1:]; trim = '--trim-right' in args; KEEP_ALL = '--keep-all' in args;
     for x in args:
         if x.startswith('--crop='): CROP = [float(v) for v in x[7:].split(',')]
+        if x.startswith('--extra='): EXTRA.append([float(v) for v in x[8:].split(',')])
     names = [a for a in args if not a.startswith('--')]
     for n in names:
         out = os.path.join(ROOT, 'assets', 'cat', n + '-cut.webp')
