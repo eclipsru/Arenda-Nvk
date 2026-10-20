@@ -3,6 +3,8 @@
 
   python3 tools/cat-cut.py power garden ...        assets/cat/src/<ключ>.jpg -> assets/cat/<ключ>-cut.webp
   python3 tools/cat-cut.py --trim-right welding    + отрезать тонкий «хвост» справа (кабель сварочника)
+  python3 tools/cat-cut.py --keep-all sub/x         оставить все крупные части предмета (ручку на тонкой шейке)
+  python3 tools/cat-cut.py --crop=0.25,0,0.68,0.95 sub/cut-chasers   сначала обрезать кадр (доли), если нейросеть теряет часть предмета
 
 Нужно: pip install onnxruntime numpy pillow scipy  и модель ISNet (медленная, ~88 МБ, в репозиторий НЕ кладём):
   npm pack @imgly/background-removal-node@1.4.5 && tar xzf imgly-*.tgz
@@ -21,13 +23,18 @@ if len(sys.argv) == 3 and sys.argv[1] == '--extract-model':
         for c in res['chunks']: o.write(open(os.path.join(d, c['hash']), 'rb').read())
     print('модель:', MODEL, os.path.getsize(MODEL)); sys.exit(0)
 import onnxruntime as ort
+CROP = None
+KEEP_ALL = False   # --keep-all: оставить все крупные части (ручка штробореза отделена тонкой шейкой)
 s = ort.InferenceSession(MODEL)
 def mask(im):
     x = np.asarray(im.resize((1024,1024), Image.BILINEAR)).astype(np.float32)
     y = s.run(['output'], {'input': ((x-128)/256).transpose(2,0,1)[None]})[0][0,0]
     return np.asarray(Image.fromarray((np.clip(y,0,1)*255).astype(np.uint8)).resize(im.size, Image.BILINEAR)).astype(np.float32)/255
 def cut(name, src, out):
-    im = Image.open(src).convert('RGB'); a = mask(im); H, W = a.shape
+    im = Image.open(src).convert('RGB')
+    if CROP:   # --crop=x0,y0,x1,y1 (доли кадра): нейросеть видит предмет крупнее и не теряет тёмные части
+        W0, H0 = im.size; im = im.crop((int(W0*CROP[0]), int(H0*CROP[1]), int(W0*CROP[2]), int(H0*CROP[3])))
+    a = mask(im); H, W = a.shape
     a = np.clip((a-0.12)/0.76, 0, 1)
     solid = a > 0.5
     # «толстая» часть предмета: тонкие кабели и шланги отрезаются открытием
@@ -39,6 +46,9 @@ def cut(name, src, out):
     ys, xs = np.where(main); y0,y1,x0,x1 = ys.min(), ys.max(), xs.min(), xs.max()
     # соседние крупные части (маска на сварочнике, колёса тележки) — если пересекают рамку главного
     for i,sz in enumerate(sizes):
+        if KEEP_ALL and sz > 0.01*sizes.max() and i+1 != 1+int(np.argmax(sizes)):
+            yy, xx = np.where(lab == i+1)
+            y0,y1,x0,x1 = min(y0,yy.min()),max(y1,yy.max()),min(x0,xx.min()),max(x1,xx.max()); continue
         if sz > 0.03*sizes.max() and i+1 != 1+int(np.argmax(sizes)):
             yy, xx = np.where(lab == i+1)
             if xx.min() < x1 + 0.05*W and xx.max() > x0 - 0.05*W and yy.min() < y1 and yy.max() > y0 - 0.05*H:
@@ -73,7 +83,10 @@ def trim_right(o):
     r = Image.fromarray(c, 'RGBA'); return r.crop(r.getchannel('A').point(lambda v: 255 if v > 10 else 0).getbbox())
 
 if __name__ == '__main__':
-    args = sys.argv[1:]; trim = '--trim-right' in args; names = [a for a in args if not a.startswith('--')]
+    args = sys.argv[1:]; trim = '--trim-right' in args; KEEP_ALL = '--keep-all' in args;
+    for x in args:
+        if x.startswith('--crop='): CROP = [float(v) for v in x[7:].split(',')]
+    names = [a for a in args if not a.startswith('--')]
     for n in names:
         out = os.path.join(ROOT, 'assets', 'cat', n + '-cut.webp')
         o = cut(n, os.path.join(ROOT, 'assets', 'cat', 'src', n + '.jpg'), out)
