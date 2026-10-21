@@ -945,11 +945,35 @@ function closeAcct(){
   if (m) m.classList.add('hide');
   if (b) b.setAttribute('aria-expanded', 'false');
 }
+/* Нижнее меню на телефоне: «Кабинет» — своей аватаркой, как в приложении; фото нет — прежний значок */
+function paintBnavAva(authed){
+  const a = document.querySelector('#bnav a[href="account.html"]');
+  if (!a) return;
+  if (!authed || typeof IvaAva === 'undefined'){
+    const sp = a.querySelector('.bnav-ava');
+    if (sp) sp.outerHTML = IC.user;
+    return;
+  }
+  IvaAva.mine().then(function(url){
+    const link = document.querySelector('#bnav a[href="account.html"]');
+    if (!link || !url) return;
+    let sp = link.querySelector('.bnav-ava');
+    if (!sp){
+      sp = document.createElement('span');
+      sp.className = 'bnav-ava';
+      const svg = link.querySelector('svg');
+      if (svg) svg.replaceWith(sp); else link.insertBefore(sp, link.firstChild);
+    }
+    sp.setAttribute('data-ava', (A && A.me) || '');
+    IvaAva.paint(sp);
+  }).catch(function(){});
+}
 function paintAcct(){
   const btn = $('acctBtn'), menu = $('acctMenu');
   if (!btn || !menu) return;
   const authed = typeof isAuthed === 'function' && isAuthed();
   const ic = btn.querySelector('.acct-ic');
+  paintBnavAva(authed);
   if (!authed){
     if (ic) ic.innerHTML = IC.user;
     btn.removeAttribute('aria-haspopup'); btn.removeAttribute('aria-expanded');
@@ -1214,10 +1238,21 @@ const IvaAva = (function(){
   }
 
   /* Заранее одним заходом: фото админов и пакетная подпись фото клиентов */
+  const inflight = {};   // почта → идущий запрос (список диалогов и шапка переписки просят одновременно)
   async function prefetch(emails){
     const me = low(A.me);
-    const need = emails.map(low).filter(function(e, i, a){ return e && e !== me && a.indexOf(e) === i && !cached('u:' + e); });
-    if (!need.length) return;
+    const all = emails.map(low).filter(function(e, i, a){ return e && e !== me && a.indexOf(e) === i && !cached('u:' + e); });
+    const wait = all.filter(function(e){ return inflight[e]; }).map(function(e){ return inflight[e]; });
+    const need = all.filter(function(e){ return !inflight[e]; });
+    if (need.length){
+      const job = load(need);
+      need.forEach(function(e){ inflight[e] = job; });
+      job.finally(function(){ need.forEach(function(e){ if (inflight[e] === job) delete inflight[e]; }); });
+      wait.push(job);
+    }
+    try { await Promise.all(wait); } catch(e){}
+  }
+  async function load(need){
     const m = await admins();
     const rest = [];
     need.forEach(function(e){ if (m[e]) keep('u:' + e, m[e], TTL_PUBLIC); else rest.push(e); });
@@ -1395,7 +1430,7 @@ const IvaAva = (function(){
       '<input type="range" class="ava-zoom" id="avaZoom" min="1" max="4" step="0.01" value="1" aria-label="Масштаб">' +
       '<p class="small muted" style="text-align:center;margin:0">Двигайте фото пальцем или мышью, масштаб — ползунком, колёсиком или двумя пальцами. ' +
         'В кружке — то, что увидят другие.</p>',
-      '<div style="display:flex;gap:10px"><button class="btn sec" type="button" id="avaRot">Повернуть</button>' +
+      '<div style="display:flex;gap:10px;width:100%"><button class="btn sec" type="button" id="avaRot">Повернуть</button>' +
       '<button class="btn" type="button" id="avaSave" style="flex:1">Сохранить</button></div>');
     const cv = $('avaCv'), ctx = cv.getContext('2d'), zoom = $('avaZoom');
     function dims(){ return rot % 2 ? [img.height, img.width] : [img.width, img.height]; }
