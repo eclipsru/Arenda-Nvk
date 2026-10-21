@@ -323,6 +323,20 @@ select.inp{cursor:pointer;appearance:none;
 .owner .rt{font-size:13px;color:var(--gr);display:flex;align-items:center;gap:5px;margin-top:2px}
 .owner .rt .star{color:var(--or)}
 
+/* ---------- Аватарки (21.10.2026): фото в тех же кружках, без фото — буквы ---------- */
+.ava,.acct-ini,.acct-ava{overflow:hidden}
+.ava.ava-img,.acct-ini.ava-img,.acct-ava.ava-img{background:var(--card)}
+.ava img,.acct-ini img,.acct-ava img{width:100%;height:100%;object-fit:cover;display:block;border-radius:50%}
+.ava-edit{border:0;padding:0;font-family:inherit;cursor:pointer;position:relative}
+.ava-edit:hover{box-shadow:0 0 0 2px var(--or)}
+.ava-edit:focus-visible{outline:2px solid var(--or);outline-offset:2px}
+.ava-pair{display:flex;flex-wrap:wrap;gap:18px 32px;margin-bottom:18px}
+.ava-one{display:flex;align-items:center;gap:14px;min-width:0}
+.ava-crop{display:flex;justify-content:center}
+.ava-crop canvas{width:100%;max-width:340px;height:auto;aspect-ratio:1/1;border-radius:var(--r);touch-action:none;cursor:grab;background:#000}
+.ava-crop canvas:active{cursor:grabbing}
+.ava-zoom{display:block;width:100%;max-width:340px;margin:14px auto 8px;accent-color:var(--or)}
+
 .phone-btn{font-family:inherit;letter-spacing:.3px}
 
 /* ---------- Меню аккаунта в шапке (этап C, 20.10.2026) ---------- */

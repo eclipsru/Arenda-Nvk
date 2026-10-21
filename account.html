@@ -8,7 +8,7 @@
 <meta name="robots" content="noindex, nofollow">
 <meta name="theme-color" content="#101217">
 <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
-<link rel="stylesheet" href="assets/theme.css?v=20261020-f">
+<link rel="stylesheet" href="assets/theme.css?v=20261021-a">
 <link rel="stylesheet" href="assets/profile.css?v=20260923-rental-profile">
 <style>
 .tabs{display:flex;gap:4px;border-bottom:1px solid var(--line);margin-bottom:18px;
@@ -145,7 +145,7 @@
 <script src="assets/geo.js?v=20260923-photon"></script>
 <script src="assets/email-guard.js?v=20260926-email"></script><script src="assets/sb.js?v=20260926-email"></script>
 <script src="assets/app-release.js?v=20261009-rel"></script>
-<script src="assets/app.js?v=20261020-f"></script>
+<script src="assets/app.js?v=20261021-a"></script>
 <script src="assets/profile.js?v=20260923-photon"></script>
 <script>
 (function(){
@@ -1346,11 +1346,21 @@
   function viewProf(){
     const a = A.admin || {};
     return '<div class="box profile-account" style="max-width:1000px">' +
-      '<div style="display:flex;align-items:center;gap:14px;margin-bottom:18px">' +
-        '<div class="ava" style="width:56px;height:56px;font-size:20px">' +
-          esc(initials(A.uname || A.me)) + '</div>' +
-        '<div><div style="font-weight:700;font-size:17px">' + esc(A.uname || '—') + '</div>' +
-          '<div class="small muted">' + esc(A.me) + '</div></div>' +
+      '<div class="ava-pair">' +
+        '<div class="ava-one">' +
+          '<button type="button" class="ava ava-edit" id="profAva" data-ava="' + esc(A.me) + '" title="Изменить фото" ' +
+            'style="width:72px;height:72px;font-size:24px">' + esc(initials(A.uname || A.me)) + '</button>' +
+          '<div style="min-width:0"><div style="font-weight:700;font-size:17px">' + esc(A.uname || '—') + '</div>' +
+            '<div class="small muted">' + esc(A.me) + '</div>' +
+            '<button type="button" class="btn sec sm" id="profAvaBtn" style="margin-top:8px">Изменить фото</button></div>' +
+        '</div>' +
+        '<div class="ava-one">' +
+          '<button type="button" class="ava ava-edit" id="orgAva" data-ava-org="1" title="Изменить аватарку проката" ' +
+            'style="width:72px;height:72px;font-size:24px">' + esc(initials(a.company || A.uname || A.me)) + '</button>' +
+          '<div style="min-width:0"><div style="font-weight:700;font-size:15px">Аватарка проката</div>' +
+            '<div class="small muted">Видна клиентам в карточке инструмента</div>' +
+            '<button type="button" class="btn sec sm" id="orgAvaBtn" style="margin-top:8px">Изменить</button></div>' +
+        '</div>' +
       '</div>' +
       '<dl>' +
         '<div class="prof-row"><dt>Статус</dt><dd>' +
@@ -1407,6 +1417,14 @@
     };
 
     if($('apkCards'))mountAppCards($('apkCards'));
+    /* Аватарки (21.10.2026): своё фото (admins.avatar) и аватарка проката (admins.org_avatar) — те же поля, что в приложении */
+    if (typeof IvaAva !== 'undefined' && $('profAva')){
+      const me1 = function(){ IvaAva.pick('Фото профиля', IvaAva.saveMine); };
+      const org1 = function(){ IvaAva.pick('Аватарка проката', IvaAva.saveOrg); };
+      $('profAva').onclick = me1; if ($('profAvaBtn')) $('profAvaBtn').onclick = me1;
+      if ($('orgAva')){ $('orgAva').onclick = org1; if ($('orgAvaBtn')) $('orgAvaBtn').onclick = org1; }
+      IvaAva.paint($('root'));
+    }
     if($('rentalProfile'))RentalProfile.mount($('rentalProfile'));
     const jump=$('jumpRental');if(jump)jump.onclick=function(e){e.preventDefault();$('rentalProfile').scrollIntoView({behavior:'smooth'});};
     const cityForm=$('profileCityForm');

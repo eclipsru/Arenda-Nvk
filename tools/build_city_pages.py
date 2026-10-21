@@ -299,7 +299,7 @@ def hub_page(targets, cities_by_slug, allow_index=False):
 <meta name="theme-color" content="#101217">
 <link rel="canonical" href="{SITE}/city/">
 <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
-<link rel="stylesheet" href="assets/theme.css?v=20261020-f">
+<link rel="stylesheet" href="assets/theme.css?v=20261021-a">
 <link rel="stylesheet" href="assets/geo.css?v=20260923-photon">
 <script type="application/ld+json">{json.dumps(jsonld_payload, ensure_ascii=False)}</script>
 </head>
@@ -351,7 +351,7 @@ def hub_page(targets, cities_by_slug, allow_index=False):
 <script src="assets/geo.js?v=20260923-photon"></script>
 <script src="assets/email-guard.js?v=20260926-email"></script><script src="assets/sb.js?v=20260926-email"></script>
 <script src="assets/app-release.js?v=20261009-rel"></script>
-<script src="assets/app.js?v=20261020-f"></script>
+<script src="assets/app.js?v=20261021-a"></script>
 <script>
 (function(){{ mountChrome('catalog', ''); }})();
 </script>

@@ -7,7 +7,7 @@
 <meta name="robots" content="noindex, nofollow">
 <meta name="theme-color" content="#101217">
 <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
-<link rel="stylesheet" href="assets/theme.css?v=20261020-f">
+<link rel="stylesheet" href="assets/theme.css?v=20261021-a">
 <link rel="stylesheet" href="assets/geo.css?v=20260923-photon">
 </head>
 <body>
@@ -27,7 +27,7 @@
 <script src="assets/geo.js?v=20260923-photon"></script>
 <script src="assets/sb.js?v=20260923-photon"></script>
 <script src="assets/app-release.js?v=20261009-rel"></script>
-<script src="assets/app.js?v=20261020-f"></script>
+<script src="assets/app.js?v=20261021-a"></script>
 <script>
 (function(){
   mountChrome('chat', '');
@@ -137,7 +137,7 @@
 
     box.innerHTML = list.map(function(d){
       return '<div class="dlg' + (d.who === WHO ? ' on' : '') + '" data-who="' + esc(d.who) + '">' +
-        '<div class="ava">' + esc(initials(whoTitle(d.who))) + '</div>' +
+        '<div class="ava" data-ava="' + esc(d.who) + '">' + esc(initials(whoTitle(d.who))) + '</div>' +
         '<div class="dmid">' +
           '<div class="dnm">' + esc(whoTitle(d.who)) + '</div>' +
           '<div class="dlast">' + esc(d.fresh ? 'Новый диалог' : msgPreview(d.last)) + '</div>' +
@@ -149,6 +149,7 @@
       '</div>';
     }).join('');
 
+    if (typeof IvaAva !== 'undefined') IvaAva.paint(box);   // аватарки собеседников (21.10.2026)
     box.onclick = function(e){
       const d = e.target.closest('[data-who]');
       if (!d) return;
@@ -251,7 +252,7 @@
       '<div class="th-head">' +
         '<button class="back" id="thBack" aria-label="Назад">' +
           '<svg viewBox="0 0 24 24"><path d="m15 18-6-6 6-6"/></svg></button>' +
-        '<div class="ava">' + esc(initials(peerTitle())) + '</div>' +
+        '<div class="ava" data-ava="' + esc(WHO) + '">' + esc(initials(peerTitle())) + '</div>' +
         '<div><div class="thnm">' + esc(peerTitle()) + '</div>' +
           '<div class="thsub">' + esc(WHO) + '</div></div>' +
       '</div>' +
@@ -273,6 +274,7 @@
         '<input type="file" id="thFile" accept="image/*" class="hide">' +
       '</div>';
 
+    if (typeof IvaAva !== 'undefined') IvaAva.paint(box.querySelector('.th-head'));
     bindThread();
     renderPendingImage();
     scrollDown();

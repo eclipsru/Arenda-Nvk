@@ -69,10 +69,11 @@ const IvaClientProfile = (function(){
 
   function identityHTML(){
     return '<div style="display:flex;align-items:center;gap:14px">' +
-        '<div class="ava" style="width:56px;height:56px;font-size:20px">' +
-          esc(initials(displayName()) || '?') + '</div>' +
+        '<button type="button" class="ava ava-edit" id="pfAva" data-ava="' + esc(A.me || '') + '" title="Изменить фото" ' +
+          'style="width:72px;height:72px;font-size:24px">' + esc(initials(displayName()) || '?') + '</button>' +
         '<div><div style="font-weight:700;font-size:17px">' + value(displayName()) + '</div>' +
-          '<div class="small muted">' + esc(A.me || '') + '</div></div>' +
+          '<div class="small muted">' + esc(A.me || '') + '</div>' +
+          '<button type="button" class="btn sec sm" id="pfAvaBtn" style="margin-top:8px">Изменить фото</button></div>' +
       '</div>' +
       '<div class="pf-rows">' +
         row('Почта для входа', A.me) +
@@ -168,6 +169,15 @@ const IvaClientProfile = (function(){
   }
 
   function wire(host){
+    /* Аватарка (21.10.2026): то же фото, что в приложении; выбор области кругом и поворот — IvaAva */
+    if (typeof IvaAva !== 'undefined'){
+      const ava = host.querySelector('#pfAva');
+      if (ava) IvaAva.paint(ava);
+      const change = function(){ IvaAva.pick('Фото профиля', IvaAva.saveMine); };
+      if (ava) ava.addEventListener('click', change);
+      const avaBtn = host.querySelector('#pfAvaBtn');
+      if (avaBtn) avaBtn.addEventListener('click', change);
+    }
     const form = host.querySelector('#personalForm');
     if (form){
       form.addEventListener('submit', async function(e){

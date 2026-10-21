@@ -918,7 +918,7 @@ function acctMenuHTML(){
   const me = (typeof A !== 'undefined' && A.me) || '';
   const role = chief ? 'Владелец площадки' : lord ? 'Арендодатель' : staff ? 'Сотрудник проката' : 'Клиент';
   const a = (href, label, extra) => '<a role="menuitem" href="' + href + '">' + label + (extra || '') + '</a>';
-  let h = '<div class="acct-head"><span class="acct-ava">' + esc(initials(name)) + '</span>' +
+  let h = '<div class="acct-head"><span class="acct-ava" data-ava="' + esc(me) + '">' + esc(initials(name)) + '</span>' +
     '<span style="min-width:0"><b>' + esc(name) + '</b><small>' + esc(me) + '</small>' +
     '<span class="acct-role">' + role + '</span></span></div>';
   if (lord) h += modeSwitchHTML();
@@ -960,8 +960,15 @@ function paintAcct(){
   btn.setAttribute('aria-haspopup', 'menu');
   if (!btn.hasAttribute('aria-expanded')) btn.setAttribute('aria-expanded', 'false');
   btn.lastChild.textContent = 'Кабинет';
-  if (ic) ic.innerHTML = '<span class="acct-ini">' + esc(initials((A && A.uname) || (A && A.me) || '?')) + '</span>';
-  if (!menu.classList.contains('hide')) menu.innerHTML = acctMenuHTML();
+  if (ic){
+    /* аватарка (21.10.2026): кружок не перерисовываем, если в нём уже фото этого же аккаунта */
+    const cur = ic.querySelector('.acct-ini');
+    if (!cur || cur.getAttribute('data-ava') !== ((A && A.me) || '')){
+      ic.innerHTML = '<span class="acct-ini" data-ava="' + esc((A && A.me) || '') + '">' + esc(initials((A && A.uname) || (A && A.me) || '?')) + '</span>';
+    }
+    if (typeof IvaAva !== 'undefined') IvaAva.paint(ic);
+  }
+  if (!menu.classList.contains('hide')){ menu.innerHTML = acctMenuHTML(); if (typeof IvaAva !== 'undefined') IvaAva.paint(menu); }
 }
 document.addEventListener('click', function(e){
   const btn = e.target.closest ? e.target.closest('#acctBtn') : null;
@@ -970,6 +977,7 @@ document.addEventListener('click', function(e){
     e.preventDefault();
     if (menu.classList.contains('hide')){
       menu.innerHTML = acctMenuHTML();
+      if (typeof IvaAva !== 'undefined') IvaAva.paint(menu);
       menu.classList.remove('hide');
       btn.setAttribute('aria-expanded', 'true');
       paintFavCount(); paintChatBadge();
@@ -1102,3 +1110,373 @@ function ivaEmptyStateHTML(o){
         'от арендодателей, которые размещают объявления.</p>' +
     '</div>';
 }
+
+/* ===========================================================
+   Аватарки на сайте (21.10.2026, просьба владельца «на сайте нужно сделать аватарки»).
+   Те же фото, что в приложении (10.98 / 10.109), — ничего нового не собирается:
+   • свой кружок: арендодатель — admins.avatar (файл публичный, как в «Мои данные» приложения);
+     клиент — приватный customer-avatars/<uid>/avatar.jpg (ссылка на 1 час; файл видит только сам клиент
+     и администратор, которому клиент писал — правила SQL 10.54);
+   • собеседник-арендодатель — admins.avatar; клиент у администратора — iva_chat_peers() (SQL 10.54);
+   • прокат в карточке инструмента — admins.org_avatar через iva_prokat_points() (SQL 10.120), иначе фото админа.
+   Нет фото, функция ещё не применена или файл не открылся — остаются буквы, как раньше.
+   Разметка: <span class="ava" data-ava="почта">ИН</span> или data-ava-point / data-ava-owner, затем IvaAva.paint(узел).
+   =========================================================== */
+const IvaAva = (function(){
+  const SS = 'iva_ava_v1', TTL_SIGNED = 50 * 60000, TTL_PUBLIC = 6 * 3600000, TTL_NONE = 2 * 60000;
+  let mem = {};
+  try { mem = JSON.parse(sessionStorage.getItem(SS) || '{}') || {}; } catch(e){ mem = {}; }
+  const pend = {};
+  let adm = null, admAt = 0, peers = null, peersFor = '';
+
+  function low(e){ return String(e || '').trim().toLowerCase(); }
+  function isUrl(u){ return /^https:\/\//.test(String(u || '').trim()); }
+  function keep(k, url, ttl){
+    mem[k] = { u: url || '', t: Date.now() + (url ? ttl : TTL_NONE) };
+    try { sessionStorage.setItem(SS, JSON.stringify(mem)); } catch(e){}
+  }
+  function cached(k){ const c = mem[k]; return c && c.t > Date.now() ? c : null; }
+  function drop(prefix){
+    Object.keys(mem).forEach(function(k){ if (k.indexOf(prefix) === 0) delete mem[k]; });
+    try { sessionStorage.setItem(SS, JSON.stringify(mem)); } catch(e){}
+  }
+  async function ready(){
+    try { if (typeof _restoreSessionPending !== 'undefined' && _restoreSessionPending) await _restoreSessionPending; } catch(e){}
+  }
+  function lord(){ return typeof isAdmin === 'function' && isAdmin(); }
+
+  /* Пакетная подпись приватных файлов клиентов: один запрос на весь список */
+  async function signPaths(paths){
+    const out = {};
+    if (!paths.length || !A.tok) return out;
+    try {
+      const r = await fetch(SB + '/storage/v1/object/sign/customer-avatars', {
+        method: 'POST',
+        headers: { apikey: KEY, Authorization: 'Bearer ' + A.tok, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ expiresIn: 3600, paths: paths })
+      });
+      if (!r.ok) return out;
+      (await r.json() || []).forEach(function(x){
+        const s = x && !x.error && (x.signedURL || x.signedUrl);
+        if (s) out[x.path] = s.indexOf('http') === 0 ? s : SB + '/storage/v1' + s;
+      });
+    } catch(e){}
+    return out;
+  }
+
+  /* Фото администраторов (те же, что видит приложение в чате) */
+  async function admins(){
+    if (adm && Date.now() - admAt < 300000) return adm;
+    const m = {};
+    try {
+      (await api('/rest/v1/admins?select=email,avatar') || []).forEach(function(x){
+        if (x && isUrl(x.avatar)) m[low(x.email)] = String(x.avatar).trim();
+      });
+    } catch(e){}
+    adm = m; admAt = Date.now();
+    return m;
+  }
+  /* Администратору — пути к фото клиентов, которые ему писали */
+  async function peerPaths(){
+    const me = low(A.me);
+    if (peers && peersFor === me) return peers;
+    peers = {}; peersFor = me;
+    if (!A.tok || !lord()) return peers;
+    try {
+      (await api('/rest/v1/rpc/iva_chat_peers', 'POST', {}) || []).forEach(function(x){
+        if (x && x.avatar_path) peers[low(x.email)] = String(x.avatar_path);
+      });
+    } catch(e){}
+    return peers;
+  }
+
+  async function mine(){
+    await ready();
+    const me = low(A.me);
+    if (!me || !A.tok) return '';
+    const c = cached('me:' + me);
+    if (c) return c.u;
+    if (pend['me:' + me]) return pend['me:' + me];
+    return pend['me:' + me] = (async function(){
+      let url = '';
+      if (lord()){
+        try {
+          const r = await api('/rest/v1/admins?select=avatar&email=eq.' + encodeURIComponent(me));
+          if (r && r[0] && isUrl(r[0].avatar)) url = String(r[0].avatar).trim();
+        } catch(e){}
+      }
+      if (!url && typeof getCustomerAvatarUrl === 'function'){
+        try { url = await getCustomerAvatarUrl(); } catch(e){}
+      }
+      keep('me:' + me, url, TTL_SIGNED);
+      return url;
+    })().finally(function(){ delete pend['me:' + me]; });
+  }
+
+  /* Заранее одним заходом: фото админов и пакетная подпись фото клиентов */
+  async function prefetch(emails){
+    const me = low(A.me);
+    const need = emails.map(low).filter(function(e, i, a){ return e && e !== me && a.indexOf(e) === i && !cached('u:' + e); });
+    if (!need.length) return;
+    const m = await admins();
+    const rest = [];
+    need.forEach(function(e){ if (m[e]) keep('u:' + e, m[e], TTL_PUBLIC); else rest.push(e); });
+    if (!rest.length) return;
+    const p = await peerPaths();
+    const paths = rest.map(function(e){ return p[e]; }).filter(Boolean);
+    const s = await signPaths(paths);
+    rest.forEach(function(e){ keep('u:' + e, p[e] ? (s[p[e]] || '') : '', TTL_SIGNED); });
+  }
+  async function of(email){
+    const e = low(email);
+    if (!e) return '';
+    if (e === low(A.me)) return mine();
+    const c = cached('u:' + e);
+    if (c) return c.u;
+    await ready();
+    await prefetch([e]);
+    const c2 = cached('u:' + e);
+    return c2 ? c2.u : '';
+  }
+
+  /* Прокат: логотип из «Данных проката» (org_avatar), иначе фото арендодателя */
+  async function prokat(point, owner){
+    const k = 'p:' + (point || '') + ':' + low(owner);
+    const c = cached(k);
+    if (c) return c.u;
+    let url = '';
+    if (point){
+      try {
+        const r = await api('/rest/v1/rpc/iva_prokat_points', 'POST', { p_point: point });
+        const row = (r || [])[0];
+        if (row && isUrl(row.avatar)) url = String(row.avatar).trim();
+      } catch(e){}
+    }
+    if (!url && owner) url = (await admins())[low(owner)] || '';
+    keep(k, url, TTL_PUBLIC);
+    return url;
+  }
+
+  function put(el, url){
+    if (!el || !url || el.getAttribute('data-ava-src') === url) return;
+    const im = new Image();
+    im.alt = ''; im.decoding = 'async';
+    im.onload = function(){
+      if (!el.hasAttribute('data-ini')) el.setAttribute('data-ini', el.textContent);
+      el.setAttribute('data-ava-src', url);
+      el.textContent = '';
+      el.appendChild(im);
+      el.classList.add('ava-img');
+    };
+    im.src = url;
+  }
+  function reset(el){
+    if (el.hasAttribute('data-ini')) el.textContent = el.getAttribute('data-ini');
+    el.removeAttribute('data-ava-src');
+    el.classList.remove('ava-img');
+  }
+
+  async function paint(root){
+    root = root || document;
+    let els;
+    try { els = Array.prototype.slice.call(root.querySelectorAll('[data-ava],[data-ava-point],[data-ava-owner],[data-ava-org]')); }
+    catch(e){ return; }
+    if (root.hasAttribute && (root.hasAttribute('data-ava') || root.hasAttribute('data-ava-owner'))) els.unshift(root);
+    if (!els.length) return;
+    try {
+      await ready();
+      await prefetch(els.map(function(el){ return el.getAttribute('data-ava') || ''; }));
+    } catch(e){}
+    els.forEach(function(el){
+      let job;
+      if (el.hasAttribute('data-ava-org')) job = myOrg();
+      else if (el.hasAttribute('data-ava-point') || el.hasAttribute('data-ava-owner'))
+        job = prokat(el.getAttribute('data-ava-point') || '', el.getAttribute('data-ava-owner') || '');
+      else job = of(el.getAttribute('data-ava'));
+      job.then(function(url){ if (url) put(el, url); }).catch(function(){});
+    });
+  }
+
+  function repaintMine(url){
+    const me = low(A.me);
+    keep('me:' + me, url, TTL_SIGNED);
+    document.querySelectorAll('[data-ava]').forEach(function(el){
+      if (low(el.getAttribute('data-ava')) !== me) return;
+      reset(el);
+      if (url) put(el, url);
+    });
+  }
+
+  /* ---------- Логотип проката (свой) ---------- */
+  async function myOrg(){
+    await ready();
+    const me = low(A.me);
+    if (!me || !lord()) return '';
+    const c = cached('org:' + me);
+    if (c) return c.u;
+    let url = '';
+    try {
+      const r = await api('/rest/v1/admins?select=org_avatar&email=eq.' + encodeURIComponent(me));
+      if (r && r[0] && isUrl(r[0].org_avatar)) url = String(r[0].org_avatar).trim();
+    } catch(e){}
+    keep('org:' + me, url, TTL_PUBLIC);
+    return url;
+  }
+
+  /* ---------- Сохранение ---------- */
+  async function uploadPublic(blob){
+    const path = 'tools/avatar_' + Date.now() + '_' + Math.floor(Math.random() * 1e6) + '.jpg';
+    const r = await fetch(SB + '/storage/v1/object/tool-photos/' + path, {
+      method: 'POST',
+      headers: { apikey: KEY, Authorization: 'Bearer ' + A.tok, 'Content-Type': 'image/jpeg' },
+      body: blob
+    });
+    if (!r.ok) throw new Error(sbErr(await r.text()));
+    return SB + '/storage/v1/object/public/tool-photos/' + path;
+  }
+  async function saveMine(blob){
+    await ready();
+    if (!A.tok) throw new Error('Нужно войти');
+    if (lord()){
+      const url = await uploadPublic(blob);
+      await api('/rest/v1/admins?email=eq.' + encodeURIComponent(low(A.me)), 'PATCH', { avatar: url }, { Prefer: 'return=minimal' });
+      adm = null;
+      repaintMine(url);
+      return url;
+    }
+    if (!A.uid) throw new Error('Нужно войти');
+    const path = A.uid + '/avatar.jpg';
+    const r = await fetch(SB + '/storage/v1/object/customer-avatars/' + path, {
+      method: 'PUT',
+      headers: { apikey: KEY, Authorization: 'Bearer ' + A.tok, 'Content-Type': 'image/jpeg', 'x-upsert': 'true' },
+      body: blob
+    });
+    if (!r.ok) throw new Error(sbErr(await r.text()));
+    const prof = A.customerProfile || {}, m = A.userMeta || {};
+    /* база требует имя в записи профиля — берём уже сохранённое имя (как приложение) */
+    const given = String(prof.given_name || m.given_name || m.name || m.full_name || A.uname || '').trim();
+    if (!given) throw new Error('Сначала укажите имя в профиле');
+    await saveCustomerProfile(Object.assign({}, prof, { given_name: prof.given_name || given, avatar_path: path }));
+    const url = await getCustomerAvatarUrl();
+    repaintMine(url);
+    return url;
+  }
+  async function saveOrg(blob){
+    await ready();
+    if (!A.tok || !lord()) throw new Error('Только для арендодателя');
+    const url = await uploadPublic(blob);
+    await api('/rest/v1/admins?email=eq.' + encodeURIComponent(low(A.me)), 'PATCH', { org_avatar: url }, { Prefer: 'return=minimal' });
+    drop('p:');
+    keep('org:' + low(A.me), url, TTL_PUBLIC);
+    document.querySelectorAll('[data-ava-org]').forEach(function(el){ reset(el); put(el, url); });
+    return url;
+  }
+
+  /* ---------- Выбор фото и область кругом (как в приложении 10.98/10.109) ---------- */
+  function pick(title, save){
+    const inp = document.createElement('input');
+    inp.type = 'file'; inp.accept = 'image/*';
+    inp.onchange = function(){
+      const f = inp.files && inp.files[0];
+      if (!f) return;
+      if (!/^image\//.test(f.type)){ toast('Выберите изображение'); return; }
+      const src = URL.createObjectURL(f), img = new Image();
+      img.onload = function(){ editor(img, title, save, src); };
+      img.onerror = function(){ URL.revokeObjectURL(src); toast('Файл не читается — выберите другое фото'); };
+      img.src = src;
+    };
+    inp.click();
+  }
+  function editor(img, title, save, src){
+    const S = 560, M = 10;                 // холст и отступ круга
+    let rot = 0, z = 1, ox = 0, oy = 0;
+    openSheet(title || 'Фото профиля',
+      '<div class="ava-crop"><canvas id="avaCv" width="' + S + '" height="' + S + '" aria-label="Область фото"></canvas></div>' +
+      '<input type="range" class="ava-zoom" id="avaZoom" min="1" max="4" step="0.01" value="1" aria-label="Масштаб">' +
+      '<p class="small muted" style="text-align:center;margin:0">Двигайте фото пальцем или мышью, масштаб — ползунком, колёсиком или двумя пальцами. ' +
+        'В кружке — то, что увидят другие.</p>',
+      '<div style="display:flex;gap:10px"><button class="btn sec" type="button" id="avaRot">Повернуть</button>' +
+      '<button class="btn" type="button" id="avaSave" style="flex:1">Сохранить</button></div>');
+    const cv = $('avaCv'), ctx = cv.getContext('2d'), zoom = $('avaZoom');
+    function dims(){ return rot % 2 ? [img.height, img.width] : [img.width, img.height]; }
+    function scale(){ const d = dims(); return (S - 2 * M) / Math.min(d[0], d[1]) * z; }
+    function clamp(){
+      const d = dims(), k = scale();
+      const mx = Math.max(0, (d[0] * k - (S - 2 * M)) / 2), my = Math.max(0, (d[1] * k - (S - 2 * M)) / 2);
+      ox = Math.max(-mx, Math.min(mx, ox)); oy = Math.max(-my, Math.min(my, oy));
+    }
+    function drawImg(c){
+      const k = scale();
+      c.save();
+      c.translate(S / 2 + ox, S / 2 + oy);
+      c.rotate(rot * Math.PI / 2);
+      c.drawImage(img, -img.width * k / 2, -img.height * k / 2, img.width * k, img.height * k);
+      c.restore();
+    }
+    function draw(){
+      clamp();
+      ctx.fillStyle = '#000'; ctx.fillRect(0, 0, S, S);
+      drawImg(ctx);
+      ctx.save();
+      ctx.fillStyle = 'rgba(16,18,23,.62)';
+      ctx.beginPath(); ctx.rect(0, 0, S, S); ctx.arc(S / 2, S / 2, S / 2 - M, 0, Math.PI * 2, true); ctx.fill();
+      ctx.strokeStyle = 'rgba(255,143,31,.9)'; ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.arc(S / 2, S / 2, S / 2 - M, 0, Math.PI * 2); ctx.stroke();
+      ctx.restore();
+    }
+    function setZoom(v){ z = Math.max(1, Math.min(4, v)); zoom.value = z; draw(); }
+    const pts = {};
+    let pinch0 = 0, z0 = 1;
+    function ratio(){ const r = cv.getBoundingClientRect(); return r.width ? S / r.width : 1; }
+    cv.addEventListener('pointerdown', function(e){
+      cv.setPointerCapture(e.pointerId); pts[e.pointerId] = [e.clientX, e.clientY];
+      const ids = Object.keys(pts);
+      if (ids.length === 2){ const a = pts[ids[0]], b = pts[ids[1]]; pinch0 = Math.hypot(a[0] - b[0], a[1] - b[1]); z0 = z; }
+    });
+    cv.addEventListener('pointermove', function(e){
+      const p = pts[e.pointerId];
+      if (!p) return;
+      const ids = Object.keys(pts);
+      if (ids.length === 1){
+        const k = ratio();
+        ox += (e.clientX - p[0]) * k; oy += (e.clientY - p[1]) * k;
+        pts[e.pointerId] = [e.clientX, e.clientY];
+        draw();
+      } else if (ids.length === 2){
+        pts[e.pointerId] = [e.clientX, e.clientY];
+        const a = pts[ids[0]], b = pts[ids[1]], d = Math.hypot(a[0] - b[0], a[1] - b[1]);
+        if (pinch0 > 0) setZoom(z0 * d / pinch0);
+      }
+    });
+    function up(e){ delete pts[e.pointerId]; pinch0 = 0; }
+    cv.addEventListener('pointerup', up); cv.addEventListener('pointercancel', up);
+    cv.addEventListener('wheel', function(e){ e.preventDefault(); setZoom(z * (e.deltaY < 0 ? 1.08 : 1 / 1.08)); }, { passive: false });
+    zoom.addEventListener('input', function(){ setZoom(Number(zoom.value) || 1); });
+    $('avaRot').onclick = function(){ rot = (rot + 1) % 4; const t = ox; ox = -oy; oy = t; draw(); };
+    $('avaSave').onclick = async function(){
+      const b = this, rb = $('avaRot');
+      b.disabled = true; rb.disabled = true; b.textContent = 'Сохраняем…';
+      try {
+        const out = document.createElement('canvas'), O = 512, k = O / (S - 2 * M);
+        out.width = out.height = O;
+        const c = out.getContext('2d');
+        c.fillStyle = '#fff'; c.fillRect(0, 0, O, O);
+        c.scale(k, k); c.translate(-M, -M);
+        drawImg(c);
+        const blob = await new Promise(function(res){ out.toBlob(res, 'image/jpeg', 0.88); });
+        if (!blob) throw new Error('не удалось подготовить фото');
+        await save(blob);
+        try { URL.revokeObjectURL(src); } catch(e){}
+        closeSheet();
+        toast('Фото сохранено');
+      } catch(e){
+        b.disabled = false; rb.disabled = false; b.textContent = 'Сохранить';
+        toast('Фото не сохранено: ' + ((e && e.message) || 'нет связи'));
+      }
+    };
+    draw();
+  }
+
+  return { paint: paint, of: of, mine: mine, prokat: prokat, myOrg: myOrg, pick: pick,
+           saveMine: saveMine, saveOrg: saveOrg, reset: reset };
+})();
