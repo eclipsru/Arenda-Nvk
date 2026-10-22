@@ -891,7 +891,22 @@ function setIvaMode(m, go){
   try { localStorage.setItem(MODE_KEY, m === 'rent' ? 'rent' : 'lend'); } catch(e){}
   paintLordChrome(lordHint());
   toast(m === 'rent' ? 'Режим «Арендую»: каталог и избранное' : 'Режим «Сдаю»: объявления и заявки');
-  if (go) location.href = m === 'rent' ? 'catalog.html' : 'account.html#ads';
+  if (!go) return;
+  /* в кабинете режим меняет вкладки на месте (этап 2 кабинетов, 22.10.2026): «Арендую» — «Я арендую», «Сдаю» — «Сводка» */
+  if (/(^|\/)account\.html$/.test(location.pathname)) { location.hash = m === 'rent' ? 'sent' : 'home'; return; }
+  location.href = m === 'rent' ? 'catalog.html' : 'account.html#home';
+}
+
+/* Строка вкладок на узком экране: затухание у края, за которым есть ещё вкладки (этап 2 кабинетов) */
+function ivaTabsFade(tb){
+  if (!tb) return;
+  const upd = function(){
+    const more = tb.scrollWidth - tb.clientWidth > 4;
+    tb.classList.toggle('fade-l', more && tb.scrollLeft > 4);
+    tb.classList.toggle('fade-r', more && tb.scrollLeft + tb.clientWidth < tb.scrollWidth - 4);
+  };
+  if (!tb._ivaFade){ tb._ivaFade = true; tb.addEventListener('scroll', upd, { passive: true }); window.addEventListener('resize', upd); }
+  upd();
 }
 function modeSwitchHTML(){
   const m = ivaMode();
@@ -923,7 +938,7 @@ function acctMenuHTML(){
     '<span class="acct-role">' + role + '</span></span></div>';
   if (lord) h += modeSwitchHTML();
   if (lend){
-    h += a('account.html#ads', 'Мои объявления') + a('account.html#orders', 'Заявки на мой инструмент') +
+    h += a('account.html#home', 'Сводка') + a('account.html#orders', 'Заявки на мой инструмент') + a('account.html#ads', 'Мои объявления') +
          a('account.html#fee', 'Комиссия и оплата') + a('account.html#reviews', 'Отзывы') +
          a('new.html', '+ Добавить инструмент');
   } else if (!lord){

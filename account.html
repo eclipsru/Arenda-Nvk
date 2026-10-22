@@ -123,6 +123,8 @@
   .prof-row{flex-direction:column;gap:3px}
   .prof-row dt{min-width:0;font-size:12.5px}
   .kpi .vl{font-size:20px}
+  .kpis{grid-template-columns:1fr 1fr;gap:10px}
+  .kpi{padding:13px}
   .tbl th:nth-child(n+4),.tbl td:nth-child(n+4){display:none}
 }
 </style>
@@ -145,13 +147,13 @@
 <script src="assets/geo.js?v=20260923-photon"></script>
 <script src="assets/email-guard.js?v=20260926-email"></script><script src="assets/sb.js?v=20260926-email"></script>
 <script src="assets/app-release.js?v=20261009-rel"></script>
-<script src="assets/app.js?v=20261021-a"></script>
+<script src="assets/app.js?v=20261022-a"></script>
 <script src="assets/profile.js?v=20260923-photon"></script>
 <script>
 (function(){
   mountChrome('cab', '');
 
-  let TAB = (location.hash || '').replace('#','') || 'ads';
+  let TAB = (location.hash || '').replace('#','');   // пусто — выбирается в render(): «Сводка» / «Я арендую» / заявки
   let MY = [];
   let ORDERS = [];
   let FEES = [];
@@ -382,6 +384,65 @@
     };
   }
 
+  /* ---------- Кабинеты, этап 2 (22.10.2026): «Сводка» арендодателя ----------
+     Первая вкладка в режиме «Сдаю»: что нужно сделать сейчас (новые заявки, просьбы изменить, просрочки, долг, модерация)
+     и главные цифры. Всё считается из уже загруженных данных кабинета — новых запросов к базе нет. */
+  /* режим арендодателя: тот же ключ, что у переключателя в шапке (assets/app.js → ivaMode); m — сменить без перехода */
+  function lordMode(m){
+    if (m){
+      try { localStorage.setItem('iva_mode', m === 'rent' ? 'rent' : 'lend'); } catch(e){}
+      if (typeof paintLordChrome === 'function' && typeof lordHint === 'function') paintLordChrome(lordHint());
+    }
+    return typeof ivaMode === 'function' ? ivaMode() : 'lend';
+  }
+  function homeTodo(){
+    const live = ORDERS.filter(function(p){ return !p.archived; });
+    const nNew = live.filter(function(p){ return (p.status || 'new') === 'new'; }).length;
+    const nLate = LCARDS ? live.filter(function(p){ const k = LCARDS[String(p.id)]; return k && lcLate(k); }).length : 0;
+    const nChange = LCARDS ? live.filter(function(p){ const k = LCARDS[String(p.id)]; return k && k.p.change && k.p.change.state === 'pending'; }).length : 0;
+    const nMod = MY.filter(function(t){ return t.status === 'moderation'; }).length;
+    const fs = computeFeeStats();
+    const out = [];
+    if (nLate)   out.push({ c: 'red', n: nLate, t: plural(nLate, 'Просрочен возврат', 'Просрочены возвраты', 'Просрочены возвраты'), s: 'Свяжитесь с клиентом или отметьте «Вернули»', go: 'orders', sub: 'late', b: 'Открыть' });
+    if (nChange) out.push({ c: 'or', n: nChange, t: 'Клиент просит изменить заявку', s: 'Примите или отклоните — пока действует прежний вариант', go: 'orders', sub: 'new', b: 'Решить' });
+    if (nNew)    out.push({ c: 'grn', n: nNew, t: plural(nNew, 'Новая заявка', 'Новые заявки', 'Новых заявок'), s: 'Когда отдадите инструмент — нажмите «Выдал инструмент»', go: 'orders', sub: 'new', b: 'Открыть' });
+    if (fs.debt > 0) out.push({ c: fs.isBlocked ? 'red' : 'or', n: rub(fs.debt), t: 'Комиссия к оплате', s: fs.isBlocked ? 'Превышен лимит задолженности — оплатите комиссию' : 'Оплатите удобным способом во вкладке «Комиссия и оплата»', go: 'fee', b: 'Оплатить' });
+    if (nMod)    out.push({ c: 'gr', n: nMod, t: plural(nMod, 'Объявление на модерации', 'Объявления на модерации', 'Объявлений на модерации'), s: 'Обычно проверка занимает немного времени', go: 'ads', st: 'moderation', b: 'Смотреть' });
+    return { list: out, fs: fs };
+  }
+  function viewHome(){
+    const td = homeTodo(), fs = td.fs;
+    const rented = ORDERS.filter(function(p){ return !p.archived && p.status === 'rented'; }).length;
+    const active = MY.filter(function(t){ return (t.status || 'active') === 'active'; }).length;
+    const pub = REVIEWS.filter(function(r){ return r.status === 'published'; });
+    const avg = pub.length ? (pub.reduce(function(a, r){ return a + (Number(r.rating) || 0); }, 0) / pub.length) : 0;
+    let h = '<div class="home-sec"><h3>Что сделать сейчас</h3>';
+    if (!td.list.length){
+      h += '<div class="home-done"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 16.2 4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4z"/></svg>' +
+        '<div><b>Всё сделано</b><span>Новых заявок, просрочек и долгов нет.</span></div></div>';
+    } else {
+      h += '<div class="home-todo">' + td.list.map(function(x){
+        return '<button type="button" class="home-row c-' + x.c + '" data-go-tab="' + x.go + '"' + (x.sub ? ' data-go-sub="' + x.sub + '"' : '') + (x.st ? ' data-go-st="' + x.st + '"' : '') + '>' +
+          '<span class="home-n">' + esc(String(x.n)) + '</span>' +
+          '<span class="home-t"><b>' + esc(x.t) + '</b><span>' + esc(x.s) + '</span></span>' +
+          '<span class="home-b">' + esc(x.b) + ' →</span></button>';
+      }).join('') + '</div>';
+    }
+    h += '</div>';
+    h += '<div class="home-sec"><h3>Коротко о прокате</h3><div class="kpis">' +
+      '<button type="button" class="kpi home-kpi" data-go-tab="orders" data-go-sub="rented"><div class="lb">В аренде сейчас</div><div class="vl">' + rented + '</div><div class="sub">' + plural(rented, 'заявка', 'заявки', 'заявок') + '</div></button>' +
+      '<button type="button" class="kpi home-kpi" data-go-tab="ads" data-go-st="active"><div class="lb">Объявлений в каталоге</div><div class="vl">' + active + '</div><div class="sub">всего ' + MY.length + '</div></button>' +
+      '<button type="button" class="kpi home-kpi" data-go-tab="fee"><div class="lb">Выручка за месяц</div><div class="vl">' + rub(fs.per.mo[0]) + '</div><div class="sub">комиссия ' + rub(fs.per.mo[1]) + '</div></button>' +
+      '<button type="button" class="kpi home-kpi" data-go-tab="reviews"><div class="lb">Рейтинг</div><div class="vl">' + (pub.length ? '★ ' + avg.toFixed(1) : '—') + '</div><div class="sub">' + pub.length + ' ' + plural(pub.length, 'отзыв', 'отзыва', 'отзывов') + '</div></button>' +
+    '</div></div>';
+    h += '<div class="home-sec"><h3>Быстрые действия</h3><div class="home-quick">' +
+      '<a class="btn" href="new.html">+ Добавить инструмент</a>' +
+      '<a class="btn sec" href="chat.html">Сообщения</a>' +
+      '<button type="button" class="btn sec" data-go-tab="prof">Профиль проката</button>' +
+    '</div></div>';
+    return h;
+  }
+
   /* ---------- Каркас кабинета ---------- */
   function shell(inner){
     const cnt = {
@@ -398,38 +459,40 @@
 
     const fStat = isAdmin() ? computeFeeStats() : { debt: 0 };
 
-    const tabsHtml =
-      (isAdmin() ?
-        '<button data-tab="ads" class="' + (TAB==='ads'?'on':'') + '">' +
-          'Мои объявления<span class="n">' + cnt.all + '</span></button>' +
-        '<button data-tab="orders" class="' + (TAB==='orders'?'on':'') + '">' +
-          'Заявки' + (activeOrdersCnt ? '<span class="n">' + activeOrdersCnt + '</span>' : '') + '</button>' +
-        '<button data-tab="fee" class="' + (TAB==='fee'?'on':'') + '">' +
-          'Комиссия и оплата' + (fStat.debt > 0 ? '<span class="n warn">!</span>' : '') + '</button>' +
-        '<button data-tab="reviews" class="' + (TAB==='reviews'?'on':'') + '">' +
-          'Отзывы' + (REVIEWS.length ? '<span class="n">' + REVIEWS.length + '</span>' : '') + '</button>' +
-        '<button data-tab="sent" class="' + (TAB==='sent'?'on':'') + '">' +
-          'Я арендую' + (SENT.length ? '<span class="n">' + SENT.length + '</span>' : '') + '</button>'
-      :
-        (STAFF ? '<button data-tab="staff" class="' + (TAB==='staff'?'on':'') + '">' +
-          (STAFF.status === 'invited' ? 'Приглашение' : 'Работа') + staffNewBadge() + '</button>' : '') +
-        '<button data-tab="orders" class="' + (TAB==='orders'?'on':'') + '">' +
-          'Мои заявки' + (ORDERS.length ? '<span class="n">' + ORDERS.length + '</span>' : '') + '</button>'
-      ) +
-      '<button data-tab="fav" class="' + (TAB==='fav'?'on':'') + '">' +
-        'Избранное<span class="n fav-n">' + favList().length + '</span></button>' +
-      '<button data-tab="msg" class="' + (TAB==='msg'?'on':'') + '">Сообщения</button>' +
-      '<button data-tab="prof" class="' + (TAB==='prof'?'on':'') + '">Профиль</button>';
+    /* Этап 2 кабинетов: у арендодателя вкладки зависят от режима «Сдаю» / «Арендую» (как у Airbnb) */
+    const tbtn = function(t, label, badge){ return '<button data-tab="' + t + '" class="' + (TAB === t ? 'on' : '') + '">' + label + (badge || '') + '</button>'; };
+    const profBtn = '<button data-tab="prof" class="' + (TAB === 'prof' ? 'on' : '') + '">Профиль</button>';
+    const nTodo = isAdmin() && lordMode() === 'lend' ? homeTodo().list.length : 0;
+    let tabsHtml;
+    if (isAdmin() && lordMode() === 'lend'){
+      tabsHtml = tbtn('home', 'Сводка', nTodo ? '<span class="n warn">' + nTodo + '</span>' : '') +
+        tbtn('orders', 'Заявки', activeOrdersCnt ? '<span class="n">' + activeOrdersCnt + '</span>' : '') +
+        tbtn('ads', 'Мои объявления', '<span class="n">' + cnt.all + '</span>') +
+        tbtn('fee', 'Комиссия и оплата', fStat.debt > 0 ? '<span class="n warn">!</span>' : '') +
+        tbtn('reviews', 'Отзывы', REVIEWS.length ? '<span class="n">' + REVIEWS.length + '</span>' : '') +
+        tbtn('msg', 'Сообщения') + profBtn;
+    } else if (isAdmin()){
+      tabsHtml = tbtn('sent', 'Я арендую', SENT.length ? '<span class="n">' + SENT.length + '</span>' : '') +
+        tbtn('fav', 'Избранное', '<span class="n fav-n">' + favList().length + '</span>') +
+        tbtn('msg', 'Сообщения') + profBtn;
+    } else {
+      tabsHtml = (STAFF ? tbtn('staff', STAFF.status === 'invited' ? 'Приглашение' : 'Работа', staffNewBadge()) : '') +
+        tbtn('orders', 'Мои заявки', ORDERS.length ? '<span class="n">' + ORDERS.length + '</span>' : '') +
+        tbtn('fav', 'Избранное', '<span class="n fav-n">' + favList().length + '</span>') +
+        tbtn('msg', 'Сообщения') + profBtn;
+    }
 
-    return '<div class="sect" style="padding-bottom:0"><div class="sect-h">' +
-        '<h2>' + esc(A.uname || 'Кабинет') + '</h2>' +
-        '<span class="cnt">' + esc(A.me) + (isCreator() ? ' · создатель' : isAdmin() ? ' · арендодатель' : '') + '</span>' +
+    /* Шапка кабинета (этап 2): своё фото, имя, прокат и роль; переключатель режима — справа */
+    const ad = A.admin || {};
+    const who = esc(A.uname || ad.full_name || 'Кабинет');
+    const org = isAdmin() && ad.company ? '«' + esc(ad.company) + '»' : (STAFF && STAFF.status === 'active' && STAFF.company ? '«' + esc(STAFF.company) + '»' : '');
+    const role = isCreator() ? ' · создатель' : isAdmin() ? ' · арендодатель' : (STAFF && STAFF.status === 'active' ? ' · сотрудник проката' : '');
+    const meta = (org + role + ' · ' + esc(A.me)).replace(/^ · /, '');
+    return '<div class="sect" style="padding-bottom:0"><div class="acct-head">' +
+        '<span class="ava acct-head-ava" data-ava="' + esc(A.me) + '">' + esc(initials(A.uname || A.me)) + '</span>' +
+        '<div class="acct-head-t"><h2>' + who + '</h2><div class="small muted">' + meta + '</div></div>' +
+        (isAdmin() && typeof modeSwitchHTML === 'function' ? '<div class="acct-head-mode">' + modeSwitchHTML() + '</div>' : '') +
       '</div>' +
-      /* Переключатель «Арендую / Сдаю» (этап C сайта): на телефоне меню аккаунта в шапке нет — он здесь */
-      (isAdmin() && typeof modeSwitchHTML === 'function'
-        ? '<div class="acct-mode-cab">' + modeSwitchHTML() + '<span class="small muted">Меню сайта: ' +
-            (ivaMode() === 'rent' ? 'как у клиента — каталог и избранное' : 'арендодателя — заявки и «+ Добавить»') + '</span></div>'
-        : '') +
       '</div>' +
       '<div class="tabs">' + tabsHtml + '</div>' + inner + (isAdmin() || STAFF ? '' : lendCardHTML());
   }
@@ -1584,6 +1647,13 @@
        старые ссылки account.html#prof у клиента тоже ведут туда.
        Вкладка «Профиль» в кабинете остаётся для арендодателя. */
     if (TAB === 'prof' && !isAdmin()){ location.replace('profile.html'); return; }
+    if (isAdmin()){
+      /* вкладка другого режима (ссылка из уведомления, #orders и т. п.) — режим переключается сам, без перехода */
+      const LEND = ['home', 'orders', 'ads', 'fee', 'reviews'], RENT = ['sent', 'fav'];
+      if (LEND.indexOf(TAB) >= 0 && lordMode() !== 'lend') lordMode('lend');
+      else if (RENT.indexOf(TAB) >= 0 && lordMode() !== 'rent') lordMode('rent');
+      if (!TAB) TAB = lordMode() === 'rent' ? 'sent' : 'home';
+    } else if (!TAB || TAB === 'home') TAB = STAFF ? 'staff' : 'orders';
     let inner;
     if (TAB === 'fee')           inner = viewFee();
     else if (TAB === 'orders')   inner = viewOrders();
@@ -1593,7 +1663,9 @@
     else if (TAB === 'fav')      inner = viewFav();
     else if (TAB === 'msg')      inner = viewMsg();
     else if (TAB === 'prof')     inner = viewProf();
-    else                         inner = isAdmin() ? viewAds() : viewFav();
+    else if (TAB === 'home' && isAdmin()) inner = viewHome();
+    else if (TAB === 'ads' && isAdmin())  inner = viewAds();
+    else                         inner = isAdmin() ? viewHome() : viewFav();
 
     $('root').innerHTML = shell(inner);
     paintFavCount();
@@ -1608,6 +1680,8 @@
     };
 
     if($('apkCards'))mountAppCards($('apkCards'));
+    if (typeof ivaTabsFade === 'function') ivaTabsFade(document.querySelector('#root .tabs'));
+    if (typeof IvaAva !== 'undefined' && !$('profAva')) IvaAva.paint(document.querySelector('#root .acct-head'));
     /* Аватарки (21.10.2026): своё фото (admins.avatar) и аватарка проката (admins.org_avatar) — те же поля, что в приложении */
     if (typeof IvaAva !== 'undefined' && $('profAva')){
       const me1 = function(){ IvaAva.pick('Фото профиля', IvaAva.saveMine); };
@@ -1645,6 +1719,17 @@
 
     const st = e.target.closest('[data-st]');
     if (st){ SUB_TAB = st.getAttribute('data-st'); render(); return; }
+
+    /* «Сводка»: строка или плитка ведёт в нужную вкладку с нужным фильтром */
+    const go = e.target.closest('[data-go-tab]');
+    if (go){
+      TAB = go.getAttribute('data-go-tab');
+      if (go.getAttribute('data-go-sub')) SUB_TAB_ORD = go.getAttribute('data-go-sub');
+      if (go.getAttribute('data-go-st')) SUB_TAB = go.getAttribute('data-go-st');
+      history.replaceState(null, '', '#' + TAB);
+      render(); window.scrollTo(0, 0);
+      return;
+    }
 
     const sAns = e.target.closest('[data-staff-ans]');
     if (sAns && STAFF){
@@ -1885,7 +1970,7 @@
       await loadStaff();
     }
     await showcase;
-    if (!isAdmin() && (TAB === 'ads' || TAB === 'sent')) TAB = STAFF ? 'staff' : 'orders';
+    if (!isAdmin() && (TAB === 'ads' || TAB === 'sent' || TAB === 'home')) TAB = STAFF ? 'staff' : 'orders';
     if (TAB === 'staff' && !STAFF) TAB = 'orders';
     render();
   }

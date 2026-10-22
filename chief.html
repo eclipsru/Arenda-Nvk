@@ -110,7 +110,7 @@
 <script src="assets/geo.js?v=20260923-photon"></script>
 <script src="assets/email-guard.js?v=20260926-email"></script><script src="assets/sb.js?v=20260926-email"></script>
 <script src="assets/app-release.js?v=20261009-rel"></script>
-<script src="assets/app.js?v=20261021-a"></script>
+<script src="assets/app.js?v=20261022-a"></script>
 <script src="assets/partners.js?v=20261020-lend"></script>
 <script src="assets/model-proposals.js?v=20261018-stage4"></script>
 <script>
@@ -859,6 +859,7 @@
     /* выбранная вкладка видна и на узком экране (строка вкладок прокручивается) */
     (function(){ const tb = document.querySelector('.tabs'), on = tb && tb.querySelector('button.on');
       if (on && tb.scrollWidth > tb.clientWidth) tb.scrollLeft = on.offsetLeft - tb.offsetLeft - (tb.clientWidth - on.offsetWidth) / 2; })();
+    if (typeof ivaTabsFade === 'function') ivaTabsFade(document.querySelector('.chief-nav'));
     if (TAB === 'mod') paintFlags();
     if ($('apkCards')) mountAppCards($('apkCards'));
     ivaPaintReleaseLinks($('root'));
