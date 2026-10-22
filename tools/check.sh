@@ -2,8 +2,17 @@
 # ============================================================
 #  Ива — предполётная проверка (этап П0).
 #  Ничего не меняет: только читает файлы и запускает тесты.
-#  Запуск:  bash tools/check.sh     (Windows: Git Bash)   или   npm run check
-#  Код выхода: 0 — всё в порядке, 1 — есть проблемы.
+#
+#  Запуск:
+#    bash tools/check.sh              полная проверка (как в CI)
+#    bash tools/check.sh --fast       только быстрое: секреты, релиз, статические тесты (~3 с)
+#    bash tools/check.sh --only photon
+#                                     только тесты, в имени которых есть «photon»
+#    bash tools/check.sh --no-browser без браузерных тестов
+#    bash tools/check.sh --no-stands  без стендов PostgreSQL и проверки APK
+#    bash tools/check.sh --list       список имён тестов
+#
+#  Код выхода: 0 — всё в порядке, 1 — есть проблемы, 2 — неверный запуск.
 # ============================================================
 set -u
 cd "$(dirname "${BASH_SOURCE[0]}")/.." || exit 2
@@ -15,12 +24,76 @@ bad()   { printf '  %s✘%s %s\n' "$R" "$N" "$1"; FAIL=$((FAIL+1)); }
 skip()  { printf '  %s•%s %s\n' "$Y" "$N" "$1"; SKIP=$((SKIP+1)); }
 head_() { printf '\n== %s ==\n' "$1"; }
 
+STATIC_TESTS="syntax-and-release email-guard cities-sync directory-import city-pages city-priority py-compat empty-states p4-personal-data p6-commission diag-owner-readonly p5-bot-no-contacts p5-max-no-contacts p5-order-email deploy-functions-guard reset-password keystore-check-guard apk-build-guard app-test-channel publish-rights-guard qr-codes client-profile-page asset-versions dev-server"
+BROWSER_TESTS="photon rental-profile new-tool-prefill order-and-fee order-consent-browser reviews-system app-banner chief-and-apk empty-states-browser"
+
+RUN_STANDS=1
+RUN_BROWSER=1
+FAST=0
+ONLY=""
+LIST=0
+
+usage() {
+  cat <<'EOF'
+Ива — проверка проекта
+
+  bash tools/check.sh                 полная проверка (как в CI)
+  bash tools/check.sh --fast          быстро: секреты, релиз, статические тесты
+  bash tools/check.sh --only photon   только тесты, в имени которых есть «photon»
+  bash tools/check.sh --no-browser    без браузерных тестов
+  bash tools/check.sh --no-stands     без стендов PostgreSQL и проверки APK
+  bash tools/check.sh --list          список имён тестов
+
+  npm run check          то же, что полная проверка
+  npm run check:fast     то же, что --fast
+  npm run check:only -- photon
+  npm run check:list
+EOF
+}
+
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --fast)       FAST=1; RUN_STANDS=0; RUN_BROWSER=0 ;;
+    --no-browser) RUN_BROWSER=0 ;;
+    --no-stands)  RUN_STANDS=0 ;;
+    --only)
+      shift
+      if [ "$#" -eq 0 ]; then echo 'Нужно имя теста: bash tools/check.sh --only photon'; exit 2; fi
+      ONLY="$1"
+      ;;
+    --only=*)     ONLY="${1#*=}" ;;
+    --list)       LIST=1 ;;
+    -h|--help)    usage; exit 0 ;;
+    *)            echo "Неизвестная опция: $1"; usage; exit 2 ;;
+  esac
+  shift
+done
+
+if [ "$LIST" = "1" ]; then
+  echo 'Статические тесты:'
+  for t in $STATIC_TESTS; do echo "  $t"; done
+  echo 'Браузерные тесты:'
+  for t in $BROWSER_TESTS; do echo "  $t"; done
+  exit 0
+fi
+
+matches() { case "$1" in *"$ONLY"*) return 0 ;; *) return 1 ;; esac; }
+STATIC_MATCHED=0
+BROWSER_MATCHED=0
+if [ -n "$ONLY" ]; then
+  for t in $BROWSER_TESTS; do
+    if matches "$t"; then BROWSER_MATCHED=$((BROWSER_MATCHED+1)); fi
+  done
+fi
+
 head_ "1. Окружение"
 command -v node >/dev/null 2>&1 || { echo "Не найден node — проверка невозможна."; exit 2; }
 ok "node $(node -v)"
 if command -v python3 >/dev/null 2>&1; then ok "python3 $(python3 -V 2>&1 | cut -d' ' -f2)"
 else skip "python3 не найден (нужен только для локального сервера в браузерных тестах)"; fi
 printf '  инфо  ветка: %s, коммит: %s\n' "$(git branch --show-current 2>/dev/null || echo '?')" "$(git rev-parse --short HEAD 2>/dev/null || echo '?')"
+if [ -n "$ONLY" ]; then printf '  инфо  режим: только тесты «%s»\n' "$ONLY"; fi
+if [ "$FAST" = "1" ]; then printf '  инфо  режим: --fast (стенды и браузер пропущены)\n'; fi
 
 head_ "2. Секреты не должны попадать в репозиторий"
 scan() { # scan "<что ищем>" "<regex>"
@@ -65,11 +138,17 @@ head_ "3. Релиз приложения (app-update.json ↔ APK ↔ этал�
 if node tools/check-release.js; then ok "релиз приложения согласован"; else bad "см. замечания выше"; fi
 
 head_ "4. Статические тесты (без браузера)"
-for t in syntax-and-release email-guard cities-sync directory-import city-pages city-priority py-compat empty-states p4-personal-data p6-commission diag-owner-readonly p5-bot-no-contacts p5-max-no-contacts p5-order-email deploy-functions-guard reset-password keystore-check-guard apk-build-guard app-test-channel publish-rights-guard qr-codes client-profile-page; do
+for t in $STATIC_TESTS; do
+  if [ -n "$ONLY" ] && ! matches "$t"; then continue; fi
+  STATIC_MATCHED=$((STATIC_MATCHED+1))
   if node "tests/$t.cjs" >"/tmp/iva-test-$t.log" 2>&1; then ok "tests/$t.cjs"
   else bad "tests/$t.cjs"; tail -6 "/tmp/iva-test-$t.log" | sed 's/^/      /'; fi
 done
+if [ -n "$ONLY" ] && [ "$STATIC_MATCHED" = "0" ]; then
+  skip "нет статических тестов, совпадающих с «$ONLY»"
+fi
 
+if [ "$RUN_STANDS" = "1" ] && [ -z "$ONLY" ]; then
 head_ "4.1. Стенд таблицы релизов app_releases (локальный PostgreSQL)"
 PG_PY="${PG_PY:-python3}"
 if "$PG_PY" -c "import pgserver" >/dev/null 2>&1; then
@@ -145,13 +224,30 @@ rc=$?
 if [ "$rc" = "0" ]; then ok "$(tail -1 /tmp/iva-test-released-apk.log)"
 elif [ "$rc" = "2" ]; then skip "$(tail -1 /tmp/iva-test-released-apk.log)"
 else bad "файл выпущенной версии пропал из корня"; tail -6 /tmp/iva-test-released-apk.log | sed 's/^/      /'; fi
+else
+head_ "4.1–4.6. Стенды PostgreSQL и проверка APK"
+if [ "$FAST" = "1" ]; then skip "пропущены: режим --fast"
+elif [ -n "$ONLY" ]; then skip "пропущены: режим --only «$ONLY»"
+else skip "пропущены: режим --no-stands"; fi
+fi
 
+if [ "$RUN_BROWSER" = "1" ]; then
 head_ "5. Браузерные тесты (Playwright + локальный сервер)"
 # Три разных «нет»: нет модуля, модуль есть без браузера, нет python3 для сервера.
 # Во всех трёх случаях тесты честно пропускаются — окружение не должно
 # превращаться в «ошибки сайта» в итоговой строке.
 BROWSER_PROBE="const fs=require('fs');const {chromium}=require('playwright');if(!fs.existsSync(chromium.executablePath()))process.exit(1)"
-if ! node -e "require.resolve('playwright')" >/dev/null 2>&1; then
+BROWSER_RUN="$BROWSER_TESTS"
+if [ -n "$ONLY" ]; then
+  BROWSER_RUN=""
+  for t in $BROWSER_TESTS; do
+    if matches "$t"; then BROWSER_RUN="$BROWSER_RUN $t"; fi
+  done
+  BROWSER_RUN="${BROWSER_RUN# }"
+fi
+if [ -z "$BROWSER_RUN" ]; then
+  skip "нет браузерных тестов, совпадающих с «$ONLY»"
+elif ! node -e "require.resolve('playwright')" >/dev/null 2>&1; then
   skip "Playwright не установлен. Установить: npm install && npx playwright install chromium"
 elif ! node -e "$BROWSER_PROBE" >/dev/null 2>&1; then
   skip "Playwright есть, но Chromium не скачан — браузерные тесты пропущены. Установить: npx playwright install chromium"
@@ -169,7 +265,7 @@ else
   done
   if [ "$READY" = "1" ]; then
     ok "локальный сервер поднят: http://127.0.0.1:$PORT"
-    for t in photon rental-profile new-tool-prefill order-and-fee order-consent-browser reviews-system app-banner chief-and-apk empty-states-browser; do
+    for t in $BROWSER_RUN; do
       if SITE_BASE_URL="http://127.0.0.1:$PORT" node "tests/$t.cjs" >"/tmp/iva-test-$t.log" 2>&1; then ok "tests/$t.cjs"
       else bad "tests/$t.cjs"; tail -6 "/tmp/iva-test-$t.log" | sed 's/^/      /'; fi
     done
@@ -177,6 +273,14 @@ else
     bad "не удалось поднять локальный сервер на :$PORT"
     kill "$SERVER_PID" 2>/dev/null || true
   fi
+fi
+else
+head_ "5. Браузерные тесты (Playwright + локальный сервер)"
+skip "пропущены: режим --fast / --no-browser (их выполнит CI)"
+fi
+
+if [ -n "$ONLY" ] && [ "$STATIC_MATCHED" = "0" ] && [ "$BROWSER_MATCHED" = "0" ]; then
+  bad "нет тестов, совпадающих с «$ONLY» — список: bash tools/check.sh --list"
 fi
 
 head_ "Итог"
