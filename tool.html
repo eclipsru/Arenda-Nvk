@@ -6,7 +6,7 @@
 <title>Объявление — Ива, аренда инструмента</title>
 <meta name="theme-color" content="#101217">
 <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
-<link rel="stylesheet" href="assets/theme.css?v=20261021-a">
+<link rel="stylesheet" href="assets/theme.css?v=20261022-a">
 <link rel="stylesheet" href="assets/profile.css?v=20260923-rental-profile">
 <link rel="stylesheet" href="assets/geo.css?v=20260923-photon">
 <style>
@@ -872,7 +872,7 @@
     function renderFormArea(){
       if (!isAuthed()){
         formArea.innerHTML = '<div class="review-callout">Оставить отзыв могут арендаторы после оформления заявки на инструмент. ' +
-          '<a href="cabinet.html" style="color:var(--or);font-weight:600">Войдите в аккаунт</a>, если вы уже брали этот инструмент.</div>';
+          '<a href="account.html?next=' + encodeURIComponent((location.pathname.split('/').pop() || 'tool.html') + location.search) + '" style="color:var(--or);font-weight:600">Войдите в аккаунт</a>, если вы уже брали этот инструмент.</div>';
         return;
       }
 

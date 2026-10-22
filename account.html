@@ -8,7 +8,7 @@
 <meta name="robots" content="noindex, nofollow">
 <meta name="theme-color" content="#101217">
 <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
-<link rel="stylesheet" href="assets/theme.css?v=20261021-a">
+<link rel="stylesheet" href="assets/theme.css?v=20261022-a">
 <link rel="stylesheet" href="assets/profile.css?v=20260923-rental-profile">
 <style>
 .tabs{display:flex;gap:4px;border-bottom:1px solid var(--line);margin-bottom:18px;
@@ -513,23 +513,209 @@
     return viewTenantOrders();
   }
 
+  /* ---------- Кабинеты, этап 1 (21.10.2026): заявки проката — как в приложении ----------
+     Та же функция базы, что у приложения: iva_order_cards('admin') владельцу и ('staff') сотруднику (SQL 10.121–10.126).
+     В карточке: ход заявки, пункт, инструменты со сроками и «чеком», таймер «осталось / просрочено» на каждый срок,
+     «Вернули» по сроку (iva_staff_return), просьба клиента изменить заявку («Принять» / «Отклонить» — iva_order_edit_decide),
+     причина отмены, «Позвонить» и «Написать» клиенту. Если функции в базе нет — остаётся прежняя простая карточка. */
+  let LCARDS = null;         // владелец: part_id → { c: заявка, p: часть } или null
+  let SCARDS = null;         // сотрудник: то же для его пунктов
+
+  function lcMap(r){
+    if (!Array.isArray(r)) return null;
+    const m = {};
+    r.forEach(function(x){
+      const c = x && x.iva_order_cards ? x.iva_order_cards : x;
+      const p = c && Array.isArray(c.parts) ? c.parts[0] : null;
+      if (p && p.part_id != null) m[String(p.part_id)] = { c: c, p: p };
+    });
+    return m;
+  }
+  async function loadLordCards(){
+    try { LCARDS = lcMap(await api('/rest/v1/rpc/iva_order_cards', 'POST', { p_scope: 'admin' })); }
+    catch(e){ LCARDS = null; }
+  }
+
+  /* сроки выданной части: { дни: конец срока } — только у ещё не возвращённых инструментов */
+  function lcTerms(k){
+    const c = k.c, p = k.p, items = Array.isArray(p.items) ? p.items : [], out = {};
+    if ((p.status || 'new') !== 'rented' || !p.rented_at) return out;
+    const tz = p.tz || 'Europe/Moscow';
+    items.forEach(function(it){
+      if (it.returned_at) return;
+      const d = coDays(it, c.days);
+      if (!out[d]) out[d] = coRentEnd(p.rented_at, d, p.rent_mode, p.close_min, tz);
+    });
+    if (!items.length){ const d = coDays({}, c.days); out[d] = coRentEnd(p.rented_at, d, p.rent_mode, p.close_min, tz); }
+    return out;
+  }
+  function lcLate(k){
+    const t = lcTerms(k), now = Date.now();
+    return Object.keys(t).some(function(d){ return t[d] && t[d] < now; });
+  }
+  function lcDaysTxt(d){ d = parseInt(d, 10) || 0; return d > 0 ? d + ' ' + plural(d, 'сутки', 'суток', 'суток') : 'срок заявки'; }
+  /* что клиент просит изменить — как в приложении (IvaOrderEditPatch.diff) */
+  function lcDiff(b, a){
+    const out = [];
+    if (!b || !a) return out;
+    const bi = Array.isArray(b.items) ? b.items : [], ai = Array.isArray(a.items) ? a.items : [];
+    bi.forEach(function(x){
+      const y = ai.find(function(z){ return String(z.id || '') === String(x.id || ''); });
+      const n = x.name || 'Инструмент';
+      if (!y) out.push('Убрать: ' + n);
+      else if ((parseInt(x.days, 10) || 0) !== (parseInt(y.days, 10) || 0)) out.push(n + ': ' + lcDaysTxt(x.days) + ' → ' + lcDaysTxt(y.days));
+    });
+    if ((b.get_method || '') !== (a.get_method || '')) out.push('Получение: ' + (b.get_method || '—') + ' → ' + (a.get_method || '—'));
+    if ((b.comment || '') !== (a.comment || '')) out.push('Комментарий: ' + (a.comment ? '«' + a.comment + '»' : 'убрать'));
+    return out;
+  }
+
+  /* row — строка order_parts (владелец) или iva_staff_parts (сотрудник); k — { c, p } из iva_order_cards */
+  function lcCardHTML(row, k, staff){
+    const c = k.c, p = k.p;
+    const st = p.status || row.status || 'new';
+    const isArc = !staff && !!row.archived;
+    const tz = p.tz || 'Europe/Moscow';
+    const items = Array.isArray(p.items) ? p.items : [];
+    const terms = lcTerms(k), tKeys = Object.keys(terms).map(Number).sort(function(a, b){ return a - b; });
+    const now = Date.now();
+    const late = tKeys.some(function(d){ return terms[d] && terms[d] < now; });
+    const tint = st === 'cancelled' || st === 'closed' || isArc ? 'off' : (late ? 'late' : st);
+    const badge = st === 'new' ? 'Новая заявка' : st === 'rented' ? (late ? 'Просрочена' : 'В аренде') : st === 'cancelled' ? 'Отменена клиентом' : 'Завершена';
+    const bcls = st === 'rented' && late ? 'b-cancelled' : 'b-' + st;
+    const canAct = staff ? !!row.can_act : !isArc;
+    const pid = esc(p.part_id);
+
+    /* сроки: таймер у каждого; «Вернули» по сроку, когда сроков несколько */
+    let termsHTML = '';
+    tKeys.forEach(function(d){
+      const end = terms[d];
+      if (!end) return;
+      const names = items.filter(function(it){ return !it.returned_at && coDays(it, c.days) === d; }).map(function(it){ return it.name || 'Инструмент'; }).join(', ');
+      termsHTML += '<div class="co-term lc-term' + (end < now ? ' late' : '') + '"><div>' +
+        (tKeys.length > 1 ? '<b>' + lcDaysTxt(d) + ':</b> ' : '') +
+        'вернуть до <b>' + esc(coWhen(end, tz)) + '</b> · <span data-co-end="' + end + '">' + coTimer(end) + '</span>' +
+        (tKeys.length > 1 && names ? '<div class="small" style="color:var(--gr);margin-top:2px">' + esc(names) + '</div>' : '') + '</div>' +
+        (tKeys.length > 1 && canAct && items.length ? '<button class="btn sm lc-ret" data-lc-ret="' + pid + '" data-days="' + d + '" data-last="0" data-names="' + esc(names) + '">Вернули</button>' : '') +
+      '</div>';
+    });
+
+    /* инструменты и «чек»: цена × сутки; после возврата — начатые сутки (считает база). Сотруднику — без денег */
+    let sum = 0;
+    const list = items.map(function(it){
+      const price = staff ? 0 : (Number(it.price) || 0), plan = coDays(it, c.days);
+      const used = parseInt(it.used_days, 10) >= 1 ? parseInt(it.used_days, 10) : 0;
+      const d = used || plan;
+      sum += price * d;
+      const img = /^https:\/\//.test(it.img || '') ? '<img src="' + esc(it.img) + '" alt="" loading="lazy">' : '<span class="co-noimg"></span>';
+      const name = esc(it.name || 'Инструмент');
+      return '<div class="co-item">' + img + '<div class="co-item-t">' +
+        (it.id ? '<a href="tool.html?id=' + encodeURIComponent(it.id) + '">' + name + '</a>' : '<b>' + name + '</b>') +
+        '<span>' + (price ? rub(price) + ' × ' : '') + lcDaysTxt(d) + (used && used !== plan ? ' (по факту, бронь ' + plan + ')' : '') +
+        (price ? ' = <b>' + rub(price * d) + '</b>' : '') + '</span>' +
+        (it.returned_at && st === 'rented' ? '<span class="co-ok">возвращён ' + esc(coWhen(Date.parse(it.returned_at), tz)) + '</span>' : '') +
+        '</div></div>';
+    }).join('');
+    const total = !staff && st === 'closed' && Number(row.rent_sum) > 0 ? Number(row.rent_sum) : sum;
+
+    const pt = p.point || null;
+    const ptLine = pt ? (pt.name ? esc(pt.name) : 'Пункт') + (pt.address ? ' — ' + esc([pt.city, pt.address].filter(Boolean).join(', ')) : '') : '';
+    const o = row.orders || {};
+    const cName = c.client_name || o.name || row.client_name || '';
+    const cTel = c.client_tel || o.phone || row.client_tel || '';
+    const tel = String(cTel).replace(/[^\d+]/g, '');
+    const cMail = staff ? '' : (o.user_email || '');
+    const firstTool = items.length && items[0].id ? '&tool=' + encodeURIComponent(items[0].id) : '';
+
+    const ch = p.change || null, cn = p.cancel || null;
+    let chHTML = '';
+    if (ch && ch.state && ch.state !== 'void'){
+      const lines = lcDiff(ch.before, ch.after);
+      const pend = ch.state === 'pending';
+      chHTML = '<div class="co-note' + (ch.state === 'accepted' ? ' ok' : '') + '"><b>' +
+        (pend ? 'Клиент просит изменить заявку' : ch.state === 'accepted' ? 'Вы приняли изменение заявки' : 'Вы отклонили изменение заявки') + '</b>' +
+        (lines.length ? '<ul class="lc-diff">' + lines.map(function(l){ return '<li>' + esc(l) + '</li>'; }).join('') + '</ul>' : '') +
+        (pend && !staff ? '<div class="small" style="color:var(--gr);margin-top:6px">Пока вы не решили, действует прежний вариант заявки.</div>' +
+          '<div class="acts" style="margin-top:8px"><button class="btn sm" data-lc-decide="' + esc(ch.id) + '" data-ok="1">Принять</button>' +
+          '<button class="btn sm sec" data-lc-decide="' + esc(ch.id) + '" data-ok="0">Отклонить</button></div>' : '') +
+      '</div>';
+    }
+
+    let btns = '';
+    if (staff){
+      if (canAct && st === 'new') btns += '<button class="btn sm" data-staff-do="rented" data-id="' + pid + '">Выдал инструмент</button>';
+      if (canAct && st === 'rented' && tKeys.length <= 1)
+        btns += items.length && tKeys.length
+          ? '<button class="btn sm lc-ok" data-lc-ret="' + pid + '" data-days="' + tKeys[0] + '" data-last="1" data-names="">Инструмент вернули</button>'
+          : '<button class="btn sm lc-ok" data-staff-do="closed" data-id="' + pid + '">Инструмент вернули</button>';
+      if (!row.can_act && row.mine && (st === 'new' || st === 'rented')) btns += '<span class="small muted">Это ваша заявка — отмечает другой сотрудник или владелец</span>';
+    } else if (isArc){
+      btns += '<button class="btn sm sec" data-ord-do="unarch" data-id="' + esc(row.id) + '">Вернуть из архива</button>';
+    } else if (st === 'new'){
+      btns += '<button class="btn sm" data-ord-do="rented" data-id="' + esc(row.id) + '">Выдал инструмент</button>';
+    } else if (st === 'rented' && tKeys.length <= 1){
+      btns += items.length && tKeys.length
+        ? '<button class="btn sm lc-ok" data-lc-ret="' + pid + '" data-days="' + tKeys[0] + '" data-last="1" data-names="">Инструмент вернули</button>'
+        : '<button class="btn sm lc-ok" data-ord-do="closed" data-id="' + esc(row.id) + '">Инструмент вернули</button>';
+    } else if (st === 'closed' || st === 'cancelled'){
+      btns += '<button class="btn sm sec" data-ord-do="arch" data-id="' + esc(row.id) + '">В архив</button>';
+    }
+    if (st !== 'closed' && st !== 'cancelled' && !isArc){
+      if (tel) btns += '<a class="btn sm sec" href="tel:' + esc(tel) + '">Позвонить</a>';
+      if (cMail) btns += '<a class="btn sm sec" href="chat.html?who=' + encodeURIComponent(cMail) + firstTool + '">Написать</a>';
+    }
+
+    return '<div class="order-card lc-card t-' + tint + '" data-order-id="' + esc(staff ? p.part_id : row.id) + '">' +
+      '<div class="top"><span class="badge ' + bcls + '">' + badge + '</span>' +
+        '<span class="small muted">' + niceDate(c.created_at || row.created_at) + ' · №' + esc(c.order_id || row.order_id) + '</span></div>' +
+      (st !== 'cancelled' ? coSteps(st) : '') +
+      (cName || cTel ? '<div class="hint">Клиент: <b style="color:var(--tx)">' + esc(cName || '—') + '</b>' +
+        (tel ? ' · <a href="tel:' + esc(tel) + '" style="color:var(--or);font-weight:600">' + esc(cTel) + '</a>' : '') + '</div>' : '') +
+      (ptLine ? '<div class="hint">Пункт: ' + ptLine + '</div>' : (staff && row.point_name ? '<div class="hint">Пункт: ' + esc(row.point_name) + '</div>' : '')) +
+      (c.get_method ? '<div class="hint">Получение: ' + esc(c.get_method) + (c.address ? ' — ' + esc(c.address) : '') + '</div>' : '') +
+      (st === 'rented' && p.rented_at ? '<div class="hint">Выдан ' + esc(coWhen(Date.parse(p.rented_at), tz)) + '</div>' : '') +
+      termsHTML +
+      (list ? '<div class="co-items">' + list + '</div>' : (p.tools_text || row.tools_text ? '<div class="title" style="margin-top:8px">' + esc(p.tools_text || row.tools_text) + '</div>' : '')) +
+      (!staff && total && st !== 'cancelled' ? '<div class="co-sum"><span>' + (st === 'closed' ? 'Итого за аренду' : 'Аренда по заявке') + '</span><b>' + rub(total) + '</b></div>' : '') +
+      (!staff && Number(row.fee) > 0 && st !== 'cancelled' ? '<div class="co-sum sm"><span>Комиссия площадки' + (row.fee_pct ? ' (' + row.fee_pct + '%)' : '') + '</span><b>' + rub(row.fee) + '</b></div>' : '') +
+      (!staff && st === 'rented' && total ? '<div class="hint">Итог посчитается при возврате: начатые сутки от выдачи (час запаса).</div>' : '') +
+      (c.comment ? '<div class="hint lc-comment">' + esc(c.comment) + '</div>' : '') +
+      chHTML +
+      (st === 'cancelled' ? '<div class="hint">' + (cn && cn.reason ? 'Причина отмены: <b style="color:var(--tx)">' + esc(cn.reason) + '</b>' : 'Клиент отменил заявку до выдачи') +
+        (cn && cn.answer === 'took' ? ' · клиент ответил, что всё же взял инструмент' : '') + ' · без комиссии</div>' : '') +
+      (btns ? '<div class="acts">' + btns + '</div>' : '') +
+    '</div>';
+  }
+
+  async function lcReload(){
+    if (isAdmin()){
+      const r = await Promise.allSettled([loadMyOrderParts(), loadLordCards()]);
+      if (r[0].status === 'fulfilled') ORDERS = r[0].value || [];
+    } else await loadStaff();
+    render();
+  }
+
   function viewAdminOrders(){
     const ordFilter = SUB_TAB_ORD || 'all';
 
+    const isLate = function(p){ const k = LCARDS && LCARDS[String(p.id)]; return !p.archived && !!k && lcLate(k); };
     const filtered = ordFilter === 'all' ? ORDERS : ORDERS.filter(function(p){
       if (ordFilter === 'archived') return !!p.archived;
       if (p.archived) return false;
+      if (ordFilter === 'late') return isLate(p);
       return (p.status || 'new') === ordFilter;
     });
 
     const cnt = function(st){
       if (st === 'all') return ORDERS.length;
       if (st === 'archived') return ORDERS.filter(function(p){ return !!p.archived; }).length;
+      if (st === 'late') return ORDERS.filter(isLate).length;
       return ORDERS.filter(function(p){ return !p.archived && (p.status || 'new') === st; }).length;
     };
 
     let h = '<div class="chips" style="margin-bottom:16px">' +
-      [['all','Все'],['new','Новые'],['rented','В аренде'],['closed','Завершены'],['cancelled','Отменены'],['archived','Архив']]
+      [['all','Все'],['new','Новые'],['rented','В аренде'],['late','Просрочены'],['closed','Завершены'],['cancelled','Отменены'],['archived','Архив']]
+        .filter(function(p){ return p[0] !== 'late' || cnt('late') > 0 || ordFilter === 'late'; })
         .map(function(p){
           return '<button class="chip" data-ost="' + p[0] + '"' +
                  (ordFilter === p[0] ? ' style="border-color:var(--or);color:var(--or)"' : '') +
@@ -546,6 +732,8 @@
     }
 
     h += filtered.map(function(p){
+      const lk = LCARDS && LCARDS[String(p.id)];
+      if (lk) return lcCardHTML(p, lk, false);
       const o = p.orders || {};
       const st = p.status || 'new';
       const isArc = !!p.archived;
@@ -752,7 +940,7 @@
       (sum && st === 'rented' ? '<div class="hint">Итог считает прокат при возврате: начатые сутки от выдачи (час запаса).</div>' : '') +
       (fact && st === 'closed' ? '<div class="hint">Посчитано по факту: начатые сутки от выдачи до возврата.</div>' : '') +
       (ch && ch.state === 'pending' ? '<div class="co-note">Вы попросили изменить заявку — ждём ответа проката.</div>' : '') +
-      (ch && ch.state === 'approved' ? '<div class="co-note ok">Прокат принял изменение заявки.</div>' : '') +
+      (ch && (ch.state === 'accepted' || ch.state === 'approved') ? '<div class="co-note ok">Прокат принял изменение заявки.</div>' : '') +
       (ch && ch.state === 'rejected' ? '<div class="co-note">Прокат не принял изменение — действует прежняя заявка.</div>' : '') +
       (st === 'cancelled' && cn && cn.reason ? '<div class="hint">Причина отмены: ' + esc(cn.reason) + '</div>' : '') +
       (acts ? '<div class="acts">' + acts + '</div>' : '') +
@@ -1224,7 +1412,7 @@
        iva_staff_set_status — «Выдал» / «Вернули» (право «Выдача», свой пункт, new → rented → closed).
      Без SQL сотрудников (20261028/1029) функции не найдутся — вкладка просто не появится. */
   async function loadStaff(){
-    STAFF = null; SPARTS = [];
+    STAFF = null; SPARTS = []; SCARDS = null;
     try {
       const r = await api('/rest/v1/rpc/iva_staff_me', 'POST', {});
       STAFF = (Array.isArray(r) ? r[0] : r) || null;
@@ -1232,6 +1420,7 @@
     try { if (STAFF) localStorage.setItem('iva_staff_hint', '1'); else localStorage.removeItem('iva_staff_hint'); } catch(e){}
     if (STAFF && STAFF.status === 'active' && (STAFF.can_issue || STAFF.can_notify)){
       try { SPARTS = await api('/rest/v1/rpc/iva_staff_parts', 'POST', {}) || []; } catch(e){ SPARTS = []; }
+      try { SCARDS = lcMap(await api('/rest/v1/rpc/iva_order_cards', 'POST', { p_scope: 'staff' })); } catch(e){ SCARDS = null; }
     }
   }
   function staffNewBadge(){
@@ -1301,6 +1490,8 @@
     return h;
   }
   function staffPartCard(p){
+    const sk = SCARDS && SCARDS[String(p.part_id)];
+    if (sk) return lcCardHTML(p, sk, true);
     const st = p.status || 'new';
     const days = Number(p.days) || 1;
     let due = '';
@@ -1466,6 +1657,34 @@
       }).catch(function(err){ sAns.disabled = false; toast('Не удалось: ' + err.message); });
       return;
     }
+    /* «Вернули» по сроку заявки — владелец и сотрудник с правом «Выдача» (как в приложении) */
+    const lRet = e.target.closest('[data-lc-ret]');
+    if (lRet){
+      const id = lRet.getAttribute('data-lc-ret'), d = parseInt(lRet.getAttribute('data-days'), 10);
+      if (!/^\d{1,18}$/.test(id || '') || !(d >= 1 && d <= 365)) return;
+      const names = lRet.getAttribute('data-names') || '', last = lRet.getAttribute('data-last') === '1';
+      if (!confirm('Отметить «Вернули»?\n' + (names ? names + '\n' : '') + 'Срок ' + lcDaysTxt(d) + '. ' +
+                   (last ? 'Заявка закроется, сумма посчитается по начатым суткам.' : 'Остальные инструменты заявки остаются в аренде.'))) return;
+      lRet.disabled = true; lRet.textContent = '…';
+      api('/rest/v1/rpc/iva_staff_return', 'POST', { p_part: Number(id), p_days: d }).then(async function(r){
+        toast(String(r).indexOf('closed') >= 0 ? 'Готово: заявка закрыта' : 'Готово: отмечено «Вернули»');
+        await lcReload();
+      }).catch(async function(err){ toast('Не удалось: ' + err.message); await lcReload(); });
+      return;
+    }
+    /* просьба клиента изменить заявку: «Принять» / «Отклонить» */
+    const lDec = e.target.closest('[data-lc-decide]');
+    if (lDec){
+      const cid = lDec.getAttribute('data-lc-decide'), ok = lDec.getAttribute('data-ok') === '1';
+      if (!/^\d{1,18}$/.test(cid || '')) return;
+      if (!confirm(ok ? 'Принять изменение? Заявка станет такой, как просит клиент.' : 'Отклонить изменение? Останется прежний вариант заявки.')) return;
+      lDec.disabled = true; lDec.textContent = '…';
+      api('/rest/v1/rpc/iva_order_edit_decide', 'POST', { p_change: Number(cid), p_ok: ok }).then(async function(){
+        toast(ok ? 'Изменение принято' : 'Изменение отклонено');
+        await lcReload();
+      }).catch(async function(err){ toast('Не удалось: ' + err.message); await lcReload(); });
+      return;
+    }
     const sDo = e.target.closest('[data-staff-do]');
     if (sDo){
       const act = sDo.getAttribute('data-staff-do'), id = sDo.getAttribute('data-id');
@@ -1586,16 +1805,19 @@
         part.archived = false;
         toast('Заявка восстановлена из архива');
       } else if (act === 'rented'){
+        if (!confirm('Отметить «Выдал»? Срок аренды пойдёт с этой минуты.')){ btn.disabled = false; btn.textContent = oldText; return; }
         await updateOrderPart(id, { status: 'rented' });
         part.status = 'rented';
         toast('Инструмент переведён в статус «В аренде»');
       } else if (act === 'closed'){
+        if (!confirm('Отметить «Вернули»? Заявка закроется целиком, комиссия будет начислена.')){ btn.disabled = false; btn.textContent = oldText; return; }
         await updateOrderPart(id, { status: 'closed' });
         part.status = 'closed';
         toast('Заказ завершён! Комиссия учтена');
         // Обновляем список для точного расчёта начисленной комиссии
         ORDERS = await loadMyOrderParts();
       }
+      if (LCARDS) await loadLordCards();
       render();
     } catch(err){
       btn.disabled = false;
@@ -1643,7 +1865,8 @@
           loadMyFeePayments(),
           loadLandlordReviews(A.me),
           loadClientOrders(),
-          loadClientCards()
+          loadClientCards(),
+          loadLordCards()
         ]);
         SENT = mySent.status === 'fulfilled' ? (mySent.value || []) : [];
         MY = myTools.status === 'fulfilled' ? (myTools.value || []) : [];
