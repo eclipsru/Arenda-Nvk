@@ -471,6 +471,44 @@ select.inp{cursor:pointer;appearance:none;
 .prof-link b{font-size:14.5px}
 .prof-link span{font-size:12.5px;color:var(--gr)}
 .prof-link:hover{border-color:var(--line-2)}
+/* Кабинеты, этап 4 (23.10.2026): «Управление площадкой» — поиск, подробности заявки, таблицы карточками на телефоне */
+.sr-lbl{position:absolute;left:-9999px}
+.ch-search{margin:-4px 0 14px}
+.ch-search .inp{width:100%;max-width:440px}
+.tbl tr.ch-row{cursor:pointer}
+.tbl tr.ch-row:focus-visible{outline:2px solid var(--or);outline-offset:-2px}
+.tbl td.ch-tools{max-width:240px}
+.ch-tl{display:flex;align-items:center;gap:10px;min-width:0;color:var(--tx);text-decoration:none}
+.ch-tl:hover b{color:var(--or)}
+.ch-th{width:44px;height:44px;border-radius:8px;overflow:hidden;background:#12151B;flex:0 0 44px}
+.ch-th img{width:100%;height:100%;object-fit:cover;display:block}
+.ch-tn{display:flex;flex-direction:column;gap:2px;min-width:0}
+.badge.done{background:var(--field);color:var(--gr)}
+.ch-od{display:flex;flex-direction:column;gap:10px}
+.ch-od-top{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.ch-kv{display:flex;gap:12px;font-size:14px;line-height:1.45}
+.ch-kv>span:first-child{flex:0 0 92px;color:var(--g2)}
+.ch-kv>span:last-child{min-width:0;word-break:break-word}
+.ch-kv a{color:var(--or)}
+.ch-od h4{font-size:14px;margin:6px 0 0}
+.ch-op{background:var(--field);border:1px solid var(--line);border-radius:12px;padding:10px 12px;display:flex;flex-direction:column;gap:4px}
+.ch-op-h{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.ch-op-s{font-size:13px;color:var(--gr)}
+@media (max-width:760px){
+  .tcw{background:none;border:0;border-radius:0;overflow:visible}
+  .tbl.tc,.tbl.tc tbody{display:block}
+  .tbl.tc thead{display:none}
+  .tbl.tc tr{display:block;background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:10px 12px;margin-bottom:10px}
+  .tbl.tc tbody tr:hover{background:var(--card)}
+  .tbl.tc td{display:block;position:relative;padding:5px 0 5px 40%;border:0;text-align:right;white-space:normal;max-width:none;min-height:26px}
+  .tbl.tc td[data-l]::before{content:attr(data-l);position:absolute;left:0;top:6px;max-width:38%;text-align:left;color:var(--g2);font-size:12.5px;font-weight:400}
+  .tbl.tc td:first-child{padding:0 0 8px;margin-bottom:4px;text-align:left;border-bottom:1px solid var(--line)}
+  .tbl.tc td:first-child::before,.tbl.tc td:not([data-l])::before{content:none}
+  .tbl.tc td:not([data-l]){padding-left:0;text-align:left}
+  .tbl.tc td:empty{display:none}
+  .tbl.tc td .acts{justify-content:flex-start;padding-top:4px}
+  .tbl.tc td.ch-tools{max-width:none}
+}
 @media (max-width:620px){
   .acct-head-ava{width:48px;height:48px;font-size:16px;flex-basis:48px}
   .acct-head-t h2{font-size:19px}
