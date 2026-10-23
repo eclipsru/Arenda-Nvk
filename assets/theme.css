@@ -451,6 +451,26 @@ select.inp{cursor:pointer;appearance:none;
 .home-kpi{text-align:left;font:inherit;color:var(--tx);cursor:pointer}
 .home-kpi:hover{border-color:var(--line-2)}
 .home-quick{display:flex;gap:8px;flex-wrap:wrap}
+/* Кабинеты, этап 3 (22.10.2026): компактная карточка объявления, меню «⋯», разделы «Профиля» */
+.row-ad.ad-c .rph{position:relative;display:block;width:104px;height:104px}
+.ad-c .rph img{width:100%;height:100%;object-fit:cover}
+.ad-noimg{width:100%;height:100%;display:flex;align-items:center;justify-content:center;color:var(--g2);font-size:11px}
+.ad-st{position:absolute;left:5px;bottom:5px;max-width:calc(100% - 10px);border-radius:8px;background:rgba(16,18,23,.9);box-shadow:0 1px 4px rgba(0,0,0,.45);line-height:1.2}
+.ad-st .badge{display:block;font-size:10px;line-height:1.3;padding:3px 6px;white-space:normal}
+.ad-acts{display:flex;gap:7px;flex-wrap:wrap;margin-top:10px;align-items:center}
+.ad-more{min-width:40px;font-size:18px;line-height:1;letter-spacing:1px}
+.ad-menu{display:flex;flex-direction:column;gap:8px}
+.ad-mi{display:flex;flex-direction:column;gap:2px;width:100%;text-align:left;background:var(--card);border:1px solid var(--line);
+  border-radius:12px;padding:13px 14px;color:var(--tx);font:inherit;font-size:15px;font-weight:600;text-decoration:none;cursor:pointer}
+.ad-mi span{font-size:12.5px;font-weight:400;color:var(--gr)}
+.ad-mi:hover{border-color:var(--line-2)}
+.ad-mi.del{color:var(--red)}
+.prof-links{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:8px;margin-top:20px}
+.prof-link{display:flex;flex-direction:column;gap:3px;text-align:left;background:var(--field);border:1px solid var(--line);border-radius:12px;
+  padding:12px 14px;color:var(--tx);font:inherit;text-decoration:none;cursor:pointer}
+.prof-link b{font-size:14.5px}
+.prof-link span{font-size:12.5px;color:var(--gr)}
+.prof-link:hover{border-color:var(--line-2)}
 @media (max-width:620px){
   .acct-head-ava{width:48px;height:48px;font-size:16px;flex-basis:48px}
   .acct-head-t h2{font-size:19px}

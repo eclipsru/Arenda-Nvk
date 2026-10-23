@@ -120,6 +120,8 @@
 @media (max-width:620px){
   .row-ad{flex-wrap:wrap}
   .row-ad .rph{width:76px;height:60px}
+  .row-ad.ad-c{flex-wrap:nowrap;gap:12px;padding:12px}
+  .row-ad.ad-c .rph{width:96px;height:96px}
   .prof-row{flex-direction:column;gap:3px}
   .prof-row dt{min-width:0;font-size:12.5px}
   .kpi .vl{font-size:20px}
@@ -148,7 +150,7 @@
 <script src="assets/email-guard.js?v=20260926-email"></script><script src="assets/sb.js?v=20260926-email"></script>
 <script src="assets/app-release.js?v=20261009-rel"></script>
 <script src="assets/app.js?v=20261022-a"></script>
-<script src="assets/profile.js?v=20260923-photon"></script>
+<script src="assets/profile.js?v=20261022-a"></script>
 <script>
 (function(){
   mountChrome('cab', '');
@@ -536,30 +538,25 @@
       return h;
     }
 
+    /* Этап 3 кабинетов (22.10.2026): компактная карточка — статус меткой на фото, одна главная кнопка
+       «Редактировать», остальное (смотреть, снять / опубликовать, удалить) — в меню «⋯» */
     h += f.map(function(t){
       const st  = t.status || 'active';
       const img = (t.imgs && t.imgs[0]) || t.img || '';
       const dep = Number(t.deposit) || Number(t.price) * 5;
-      return '<div class="row-ad" data-id="' + esc(t.id) + '">' +
-        '<div class="rph">' +
-          (img ? '<img src="' + esc(img) + '" alt="">' :
-                 '<div style="width:100%;height:100%;display:flex;align-items:center;' +
-                 'justify-content:center;color:var(--g2);font-size:11px">нет фото</div>') +
-        '</div>' +
+      return '<div class="row-ad ad-c" data-id="' + esc(t.id) + '">' +
+        '<a class="rph" href="tool.html?id=' + encodeURIComponent(t.id) + '" aria-label="Смотреть объявление">' +
+          (img ? '<img src="' + esc(img) + '" alt="" loading="lazy">' : '<span class="ad-noimg">нет фото</span>') +
+          '<span class="ad-st"><span class="badge ' + statusCls(st) + '">' + statusTitle(st) + '</span></span>' +
+        '</a>' +
         '<div class="rmid">' +
           '<div class="rnm">' + esc(t.name) + '</div>' +
           '<div class="rpr">' + rub(t.price) + ' <span>/ сутки</span></div>' +
           '<div class="rmeta">Залог ' + rub(dep) + ' · ' + esc(catTitle(t.cat) || t.cat) +
             (t.delivery ? ' · доставка' : '') + '</div>' +
-          '<div class="racts">' +
-            '<span class="badge ' + statusCls(st) + '" style="padding:7px 12px">' +
-              statusTitle(st) + '</span>' +
-            '<a href="tool.html?id=' + encodeURIComponent(t.id) + '">Смотреть</a>' +
-            (st === 'active'
-              ? '<button data-act="hide">Снять с публикации</button>'
-              : '<button class="pub" data-act="show">Опубликовать</button>') +
-            '<a href="new.html?edit=' + encodeURIComponent(t.id) + '">Редактировать</a>' +
-            '<button class="del" data-act="del">Удалить</button>' +
+          '<div class="ad-acts">' +
+            '<a class="btn sec sm" href="new.html?edit=' + encodeURIComponent(t.id) + '">Редактировать</a>' +
+            '<button type="button" class="btn sec sm ad-more" data-ad-menu="1" aria-label="Ещё действия" title="Ещё действия">⋯</button>' +
           '</div>' +
         '</div>' +
       '</div>';
@@ -1597,17 +1594,17 @@
   /* Вкладка «Профиль» здесь — только для арендодателя: данные проката,
      город поиска и карточки приложения. Настройки профиля клиента
      (арендатора) вынесены на отдельную страницу profile.html. */
+  /* Этап 3 кабинетов (22.10.2026): «Профиль» арендодателя по разделам — «Мой профиль», «Прокат», «Приложение»
+     (раньше всё шло одной длинной лентой). Адреса: #prof, #prof-org, #prof-app. */
+  let PROF_SUB = 'me';
   function viewProf(){
     const a = A.admin || {};
-    return '<div class="box profile-account" style="max-width:1000px">' +
-      '<div class="ava-pair">' +
-        '<div class="ava-one">' +
-          '<button type="button" class="ava ava-edit" id="profAva" data-ava="' + esc(A.me) + '" title="Изменить фото" ' +
-            'style="width:72px;height:72px;font-size:24px">' + esc(initials(A.uname || A.me)) + '</button>' +
-          '<div style="min-width:0"><div style="font-weight:700;font-size:17px">' + esc(A.uname || '—') + '</div>' +
-            '<div class="small muted">' + esc(A.me) + '</div>' +
-            '<button type="button" class="btn sec sm" id="profAvaBtn" style="margin-top:8px">Изменить фото</button></div>' +
-        '</div>' +
+    const subs = [['me', 'Мой профиль'], ['org', 'Прокат'], ['app', 'Приложение']];
+    let h = '<div class="chips prof-subs" style="margin-bottom:16px">' + subs.map(function(x){
+      return '<button class="chip" data-prof-sub="' + x[0] + '"' + (PROF_SUB === x[0] ? ' style="border-color:var(--or);color:var(--or)"' : '') + '>' + x[1] + '</button>';
+    }).join('') + '</div>';
+    if (PROF_SUB === 'org'){
+      return h + '<div class="box profile-account" style="max-width:1000px">' +
         '<div class="ava-one">' +
           '<button type="button" class="ava ava-edit" id="orgAva" data-ava-org="1" title="Изменить аватарку проката" ' +
             'style="width:72px;height:72px;font-size:24px">' + esc(initials(a.company || A.uname || A.me)) + '</button>' +
@@ -1615,8 +1612,26 @@
             '<div class="small muted">Видна клиентам в карточке инструмента</div>' +
             '<button type="button" class="btn sec sm" id="orgAvaBtn" style="margin-top:8px">Изменить</button></div>' +
         '</div>' +
+        '<p class="small muted" style="margin-top:14px;line-height:1.5">Пункты выдачи, сотрудники и настройки проката — в приложении, раздел «Настройки проката».</p>' +
+      '</div><div id="rentalProfile"></div>';
+    }
+    if (PROF_SUB === 'app'){
+      return h + '<div class="box profile-account" style="max-width:1000px">' +
+        '<b style="font-size:15px">Приложение для Android</b>' +
+        '<p class="small muted" style="margin-top:4px;line-height:1.5">Заявки, чат и уведомления о новых заявках — на телефоне.</p>' +
+        // Карточки приложения (assets/app.js → mountAppCards): у всех — выпущенная версия; у создателя на телефоне — ещё новая с «Подтвердить релиз»
+        '<div class="apk-cards" id="apkCards"></div>' +
+      '</div>';
+    }
+    return h + '<div class="box profile-account" style="max-width:1000px">' +
+      '<div class="ava-one">' +
+        '<button type="button" class="ava ava-edit" id="profAva" data-ava="' + esc(A.me) + '" title="Изменить фото" ' +
+          'style="width:72px;height:72px;font-size:24px">' + esc(initials(A.uname || A.me)) + '</button>' +
+        '<div style="min-width:0"><div style="font-weight:700;font-size:17px">' + esc(A.uname || '—') + '</div>' +
+          '<div class="small muted">' + esc(A.me) + '</div>' +
+          '<button type="button" class="btn sec sm" id="profAvaBtn" style="margin-top:8px">Изменить фото</button></div>' +
       '</div>' +
-      '<dl>' +
+      '<dl style="margin-top:14px">' +
         '<div class="prof-row"><dt>Статус</dt><dd>' +
           (isAdmin() ? 'Арендодатель' + (a.role === 'chief' ? ' (главный)' : '') : 'Арендатор') + '</dd></div>' +
         (a.fee_pct != null ? '<div class="prof-row"><dt>Комиссия площадки</dt><dd>' +
@@ -1631,14 +1646,13 @@
         '<button class="btn sec sm" type="submit">Сохранить город</button>' +
         '<p id="profileCityError" role="alert" style="color:var(--red);margin-top:8px"></p>' +
       '</form>' +
-      '<div style="display:flex;gap:10px;margin-top:20px;flex-wrap:wrap">' +
-        '<a class="btn sec sm" href="#rentalProfile" id="jumpRental">Данные проката ↓</a>' +
-        '<a class="btn sec sm" href="profile.html">Личные настройки</a>' +
-        '<button class="btn ghost sm" id="bOut">Выйти</button>' +
+      '<div class="prof-links">' +
+        '<button type="button" class="prof-link" data-prof-sub="org"><b>Прокат</b><span>Название, контакты, адрес, аватарка проката</span></button>' +
+        '<a class="prof-link" href="profile.html"><b>Личные настройки</b><span>Имя, телефон, вход и безопасность</span></a>' +
+        '<button type="button" class="prof-link" data-prof-sub="app"><b>Приложение</b><span>Скачать Android-приложение</span></button>' +
       '</div>' +
-      // Карточки приложения (assets/app.js → mountAppCards): у всех — выпущенная версия; у создателя на телефоне — ещё новая с «Подтвердить релиз»
-      '<div class="apk-cards" id="apkCards"></div>' +
-    '</div><div id="rentalProfile"></div>';
+      '<button class="btn ghost sm" id="bOut" style="margin-top:16px">Выйти</button>' +
+    '</div>';
   }
 
   /* ---------- Рендер ---------- */
@@ -1646,6 +1660,7 @@
     /* Настройки профиля клиента — отдельная страница profile.html:
        старые ссылки account.html#prof у клиента тоже ведут туда.
        Вкладка «Профиль» в кабинете остаётся для арендодателя. */
+    { const pm = /^prof-(me|org|app)$/.exec(TAB); if (pm){ PROF_SUB = pm[1]; TAB = 'prof'; } }
     if (TAB === 'prof' && !isAdmin()){ location.replace('profile.html'); return; }
     if (isAdmin()){
       /* вкладка другого режима (ссылка из уведомления, #orders и т. п.) — режим переключается сам, без перехода */
@@ -1681,17 +1696,15 @@
 
     if($('apkCards'))mountAppCards($('apkCards'));
     if (typeof ivaTabsFade === 'function') ivaTabsFade(document.querySelector('#root .tabs'));
-    if (typeof IvaAva !== 'undefined' && !$('profAva')) IvaAva.paint(document.querySelector('#root .acct-head'));
     /* Аватарки (21.10.2026): своё фото (admins.avatar) и аватарка проката (admins.org_avatar) — те же поля, что в приложении */
-    if (typeof IvaAva !== 'undefined' && $('profAva')){
+    if (typeof IvaAva !== 'undefined'){
       const me1 = function(){ IvaAva.pick('Фото профиля', IvaAva.saveMine); };
       const org1 = function(){ IvaAva.pick('Аватарка проката', IvaAva.saveOrg); };
-      $('profAva').onclick = me1; if ($('profAvaBtn')) $('profAvaBtn').onclick = me1;
+      if ($('profAva')){ $('profAva').onclick = me1; if ($('profAvaBtn')) $('profAvaBtn').onclick = me1; }
       if ($('orgAva')){ $('orgAva').onclick = org1; if ($('orgAvaBtn')) $('orgAvaBtn').onclick = org1; }
       IvaAva.paint($('root'));
     }
     if($('rentalProfile'))RentalProfile.mount($('rentalProfile'));
-    const jump=$('jumpRental');if(jump)jump.onclick=function(e){e.preventDefault();$('rentalProfile').scrollIntoView({behavior:'smooth'});};
     const cityForm=$('profileCityForm');
     if(cityForm)cityForm.addEventListener('submit',async function(e){
       e.preventDefault();const btn=cityForm.querySelector('button');btn.disabled=true;$('profileCityError').textContent='';
@@ -1712,6 +1725,7 @@
     const tb = e.target.closest('[data-tab]');
     if (tb){
       TAB = tb.getAttribute('data-tab');
+      if (TAB === 'prof') PROF_SUB = 'me';
       history.replaceState(null, '', '#' + TAB);
       render();
       return;
@@ -1719,6 +1733,16 @@
 
     const st = e.target.closest('[data-st]');
     if (st){ SUB_TAB = st.getAttribute('data-st'); render(); return; }
+
+    /* «Профиль»: разделы; несохранённый профиль проката не теряется молча */
+    const ps = e.target.closest('[data-prof-sub]');
+    if (ps){
+      if (typeof RentalProfile !== 'undefined' && RentalProfile.allowLeave && !RentalProfile.allowLeave()) return;
+      PROF_SUB = ps.getAttribute('data-prof-sub');
+      history.replaceState(null, '', '#prof' + (PROF_SUB === 'me' ? '' : '-' + PROF_SUB));
+      render(); window.scrollTo(0, 0);
+      return;
+    }
 
     /* «Сводка»: строка или плитка ведёт в нужную вкладку с нужным фильтром */
     const go = e.target.closest('[data-go-tab]');
@@ -1814,6 +1838,33 @@
         modRev.disabled = false;
         toast('Ошибка: ' + err.message);
       });
+      return;
+    }
+
+    /* меню «⋯» карточки объявления */
+    const adm = e.target.closest('[data-ad-menu]');
+    if (adm){
+      const row = adm.closest('[data-id]'), id = row && row.getAttribute('data-id');
+      const t = MY.find(function(x){ return String(x.id) === String(id); });
+      if (!t) return;
+      const st = t.status || 'active';
+      openSheet(t.name || 'Объявление',
+        '<div class="ad-menu" data-ad-id="' + esc(t.id) + '">' +
+          '<a class="ad-mi" href="tool.html?id=' + encodeURIComponent(t.id) + '">Смотреть на сайте</a>' +
+          '<a class="ad-mi" href="new.html?edit=' + encodeURIComponent(t.id) + '">Редактировать</a>' +
+          (st === 'active' ? '<button type="button" class="ad-mi" data-ad-do="hide">Снять с публикации<span>Объявление пропадёт из каталога, его можно вернуть</span></button>'
+                           : '<button type="button" class="ad-mi" data-ad-do="show">Опубликовать</button>') +
+          '<button type="button" class="ad-mi del" data-ad-do="del">Удалить</button>' +
+        '</div>');
+      return;
+    }
+    const adDo = e.target.closest('[data-ad-do]');
+    if (adDo){
+      const box = adDo.closest('[data-ad-id]'), id = box && box.getAttribute('data-ad-id');
+      const a2 = adDo.getAttribute('data-ad-do');
+      const rowBtn = document.querySelector('.row-ad[data-id="' + (window.CSS && CSS.escape ? CSS.escape(id) : id) + '"] .ad-more');
+      closeSheet(true);
+      if (id) doAction(id, a2, rowBtn || adDo);
       return;
     }
 

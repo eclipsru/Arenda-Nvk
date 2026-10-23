@@ -128,7 +128,7 @@ const IvaClientProfile = (function(){
     return '<p class="small muted" style="line-height:1.55">Сведения о прокате, точки выдачи, объявления, заявки и расчёты — в кабинете. ' +
         'Личные данные (имя, телефон, город) меняются здесь.</p>' +
       '<div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:12px">' +
-        '<a class="btn sec sm" href="account.html#prof">Данные проката</a>' +
+        '<a class="btn sec sm" href="account.html#prof-org">Данные проката</a>' +
         '<a class="btn sec sm" href="account.html">Мои объявления</a>' +
         '<a class="btn sec sm" href="account.html#orders">Заявки</a>' +
         '<a class="btn sec sm" href="account.html#fee">Комиссия и оплата</a>' +
