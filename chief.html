@@ -482,7 +482,7 @@
         fChip('of', 'cancelled', ORD_FILTER, 'Отменены', c.cancelled) +
       '</div>' +
       '<div class="ch-search"><label for="ordQ" class="sr-lbl">Поиск по заявкам</label>' +
-        '<input class="inp" id="ordQ" type="search" autocomplete="off" placeholder="Поиск: №, клиент, телефон, инструмент, прокат" value="' + esc(ORD_Q) + '"></div>' +
+        '<input class="inp" id="ordQ" type="search" autocomplete="off" placeholder="№, клиент, телефон, инструмент, прокат" value="' + esc(ORD_Q) + '"></div>' +
       '<div id="ordList">' + ordListHTML(pm) + '</div>';
   }
   function ordListHTML(pm){
@@ -623,7 +623,7 @@
         fChip('af', 'archived', ADS_FILTER, 'Снятые', c.archived) +
       '</div>' +
       '<div class="ch-search"><label for="adsQ" class="sr-lbl">Поиск по объявлениям</label>' +
-        '<input class="inp" id="adsQ" type="search" autocomplete="off" placeholder="Поиск: название, прокат, почта, категория" value="' + esc(ADS_Q) + '"></div>' +
+        '<input class="inp" id="adsQ" type="search" autocomplete="off" placeholder="Название, прокат, почта, категория" value="' + esc(ADS_Q) + '"></div>' +
       '<div id="adsList">' + adsListHTML() + '</div>';
   }
   function adsListHTML(){
