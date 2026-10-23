@@ -127,7 +127,7 @@
   .kpi .vl{font-size:20px}
   .kpis{grid-template-columns:1fr 1fr;gap:10px}
   .kpi{padding:13px}
-  .tbl th:nth-child(n+4),.tbl td:nth-child(n+4){display:none}
+  .tbl:not(.tc) th:nth-child(n+4),.tbl:not(.tc) td:nth-child(n+4){display:none}
 }
 </style>
 <link rel="stylesheet" href="assets/geo.css?v=20260923-photon">
@@ -1156,168 +1156,106 @@
   }
 
   /* ---------- Комиссия и оплата ---------- */
+  /* Этап 5 кабинетов (23.10.2026): «Комиссия и оплата» — сверху сумма к оплате с реквизитами и одной кнопкой,
+     долг без знака «−»; на телефоне таблицы карточками со всеми столбцами (раньше «Комиссия» скрывалась). */
   function viewFee(){
     if (!isAdmin()){
       return '<div class="empty"><b>Раздел доступен арендодателям</b><p>Здесь отображаются начисления комиссии и история оплат.</p></div>';
     }
 
     const s = computeFeeStats();
+    const td = function(l, v, cls, st){ return '<td data-l="' + l + '"' + (cls ? ' class="' + cls + '"' : '') + (st ? ' style="' + st + '"' : '') + '>' + v + '</td>'; };
     let h = '';
 
-    if (s.isBlocked){
-      h += '<div class="box" style="border-color:var(--red);background:rgba(255,138,128,.1);margin-bottom:16px">' +
-        '<b style="color:var(--red);font-size:15px">Внимание: задолженность превышает лимит!</b>' +
-        '<p class="small" style="color:var(--tx);margin-top:4px">Лимит долга: ' + rub(s.debtLimit) + ', текущий долг: ' + rub(s.debt) + '. Погасите комиссию, чтобы объявления оставались активными.</p>' +
-      '</div>';
-    }
+    h += '<div class="sect-h" style="margin-bottom:12px"><div>' +
+        '<h2>Комиссия и оплата</h2>' +
+        '<p class="small muted" style="margin-top:2px">Взаиморасчёты с площадкой «Ива» и статистика доходов</p>' +
+      '</div></div>';
 
-    h += '<div class="sect-h" style="margin-bottom:14px;align-items:flex-start">' +
-        '<div>' +
-          '<h2>Комиссия и оплата</h2>' +
-          '<p class="small muted" style="margin-top:2px">Взаиморасчёты с площадкой «Ива» и статистика доходов</p>' +
+    // Главное: сколько оплатить и куда
+    const sub = s.debt > 0
+      ? (s.pendingPaid > 0 ? 'На проверке ' + rub(s.pendingPaid) + ' — площадка подтвердит перевод' : 'Комиссия с закрытых заказов')
+      : (s.pendingPaid > 0 ? 'На проверке ' + rub(s.pendingPaid) : 'Задолженности нет');
+    h += '<div class="box fee-hero' + (s.isBlocked ? ' bad' : s.debt > 0 ? ' due' : ' ok') + '">' +
+        '<div class="fee-top">' +
+          '<div><div class="small muted">К оплате</div>' +
+            '<div class="fee-amt">' + rub(s.debt) + '</div>' +
+            '<div class="small fee-sub">' + esc(sub) + '</div></div>' +
+          '<button class="btn' + (s.debt > 0 ? '' : ' sec') + '" id="btnPayFeeTop">' + (s.debt > 0 ? 'Оплатить комиссию' : 'Внести платёж') + '</button>' +
         '</div>' +
-        '<button class="btn sm" id="btnPayFeeTop">Оплатить комиссию</button>' +
+        (s.isBlocked
+          ? '<div class="fee-warn">Долг больше лимита (' + rub(s.debtLimit) + '), который установил владелец площадки. Оплатите комиссию.</div>'
+          : (s.debtLimit > 0 ? '<div class="small muted" style="margin-top:8px">Лимит долга: ' + rub(s.debtLimit) + '</div>' : '')) +
+        '<div class="fee-req">' +
+          '<div><span>Перевод по СБП на телефон</span>' +
+            '<b>+7 (908) 173-14-10 <button type="button" class="mini-btn" id="btnCopyPhone">Копировать</button></b></div>' +
+          '<div><span>Получатель</span><b>Илья Игоревич Г. (Т-Банк / Сбербанк)</b></div>' +
+          '<div><span>Назначение</span><b>Комиссия Ива (' + esc(A.me) + ')</b></div>' +
+        '</div>' +
+        '<p class="small muted" style="margin-top:10px">После перевода нажмите «' + (s.debt > 0 ? 'Оплатить комиссию' : 'Внести платёж') + '» и укажите сумму — платёж уйдёт на подтверждение.</p>' +
       '</div>';
 
-    // Карточки KPI
     h += '<div class="kpis">' +
-        '<div class="kpi' + (s.debt > 0 ? ' warn' : ' good') + '">' +
-          '<div class="lb">К оплате (долг)</div>' +
-          '<div class="vl">' + (s.debt > 0 ? ('−' + rub(s.debt)) : '0 ₽') + '</div>' +
-          '<div class="sub">' + (s.debt > 0 ? (s.pendingPaid > 0 ? 'На проверке ' + rub(s.pendingPaid) : 'Ожидает оплаты') : 'Задолженности нет') + '</div>' +
-        '</div>' +
-
-        '<div class="kpi">' +
-          '<div class="lb">Ставка комиссии</div>' +
-          '<div class="vl">' + s.feePct + ' %</div>' +
-          '<div class="sub">от стоимости аренды</div>' +
-        '</div>' +
-
-        '<div class="kpi">' +
-          '<div class="lb">Лимит задолженности</div>' +
-          '<div class="vl">' + (s.debtLimit > 0 ? rub(s.debtLimit) : '0 ₽') + '</div>' +
-          '<div class="sub">' + (s.debtLimit > 0 ? 'порог без ограничений' : 'без блокировки') + '</div>' +
-        '</div>' +
-
-        '<div class="kpi">' +
-          '<div class="lb">Начислено всего</div>' +
-          '<div class="vl">' + rub(s.feeAll) + '</div>' +
-          '<div class="sub">из ' + rub(s.rentAll) + ' выручки</div>' +
-        '</div>' +
-
-        '<div class="kpi good">' +
-          '<div class="lb">Оплачено комиссии</div>' +
-          '<div class="vl">' + rub(s.paidAll) + '</div>' +
-          '<div class="sub">подтверждено площадкой</div>' +
-        '</div>' +
+        '<div class="kpi"><div class="lb">Ставка комиссии</div><div class="vl">' + s.feePct + ' %</div><div class="sub">от стоимости аренды</div></div>' +
+        '<div class="kpi"><div class="lb">Начислено всего</div><div class="vl">' + rub(s.feeAll) + '</div><div class="sub">из ' + rub(s.rentAll) + ' выручки</div></div>' +
+        '<div class="kpi good"><div class="lb">Оплачено комиссии</div><div class="vl">' + rub(s.paidAll) + '</div><div class="sub">подтверждено площадкой</div></div>' +
       '</div>';
 
-    // Сводка по периодам
-    h += '<div class="box" style="margin-bottom:20px">' +
-        '<h3 style="font-size:15px;margin-bottom:12px">Доход и начисления по периодам</h3>' +
-        '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px">' +
-          '<div class="stat-card" style="background:var(--field);padding:12px;border-radius:10px">' +
-            '<div class="small muted">Сегодня</div>' +
-            '<div style="font-size:16px;font-weight:700;margin:4px 0">' + rub(s.per.d[0]) + '</div>' +
-            '<div class="small" style="color:var(--gr)">Комиссия: ' + rub(s.per.d[1]) + '<br>Чистыми: ' + rub(s.per.d[2]) + '</div>' +
-          '</div>' +
-          '<div class="stat-card" style="background:var(--field);padding:12px;border-radius:10px">' +
-            '<div class="small muted">За 7 дней</div>' +
-            '<div style="font-size:16px;font-weight:700;margin:4px 0">' + rub(s.per.w[0]) + '</div>' +
-            '<div class="small" style="color:var(--gr)">Комиссия: ' + rub(s.per.w[1]) + '<br>Чистыми: ' + rub(s.per.w[2]) + '</div>' +
-          '</div>' +
-          '<div class="stat-card" style="background:var(--field);padding:12px;border-radius:10px">' +
-            '<div class="small muted">Этот месяц</div>' +
-            '<div style="font-size:16px;font-weight:700;margin:4px 0">' + rub(s.per.mo[0]) + '</div>' +
-            '<div class="small" style="color:var(--gr)">Комиссия: ' + rub(s.per.mo[1]) + '<br>Чистыми: ' + rub(s.per.mo[2]) + '</div>' +
-          '</div>' +
-          '<div class="stat-card" style="background:var(--field);padding:12px;border-radius:10px">' +
-            '<div class="small muted">За всё время</div>' +
-            '<div style="font-size:16px;font-weight:700;margin:4px 0">' + rub(s.per.a[0]) + '</div>' +
-            '<div class="small" style="color:var(--gr)">Комиссия: ' + rub(s.per.a[1]) + '<br>Чистыми: ' + rub(s.per.a[2]) + '</div>' +
-          '</div>' +
-        '</div>' +
-      '</div>';
-
-    // Реквизиты и оплата через СБП
-    h += '<div class="box" style="margin-bottom:20px">' +
-        '<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:12px">' +
-          '<div>' +
-            '<h3 style="font-size:15px;margin-bottom:3px">Реквизиты для оплаты комиссии</h3>' +
-            '<p class="small muted">Перевод по номеру телефона через Систему быстрых платежей (СБП) любого банка</p>' +
-          '</div>' +
-          '<button class="btn sm" id="btnPayFeeCard">Внести платёж</button>' +
-        '</div>' +
-        '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;background:var(--field);padding:14px;border-radius:10px">' +
-          '<div>' +
-            '<div class="small muted">Телефон получателя (СБП):</div>' +
-            '<div style="display:flex;align-items:center;gap:8px;margin-top:3px">' +
-              '<b style="font-size:15px;letter-spacing:.3px">+7 (908) 173-14-10</b>' +
-              '<button type="button" class="mini-btn" id="btnCopyPhone">Копировать</button>' +
-            '</div>' +
-          '</div>' +
-          '<div>' +
-            '<div class="small muted">Получатель:</div>' +
-            '<div style="font-weight:600;margin-top:3px">Илья Игоревич Г. (Т-Банк / Сбербанк)</div>' +
-          '</div>' +
-          '<div>' +
-            '<div class="small muted">Назначение перевода:</div>' +
-            '<div style="font-weight:600;margin-top:3px">Комиссия Ива (' + esc(A.me) + ')</div>' +
-          '</div>' +
-        '</div>' +
-      '</div>';
+    // Доход по периодам (закрытые заказы, по дате заявки)
+    const per = [['Сегодня', s.per.d], ['За 7 дней', s.per.w], ['Этот месяц', s.per.mo], ['За всё время', s.per.a]];
+    h += '<div class="home-sec"><h3>Доход по периодам</h3><div class="fee-per">' +
+      per.map(function(x){
+        return '<div class="fee-pc"><div class="small muted">' + x[0] + '</div><b>' + rub(x[1][0]) + '</b>' +
+          '<div class="small">комиссия ' + rub(x[1][1]) + '</div><div class="small">чистыми ' + rub(x[1][2]) + '</div></div>';
+      }).join('') + '</div>' +
+      '<p class="small muted" style="margin-top:6px">Считаются закрытые заказы, по дате заявки.</p></div>';
 
     // История оплат комиссии
-    h += '<div class="sect-h" style="margin-top:24px;margin-bottom:10px">' +
-        '<h3 style="font-size:16px">История оплат комиссии</h3>' +
-      '</div>';
-
+    h += '<div class="home-sec"><h3>История оплат комиссии</h3>';
     if (!FEES.length){
-      h += '<div class="empty" style="padding:30px 20px"><b>Платежей по комиссии пока нет</b>' +
-        '<p>После совершения перевода нажмите «Внести платёж», чтобы зафиксировать оплату.</p></div>';
+      h += '<div class="empty" style="padding:24px 20px"><b>Платежей по комиссии пока нет</b>' +
+        '<p>После перевода нажмите «' + (s.debt > 0 ? 'Оплатить комиссию' : 'Внести платёж') + '», чтобы зафиксировать оплату.</p></div>';
     } else {
-      h += '<div class="tbl-wrap"><table class="tbl"><thead><tr>' +
-        '<th>Дата</th><th class="num">Сумма</th><th>Статус</th><th>Примечание</th>' +
+      h += '<div class="tbl-wrap tcw"><table class="tbl tc"><thead><tr>' +
+        '<th>Сумма</th><th>Дата</th><th>Статус</th><th>Примечание</th>' +
         '</tr></thead><tbody>' +
         FEES.map(function(f){
           const isOk = f.status === 'confirmed';
           return '<tr>' +
-            '<td class="small muted">' + niceDate(f.created_at) + '</td>' +
-            '<td class="num ' + (isOk ? 'pos' : '') + '" style="font-weight:700">' + rub(f.amount) + '</td>' +
-            '<td><span class="badge ' + (isOk ? 'b-closed' : 'b-mod') + '">' +
-              (isOk ? 'Подтверждено' : 'На проверке') + '</span></td>' +
-            '<td class="small">' + esc(f.note || 'Оплата комиссии') + '</td>' +
+            '<td class="' + (isOk ? 'pos' : '') + '" style="font-weight:700">' + rub(f.amount) + '</td>' +
+            td('Дата', niceDate(f.created_at), 'small muted') +
+            td('Статус', '<span class="badge ' + (isOk ? 'b-closed' : 'b-mod') + '">' + (isOk ? 'Подтверждено' : 'На проверке') + '</span>') +
+            td('Примечание', esc(f.note || 'Оплата комиссии'), 'small') +
           '</tr>';
         }).join('') +
         '</tbody></table></div>';
     }
+    h += '</div>';
 
-    // История начислений по заказам
+    // Начисления по закрытым заказам
     const closed = ORDERS.filter(function(p){ return p.status === 'closed'; });
-    h += '<div class="sect-h" style="margin-top:24px;margin-bottom:10px">' +
-        '<h3 style="font-size:16px">Начисления по закрытым заказам</h3>' +
-      '</div>';
-
+    h += '<div class="home-sec"><h3>Начисления по закрытым заказам' + (closed.length ? ' · ' + closed.length : '') + '</h3>';
     if (!closed.length){
-      h += '<div class="empty" style="padding:30px 20px"><b>Начислений пока нет</b>' +
+      h += '<div class="empty" style="padding:24px 20px"><b>Начислений пока нет</b>' +
         '<p>Комиссия начисляется автоматически при завершении аренды в разделе «Заявки».</p></div>';
     } else {
-      h += '<div class="tbl-wrap"><table class="tbl"><thead><tr>' +
-        '<th>Дата</th><th>Инструмент</th><th>Клиент</th><th class="num">Аренда</th><th class="num">Ставка</th><th class="num">Комиссия</th>' +
+      h += '<div class="tbl-wrap tcw"><table class="tbl tc"><thead><tr>' +
+        '<th>Инструмент</th><th>Дата</th><th>Клиент</th><th class="num">Аренда</th><th class="num">Ставка</th><th class="num">Комиссия</th>' +
         '</tr></thead><tbody>' +
         closed.map(function(p){
           const o = p.orders || {};
           return '<tr>' +
-            '<td class="small muted">' + niceDate(p.created_at) + '</td>' +
             '<td><b>' + esc(p.tools_text || 'Инструмент') + '</b></td>' +
-            '<td class="small">' + esc(o.name || 'Клиент') + (o.phone ? (' · ' + esc(o.phone)) : '') + '</td>' +
-            '<td class="num">' + rub(p.rent_sum || 0) + '</td>' +
-            '<td class="num">' + (p.fee_pct != null ? p.fee_pct : s.feePct) + '%</td>' +
-            '<td class="num" style="color:var(--or);font-weight:700">' + rub(p.fee || 0) + '</td>' +
+            td('Дата', niceDate(p.created_at), 'small muted') +
+            td('Клиент', esc(o.name || 'Клиент') + (o.phone ? (' · ' + esc(o.phone)) : ''), 'small') +
+            td('Аренда', rub(p.rent_sum || 0), 'num') +
+            td('Ставка', (p.fee_pct != null ? p.fee_pct : s.feePct) + '%', 'num') +
+            td('Комиссия', rub(p.fee || 0), 'num', 'color:var(--or);font-weight:700') +
           '</tr>';
         }).join('') +
         '</tbody></table></div>';
     }
+    h += '</div>';
 
     return h;
   }
@@ -1396,6 +1334,7 @@
   }
 
   /* ---------- Отзывы ---------- */
+  let RV_F = 'all';
   function viewReviews(){
     if (!isAdmin()){
       return '<div class="empty"><b>Раздел доступен арендодателям</b><p>Здесь отображаются отзывы клиентов о вашем инструменте.</p></div>';
@@ -1411,19 +1350,32 @@
     const pub = REVIEWS.filter(function(r){ return r.status === 'published'; });
     const sum = pub.reduce(function(acc, r){ return acc + (Number(r.rating) || 0); }, 0);
     const avg = pub.length ? (sum / pub.length).toFixed(1) : '0.0';
+    /* Этап 5 кабинетов (23.10.2026): разбивка оценок и фильтры — быстро найти недовольных клиентов */
+    const dist = [5, 4, 3, 2, 1].map(function(n){ return [n, pub.filter(function(r){ return Number(r.rating) === n; }).length]; });
+    const maxN = Math.max.apply(null, dist.map(function(d){ return d[1]; }).concat([1]));
+    const isLow = function(r){ return (Number(r.rating) || 0) <= 3; };
+    const hasText = function(r){ return !!String(r.text || '').trim(); };
+    const cnt = { all: REVIEWS.length, low: REVIEWS.filter(isLow).length, text: REVIEWS.filter(hasText).length };
+    if (!cnt[RV_F]) RV_F = 'all';
+    const shown = RV_F === 'low' ? REVIEWS.filter(isLow) : RV_F === 'text' ? REVIEWS.filter(hasText) : REVIEWS;
+    const chips = '<div class="chips" style="margin-bottom:4px">' +
+      [['all', 'Все'], ['low', 'Оценка 1–3'], ['text', 'С текстом']].map(function(x){
+        return '<button class="chip' + (RV_F === x[0] ? ' on' : '') + '" data-rv-f="' + x[0] + '"' +
+          (RV_F === x[0] ? ' style="border-color:var(--or);color:var(--or)"' : '') + '>' + x[1] + ' · ' + cnt[x[0]] + '</button>';
+      }).join('') + '</div>';
 
-    return '<div class="box" style="margin-bottom:18px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:14px">' +
+    return '<div class="box rv-sum">' +
       '<div>' +
         '<div style="font-size:13px;color:var(--g2);margin-bottom:4px">Общий рейтинг вашего проката</div>' +
         '<div class="rating-badge rating-badge-large"><span class="star">★</span> ' + avg +
           ' <span class="muted" style="font-size:14px;font-weight:400">(' + pub.length + ' ' + plural(pub.length, 'отзыв', 'отзыва', 'отзывов') + ')</span>' +
         '</div>' +
       '</div>' +
-      '<div style="font-size:13px;color:var(--gr)">' +
-        'Всего отзывов: <b>' + REVIEWS.length + '</b>' +
-      '</div>' +
-    '</div>' +
-    '<div class="review-list">' + REVIEWS.map(function(r){
+      '<div class="rv-dist">' + dist.map(function(d){
+        return '<div class="rv-row"><span>' + d[0] + ' ★</span><span class="rv-bar"><i style="width:' + Math.round(d[1] / maxN * 100) + '%"></i></span><span>' + d[1] + '</span></div>';
+      }).join('') + '</div>' +
+    '</div>' + chips +
+    '<div class="review-list">' + shown.map(function(r){
       const isHidden = r.status === 'hidden';
       const toolTitle = (r.tools && r.tools.name) || 'Инструмент';
       const modBtn = isChief()
@@ -1689,7 +1641,6 @@
       if (on && tb.scrollWidth > tb.clientWidth) tb.scrollLeft = on.offsetLeft - tb.offsetLeft - (tb.clientWidth - on.offsetWidth) / 2; })();
 
     if ($('btnPayFeeTop')) $('btnPayFeeTop').onclick = openPayModal;
-    if ($('btnPayFeeCard')) $('btnPayFeeCard').onclick = openPayModal;
     if ($('btnCopyPhone')) $('btnCopyPhone').onclick = function(){
       copyToClipboard('89081731410', 'Номер телефона получателя скопирован');
     };
@@ -1745,6 +1696,8 @@
     }
 
     /* «Сводка»: строка или плитка ведёт в нужную вкладку с нужным фильтром */
+    const rvf = e.target.closest('[data-rv-f]');
+    if (rvf){ RV_F = rvf.getAttribute('data-rv-f'); render(); return; }
     const go = e.target.closest('[data-go-tab]');
     if (go){
       TAB = go.getAttribute('data-go-tab');
