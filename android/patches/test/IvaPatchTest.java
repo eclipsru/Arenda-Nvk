@@ -2614,6 +2614,7 @@ public class IvaPatchTest {
         v123();                                                       // 10.123: доставка по наибольшей цене, «обратно» за каждым сроком, карточки
         v124();                                                       // 10.124: подсветка карточек заявок
         v125();                                                       // 10.125: телефон пункта в карточке, другой пункт проката
+        j128();                                                       // 10.128: «Выдал / Принял» на карточках владельца
         if (fail > 0) { System.out.println("ошибок: " + fail); System.exit(1); }
         System.out.println("все проверки IvaPatch пройдены");
     }
@@ -3605,6 +3606,33 @@ public class IvaPatchTest {
             "400\u00a0₽ × 3 суток = 1\u00a0200\u00a0₽ · залог 2\u00a0000\u00a0₽|99,50\u00a0₽ × 1 сутки = 99,50\u00a0₽");
         eq("10.124: нет цены — строка как раньше", IvaOrderViewPatch.checkLine(3, Double.NaN, 0) + "|" + IvaOrderViewPatch.checkLine(0, 400, 0),
             IvaOrderViewPatch.itemLine(3, Double.NaN, 0) + "|" + IvaOrderViewPatch.itemLine(0, 400, 0));
+    }
+
+    /** 10.128: «Выдал / Принял» на карточках заявок владельца (SQL 20261118, iva_parts_journal). */
+    static void j128() {
+        java.util.List<String> ids = java.util.Arrays.asList("12", " 7 ", "12", "abc", "1;drop", "");
+        eq("журнал 10.128: запрос — только номера, без повторов", IvaStaffJournalPatch.partsBody(ids), "{\"p_parts\":[12,7]}");
+        eq("журнал 10.128: нечего спрашивать — без запроса", IvaStaffJournalPatch.partsBody(java.util.Arrays.asList("x", "")), null);
+        String iss = "2026-10-24T10:35:00+00:00", ret = "2026-10-24T12:00:00+00:00";
+        String l5 = IvaStaffJournalPatch.cardLines("rented", "Иван", iss, "", "", false).toString();
+        eq("журнал 10.128: выдан — «Выдал: Иван · …», без «Принял»", l5.startsWith("[Выдал: Иван · ") && !l5.contains("Принял") && l5.contains(":35"), true);
+        String l8 = IvaStaffJournalPatch.cardLines("closed", "Вы", iss, "Пётр", ret, false).toString();
+        eq("журнал 10.128: закрыта разом — «Выдал: Вы» и «Принял: Пётр»", l8.contains("Выдал: Вы · ") && l8.contains("Принял: Пётр · "), true);
+        String l9 = IvaStaffJournalPatch.cardLines("closed", "Иван", iss, "Вы", ret, true).toString();
+        eq("журнал 10.128: принимали по срокам — «Принял» у сроков, не одной строкой", l9.contains("Выдал: Иван") && !l9.contains("Принял"), true);
+        eq("журнал 10.128: новая заявка — строк нет", IvaStaffJournalPatch.cardLines("new", "Иван", iss, "", "", false).size(), 0);
+        eq("журнал 10.128: закрыта без выдачи — «Закрыл»", IvaStaffJournalPatch.cardLines("closed", "", "", "Пётр", ret, false).toString().startsWith("[Закрыл: Пётр · "), true);
+        eq("журнал 10.128: строка без имени — пусто", IvaStaffJournalPatch.whoLine("Выдал", " ", 1L), "");
+        java.util.List<String[]> it = new java.util.ArrayList<String[]>();
+        it.add(new String[]{"d", "Пётр", "2026-10-21T10:00:00+00:00"});
+        it.add(new String[]{"e", "Вы", "2026-10-22T10:00:00+00:00"});
+        eq("журнал 10.128: разные приёмщики — по срокам", IvaStaffJournalPatch.splitReturn(it), true);
+        java.util.List<String[]> one = new java.util.ArrayList<String[]>();
+        one.add(new String[]{"d", "Пётр", ret}); one.add(new String[]{"e", "Пётр", ret}); one.add(new String[]{"f", "", ""});
+        eq("журнал 10.128: приняли разом — одной строкой", IvaStaffJournalPatch.splitReturn(one), false);
+        eq("журнал 10.128: срок принял Пётр (время ±1 мин)", IvaStaffJournalPatch.termWho(it, java.util.Arrays.asList("d"), IvaChatPatch.parseIso("2026-10-21T10:00:20+00:00")), "Пётр");
+        eq("журнал 10.128: срок приняли вы", IvaStaffJournalPatch.termWho(it, java.util.Arrays.asList("zz", "e"), IvaChatPatch.parseIso("2026-10-22T10:00:00+00:00")), "Вы");
+        eq("журнал 10.128: чужой инструмент — пусто", IvaStaffJournalPatch.termWho(it, java.util.Arrays.asList("q"), 0), "");
     }
 
     static void v125() {

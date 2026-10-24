@@ -2003,8 +2003,8 @@ try {
       && chp.includes('if (mine) try { String sw = IvaStaffJournalPatch.who(m.id); if (!sw.isEmpty()) time = sw + " · " + time; } catch (Throwable ignore) {}')
       && chp.includes(".append(IvaStaffJournalPatch.chatVer)") && (chp.match(/IvaStaffJournalPatch\./g) || []).length === 3,
       'журнал 10.107: подключение — шторка заявки админа (после пункта), «Настройка проката», чат (загрузка у админа, подпись своего пузыря, перерисовка)');
-    assert.ok(code.includes('if (!adm || r == null) return;') && !/customer_profiles|passport|phone|surname|select=|app_messages|"PATCH"|"DELETE"|"GET"|\/rest\/v1\/(?!rpc\/iva_(part_journal|points_summary|chat_staff_names)")/.test(code)
-      && (code.match(/IvaClientPatch\.apiCall\(/g) || []).length === 3 && (code.match(/new Thread\(new Runnable\(\)/g) || []).length === 2,
+    assert.ok(code.includes('if (!adm || r == null) return;') && !/customer_profiles|passport|phone|surname|select=|app_messages|"PATCH"|"DELETE"|"GET"|\/rest\/v1\/(?!rpc\/iva_(part_journal|points_summary|chat_staff_names|parts_journal)")/.test(code)
+      && (code.match(/IvaClientPatch\.apiCall\(/g) || []).length === 4 /* 10.128: + iva_parts_journal фоном в loadParts */ && (code.match(/new Thread\(new Runnable\(\)/g) || []).length === 2,
       'журнал 10.107: только функции базы, только админу, сеть — в потоках (чат — в потоке загрузки чата)');
     const phrases = (code.match(/DB_PHRASES = \{([\s\S]*?)\};/) || ['', ''])[1].match(/"([^"]+)"/g) || [];
     const lost = phrases.map(x => x.slice(1, -1)).filter(x => !sq.includes("raise exception '" + x + "'"));
@@ -2898,7 +2898,25 @@ try {
       && fp.includes('sugArrow(a, (EditText) nv, false);') && fp.includes('sugArrow(a, (EditText) mf, true);'),
       '10.127: стрелки у «Названия» и «Модели»');
     assert.ok((tp.match(/eq\("(цензура этап 2|стрелки этап 3): /g) || []).length >= 5, 'IvaPatchTest: проверки 10.127');
-    assert.ok(/NEW_NAME: '10\.127'/.test(wf) && /NEW_CODE: '201'/.test(wf), 'сборка 10.127 (201)');
+    assert.ok(Number((/NEW_CODE: '(\d+)'/.exec(wf) || [])[1]) >= 201, 'сборка 10.127 (201) или новее');
+  }
+  // 10.128 (просьба владельца 24.10.2026): «Выдал / Принял» на карточках заявок владельца — iva_parts_journal (SQL 20261118)
+  // одним запросом вместе с карточками; возврат по срокам — «принял: …» у срока. Только владельцу; без новых вставок в smali.
+  {
+    const strip = (t) => t.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '');
+    const wf = R('.github/workflows/build-apk.yml'), ap = R('android/patches/apply.py'), tp = R('android/patches/test/IvaPatchTest.java');
+    const jp = strip(R('android/patches/IvaStaffJournalPatch.java')), ov = strip(R('android/patches/IvaOrderViewPatch.java'));
+    const sq = R('supabase/migrations/20261118_order_journal.sql'), rb = R('supabase/migrations/20261118_order_journal_rollback.sql');
+    assert.ok(!/loadParts|termWho|IvaStaffJournalPatch\.card/.test(ap), '10.128: без новых вставок в smali');
+    assert.ok(jp.includes('PARTS_RPC = "/rest/v1/rpc/iva_parts_journal"') && ov.includes('if ("admin".equals(scope)) try { IvaStaffJournalPatch.loadParts(a, got.values()); }')
+      && ov.includes('IvaStaffJournalPatch.card(a, box, partId, p.optString("status", ""))') && ov.includes('finally { whoJ = null; }'),
+      '10.128: журнал — только с карточками владельца, «принял» у срока — только пока рисуется карточка владельца');
+    assert.ok(/RETURNS SETOF jsonb/.test(sq) && sq.includes("between 1 and 500") && sq.includes('public.fn_is_chief()')
+      && sq.includes("REVOKE ALL ON FUNCTION public.iva_parts_journal(bigint[]) FROM public, anon;") && !/UPDATE\s+public\./i.test(sq)
+      && !/ALTER TABLE/i.test(sq) && rb.includes('DROP FUNCTION IF EXISTS public.iva_parts_journal(bigint[]);'),
+      '10.128: SQL — одна функция только для владельца (и создателя), таблицы не меняет; откат — удалить функцию');
+    assert.ok((tp.match(/eq\("журнал 10\.128: /g) || []).length >= 12 && tp.includes('j128();'), 'IvaPatchTest: проверки 10.128');
+    assert.ok(/NEW_NAME: '10\.128'/.test(wf) && /NEW_CODE: '202'/.test(wf), 'сборка 10.128 (202)');
   }
   // 10.75 (просьба владельца 14.10.2026): в «Настройках» — кнопка «Уведомления» (с 10.97 — открывает отдельную страницу);
   // внутри сверху «Открыть настройки уведомлений Android», потом какие присылать, потом расписание, потом всё остальное

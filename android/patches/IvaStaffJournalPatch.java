@@ -1,6 +1,7 @@
 package ru.prokatnvsk.app;
 
 import android.app.Activity;
+import android.content.Context;
 import android.view.Gravity;
 import android.view.View;
 import android.widget.LinearLayout;
@@ -151,6 +152,161 @@ public class IvaStaffJournalPatch {
         return (w.isEmpty() ? "Без имени" : w) + " — выдал " + issued + ", принял " + returned;
     }
 
+    // ───────────── 24.10.2026 (10.128): «Выдал / Принял» на карточках заявок владельца (SQL 20261118) ─────────────
+    // Просьба владельца 24.10.2026: в заявках владельца видно, кто из сотрудников выдал инструмент и кто принял обратно.
+    // Одним запросом iva_parts_journal по всем выданным и закрытым частям — вместе с карточками (IvaOrderViewPatch.load,
+    // фоном, только владельцу). Возврат по срокам (10.124) — «принял: …» у каждого срока. Нет SQL — строк просто нет.
+
+    static final String PARTS_RPC = "/rest/v1/rpc/iva_parts_journal";
+    static final int PARTS_MAX = 500;
+    static final Map<String, JSONObject> partsJ = java.util.Collections.synchronizedMap(new HashMap<String, JSONObject>());
+    static volatile long partsNoDbUntil;
+
+    /** {"p_parts":[1,2]} — только номера из цифр, без повторов, не больше PARTS_MAX; нечего спрашивать — null. */
+    static String partsBody(java.util.Collection<String> ids) {
+        if (ids == null) return null;
+        List<String> ok = new ArrayList<String>();
+        for (String id : ids) {
+            String s = t(id);
+            if (s.matches("\\d{1,18}") && !ok.contains(s)) ok.add(s);
+            if (ok.size() >= PARTS_MAX) break;
+        }
+        if (ok.isEmpty()) return null;
+        StringBuilder b = new StringBuilder("{\"p_parts\":[");
+        for (int i = 0; i < ok.size(); i++) { if (i > 0) b.append(','); b.append(ok.get(i)); }
+        return b.append("]}").toString();
+    }
+
+    /** Номера выданных и закрытых частей из строк iva_order_cards('admin'). */
+    static List<String> partIds(java.util.Collection<JSONObject> rows) {
+        List<String> out = new ArrayList<String>();
+        if (rows != null) for (JSONObject o : rows) {
+            JSONArray ps = o == null ? null : o.optJSONArray("parts");
+            for (int i = 0; ps != null && i < ps.length(); i++) {
+                JSONObject p = ps.optJSONObject(i);
+                if (p != null && want(p.optString("part_id", ""), t(p.optString("status", "")).toLowerCase(Locale.ROOT)))
+                    out.add(t(p.optString("part_id", "")));
+            }
+        }
+        return out;
+    }
+
+    /** Ответ функции → номер части → журнал (строка может прийти как есть или под именем функции). */
+    static Map<String, JSONObject> parseParts(String body) {
+        Map<String, JSONObject> m = new HashMap<String, JSONObject>();
+        try {
+            JSONArray arr = new JSONArray(body == null ? "[]" : body.trim());
+            for (int i = 0; i < arr.length(); i++) {
+                JSONObject o = arr.optJSONObject(i);
+                if (o != null && o.optJSONObject("iva_parts_journal") != null) o = o.optJSONObject("iva_parts_journal");
+                if (o != null && !t(str(o, "part_id")).isEmpty()) m.put(t(str(o, "part_id")), o);
+            }
+        } catch (Throwable ignore) {}
+        return m;
+    }
+
+    /** «Выдал: Иван · 24.10 13:35»; нет имени — пусто. */
+    static String whoLine(String label, String who, long at) {
+        String w = t(who);
+        if (w.isEmpty()) return "";
+        return t(label) + ": " + w + (at > 0 ? " · " + IvaOrderViewPatch.dt(at) : "");
+    }
+
+    /** Возвращённые инструменты журнала: {номер инструмента, кто принял, когда (ISO)}. */
+    static List<String[]> jItems(JSONObject j) {
+        List<String[]> out = new ArrayList<String[]>();
+        JSONArray ji = j == null ? null : j.optJSONArray("items");
+        for (int i = 0; ji != null && i < ji.length(); i++) {
+            JSONObject x = ji.optJSONObject(i);
+            if (x != null) out.add(new String[]{t(str(x, "id")), t(str(x, "returned_who")), t(str(x, "returned_at"))});
+        }
+        return out;
+    }
+
+    /** Кто принял срок: инструмент срока с тем же временем возврата (±1 мин), иначе первый по номеру инструмента. */
+    static String termWho(List<String[]> items, List<String> groupIds, long returnedAt) {
+        String byId = "";
+        if (items == null || groupIds == null) return "";
+        for (String gid : groupIds) {
+            String id = t(gid);
+            if (id.isEmpty()) continue;
+            for (String[] x : items) {
+                if (x == null || x.length < 3 || !id.equals(t(x[0])) || t(x[1]).isEmpty()) continue;
+                long at = IvaChatPatch.parseIso(t(x[2]));
+                if (returnedAt > 0 && at > 0 && Math.abs(at - returnedAt) <= 60000L) return t(x[1]);
+                if (byId.isEmpty()) byId = t(x[1]);
+            }
+        }
+        return byId;
+    }
+
+    static String termWho(JSONObject j, JSONArray groupItems, long returnedAt) {
+        List<String> ids = new ArrayList<String>();
+        for (int g = 0; groupItems != null && g < groupItems.length(); g++) {
+            JSONObject it = groupItems.optJSONObject(g);
+            if (it != null) ids.add(it.optString("id", ""));
+        }
+        return termWho(jItems(j), ids, returnedAt);
+    }
+
+    /** Принимали по частям (разные люди или разное время) — «принял» показываем у каждого срока, а не одной строкой. */
+    static boolean splitReturn(List<String[]> items) {
+        Set<String> seen = new HashSet<String>();
+        if (items != null) for (String[] x : items) if (x != null && x.length >= 3 && !t(x[1]).isEmpty()) seen.add(t(x[1]) + "|" + t(x[2]));
+        return seen.size() > 1;
+    }
+
+    /** Строки карточки: «Выдал …»; у закрытой, принятой разом, — «Принял …» (закрыта без выдачи — «Закрыл»). */
+    static List<String> cardLines(String status, String issWho, String issAt, String retWho, String retAt, boolean split) {
+        List<String> out = new ArrayList<String>();
+        String st = t(status).toLowerCase(Locale.ROOT);
+        if (!"rented".equals(st) && !"closed".equals(st)) return out;
+        String iss = whoLine("Выдал", issWho, IvaChatPatch.parseIso(t(issAt)));
+        if (!iss.isEmpty()) out.add(iss);
+        if ("closed".equals(st) && !split) {
+            String ret = whoLine(iss.isEmpty() ? "Закрыл" : "Принял", retWho, IvaChatPatch.parseIso(t(retAt)));
+            if (!ret.isEmpty()) out.add(ret);
+        }
+        return out;
+    }
+
+    static List<String> cardLines(JSONObject j, String status) {
+        if (j == null) return new ArrayList<String>();
+        return cardLines(status, str(j, "issued_who"), str(j, "issued_at"), str(j, "returned_who"), str(j, "returned_at"), splitReturn(jItems(j)));
+    }
+
+    static JSONObject partJ(String partId) { return partId == null ? null : partsJ.get(t(partId)); }
+
+    /** Из IvaOrderViewPatch.load (фоном, только владельцу): журнал выданных и закрытых частей одним запросом. */
+    static void loadParts(Context a, java.util.Collection<JSONObject> rows) {
+        if (System.currentTimeMillis() < partsNoDbUntil) return;
+        String b = partsBody(partIds(rows));
+        if (b == null) { partsJ.clear(); return; }
+        try {
+            String[] r = a instanceof Activity ? IvaClientPatch.apiCall((Activity) a, PARTS_RPC, "POST", b, true) : IvaNotifyPatch.api(a, PARTS_RPC, "POST", b);
+            if (r == null || r[0] == null) return;
+            String tx = r.length > 1 && r[1] != null ? r[1].trim() : "";
+            if (!r[0].startsWith("2")) {
+                if (NO_DB.equals(dbError(r[0], tx))) partsNoDbUntil = System.currentTimeMillis() + NO_DB_PAUSE_MS;
+                return;
+            }
+            Map<String, JSONObject> got = parseParts(tx);
+            synchronized (partsJ) { partsJ.clear(); partsJ.putAll(got); }
+        } catch (Throwable ignore) {}
+    }
+
+    /** Из IvaOrderViewPatch.admCard: строки «Выдал / Принял» серым под шапкой карточки. */
+    static void card(Activity a, LinearLayout box, String partId, String status) {
+        List<String> ls = cardLines(partJ(partId), status);
+        if (ls.isEmpty()) return;
+        int cGray = IvaOrderPatch.color(a, "gray", 0xff9aa1b0);
+        for (String l : ls) {
+            TextView t = IvaChiefPatch.text(a, l, 12f, cGray, false);
+            t.setPadding(0, IvaChiefPatch.dp(a, 6), 0, 0);
+            box.addView(t);
+        }
+    }
+
     // ───────────── шторка заявки владельца ─────────────
 
     static final Map<String, List<String[]>> partCache = new HashMap<String, List<String[]>>();
@@ -167,6 +323,9 @@ public class IvaStaffJournalPatch {
         body.addView(box, new LinearLayout.LayoutParams(-1, -2));
         List<String[]> got;
         synchronized (partCache) { got = partCache.get(key); }
+        JSONObject pj = partJ(part);                                    // 10.128: уже загружено вместе с карточками
+        if (got == null && pj != null) got = rows(status, str(pj, "issued_who"), str(pj, "issued_at"),
+            str(pj, "returned_who"), str(pj, "returned_at"), TimeZone.getDefault());
         if (got != null) { fill(a, box, got); return; }
         if (System.currentTimeMillis() < partNoDbUntil) return;
         new Thread(new Runnable() {

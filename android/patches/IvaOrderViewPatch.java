@@ -48,6 +48,8 @@ public class IvaOrderViewPatch {
     static volatile long noDbUntil, admAt;
     static volatile boolean admBusy;
     static volatile String admSig = "";
+    /** 10.128: журнал части, пока рисуется карточка владельца (главный поток); у клиента и сотрудника — null. */
+    static JSONObject whoJ;
 
     // ───────────── чистые функции (IvaPatchTest) ─────────────
 
@@ -306,7 +308,8 @@ public class IvaOrderViewPatch {
                 sub.addView(tr, tl);
             }
             if (back && g.returnedAt > 1) {
-                TextView t = tx(a, "Вернули " + dt(g.returnedAt), 12f, cGray, false);
+                String who = whoJ == null ? "" : IvaStaffJournalPatch.termWho(whoJ, g.items, g.returnedAt);   // 10.128
+                TextView t = tx(a, "Вернули " + dt(g.returnedAt) + (who.isEmpty() ? "" : " · принял: " + who), 12f, cGray, false);
                 t.setPadding(0, dp(a, 6), 0, 0);
                 sub.addView(t);
             } else if ("rented".equals(st) && at > 0) {
@@ -486,6 +489,7 @@ public class IvaOrderViewPatch {
                 cards.putAll(got);
             }
             timers(got.values(), "client".equals(scope));
+            if ("admin".equals(scope)) try { IvaStaffJournalPatch.loadParts(a, got.values()); } catch (Throwable ignore) {}   // 10.128: кто выдал / принял
             return true;
         } catch (Throwable e) { return false; }
     }
@@ -918,8 +922,11 @@ public class IvaOrderViewPatch {
         box.setOrientation(LinearLayout.VERTICAL);
         box.setTag(VIEW_TAG);
         box.addView(head(a, kind(p.optString("status", ""), endOf(p, orderDays), System.currentTimeMillis()), String.valueOf(date.getText()), o.optString("order_id", "")));
+        try { IvaStaffJournalPatch.card(a, box, partId, p.optString("status", "")); } catch (Throwable ignore) {}   // 10.128: «Выдал / Принял»
         final Activity fa = a;                                          // 10.124: разные сроки — по срокам, «Вернули» у срока
-        termItems(a, box, p, orderDays, false, partId, new Runnable() { @Override public void run() { admReload(fa); } });
+        whoJ = IvaStaffJournalPatch.partJ(partId);                      // 10.128: «принял: …» у срока — только владельцу
+        try { termItems(a, box, p, orderDays, false, partId, new Runnable() { @Override public void run() { admReload(fa); } }); }
+        finally { whoJ = null; }
         String pt = pointText(p, false);
         if (!pt.isEmpty()) {
             TextView t = tx(a, "Пункт выдачи: " + pt, 12f, col(a, "gray", 0xff9aa1b0), false);
