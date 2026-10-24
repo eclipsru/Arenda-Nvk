@@ -301,7 +301,7 @@ def hub_page(targets, cities_by_slug, allow_index=False):
 <link rel="icon" href="assets/favicon-32.png" type="image/png" sizes="32x32">
 <link rel="icon" href="assets/icon-192.png" type="image/png" sizes="192x192">
 <link rel="apple-touch-icon" href="assets/apple-touch-icon.png">
-<link rel="stylesheet" href="assets/theme.css?v=20261022-a">
+<link rel="stylesheet" href="assets/theme.css?v=20261024-live">
 <link rel="stylesheet" href="assets/geo.css?v=20260923-photon">
 <script type="application/ld+json">{json.dumps(jsonld_payload, ensure_ascii=False)}</script>
 </head>
@@ -351,9 +351,9 @@ def hub_page(targets, cities_by_slug, allow_index=False):
 
 <script src="assets/data.js"></script>
 <script src="assets/geo.js?v=20260923-photon"></script>
-<script src="assets/email-guard.js?v=20260926-email"></script><script src="assets/sb.js?v=20260926-email"></script>
+<script src="assets/email-guard.js?v=20260926-email"></script><script src="assets/sb.js?v=20261024-live"></script>
 <script src="assets/app-release.js?v=20261009-rel"></script>
-<script src="assets/app.js?v=20261022-a"></script>
+<script src="assets/app.js?v=20261024-live"></script>
 <script>
 (function(){{ mountChrome('catalog', ''); }})();
 </script>

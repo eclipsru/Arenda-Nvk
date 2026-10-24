@@ -347,6 +347,22 @@ select.inp{cursor:pointer;appearance:none;
 .acct-ic{display:flex;align-items:center;justify-content:center;width:22px;height:22px}
 .acct-ini{width:22px;height:22px;border-radius:50%;background:var(--or-soft);color:var(--or);
   font-size:10px;font-weight:700;display:flex;align-items:center;justify-content:center;letter-spacing:.2px}
+/* «Работа» / «Прокат» в шапке (24.10.2026): логотип проката в кружке слева от аватарки; число — новые заявки */
+.work-link .acct-ini{box-shadow:0 0 0 1.5px var(--or)}
+.work-link.on .acct-ini{box-shadow:0 0 0 2px var(--or)}
+.work-mob{display:none !important}
+.work-mob{position:relative;flex-shrink:0;width:36px;height:36px;align-items:center;justify-content:center}
+.work-mob .acct-ini{width:34px;height:34px;font-size:12px;box-shadow:0 0 0 1.5px var(--or)}
+.work-mob-dot{position:absolute;top:-4px;right:-6px;min-width:16px;height:16px;padding:0 4px;
+  background:var(--or);color:#fff;border-radius:8px;font-size:10px;font-weight:700;
+  display:flex;align-items:center;justify-content:center}
+@media (max-width:760px){ .work-mob:not(.hide){display:flex !important} }
+/* планшет и узкий ноутбук: в шапке только значки (подписи остаются для экранного чтеца), поиску — место */
+@media (min-width:761px) and (max-width:1100px){
+  .hlinks{gap:2px}
+  .hlink{padding:9px 9px}
+  .hlink > span:not(.dot):not(.acct-ic){position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+}
 .acct-menu{position:absolute;right:0;top:calc(100% + 8px);width:300px;z-index:70;padding:8px;
   background:var(--card);border:1px solid var(--line);border-radius:var(--r);box-shadow:0 18px 40px rgba(0,0,0,.45)}
 .acct-head{display:flex;gap:11px;align-items:center;padding:8px 8px 12px;border-bottom:1px solid var(--line);margin-bottom:8px}

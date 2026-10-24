@@ -443,6 +443,8 @@ function headerHTML(active, q){
     '<button class="city" id="cityBtn">' + IC.pin +
       '<span class="city-name">' + esc(getCity() || 'Все города') + '</span>' +
     '</button>' +
+    '<a class="work-mob hide" id="workMob" href="account.html" aria-label="Работа">' +
+      '<span class="acct-ini work-ini">П</span><span class="work-mob-dot work-count" style="display:none">0</span></a>' +
     '<div class="search">' +
       '<svg class="s-ic" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>' +
       '<input id="q" type="search" placeholder="Поиск инструмента" ' +
@@ -461,6 +463,11 @@ function headerHTML(active, q){
         '<span class="dot chat-count" style="display:none">0</span></a>' +
       /* Меню аккаунта (этап C сайта, 20.10.2026): у вошедшего — выпадающее меню с разделами по роли
          и переключателем «Арендую / Сдаю» у арендодателя; у гостя — просто вход. См. paintAcct */
+      /* «Работа» / «Прокат» (просьба владельца 24.10.2026): логотип проката в кружке слева от аватарки —
+         сотруднику ведёт в «Работу», владельцу проката — в кабинет проката. Число — новые заявки. См. paintWork */
+      '<a class="hlink work-link hide" id="workLink" href="account.html">' +
+        '<span class="acct-ic"><span class="acct-ini work-ini">П</span></span><span class="work-t">Работа</span>' +
+        '<span class="dot work-count" style="display:none">0</span></a>' +
       '<div class="acct" id="acct">' +
         '<a class="hlink' + (active === 'cab' ? ' on' : '') + '" id="acctBtn" href="account.html">' +
           '<span class="acct-ic">' + IC.user + '</span><span>Кабинет</span></a>' +
@@ -863,6 +870,7 @@ async function paintChiefLink(){
     }
     paintLordChrome(isAuthed() && typeof isAdmin === 'function' && isAdmin());
     if (typeof IvaDistance !== 'undefined') IvaDistance.paintCards();
+    if (isAuthed()){ IvaLive.start(); paintWork(); }
   } catch(e){}
 }
 
@@ -921,6 +929,177 @@ document.addEventListener('click', function(e){
   e.preventDefault();
   setIvaMode(mb.getAttribute('data-mode'), true);
 });
+
+/* ---------- Заявки сразу, без перезагрузки (просьба владельца 24.10.2026) ----------
+   Одно соединение Supabase Realtime на любой странице: своя строка iva_order_ping (SQL 20261119) поменялась —
+   событие «iva:orders» (кабинет сразу перечитывает заявки). О новой заявке на другой странице — сообщение, звук,
+   число на кружке «Работа» / «Прокат» и, если вкладка свёрнута и уведомления разрешены, уведомление браузера.
+   Без SQL соединение не примется — кабинет обновляет заявки раз в 30 секунд на любой своей вкладке. */
+const IvaLive = (function(){
+  const NK = 'iva_live_new';
+  let sub = null, subFor = '', live = false, ac = null, baseTitle = '', marks = 0;
+  const low = function(x){ return String(x || '').trim().toLowerCase(); };
+  function onAcct(){ return /(^|\/)account\.html$/.test(location.pathname); }
+  function lord(){ return typeof isAdmin === 'function' && isAdmin(); }
+  function label(){ return lord() ? 'Прокат' : 'Работа'; }
+  function href(){ return lord() ? 'account.html#orders' : 'account.html#staff'; }
+  function count(){ try { return Number(sessionStorage.getItem(NK)) || 0; } catch(e){ return 0; } }
+  function setCount(n){
+    try { if (n > 0) sessionStorage.setItem(NK, String(n)); else sessionStorage.removeItem(NK); } catch(e){}
+    if (typeof paintWork === 'function') paintWork(); else paintDot();   // у владельца кружок ведёт в «Заявки», пока есть новые
+  }
+  function paintDot(){
+    const n = count();
+    $$('.work-count').forEach(function(el){ el.textContent = n > 9 ? '9+' : String(n); el.style.display = n ? '' : 'none'; });
+  }
+  function start(){
+    if (typeof subscribeTable !== 'function' || typeof isAuthed !== 'function' || !isAuthed()) return;
+    const me = low(A.me);
+    if (!me || (sub && subFor === me)) return;
+    if (sub) sub.close();
+    subFor = me;
+    sub = subscribeTable('iva_order_ping', onRow, function(ok){
+      if (live === ok) return;
+      live = ok;
+      try { window.dispatchEvent(new CustomEvent('iva:live', { detail: { live: ok } })); } catch(e){}
+    });
+  }
+  function onRow(r){
+    if (!r || low(r.email) !== subFor) return;
+    try { window.dispatchEvent(new CustomEvent('iva:orders', { detail: r })); } catch(e){}
+    if (!onAcct() && r.kind === 'new'){ setCount(count() + 1); alertNew(1, ''); }
+  }
+  /* звук: два коротких тона (без файла); браузер разрешает звук после первого касания страницы */
+  function audio(){
+    try {
+      const C = window.AudioContext || window.webkitAudioContext;
+      if (!C) return null;
+      if (!ac) ac = new C();
+      if (ac.state === 'suspended') ac.resume();
+      return ac;
+    } catch(e){ return null; }
+  }
+  function beep(){
+    const c = audio();
+    if (!c) return;
+    try {
+      [[880, 0], [1320, 0.18]].forEach(function(t){
+        const o = c.createOscillator(), g = c.createGain(), at = c.currentTime + t[1];
+        o.type = 'sine'; o.frequency.value = t[0];
+        g.gain.setValueAtTime(0.0001, at);
+        g.gain.exponentialRampToValueAtTime(0.22, at + 0.02);
+        g.gain.exponentialRampToValueAtTime(0.0001, at + 0.32);
+        o.connect(g); g.connect(c.destination); o.start(at); o.stop(at + 0.35);
+      });
+    } catch(e){}
+  }
+  function sys(title){
+    if (!document.hidden || !('Notification' in window) || Notification.permission !== 'granted') return;
+    try {
+      const n = new Notification(title, { body: 'Ива · ' + label() + ' — нажмите, чтобы открыть', icon: 'assets/icon-192.png', tag: 'iva-order' });
+      n.onclick = function(){ try { window.focus(); } catch(e){} if (!onAcct()) location.href = href(); n.close(); };
+    } catch(e){}
+  }
+  function titleMark(){
+    if (!document.hidden) return;
+    if (!marks) baseTitle = document.title;
+    marks++;
+    document.title = '(' + marks + ') ' + baseTitle;
+  }
+  /* новая заявка: сообщение, звук, уведомление браузера (вкладка свёрнута), число в заголовке вкладки */
+  function alertNew(n, what){
+    const t = n === 1 ? 'Новая заявка' + (what ? ': ' + what : '') : 'Новых заявок: ' + n;
+    toast(onAcct() ? t : t + ' — откройте «' + label() + '» вверху');
+    beep(); sys(t); titleMark();
+  }
+  function permHTML(){
+    if (!('Notification' in window) || Notification.permission !== 'default') return '';
+    return ' · <button type="button" class="st-link" data-iva-notif="1">уведомлять о заявках, даже если вкладка свёрнута</button>';
+  }
+  function updTxt(){ return live ? 'обновляется сразу' : 'обновляется само каждые 30 секунд'; }
+  document.addEventListener('click', function(e){
+    const b = e.target.closest ? e.target.closest('[data-iva-notif]') : null;
+    if (!b || !('Notification' in window)) return;
+    e.preventDefault();
+    audio();
+    Promise.resolve(Notification.requestPermission()).then(function(p){
+      toast(p === 'granted' ? 'Готово: о новой заявке скажем, даже если вкладка свёрнута' : 'Уведомления не разрешены — их можно включить в настройках браузера');
+      $$('[data-iva-notif]').forEach(function(x){ x.remove(); });
+    }).catch(function(){});
+  });
+  document.addEventListener('pointerdown', function(){ audio(); }, { once: true, passive: true });
+  document.addEventListener('visibilitychange', function(){
+    if (document.hidden) return;
+    if (marks){ document.title = baseTitle; marks = 0; }
+    try { window.dispatchEvent(new CustomEvent('iva:orders', { detail: { kind: 'upd', visible: true } })); } catch(e){}
+  });
+  return { start: start, alertNew: alertNew, permHTML: permHTML, updTxt: updTxt, seen: function(){ setCount(0); },
+           paintDot: paintDot, isLive: function(){ return live; } };
+})();
+
+/* Кружок «Работа» (сотрудник) / «Прокат» (владелец проката) в шапке слева от аватарки (просьба владельца 24.10.2026).
+   Сотрудник: логотип проката по его первому пункту (iva_prokat_points), иначе первые буквы названия проката.
+   Что человек — сотрудник, знаем из iva_staff_me (кабинет кладёт ответ сюда же; на других страницах — один запрос
+   раз в 5 минут, у клиента без работы — раз в 30 минут). */
+const WORK_KEY = 'iva_work_v1';
+function workPut(st){
+  try {
+    const me = String((A && A.me) || '').toLowerCase();
+    const on = st && st.status === 'active';
+    const p0 = on && Array.isArray(st.points) && st.points[0] ? String(st.points[0].id || '') : '';
+    sessionStorage.setItem(WORK_KEY, JSON.stringify({ me: me, at: Date.now(), on: !!on, c: on ? String(st.company || '') : '', p: p0 }));
+  } catch(e){}
+}
+async function workGet(){
+  const me = String((A && A.me) || '').toLowerCase();
+  let w = null;
+  try { w = JSON.parse(sessionStorage.getItem(WORK_KEY) || 'null'); } catch(e){}
+  if (w && w.me === me && Date.now() - w.at < (w.on ? 300000 : 1800000)) return w;
+  try {
+    const r = await api('/rest/v1/rpc/iva_staff_me', 'POST', {});
+    workPut((Array.isArray(r) ? r[0] : r) || null);
+  } catch(e){ workPut(null); }
+  try { w = JSON.parse(sessionStorage.getItem(WORK_KEY) || 'null'); } catch(e){ w = null; }
+  return w;
+}
+async function paintWork(){
+  const els = [$('workLink'), $('workMob')].filter(Boolean);
+  if (!els.length) return;
+  const hide = function(){ els.forEach(function(el){ el.classList.add('hide'); }); };
+  if (typeof isAuthed !== 'function' || !isAuthed()) return hide();
+  let kind, name, attr, link;
+  if (typeof isAdmin === 'function' && isAdmin()){
+    const ad = A.admin || {};
+    kind = 'Прокат'; name = ad.company || ad.full_name || 'Прокат'; attr = ['data-ava-org', '1'];
+    link = (Number(sessionStorage.getItem('iva_live_new')) || 0) > 0 ? 'account.html#orders' : 'account.html#home';
+  } else {
+    const w = await workGet();
+    if (!w || !w.on) return hide();
+    kind = 'Работа'; name = w.c || 'Прокат'; attr = w.p ? ['data-ava-point', w.p] : null; link = 'account.html#staff';
+  }
+  els.forEach(function(el){
+    el.classList.remove('hide');
+    el.setAttribute('href', link);
+    el.setAttribute('title', kind + ' · ' + name);
+    el.setAttribute('aria-label', kind + ' · ' + name);
+    el.classList.toggle('on', /(^|\/)account\.html$/.test(location.pathname) &&
+      (location.hash === '#staff' || (kind === 'Прокат' && /^#(home|orders)?$/.test(location.hash))));
+    const t = el.querySelector('.work-t'); if (t) t.textContent = kind;
+    const ini = el.querySelector('.work-ini');
+    if (ini){
+      const key = attr ? attr[0] + '=' + attr[1] : 'none';
+      if (ini.getAttribute('data-work') !== key){
+        ini.removeAttribute('data-ava-org'); ini.removeAttribute('data-ava-point');
+        ini.classList.remove('ava-img'); ini.removeAttribute('data-ava-src');
+        ini.textContent = initials(name);
+        if (attr) ini.setAttribute(attr[0], attr[1]);
+        ini.setAttribute('data-work', key);
+      }
+      if (attr && typeof IvaAva !== 'undefined') IvaAva.paint(el);
+    }
+  });
+  IvaLive.paintDot();
+}
 
 /* ---------- Меню аккаунта в шапке ---------- */
 function acctMenuHTML(){

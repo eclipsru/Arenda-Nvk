@@ -983,6 +983,86 @@ function subscribeMessages(onInsert){
   };
 }
 
+/* ---------- Realtime: своя строка таблицы-отметки (24.10.2026) ----------
+   Сейчас — iva_order_ping (SQL 20261119): «в моих заявках что-то поменялось». RLS отдаёт только свою строку.
+   onRow(record) — на вставку и изменение; onState(true/false) — подписка принята базой или нет
+   (нет SQL / нет таблицы в Realtime — false, сайт работает на опросе раз в 30 секунд).
+   Токен входа живёт час: перед переподключением и раз в 10 минут — свежий (refreshToken), каналу — «access_token». */
+function subscribeTable(table, onRow, onState){
+  if (!A.tok || typeof WebSocket === 'undefined' || !/^[a-z_]+$/.test(table || '')) return null;
+  let ws = null, ref = 0, joinRef = '', hb = null, tk = null, closed = false, retry = null, attempts = 0;
+  const topic = 'realtime:public:' + table;
+  const endpoint = SB.replace('https://','wss://') + '/realtime/v1/websocket?apikey=' + encodeURIComponent(KEY) + '&vsn=1.0.0';
+  const state = function(ok){ try { if (onState) onState(ok); } catch(e){} };
+  function expSoon(ms){
+    try {
+      const p = JSON.parse(atob(String(A.tok || '').split('.')[1].replace(/-/g, '+').replace(/_/g, '/')));
+      return !p.exp || p.exp * 1000 - Date.now() < ms;
+    } catch(e){ return false; }
+  }
+  async function fresh(){ if (A.tok && expSoon(120000) && typeof refreshToken === 'function') await refreshToken(); }
+  function stop(){
+    if (hb){ clearInterval(hb); hb = null; }
+    if (tk){ clearInterval(tk); tk = null; }
+  }
+  function reconnect(slow){
+    if (closed || retry) return;
+    const delay = slow ? 300000 : Math.min(30000, 1000 * Math.pow(2, attempts++));
+    retry = setTimeout(function(){ retry = null; connect(); }, delay);
+  }
+  async function connect(){
+    if (closed) return;
+    try { await fresh(); } catch(e){}
+    if (closed || !A.tok){ state(false); return; }
+    try { ws = new WebSocket(endpoint); } catch(e){ reconnect(); return; }
+    ws.onopen = function(){
+      joinRef = String(++ref);
+      ws.send(JSON.stringify({ topic: topic, event: 'phx_join', ref: joinRef, payload: {
+        config: { broadcast: { ack: false, self: false }, presence: { key: '' },
+                  postgres_changes: [{ event: '*', schema: 'public', table: table }] },
+        access_token: A.tok } }));
+      stop();
+      hb = setInterval(function(){
+        if (ws && ws.readyState === 1) ws.send(JSON.stringify({ topic: 'phoenix', event: 'heartbeat', payload: {}, ref: String(++ref) }));
+      }, 25000);
+      tk = setInterval(async function(){
+        if (!expSoon(600000)) return;
+        try { await fresh(); } catch(e){}
+        if (ws && ws.readyState === 1 && A.tok) ws.send(JSON.stringify({ topic: topic, event: 'access_token', payload: { access_token: A.tok }, ref: String(++ref) }));
+      }, 600000);
+    };
+    ws.onmessage = function(ev){
+      let d = null;
+      try { d = JSON.parse(ev.data); } catch(e){ return; }
+      if (!d || d.topic !== topic) return;
+      if (d.event === 'phx_reply' && d.ref === joinRef){
+        const ok = d.payload && d.payload.status === 'ok';
+        if (ok) attempts = 0;
+        state(ok);
+        if (!ok){ try { ws.close(); } catch(e){} }
+        return;
+      }
+      if (d.event === 'system' && d.payload && d.payload.status === 'error'){ state(false); try { ws.close(); } catch(e){} return; }
+      if (d.event === 'phx_error' || d.event === 'phx_close'){ state(false); return; }
+      const data = d.payload && d.payload.data;
+      if (d.event === 'postgres_changes' && data && (data.type === 'INSERT' || data.type === 'UPDATE') && data.record){
+        try { onRow(data.record); } catch(e){}
+      }
+    };
+    ws.onerror = function(){ stop(); try { ws.close(); } catch(e){} };
+    ws.onclose = function(){ stop(); state(false); if (!closed) reconnect(attempts > 6); };
+  }
+  connect();
+  return {
+    close: function(){
+      closed = true;
+      if (retry){ clearTimeout(retry); retry = null; }
+      stop();
+      try { if (ws) ws.close(); } catch(e){}
+    }
+  };
+}
+
 /* Подпись собеседника: имя из admins, иначе часть почты */
 function whoTitle(email){
   const o = OWNER_CACHE[(email || '').toLowerCase()];

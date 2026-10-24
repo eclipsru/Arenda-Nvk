@@ -10,7 +10,7 @@
 <link rel="icon" href="assets/favicon-32.png" type="image/png" sizes="32x32">
 <link rel="icon" href="assets/icon-192.png" type="image/png" sizes="192x192">
 <link rel="apple-touch-icon" href="assets/apple-touch-icon.png">
-<link rel="stylesheet" href="assets/theme.css?v=20261024-b">
+<link rel="stylesheet" href="assets/theme.css?v=20261024-live">
 <link rel="stylesheet" href="assets/profile.css?v=20260923-rental-profile">
 <style>
 .tabs{display:flex;gap:4px;border-bottom:1px solid var(--line);margin-bottom:18px;
@@ -149,9 +149,9 @@
 
 <script src="assets/data.js"></script>
 <script src="assets/geo.js?v=20260923-photon"></script>
-<script src="assets/email-guard.js?v=20260926-email"></script><script src="assets/sb.js?v=20260926-email"></script>
+<script src="assets/email-guard.js?v=20260926-email"></script><script src="assets/sb.js?v=20261024-live"></script>
 <script src="assets/app-release.js?v=20261009-rel"></script>
-<script src="assets/app.js?v=20261022-a"></script>
+<script src="assets/app.js?v=20261024-live"></script>
 <script src="assets/profile.js?v=20261022-a"></script>
 <script>
 (function(){
@@ -915,11 +915,13 @@
       '<button type="button" class="btn sec sm" data-ord-f="all" data-ord-clear="1">Показать все заявки</button></div>';
   }
   function oUpdTxt(){
-    return (O_UPD ? 'Обновлено ' + stWhen(O_UPD).replace(/^сегодня /, '') + ' · ' : '') + 'обновляется само каждые 30 секунд';
+    return (O_UPD ? 'Обновлено ' + stWhen(O_UPD).replace(/^сегодня /, '') + ' · ' : '') + liveTxt();
   }
+  function liveTxt(){ return typeof IvaLive !== 'undefined' ? IvaLive.updTxt() : 'обновляется само каждые 30 секунд'; }
+  function livePerm(){ return typeof IvaLive !== 'undefined' ? IvaLive.permHTML() : ''; }
   function oUpdLine(){
     const F = SUB_TAB_ORD || 'all';
-    return '<span id="ordUpd">' + oUpdTxt() + '</span>' +
+    return '<span id="ordUpd">' + oUpdTxt() + '</span>' + livePerm() +
       (F !== 'all' ? ' · фильтр «' + (O_FN[F] || F) + '» — <button type="button" class="st-link" data-ord-f="all">показать все</button>' : '');
   }
 
@@ -990,18 +992,45 @@
         (k.p.items || []).map(function(it){ return it.returned_at ? 1 : 0; }).join('')] : 0];
     })) + '|' + (LCARDS ? 1 : 0);
   }
-  /* автообновление раз в 30 секунд, пока открыты «Заявки» и вкладка браузера видна; таймеры «осталось» тикают отдельно */
-  function oAuto(){
-    if (O_TIMER) return;
-    O_TIMER = setInterval(async function(){
-      if (TAB !== 'orders' || !isAdmin() || document.hidden || $('sheet') || document.querySelector('#ordList button:disabled')) return;
+  /* автообновление (24.10.2026): сразу по сигналу базы (IvaLive, SQL 20261119) и раз в 30 секунд — на любой вкладке
+     кабинета, не только в «Заявках»; о новой заявке — сообщение, звук и уведомление браузера; таймеры тикают отдельно */
+  let O_BUSY = false;
+  async function oTick(){
+    if (O_BUSY || !isAdmin() || $('sheet') || document.querySelector('#ordList button:disabled')) return;
+    O_BUSY = true;
+    try {
       const s0 = oSig();
       let fresh;
       try { fresh = await oReload(); } catch(e){ return; }
-      if (TAB !== 'orders') return;
-      if (fresh.length) toast(fresh.length === 1 ? 'Новая заявка: ' + (fresh[0].tools_text || '') : 'Новых заявок: ' + fresh.length);
-      if (oSig() !== s0) oRepaint(); else { const u = $('ordUpd'); if (u) u.textContent = oUpdTxt(); }
-    }, 30000);
+      if (fresh.length) liveNew(fresh.length, fresh[0].tools_text || '');
+      if (oSig() === s0){ const u = $('ordUpd'); if (u) u.textContent = oUpdTxt(); return; }
+      if (TAB === 'orders') oRepaint();
+      else if (TAB === 'home') liveRender();
+      else oTabBadge();
+    } finally { O_BUSY = false; }
+  }
+  function oAuto(){
+    if (O_TIMER) return;
+    O_TIMER = setInterval(oTick, 30000);
+  }
+  /* число у вкладки «Заявки» — новые и выданные (когда открыта другая вкладка) */
+  function oTabBadge(){
+    const tb = document.querySelector('.tabs button[data-tab="orders"]');
+    if (!tb || !isAdmin()) return;
+    const n = ORDERS.filter(function(o){ const st = o.status || 'new'; return !o.archived && (st === 'new' || st === 'rented'); }).length;
+    let b = tb.querySelector('.n');
+    if (!n){ if (b) b.remove(); }
+    else { if (!b){ b = document.createElement('span'); b.className = 'n'; tb.appendChild(b); } b.textContent = n; }
+  }
+  /* перерисовать вкладку, не мешая человеку: не во время ввода и не при открытой панели */
+  function liveRender(){
+    const ae = document.activeElement;
+    if ($('sheet') || (ae && /^(INPUT|TEXTAREA|SELECT)$/.test(ae.tagName))) return;
+    const y = window.scrollY; render(); window.scrollTo(0, y);
+  }
+  function liveNew(n, what){
+    if (typeof IvaLive !== 'undefined') IvaLive.alertNew(n, what);
+    else toast(n === 1 ? 'Новая заявка: ' + what : 'Новых заявок: ' + n);
   }
 
   /* простая карточка — когда в базе ещё нет iva_order_cards */
@@ -1639,6 +1668,7 @@
       STAFF = (Array.isArray(r) ? r[0] : r) || null;
     } catch(e){ STAFF = null; }
     try { if (STAFF) localStorage.setItem('iva_staff_hint', '1'); else localStorage.removeItem('iva_staff_hint'); } catch(e){}
+    try { if (typeof workPut === 'function'){ workPut(STAFF); paintWork(); } } catch(e){}   // кружок «Работа» в шапке
     if (STAFF && STAFF.status === 'active' && (STAFF.can_issue || STAFF.can_notify)){
       try { SPARTS = await api('/rest/v1/rpc/iva_staff_parts', 'POST', {}) || []; } catch(e){ SPARTS = []; }
       try { SCARDS = lcMap(await api('/rest/v1/rpc/iva_order_cards', 'POST', { p_scope: 'staff' })); } catch(e){ SCARDS = null; }
@@ -1777,7 +1807,7 @@
     return h;
   }
   function stUpdTxt(){
-    return (ST_UPD ? 'Обновлено ' + stWhen(ST_UPD).replace(/^сегодня /, '') + ' · ' : '') + 'обновляется само каждые 30 секунд';
+    return (ST_UPD ? 'Обновлено ' + stWhen(ST_UPD).replace(/^сегодня /, '') + ' · ' : '') + liveTxt();
   }
   /* «Инструмент пунктов» (24.10.2026, этап 2 «Работы в прокате»): сотрудник с правом «Добавляет инструмент» видит инструмент
      своих пунктов — что в каталоге, что ждёт одобрения владельца, что отклонено; с правом «Удаляет» — отправляет запрос на удаление.
@@ -2113,7 +2143,7 @@
         '<input class="inp" id="stQ" type="search" autocomplete="off" placeholder="№, клиент, телефон, инструмент" value="' + esc(ST_Q) + '">' +
         '<button class="btn sec sm" data-staff-reload="1">Обновить</button>' +
       '</div>' +
-      '<div class="small muted st-upd"><span id="stUpd">' + stUpdTxt() + '</span>' +
+      '<div class="small muted st-upd"><span id="stUpd">' + stUpdTxt() + '</span>' + livePerm() +
         (ST_F !== 'all' ? ' · фильтр «' + { new: 'Новые', late: 'Просрочены', today: 'Вернуть сегодня', rented: 'В аренде' }[ST_F] +
           '» — <button type="button" class="st-link" data-st-f="all">показать все</button>' : '') + '</div>';
     h += '<div id="stList">' + stListHTML() + '</div>';
@@ -2132,11 +2162,20 @@
     if (document.activeElement && document.activeElement.id === 'stTq') { const l = $('stTList'); if (l) l.innerHTML = stToolListHTML(); return; }
     const y = window.scrollY; render(); window.scrollTo(0, y);
   }
-  /* автообновление раз в 30 секунд, пока открыта «Работа» и вкладка браузера видна */
+  /* автообновление (24.10.2026): сразу по сигналу базы (IvaLive, SQL 20261119) и раз в 30 секунд — на любой вкладке
+     кабинета, не только в «Работе»; о новой заявке — сообщение, звук и уведомление браузера */
+  let ST_BUSY = false;
   function stAuto(){
     if (ST_TIMER) return;
-    ST_TIMER = setInterval(async function(){
-      if (TAB !== 'staff' || !STAFF || STAFF.status !== 'active' || document.hidden || $('sheet')) return;
+    ST_TIMER = setInterval(stTick, 30000);
+  }
+  async function stTick(){
+    if (ST_BUSY || !STAFF || STAFF.status !== 'active' || $('sheet')) return;
+    ST_BUSY = true;
+    try { await stTick1(); } finally { ST_BUSY = false; }
+  }
+  async function stTick1(){
+    {
       const seen = {}; SPARTS.forEach(function(p){ seen[p.part_id] = 1; });
       const sig = function(){ return JSON.stringify(SPARTS.map(function(p){ return [p.part_id, p.status, p.rented_at || '']; })) + '|' + (SCARDS ? Object.keys(SCARDS).length : -1) +
         '|' + JSON.stringify((STOOLS || []).map(function(t){ return [t.id, t.review || '', t.edit_state || '', t.status || '', t.active]; })) +
@@ -2147,10 +2186,16 @@
       if (!STAFF || STAFF.status !== 'active'){ render(); return; }
       const fresh = SPARTS.filter(function(p){ return !seen[p.part_id] && (p.status || 'new') === 'new'; });
       fresh.forEach(function(p){ ST_FRESH[p.part_id] = Date.now(); });
-      if (fresh.length) toast(fresh.length === 1 ? 'Новая заявка: ' + (fresh[0].tools_text || '') : 'Новых заявок: ' + fresh.length);
+      if (fresh.length && STAFF.can_notify) liveNew(fresh.length, fresh[0].tools_text || '');
+      else if (fresh.length) toast(fresh.length === 1 ? 'Новая заявка: ' + (fresh[0].tools_text || '') : 'Новых заявок: ' + fresh.length);
       else if (stUnread(STCHATS) > u0) toast('Новое сообщение от клиента');
-      if (sig() !== s0) stRepaint(); else { const u = $('stUpd'); if (u) u.textContent = stUpdTxt(); }
-    }, 30000);
+      if (sig() === s0){ const u = $('stUpd'); if (u) u.textContent = stUpdTxt(); return; }
+      if (TAB === 'staff') stRepaint();
+      else {
+        const tb = document.querySelector('.tabs button[data-tab="staff"]');
+        if (tb){ const old = tb.querySelector('.n'); if (old) old.remove(); tb.insertAdjacentHTML('beforeend', staffNewBadge()); }
+      }
+    }
   }
   /* подтверждение в нижней панели (вместо окна браузера) */
   function askSheet(title, body, okLabel){
@@ -2308,9 +2353,11 @@
     (function(){ const tb = document.querySelector('.tabs'), on = tb && tb.querySelector('button.on');
       if (on && tb.scrollWidth > tb.clientWidth) tb.scrollLeft = on.offsetLeft - tb.offsetLeft - (tb.clientWidth - on.offsetWidth) / 2; })();
 
-    if (TAB === 'staff' && STAFF && STAFF.status === 'active') stAuto();
+    if (STAFF && STAFF.status === 'active') stAuto();      // 24.10.2026: на любой вкладке кабинета
+    if (isAdmin()) oAuto();
+    if (typeof IvaLive !== 'undefined' && ((TAB === 'staff' && STAFF) || (TAB === 'orders' && isAdmin()))) IvaLive.seen();
+    if (typeof paintWork === 'function') paintWork();
     if (TAB === 'orders' && isAdmin()){
-      oAuto();
       if ($('ordQ')){
         let oT = null;
         $('ordQ').oninput = function(){
@@ -2668,6 +2715,34 @@
 
   window.onFavChanged = function(){ if (TAB === 'fav') render(); };
 
+  /* сигнал базы «в ваших заявках что-то поменялось» (IvaLive, SQL 20261119) или вкладка снова видна — перечитать сразу */
+  let LIVE_T = null, LIVE_VIS = 0;
+  window.addEventListener('iva:orders', function(e){
+    const d = (e && e.detail) || {};
+    if (d.visible){ if (Date.now() - LIVE_VIS < 15000) return; LIVE_VIS = Date.now(); }
+    clearTimeout(LIVE_T);
+    LIVE_T = setTimeout(liveTick, 600);
+  });
+  window.addEventListener('iva:live', function(){
+    const a = $('ordUpd'), b = $('stUpd');
+    if (a) a.textContent = oUpdTxt();
+    if (b) b.textContent = stUpdTxt();
+  });
+  async function liveTick(){
+    if (!isAuthed()) return;
+    if (isAdmin()) await oTick();
+    if (STAFF && STAFF.status === 'active') await stTick();
+    /* свои заявки клиента (и «Я арендую» арендодателя): статус, «Выдал», отмена */
+    const mine = isAdmin() ? TAB === 'sent' : (TAB === 'orders' || TAB === 'staff');
+    if (!mine || $('sheet')) return;
+    try {
+      const both = await Promise.all([loadClientOrders(), loadClientCards()]);
+      const rows = both[0] || [], was = JSON.stringify((isAdmin() ? SENT : ORDERS).map(function(o){ return [o.id, o.status]; }));
+      if (isAdmin()) SENT = rows; else ORDERS = rows;
+      if (JSON.stringify(rows.map(function(o){ return [o.id, o.status]; })) !== was && TAB !== 'staff') liveRender();
+    } catch(err){}
+  }
+
   window.addEventListener('hashchange', function(){
     const h = (location.hash || '').replace('#','');
     if (h && h !== TAB){ if(!RentalProfile.allowLeave()){history.replaceState(null,'',location.pathname+'#'+TAB);return;} TAB = h; render(); }
@@ -2713,6 +2788,7 @@
         ORDERS = myParts.status === 'fulfilled' ? (myParts.value || []) : [];
         FEES = myFees.status === 'fulfilled' ? (myFees.value || []) : [];
         REVIEWS = myReviews.status === 'fulfilled' ? (myReviews.value || []) : [];
+        if (myParts.status === 'fulfilled') O_UPD = Date.now();   // 24.10.2026: первая же новая заявка — «новая», даже если «Заявки» не открывали
       } catch(e){
         MY = []; ORDERS = []; FEES = []; REVIEWS = [];
         toast('Не удалось загрузить данные: ' + e.message);
