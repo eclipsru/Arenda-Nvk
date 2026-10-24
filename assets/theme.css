@@ -1200,8 +1200,9 @@ textarea.inp.st-ch-inp{height:46px;padding:12px 14px}
 .st-ch-sheet .sheet-f{flex-wrap:wrap}
 .st-ch-draft{flex-basis:100%;position:relative;display:flex}
 .st-ch-draft[hidden]{display:none}
-.st-ch-draft img{max-height:110px;max-width:60%;border-radius:10px;border:1px solid var(--line);object-fit:cover}
-.st-ch-draft .x{position:absolute;top:-6px;left:calc(min(60%, 200px) - 14px);width:26px;height:26px;border-radius:50%;background:var(--card);border:1px solid var(--line-2);color:var(--tx);font-size:16px;line-height:1;cursor:pointer}
+.st-ch-draft span{position:relative;display:inline-block;max-width:60%}
+.st-ch-draft img{display:block;max-height:110px;max-width:100%;min-width:60px;min-height:46px;border-radius:10px;border:1px solid var(--line);object-fit:cover;background:var(--field)}
+.st-ch-draft .x{position:absolute;top:-8px;right:-8px;width:26px;height:26px;border-radius:50%;background:var(--card);border:1px solid var(--line-2);color:var(--tx);font-size:16px;line-height:1;cursor:pointer}
 .st-ch-ph{flex:0 0 46px;width:46px;height:46px;padding:0;display:flex;align-items:center;justify-content:center;cursor:pointer}
 .st-ch-ph svg{width:22px;height:22px;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linejoin:round}
 .st-ch-ph.busy{opacity:.5;pointer-events:none}

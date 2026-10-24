@@ -1763,7 +1763,7 @@
       '<label class="btn sec st-ch-ph" title="Приложить фото" aria-label="Приложить фото">' +
         '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h3l2-3h6l2 3h3v13H4z"/><circle cx="12" cy="13" r="4"/></svg>' +
         '<input type="file" id="stChFile" accept="image/*" hidden></label>' +
-      '<textarea class="inp st-ch-inp" id="stChTxt" rows="1" maxlength="2000" placeholder="Ваш ответ клиенту"></textarea>' +
+      '<textarea class="inp st-ch-inp" id="stChTxt" rows="1" maxlength="2000" placeholder="Ответ клиенту"></textarea>' +
       '<button class="btn" id="stChSend">Отправить</button>');
     const sh = $('sheet'); sh.classList.add('st-ch-sheet');
     api('/rest/v1/rpc/iva_chat_mark', 'POST', { p_thread: ch.thread, p_state: 'open' }).catch(function(){});
@@ -1798,7 +1798,7 @@
     const draft = function(){
       const d = $('stChDraft'); if (!d) return;
       d.hidden = !img;
-      d.innerHTML = img ? '<img src="' + esc(img) + '" alt="Фото к отправке"><button type="button" class="x" id="stChDraftX" aria-label="Убрать фото">×</button>' : '';
+      d.innerHTML = img ? '<span><img src="' + esc(img) + '" alt="Фото к отправке"><button type="button" class="x" id="stChDraftX" aria-label="Убрать фото">×</button></span>' : '';
       if (img) $('stChDraftX').onclick = function(){ img = ''; draft(); };
     };
     $('stChFile').onchange = async function(){
