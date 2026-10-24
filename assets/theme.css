@@ -1110,3 +1110,44 @@ select.inp{cursor:pointer;appearance:none;
 .apk-test-msg{flex-basis:100%;margin:0 !important}
 .apk-test-msg:empty{display:none}
 .apk-test-msg.bad{color:#ff6b6b !important}
+/* Работа сотрудника, этап 1 «Смена» (24.10.2026): шапка с пунктом и часами, плитки-фильтры, поиск, свежие заявки */
+.st-head{display:flex;flex-direction:column;gap:10px;margin:0 0 10px}
+.st-co{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap}
+.st-co b{font-size:18px}
+.st-head .st-pts{margin:0}
+.st-pt-info{display:flex;flex-wrap:wrap;gap:6px 14px;font-size:13px;color:var(--gr);line-height:1.45}
+.st-pt-info a{color:var(--or);white-space:nowrap}
+.st-open{color:var(--grn);font-weight:600}
+.st-shut{color:var(--yel);font-weight:600}
+.st-about{background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:10px 14px;margin:0 0 14px;font-size:13.5px}
+.st-about summary{cursor:pointer;color:var(--gr);font-weight:600}
+.st-about[open] summary{margin-bottom:8px}
+.st-kpis.kpis{grid-template-columns:repeat(4,minmax(0,1fr));margin-bottom:14px}
+.st-kpis .kpi.st-k{border-width:1px;transition:border-color .15s,background .15s}
+.st-kpis .kpi.st-k.on{border-color:var(--or);background:rgba(255,143,31,.08)}
+.st-kpis .kpi.k-new.has .vl{color:var(--grn)}
+.st-kpis .kpi.k-late.has{border-color:rgba(255,138,128,.45)}
+.st-kpis .kpi.k-late.has .vl{color:var(--red)}
+.st-kpis .kpi.k-today.has .vl{color:var(--yel)}
+.st-kpis .kpi.st-k.on.k-late.has{border-color:var(--or)}
+.st-bar{display:flex;gap:8px;align-items:center}
+.st-bar .inp{flex:1;min-width:0}
+.st-upd{margin:6px 2px 4px;line-height:1.5}
+.st-link{background:none;border:0;padding:0;color:var(--or);font:inherit;cursor:pointer;text-decoration:underline}
+.st-g{margin:18px 2px 8px;font-size:12.5px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--g2)}
+.st-g-late{color:var(--red)}
+.st-g-new{color:var(--grn)}
+.st-wrap{border-radius:var(--r)}
+.st-wrap > .order-card{margin-bottom:10px}
+.st-fresh > .order-card{animation:stFresh 1.6s ease-in-out 3;box-shadow:0 0 0 2px var(--grn)}
+@keyframes stFresh{0%,100%{box-shadow:0 0 0 2px var(--grn)}50%{box-shadow:0 0 0 6px rgba(76,175,80,.25)}}
+.sr-lbl{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+.st-ask b{display:block;font-size:15px;color:var(--tx);margin-bottom:4px;line-height:1.4}
+.st-ask p{margin:10px 0 0;color:var(--gr);line-height:1.55}
+@media (max-width:640px){
+  .st-kpis.kpis{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+  .st-kpis .kpi.st-k{padding:11px 12px}
+  .st-kpis .kpi .vl{font-size:20px}
+  .st-kpis .kpi .sub{font-size:11.5px}
+}
+@media (prefers-reduced-motion:reduce){.st-fresh > .order-card{animation:none}}
