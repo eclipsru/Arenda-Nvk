@@ -85,7 +85,7 @@ const part=(id,st,tool)=>({id,order_id:String(500+id),owner_email:'qa-owner@exam
  await p.waitForSelector('#workMob',{state:'visible'});assert.equal(await p.locator('#workLink').isVisible(),false);
  const bx=await p.locator('#workMob').boundingBox();assert(bx.width>=30&&bx.width<=40&&bx.y<60,JSON.stringify(bx));
  assert.equal(await p.evaluate(()=>document.documentElement.scrollWidth<=390),true,'шапка влезает в 390px');
- await p.screenshot({path:'/home/user/shot/s/live-staff-mobile.png',clip:{x:0,y:0,width:390,height:140}});
+ if(process.env.IVA_SHOT_DIR)await p.screenshot({path:process.env.IVA_SHOT_DIR+'/live-staff-mobile.png',clip:{x:0,y:0,width:390,height:140}});
  assert.deepEqual(errors,[]);await c.close();}
 
 // 3. Без SQL 20261119 (подписка не принята): «обновляется само каждые 30 секунд»; клиенту без работы кружка нет
