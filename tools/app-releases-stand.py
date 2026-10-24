@@ -1,5 +1,6 @@
 # Стенд миграции 20261005_app_releases.sql на настоящем PostgreSQL (pgserver из PyPI).
 # Проверяет: подтвердить релиз может только eclips.ru@mail.ru; чужие ссылки, повтор, изменение, удаление — отказ.
+# 10.94: после 20261022_app_releases_tester.sql — ещё и eclipsik.ru@mail.ru (только от своего имени); остальные — отказ.
 # Запуск: PG_PY=/путь/к/python-с-pgserver bash tools/check.sh  или  python tools/app-releases-stand.py
 import pgserver, tempfile, sys
 srv = pgserver.get_server(tempfile.mkdtemp(), cleanup_mode='stop')
@@ -37,6 +38,28 @@ bad=0
 for name,(st,out),exp in cases:
     ok = st==exp; bad += not ok
     print(('✔' if ok else '✘'), name, st, '' if st=='OK' else out.splitlines()[-1][:120])
+# 10.94: право eclipsik (20261022) — применяем дважды (идемпотентность) и проверяем
+mig2=open('supabase/migrations/20261022_app_releases_tester.sql').read()
+print('apply 20261022', q(mig2)[0]); print('apply 20261022 (повтор)', q(mig2)[0])
+cases2=[
+ ('eclipsik выпускает 10.18', as_('authenticated','Eclipsik.RU@mail.ru',ins%(92,'10.18','ProkatInstrumenta-10.18.apk')), 'OK'),
+ ('eclipsik от имени создателя', as_('authenticated','eclipsik.ru@mail.ru',"insert into public.app_releases(version_code,version_name,apk_url,confirmed_by) values (93,'10.19','ProkatInstrumenta-10.19.apk','eclips.ru@mail.ru')"), 'ERR'),
+ ('eclipsik, чужая ссылка', as_('authenticated','eclipsik.ru@mail.ru',ins%(93,'10.19','https://evil.ru/ProkatInstrumenta-10.19.apk')), 'ERR'),
+ ('eclipsik повторяет 10.18', as_('authenticated','eclipsik.ru@mail.ru',ins%(92,'10.18','ProkatInstrumenta-10.18.apk')), 'ERR'),
+ ('eclipsik удаляет', as_('authenticated','eclipsik.ru@mail.ru',"delete from public.app_releases"), 'ERR'),
+ ('eclipsik меняет', as_('authenticated','eclipsik.ru@mail.ru',"update public.app_releases set apk_url='ProkatInstrumenta-1.1.apk'"), 'ERR'),
+ ('чужой после 20261022', as_('authenticated','someone@mail.ru',ins%(93,'10.19','ProkatInstrumenta-10.19.apk')), 'ERR'),
+ ('anon после 20261022', as_('anon','',ins%(93,'10.19','ProkatInstrumenta-10.19.apk')), 'ERR'),
+ ('создатель после 20261022', as_('authenticated','eclips.ru@mail.ru',ins%(93,'10.19','ProkatInstrumenta-10.19.apk')), 'OK'),
+]
+for name,(st,out),exp in cases2:
+    ok = st==exp; bad += not ok
+    print(('✔' if ok else '✘'), name, st, '' if st=='OK' else out.splitlines()[-1][:120])
+who=q("select version_code||':'||confirmed_by from public.app_releases order by 1")[1].replace('\n',' ')
+print('кто подтвердил:', who)
+if '92:eclipsik.ru@mail.ru' not in who or '93:eclips.ru@mail.ru' not in who: bad += 1; print('✘ confirmed_by не тот')
+pol=q("select count(*) from pg_policies where tablename='app_releases' and cmd='INSERT'")[1]
+print('правил вставки:', pol.replace('\n',' '))
 r=as_('anon','',"select version_code, version_name, apk_url from public.app_releases order by version_code desc limit 1")
 print('anon читает последнюю:', r[1].replace('\n',' | ')[:200])
 n=as_('authenticated','someone@mail.ru',"delete from public.app_releases returning 1")

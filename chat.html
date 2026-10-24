@@ -6,8 +6,10 @@
 <title>Сообщения — Ива</title>
 <meta name="robots" content="noindex, nofollow">
 <meta name="theme-color" content="#101217">
-<link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
-<link rel="stylesheet" href="assets/theme.css?v=20261005-rel">
+<link rel="icon" href="assets/favicon-32.png" type="image/png" sizes="32x32">
+<link rel="icon" href="assets/icon-192.png" type="image/png" sizes="192x192">
+<link rel="apple-touch-icon" href="assets/apple-touch-icon.png">
+<link rel="stylesheet" href="assets/theme.css?v=20261024-live">
 <link rel="stylesheet" href="assets/geo.css?v=20260923-photon">
 </head>
 <body>
@@ -25,9 +27,9 @@
 
 <script src="assets/data.js"></script>
 <script src="assets/geo.js?v=20260923-photon"></script>
-<script src="assets/sb.js?v=20260923-photon"></script>
+<script src="assets/sb.js?v=20261024-live"></script>
 <script src="assets/app-release.js?v=20261009-rel"></script>
-<script src="assets/app.js?v=20261009-rel"></script>
+<script src="assets/app.js?v=20261024-live"></script>
 <script>
 (function(){
   mountChrome('chat', '');
@@ -35,8 +37,14 @@
   let MSGS = [], DLGS = [], WHO = '', TOOL = null;
   let sub = null, poll = null;
   let rec = null, recChunks = [], recStart = 0, recTimer = null;
+  let pendingImg = '';
 
   const P = new URLSearchParams(location.search);
+  /* 20.10.2026: «Написать владельцу» (?who=владелец&lend=1) — единственный путь клиента к сдаче инструмента.
+     Арендодателем человека делает только владелец после разговора; здесь — обычная переписка с ним. */
+  const LEND_OWNER = (typeof IVA_CREATOR_EMAIL !== 'undefined' && IVA_CREATOR_EMAIL) || 'eclips.ru@mail.ru';
+  let LEND = P.get('lend') === '1';
+  function lendOn(){ return LEND && !TOOL && WHO === LEND_OWNER && A.me !== LEND_OWNER; }
 
   /* ---------- Время ---------- */
   function hhmm(s){
@@ -61,6 +69,23 @@
 
   /* ---------- Нужен вход ---------- */
   function screenAuth(){
+    if (LEND){
+      const back = 'account.html?next=' + encodeURIComponent('chat.html' + location.search);
+      $('root').innerHTML =
+        '<div class="empty" style="padding:70px 20px">' +
+          '<svg viewBox="0 0 24 24"><path d="M21 11.5a8.4 8.4 0 0 1-9 8.4 8.4 8.4 0 0 1-3.8-.9L3 21l2-5.2' +
+            'a8.4 8.4 0 0 1-.9-3.8 8.4 8.4 0 0 1 8.4-8.4h.5a8.4 8.4 0 0 1 8 8z"/></svg>' +
+          '<b>Хотите сдавать свой инструмент?</b>' +
+          '<p>Войдите или создайте аккаунт, чтобы написать владельцу площадки. ' +
+             'Обсудим условия, и после его одобрения вы станете арендодателем. ' +
+             'Можно и позвонить: +7 (908) 173-24-75.</p>' +
+          '<div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap">' +
+            '<a class="btn" href="' + back + '">Войти или создать аккаунт</a>' +
+            '<a class="btn sec" href="tel:+79081732475">Позвонить</a>' +
+          '</div>' +
+        '</div>';
+      return;
+    }
     $('root').innerHTML =
       '<div class="empty" style="padding:70px 20px">' +
         '<svg viewBox="0 0 24 24"><path d="M21 11.5a8.4 8.4 0 0 1-9 8.4 8.4 8.4 0 0 1-3.8-.9L3 21l2-5.2' +
@@ -114,7 +139,7 @@
 
     box.innerHTML = list.map(function(d){
       return '<div class="dlg' + (d.who === WHO ? ' on' : '') + '" data-who="' + esc(d.who) + '">' +
-        '<div class="ava">' + esc(initials(whoTitle(d.who))) + '</div>' +
+        '<div class="ava" data-ava="' + esc(d.who) + '">' + esc(initials(whoTitle(d.who))) + '</div>' +
         '<div class="dmid">' +
           '<div class="dnm">' + esc(whoTitle(d.who)) + '</div>' +
           '<div class="dlast">' + esc(d.fresh ? 'Новый диалог' : msgPreview(d.last)) + '</div>' +
@@ -126,6 +151,7 @@
       '</div>';
     }).join('');
 
+    if (typeof IvaAva !== 'undefined') IvaAva.paint(box);   // аватарки собеседников (21.10.2026)
     box.onclick = function(e){
       const d = e.target.closest('[data-who]');
       if (!d) return;
@@ -135,6 +161,50 @@
     const tot = DLGS.reduce(function(a,d){ return a + d.unread; }, 0);
     const lb = $('unreadLb');
     if (lb) lb.textContent = tot ? tot + ' ' + plural(tot,'непрочитанное','непрочитанных','непрочитанных') : '';
+  }
+
+  function threadToolId(who){
+    const w = (who || '').toLowerCase();
+    for (let i = 0; i < MSGS.length; i++){
+      const m = MSGS[i] || {};
+      const f = (m.from_email || '').toLowerCase();
+      const t = (m.to_email || '').toLowerCase();
+      if ((f === A.me && t === w) || (f === w && t === A.me)){
+        if (m.tool_id) return m.tool_id;
+      }
+    }
+    return '';
+  }
+
+  /* Контекст инструмента — это карточка интерфейса, а не сообщение в базе. */
+  /* Клиенту владелец площадки подписан понятно, а не частью почты */
+  function peerTitle(){
+    return WHO === LEND_OWNER && A.me !== LEND_OWNER ? 'Владелец площадки «Ива»' : whoTitle(WHO);
+  }
+  function toolContextHtml(){
+    if (lendOn()) return '<div class="tool-context lend">' +
+      '<span class="tool-context-empty">🔧</span>' +
+      '<span class="tool-context-copy"><small>Хочу сдавать инструмент</small>' +
+        '<b>Расскажите, что сдаёте, в каком городе и сколько у вас инструмента</b></span></div>';
+    if (!TOOL) return '';
+    const image = (TOOL.imgs && TOOL.imgs[0]) || TOOL.img || '';
+    return '<a class="tool-context" href="tool.html?id=' + encodeURIComponent(TOOL.id) + '"' +
+      ' title="Открыть объявление инструмента">' +
+      (image ? '<img src="' + esc(image) + '" alt="">' : '<span class="tool-context-empty">🔧</span>') +
+      '<span class="tool-context-copy"><small>Обсуждение инструмента</small><b>' +
+        esc(TOOL.name || 'Инструмент') + '</b></span>' +
+      '<span class="tool-context-arrow">↗</span></a>';
+  }
+
+  function renderPendingImage(){
+    const box = $('thDraft');
+    if (!box) return;
+    if (!pendingImg){ box.innerHTML = ''; box.style.display = 'none'; return; }
+    box.style.display = 'flex';
+    box.innerHTML = '<img src="' + esc(pendingImg) + '" alt="Фото к отправке">' +
+      '<span>Фото добавлено. Нажмите «Отправить»</span>' +
+      '<button type="button" id="thDraftRemove" title="Убрать фото">×</button>';
+    $('thDraftRemove').onclick = function(){ pendingImg = ''; renderPendingImage(); };
   }
 
   /* ---------- Переписка ---------- */
@@ -162,12 +232,6 @@
       const mine = (m.from_email||'').toLowerCase() === A.me;
 
       let inner = '';
-      if (m.tool_id && TOOL && String(TOOL.id) === String(m.tool_id)){
-        const ti = (TOOL.imgs && TOOL.imgs[0]) || TOOL.img || '';
-        inner += '<div class="tool-ref">' +
-          (ti ? '<img src="' + esc(ti) + '" alt="">' : '') +
-          '<span>' + esc(TOOL.name) + '</span></div>';
-      }
       if (m.img)   inner += '<img class="bimg" src="' + esc(m.img) + '" alt="фото" data-big="' + esc(m.img) + '">';
       if (m.audio) inner += '<audio controls preload="none" src="' + esc(m.audio) + '"></audio>';
       if (m.text)  inner += esc(m.text);
@@ -181,24 +245,28 @@
     if (!ms.length){
       body = '<div class="empty" style="margin:auto;padding:30px 20px">' +
         '<b style="font-size:15px">Сообщений пока нет</b>' +
-        '<p style="font-size:13px">Напишите первым — арендодатель увидит сообщение в кабинете.</p></div>';
+        '<p style="font-size:13px">' + (lendOn()
+          ? 'Владелец площадки ответит здесь. Подключает арендодателей только он — после разговора.'
+          : 'Напишите первым — арендодатель увидит сообщение в кабинете.') + '</p></div>';
     }
 
     box.innerHTML =
       '<div class="th-head">' +
         '<button class="back" id="thBack" aria-label="Назад">' +
           '<svg viewBox="0 0 24 24"><path d="m15 18-6-6 6-6"/></svg></button>' +
-        '<div class="ava">' + esc(initials(whoTitle(WHO))) + '</div>' +
-        '<div><div class="thnm">' + esc(whoTitle(WHO)) + '</div>' +
+        '<div class="ava" data-ava="' + esc(WHO) + '">' + esc(initials(peerTitle())) + '</div>' +
+        '<div><div class="thnm">' + esc(peerTitle()) + '</div>' +
           '<div class="thsub">' + esc(WHO) + '</div></div>' +
       '</div>' +
+      toolContextHtml() +
       '<div class="th-body" id="thBody">' + body + '</div>' +
       '<div class="th-foot">' +
+        '<div class="th-draft" id="thDraft"></div>' +
         '<div class="th-in" id="thIn">' +
           '<button class="icon-btn" id="bPhoto" title="Фотография">' +
             '<svg viewBox="0 0 24 24"><path d="M3 9a2 2 0 0 1 2-2h2l1.5-2h7L17 7h2a2 2 0 0 1 2 2v9' +
               'a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><circle cx="12" cy="13" r="3.4"/></svg></button>' +
-          '<textarea id="thText" rows="1" placeholder="Сообщение"></textarea>' +
+          '<textarea id="thText" rows="1" placeholder="' + (lendOn() ? 'Например: сдаю перфоратор и бетономешалку в Новочеркасске' : 'Сообщение') + '"></textarea>' +
           '<button class="icon-btn" id="bMic" title="Голосовое">' +
             '<svg viewBox="0 0 24 24"><rect x="9" y="2" width="6" height="11" rx="3"/>' +
               '<path d="M5 11a7 7 0 0 0 14 0M12 18v4"/></svg></button>' +
@@ -208,7 +276,9 @@
         '<input type="file" id="thFile" accept="image/*" class="hide">' +
       '</div>';
 
+    if (typeof IvaAva !== 'undefined') IvaAva.paint(box.querySelector('.th-head'));
     bindThread();
+    renderPendingImage();
     scrollDown();
   }
 
@@ -221,7 +291,8 @@
   function bindThread(){
     const back = $('thBack');
     if (back) back.addEventListener('click', function(){
-      WHO = ''; history.replaceState(null,'','chat.html'); render();
+      WHO = ''; TOOL = null; pendingImg = '';
+      history.replaceState(null,'','chat.html'); render();
     });
 
     const ta = $('thText'), send = $('bSend');
@@ -244,9 +315,10 @@
       if (!f) return;
       toast('Загружаем фото…');
       try {
-        const url = await uploadPhoto(f);
-        await pushMessage({ img:url });
-      } catch(err){ toast('Не отправлено: ' + err.message); }
+        pendingImg = await uploadPhoto(f);
+        renderPendingImage();
+        toast('Фото добавлено. Нажмите «Отправить»');
+      } catch(err){ toast('Фото не добавлено: ' + err.message); }
     });
 
     /* Голосовое */
@@ -262,35 +334,42 @@
   async function doSend(){
     const ta = $('thText');
     const t = ta.value.trim();
-    if (!t) return;
+    if (!t && !pendingImg) return;
+    const image = pendingImg;
     ta.value = ''; ta.style.height = 'auto';
-    await pushMessage({ text:t });
+    await pushMessage({ text:t, img:image });
   }
 
-  /* Общая отправка: оптимистично рисуем, потом синхронизируем */
+  /* Отправка выполняется только явной кнопкой «Отправить».
+     Карточка инструмента и черновик фото сами сообщениями не являются. */
   async function pushMessage(payload){
+    const image = payload.img || '';
+    if (!payload.text && !image && !payload.audio) return;
     const tmp = {
       id: 'tmp' + Date.now(),
       from_email: A.me, to_email: WHO,
-      text: payload.text || '', img: payload.img || '',
+      text: payload.text || '', img: image,
       audio: payload.audio || '', audio_dur: payload.audio_dur || 0,
       is_read: false, created_at: new Date().toISOString(),
       tool_id: TOOL ? TOOL.id : null
     };
+    if (image && pendingImg === image) pendingImg = '';
     MSGS.push(tmp);
     paintThread();
 
     try {
-      const saved = await sendMessage(WHO, Object.assign({}, payload,
-                      TOOL ? { tool_id: TOOL.id } : {}));
+      const saved = lendOn() ? await sendLendMessage(payload)
+                             : await sendMessage(WHO, Object.assign({}, payload,
+                                 TOOL ? { tool_id: TOOL.id } : {}));
       const i = MSGS.indexOf(tmp);
       if (i !== -1 && saved) MSGS[i] = saved;
-      TOOL = null;                    /* привязка только к первому сообщению */
+      /* TOOL остаётся видимым в шапке текущего чата и не превращается в сообщение. */
       DLGS = buildDialogs(MSGS);
       paintDialogs();
     } catch(e){
       const i = MSGS.indexOf(tmp);
       if (i !== -1) MSGS.splice(i, 1);
+      if (image) pendingImg = image;
       paintThread();
       toast('Не отправлено: ' + e.message);
     }
@@ -382,6 +461,21 @@
     document.body.appendChild(d);
   }
 
+  /* Переписка «Хочу сдавать инструмент»: в приложении она отдельная (app_messages.topic = 'lend',
+     SQL 20261014_chat_lend_topic.sql). Пока этот SQL не применён, колонки topic нет — тогда сообщение
+     уходит владельцу обычной перепиской (ничего не теряется). */
+  async function sendLendMessage(payload){
+    const row = { from_email: A.me, to_email: WHO, text: payload.text || '', img: payload.img || '',
+                  audio: payload.audio || '', audio_dur: payload.audio_dur || 0, topic: 'lend' };
+    try {
+      const r = await api('/rest/v1/app_messages', 'POST', row, { Prefer:'return=representation' });
+      return (r && r[0]) || null;
+    } catch(e){
+      if (!/topic|schema cache|PGRST204|42703/i.test(e.message || '')) throw e;
+      return await sendMessage(WHO, payload);
+    }
+  }
+
   /* ---------- Открыть диалог ---------- */
   async function openThread(who){
     WHO = (who || '').toLowerCase();
@@ -423,13 +517,19 @@
     MSGS = await loadMessages();
     DLGS = buildDialogs(MSGS);
 
-    /* Переход из карточки: ?who=…&tool=… */
+    /* Переход из карточки: ?who=…&tool=…; это только контекст, не отправка сообщения. */
     const qWho  = (P.get('who') || '').toLowerCase();
     const qTool = P.get('tool');
     if (qTool){
       try { TOOL = await loadTool(qTool); } catch(e){ TOOL = null; }
     }
     if (qWho) { WHO = qWho; }
+    if (!TOOL && WHO){
+      const oldTool = threadToolId(WHO);
+      if (oldTool){
+        try { TOOL = await loadTool(oldTool); } catch(e){ TOOL = null; }
+      }
+    }
 
     render();
 
@@ -447,13 +547,13 @@
     poll = setInterval(async function(){
       try {
         const fresh = await loadMessages();
-        if (fresh.length !== MSGS.length){
-          const known = {};
-          MSGS.forEach(function(m){ known[String(m.id)] = 1; });
-          fresh.forEach(function(m){ if (!known[String(m.id)]) onIncoming(m); });
-        }
+        // Не сравниваем только количество: при лимите выдачи 400 новая запись
+        // может заменить старую, и длина массива останется прежней.
+        const known = {};
+        MSGS.forEach(function(m){ known[String(m.id)] = 1; });
+        fresh.forEach(function(m){ if (!known[String(m.id)]) onIncoming(m); });
       } catch(e){}
-    }, 20000);
+    }, 5000);
 
     window.addEventListener('beforeunload', function(){
       if (sub) sub.close();

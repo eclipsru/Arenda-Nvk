@@ -1,0 +1,75 @@
+# 10.84, этап 4: общие случаи для сайта (tests/model-stage4.cjs → assets/models.js) и приложения (IvaPatchTest → IvaModelPatch).
+# Поля через табуляцию. Ответ «—» = нет результата (null / пустая строка). Неразрывный пробел в ответах сравнивается как обычный.
+# # title	название объявления	бренд|модель	вид (подпись)	название предложения
+# models	вид:бренд:модель;…  — модели для строк exact
+# exact	вид	текст	бренд|модель найденной или —
+# err	текст ошибки сервера	понятный текст
+brands	имя=написание,написание;…  — бренды для строк parts
+# parts	текст поля «Модель»	выбранный бренд	бренд|модель
+# hint	model_id	вид	объявления «цена:залог:model_id:вид» через пробел (×N — повторить)	текст подсказки #середина цены/середина залога
+# describe	название	характеристики «подпись=значение;…»	комплектация «пункт;…»	текст (\n — перевод строки)
+# kit	отмечено «пункт;…»	пункты вида «пункт;…»	результат «пункт;…»
+brands	Makita=макита;Bosch=бош;Black+Decker=black decker,блэк декер;DeWALT=девольт,деволт
+parts	makita  HR9999X		Makita|HR9999X
+parts	макита HR1		Makita|HR1
+parts	Black Decker KX 1		Black+Decker|KX 1
+parts	Black+Decker BDCD 12		Black+Decker|BDCD 12
+parts	блэк декер KR 5		Black+Decker|KR 5
+parts	Foo Bar-1		Foo|Bar-1
+parts	HR9	Makita	Makita|HR9
+parts	Makita HR9	Makita	Makita|HR9
+parts	Makita		—
+parts	Bosch	Bosch	—
+parts	   		—
+parts	Bosch GBH 2-28 F		Bosch|GBH 2-28 F
+parts	бош gbh 180		Bosch|gbh 180
+parts	Makitaz HR		Makitaz|HR
+parts	Makita HR1	DeWALT	DeWALT|Makita HR1
+parts	Bosch XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX		—
+parts	Bosch XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX		Bosch|XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+parts	Hilti		—
+parts	ДЕВОЛЬТ DCD 791		DeWALT|DCD 791
+hint	1	a	700:3000:1:a 1000:5000:1:a 850::-:a	Обычно сдают за 700–1 000 ₽ в сутки, залог 3 000–5 000 ₽ (2 объявления этой модели) #850/4000
+hint	1	a	700:3000:1:a 1000::2:a 850::-:a	Обычно сдают за 700–1 000 ₽ в сутки (3 объявления этого вида) #850/-
+hint	1	a	700:3000:1:a 1000::2:b	—
+hint		a	100::-:a 200::-:a 300::-:a 400::-:a 500::-:a 600::-:a 700::-:a 800::-:a 900::-:a	Обычно сдают за 300–700 ₽ в сутки (9 объявлений этого вида) #500/-
+hint		a	333:1000:-:a 777:2000:-:a 1234::-:a	Обычно сдают за 350–1 250 ₽ в сутки, залог 1 000–2 000 ₽ (3 объявления этого вида) #800/1500
+hint		a	500::-:a 500::-:a 500::-:a	Обычно сдают за 500 ₽ в сутки (3 объявления этого вида) #500/-
+hint		a	80::-:a 90::-:a 95::-:a	Обычно сдают за 80–95 ₽ в сутки (3 объявления этого вида) #90/-
+hint		a	0::-:a 500::-:a 600::-:a :1000:-:a	—
+hint	7	a	1000:10000:7:a×21	Обычно сдают за 1 000 ₽ в сутки, залог 10 000 ₽ (21 объявление этой модели) #1000/10000
+hint		a	1000::-:a×12	Обычно сдают за 1 000 ₽ в сутки (12 объявлений этого вида) #1000/-
+hint	7		1000::7:a	—
+hint			1000::-:a 1000::-:a 1000::-:a	—
+hint		a	1000:5000:-:a 1500:5000:-:a 2000:20000:-:a 3000:30000:-:a 12000:50000:-:a	Обычно сдают за 1 500–3 000 ₽ в сутки, залог 5 000–30 000 ₽ (5 объявлений этого вида) #2000/20000
+describe	Перфоратор Makita HR2470	Мощность=780 Вт;Энергия удара=2,4 Дж	Кейс;Бур SDS-plus	Перфоратор Makita HR2470 в аренду.\n\nХарактеристики:\n— Мощность: 780 Вт\n— Энергия удара: 2,4 Дж\n\nВ комплекте: кейс, бур SDS-plus.
+describe	  Дрель   Bosch  			Дрель Bosch в аренду.
+describe	Лобзик!!	Питание=Аккумулятор		Лобзик в аренду.\n\nХарактеристики:\n— Питание: Аккумулятор
+describe	Мойка		SDS-адаптер;Шланг высокого давления;Я	Мойка в аренду.\n\nВ комплекте: SDS-адаптер, шланг высокого давления, Я.
+describe		Мощность=1 Вт	Кейс	—
+kit	Пика;Кейс;x	Кейс;Пика;Долото	Кейс;Пика
+kit		Кейс	—
+kit	Кейс;Кейс	Кейс;Кейс	Кейс
+kit	Долото		—
+title	Перфоратор Makita HR 9999 X	Makita|HR9999X	Перфоратор SDS-plus	Перфоратор Makita HR 9999 X
+title	Перфоратор	Makita|HR1	Перфоратор SDS-plus	Перфоратор SDS-plus Makita HR1
+title		Bosch|GBH 9		Bosch GBH 9
+title	  Дрель  bosch gbh-9 	Bosch|GBH 9	Дрель	Дрель bosch gbh-9
+title	Что-то	Bosch|YYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYY	Перфоратор SDS-plus и ещё длинное название вида	Перфоратор SDS-plus и ещё длинное название вида Bosch YYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYY
+models	rotary-sds-plus:Makita:HR2470;rotary-sds-plus:Bosch:GBH 2-26;drill:Makita:HP1630
+exact	rotary-sds-plus	Makita HR2470	Makita|HR2470
+exact	rotary-sds-plus	hr 2470	Makita|HR2470
+exact	rotary-sds-plus	gbh2-26	Bosch|GBH 2-26
+exact	rotary-sds-plus	bosch GBH 2 26	Bosch|GBH 2-26
+exact	rotary-sds-plus	HR2470F	—
+exact	drill	HR2470	—
+exact	rotary-sds-plus	Makita	—
+exact	rotary-sds-plus		—
+exact	drill	макита HP1630	—
+err	model already in directory	Такая модель уже есть в справочнике — выберите её в подсказках.
+err	duplicate key value violates unique constraint "iva_model_proposals_pending_uq"	Эту модель уже предложили — она ждёт проверки.
+err	too many pending proposals	Слишком много предложений ждут проверки — дождитесь решения по ним.
+err	new row violates row-level security policy for table "iva_model_proposals"	Предлагать модели могут только администраторы проката.
+err	Could not find the table 'public.iva_model_proposals' in the schema cache	Предложения заработают после обновления базы.
+err		Не удалось отправить: нет связи.
+err	timeout	Не удалось отправить: timeout.

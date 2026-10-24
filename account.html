@@ -7,8 +7,10 @@
 <title>Личный кабинет — Ива</title>
 <meta name="robots" content="noindex, nofollow">
 <meta name="theme-color" content="#101217">
-<link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
-<link rel="stylesheet" href="assets/theme.css?v=20261005-rel">
+<link rel="icon" href="assets/favicon-32.png" type="image/png" sizes="32x32">
+<link rel="icon" href="assets/icon-192.png" type="image/png" sizes="192x192">
+<link rel="apple-touch-icon" href="assets/apple-touch-icon.png">
+<link rel="stylesheet" href="assets/theme.css?v=20261024-live">
 <link rel="stylesheet" href="assets/profile.css?v=20260923-rental-profile">
 <style>
 .tabs{display:flex;gap:4px;border-bottom:1px solid var(--line);margin-bottom:18px;
@@ -56,6 +58,27 @@
   color:var(--red);padding:10px 13px;border-radius:var(--r-s);font-size:13.5px;
   margin-bottom:14px;display:none}
 .auth-err.show{display:block}
+.auth-ok{background:rgba(76,175,80,.12);border:1px solid rgba(76,175,80,.3);color:var(--grn);
+  padding:10px 13px;border-radius:var(--r-s);font-size:13.5px;margin-bottom:14px;display:none;line-height:1.5}
+.auth-ok.show{display:block}
+.auth-tabs{display:flex;gap:6px;background:var(--field);border:1px solid var(--line);border-radius:12px;padding:4px;margin-bottom:14px}
+.auth-tabs button{flex:1;padding:10px 0;border-radius:9px;font-weight:600;font-size:14.5px;color:var(--gr)}
+.auth-tabs button.on{background:var(--card);color:var(--or);box-shadow:0 1px 0 var(--line)}
+.auth-box .auth-consent{display:flex;gap:10px;align-items:flex-start;font-size:13px;font-weight:400;color:var(--gr);margin:4px 0 16px;line-height:1.45}
+.auth-consent input{margin-top:2px;width:18px;height:18px;flex-shrink:0;accent-color:var(--or)}
+.auth-consent a{color:var(--or)}
+.auth-fgt{text-align:right;margin:-4px 0 14px}
+.auth-fgt button{color:var(--or);font-size:13px;padding:6px 0}
+.b-cancelled{background:rgba(255,138,128,.14);color:var(--red)}
+.staff-head b{display:block;margin-top:2px}
+.staff-pts{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+.staff-pt{display:flex;flex-direction:column;background:var(--field);border:1px solid var(--line);border-radius:10px;padding:7px 11px;font-size:13px}
+.staff-pt b{margin:0;font-size:13.5px}
+.staff-pt small{color:var(--g2);font-size:12px}
+.lend-card{display:flex;gap:14px;align-items:center;justify-content:space-between;flex-wrap:wrap;margin-top:26px;
+  padding:16px;background:var(--card);border:1px solid var(--line);border-radius:var(--r)}
+.lend-card b{font-size:15px}
+.lend-card p{color:var(--gr);font-size:13px;margin-top:4px;line-height:1.5;max-width:520px}
 
 /* KPI показатели комиссии */
 .kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-bottom:20px}
@@ -99,10 +122,14 @@
 @media (max-width:620px){
   .row-ad{flex-wrap:wrap}
   .row-ad .rph{width:76px;height:60px}
+  .row-ad.ad-c{flex-wrap:nowrap;gap:12px;padding:12px}
+  .row-ad.ad-c .rph{width:96px;height:96px}
   .prof-row{flex-direction:column;gap:3px}
   .prof-row dt{min-width:0;font-size:12.5px}
   .kpi .vl{font-size:20px}
-  .tbl th:nth-child(n+4),.tbl td:nth-child(n+4){display:none}
+  .kpis{grid-template-columns:1fr 1fr;gap:10px}
+  .kpi{padding:13px}
+  .tbl:not(.tc) th:nth-child(n+4),.tbl:not(.tc) td:nth-child(n+4){display:none}
 }
 </style>
 <link rel="stylesheet" href="assets/geo.css?v=20260923-photon">
@@ -122,21 +149,30 @@
 
 <script src="assets/data.js"></script>
 <script src="assets/geo.js?v=20260923-photon"></script>
-<script src="assets/email-guard.js?v=20260926-email"></script><script src="assets/sb.js?v=20260926-email"></script>
+<script src="assets/email-guard.js?v=20260926-email"></script><script src="assets/sb.js?v=20261024-live"></script>
 <script src="assets/app-release.js?v=20261009-rel"></script>
-<script src="assets/app.js?v=20261009-rel"></script>
-<script src="assets/profile.js?v=20260923-photon"></script>
+<script src="assets/app.js?v=20261024-live"></script>
+<script src="assets/profile.js?v=20261022-a"></script>
 <script>
 (function(){
   mountChrome('cab', '');
 
-  let TAB = (location.hash || '').replace('#','') || 'ads';
+  let TAB = (location.hash || '').replace('#','');   // пусто — выбирается в render(): «Сводка» / «Я арендую» / заявки
   let MY = [];
   let ORDERS = [];
   let FEES = [];
   let REVIEWS = [];
+  let SENT = [];
+  let ST_PT = 'all', ST_F = 'all', ST_Q = '', ST_UPD = 0, ST_TIMER = null, ST_FRESH = {};   // «Смена» сотрудника (этап 1)
+  let STOOLS = null, ST_VIEW = 'orders', ST_TF = 'all', ST_TQ = '';                          // инструмент пунктов (этап 2)
+  if (TAB === 'staff-tools'){ TAB = 'staff'; ST_VIEW = 'tools'; history.replaceState(null, '', location.pathname + location.search + '#staff'); }   // возврат из формы инструмента
+  let STCHATS = null;                                                                        // сообщения пунктов (этап 3)
+  let STAFF = null;          // этап D: сотрудник проката (iva_staff_me) — приглашение или работа
+  let SPARTS = [];           // заявки пунктов сотрудника (iva_staff_parts)             // этап C: заявки, которые арендодатель сам отправил как арендатор («Я арендую»)
   let SUB_TAB = 'all';       // фильтр по статусу объявлений
   let SUB_TAB_ORD = 'all';   // фильтр по статусу заявок
+  let LJ = null, LJ_OFF = false;   // «Выдал / Принял» на карточках владельца: part_id → журнал (SQL 20261118)
+  let OQ = '', O_PT = 'all', O_UPD = 0, O_TIMER = null, O_FRESH = {};   // «Заявки» владельца: поиск, пункт, автообновление (24.10.2026)
 
   function niceDate(d){
     if (!d) return '—';
@@ -157,58 +193,156 @@
     }
   }
 
-  /* ---------- Экран входа ---------- */
-  function screenLogin(){
+  /* ---------- Куда вернуть после входа ----------
+     ?next=chat.html?who=…&lend=1 — например, из «Написать владельцу». Только адрес этого сайта. */
+  function nextUrl(){
+    const n = new URLSearchParams(location.search).get('next') || '';
+    return /^[a-z0-9_-]+\.html([?#][^\s]*)?$/i.test(n) ? n : '';
+  }
+  function afterLogin(){
+    const n = nextUrl();
+    if (n){ location.href = n; return; }
+    boot();
+  }
+
+  /* ---------- Экран входа и регистрации ----------
+     20.10.2026: регистрация клиента перенесена сюда (страница cabinet.html зависала на заставке);
+     добавлено «Забыли пароль?». Регистрация даёт только аккаунт клиента — права арендодателя выдаёт
+     владелец площадки после переписки (решение владельца 20.10.2026). */
+  let AUTH_MODE = 'in';
+  function screenLogin(msg){
+    const up = AUTH_MODE === 'up';
     $('root').innerHTML =
       '<div class="auth-box">' +
-        '<h2>Вход</h2>' +
-        '<p>Личный кабинет площадки «Ива»</p>' +
+        '<div class="auth-tabs" role="tablist">' +
+          '<button type="button" role="tab" data-auth="in" aria-selected="' + (!up) + '" class="' + (up ? '' : 'on') + '">Вход</button>' +
+          '<button type="button" role="tab" data-auth="up" aria-selected="' + up + '" class="' + (up ? 'on' : '') + '">Регистрация</button>' +
+        '</div>' +
+        '<p>' + (up ? 'Аккаунт клиента «Ивы»: заявки, избранное и сообщения в одном месте.'
+                    : 'Личный кабинет площадки «Ива»') + '</p>' +
         '<div class="auth-err" id="aErr"></div>' +
-        '<div class="fld"><label>Почта</label>' +
-          '<input class="inp" id="lEmail" type="email" autocomplete="username" placeholder="you@mail.ru"></div>' +
-        '<div class="fld"><label>Пароль</label>' +
-          '<input class="inp" id="lPass" type="password" autocomplete="current-password" placeholder="••••••••"></div>' +
-        '<button class="btn wide" id="lGo">Войти</button>' +
+        '<div class="auth-ok" id="aOk"></div>' +
+        (up ? '<div class="fld"><label for="lName">Имя</label>' +
+          '<input class="inp" id="lName" autocomplete="given-name" maxlength="60" placeholder="Иван"></div>' : '') +
+        '<div class="fld"><label for="lEmail">Почта</label>' +
+          '<input class="inp" id="lEmail" type="email" autocomplete="' + (up ? 'email' : 'username') + '" placeholder="you@mail.ru"></div>' +
+        '<div class="fld"><label for="lPass">Пароль</label>' +
+          '<input class="inp" id="lPass" type="password" autocomplete="' + (up ? 'new-password' : 'current-password') + '" placeholder="' + (up ? 'Не менее 6 символов' : '••••••••') + '"></div>' +
+        (up ? '<div class="fld"><label for="lPass2">Повторите пароль</label>' +
+          '<input class="inp" id="lPass2" type="password" autocomplete="new-password"></div>' +
+          '<label class="auth-consent"><input type="checkbox" id="lAgree">' +
+          '<span>Согласен на <a href="privacy.html" target="_blank" rel="noopener">обработку данных аккаунта</a> (имя и почта)</span></label>'
+          : '<div class="auth-fgt"><button type="button" id="lForgot">Забыли пароль?</button></div>') +
+        '<button class="btn wide" id="lGo">' + (up ? 'Создать аккаунт' : 'Войти') + '</button>' +
         '<p style="margin:16px 0 0;font-size:13px;text-align:center">' +
-          'Нет аккаунта? <a href="cabinet.html" style="color:var(--or)">Зарегистрироваться</a></p>' +
+          (up ? 'Уже есть аккаунт? <a href="#" data-auth="in" style="color:var(--or)">Войти</a>'
+              : 'Нет аккаунта? <a href="#" data-auth="up" style="color:var(--or)">Зарегистрироваться</a>') + '</p>' +
       '</div>';
 
-    const go = $('lGo'), em = $('lEmail'), pw = $('lPass'), er = $('aErr');
+    const go = $('lGo'), em = $('lEmail'), pw = $('lPass'), er = $('aErr'), ok = $('aOk');
+    const say = function(t){ ok.classList.remove('show'); er.textContent = t; er.classList.add('show'); };
+    const good = function(t){ er.classList.remove('show'); ok.textContent = t; ok.classList.add('show'); };
+    if (msg) good(msg);
+
+    $$('[data-auth]', $('root')).forEach(function(b){
+      b.addEventListener('click', function(ev){
+        ev.preventDefault();
+        const keep = em.value;
+        AUTH_MODE = b.getAttribute('data-auth');
+        screenLogin();
+        $('lEmail').value = keep;
+      });
+    });
+
+    function addResend(){
+      if (typeof resendConfirmEmail !== 'function' || $('resendBtn')) return;
+      const rb = document.createElement('button');
+      rb.id = 'resendBtn'; rb.className = 'btn wide sec'; rb.style.marginTop = '10px';
+      rb.textContent = 'Отправить письмо ещё раз';
+      rb.addEventListener('click', async function(){
+        rb.disabled = true;
+        try {
+          await resendConfirmEmail(em.value.trim().toLowerCase(), confirmRedirect());
+          good('Письмо отправлено — проверьте ящик и папку «Спам»');
+        } catch(e2){ say(e2.message); }
+        rb.disabled = false;
+      });
+      go.insertAdjacentElement('afterend', rb);
+    }
 
     async function doLogin(){
-      er.classList.remove('show');
-      const e = em.value.trim(), p = pw.value;
-      if (!e || !p){ er.textContent = 'Введите почту и пароль'; er.classList.add('show'); return; }
+      const e = em.value.trim().toLowerCase(), p = pw.value;
+      if (!e || !p){ say('Введите почту и пароль'); return; }
       go.disabled = true; go.textContent = 'Входим…';
       try {
         await signIn(e, p);
-        boot();
+        afterLogin();
       } catch(err){
-        er.textContent = err.message;
-        er.classList.add('show');
-        if (/не подтверждена|not confirmed/i.test(err.message || '') && typeof resendConfirmEmail === 'function' && !$('resendBtn')){
-          const rb = document.createElement('button');
-          rb.id = 'resendBtn'; rb.className = 'btn wide'; rb.style.marginTop = '10px';
-          rb.textContent = 'Отправить письмо ещё раз';
-          rb.addEventListener('click', async function(){
-            rb.disabled = true;
-            try {
-              await resendConfirmEmail(em.value.trim().toLowerCase());
-              er.textContent = 'Письмо отправлено — проверьте ящик и спам';
-            } catch(e2){ er.textContent = e2.message; }
-            rb.disabled = false;
-          });
-          er.appendChild(document.createElement('br'));
-          er.appendChild(rb);
-        }
+        say(err.message);
+        if (/не подтверждена|not confirmed/i.test(err.message || '')) addResend();
         go.disabled = false; go.textContent = 'Войти';
       }
     }
-    go.addEventListener('click', doLogin);
-    [em, pw].forEach(function(i){
-      i.addEventListener('keydown', function(ev){ if (ev.key === 'Enter') doLogin(); });
+
+    async function doSignup(){
+      const name = $('lName').value.trim(), e = em.value.trim().toLowerCase(), p = pw.value;
+      if (!name){ say('Укажите имя'); return; }
+      if (typeof IvaEmailGuard !== 'undefined'){ const bad = IvaEmailGuard.check(e); if (bad){ say(bad); return; } }
+      if (p.length < 6){ say('Пароль — не короче 6 символов'); return; }
+      if (p !== $('lPass2').value){ say('Пароли не совпадают'); return; }
+      if (!$('lAgree').checked){ say('Нужно согласие на обработку данных аккаунта'); return; }
+      go.disabled = true; go.textContent = 'Создаём…';
+      try {
+        const r = await fetch(SB + '/auth/v1/signup?redirect_to=' + encodeURIComponent(confirmRedirect()), {
+          method:'POST', headers:{ apikey:KEY, 'Content-Type':'application/json' },
+          body: JSON.stringify({ email:e, password:p, data:{ name:name, full_name:name } })
+        });
+        const txt = await r.text();
+        if (!r.ok){
+          const m = sbErr(txt);
+          if (/already registered|already been registered|exists/i.test(m)) throw new Error('Такой аккаунт уже есть — войдите или нажмите «Забыли пароль?»');
+          if (/rate limit|too many/i.test(m)) throw new Error('Слишком много попыток. Подождите немного и повторите');
+          if (/password/i.test(m)) throw new Error('Пароль не подходит: не короче 6 символов');
+          throw new Error(m);
+        }
+        let j = {}; try { j = JSON.parse(txt); } catch(x){}
+        const confirmed = j.access_token && j.user && (typeof IvaEmailGuard === 'undefined' || IvaEmailGuard.isConfirmed(j.user));
+        if (confirmed){
+          A.tok = j.access_token; A.rtok = j.refresh_token; A.me = ((j.user || {}).email || e).toLowerCase(); A.uname = name;
+          applyAuthUser(j.user); saveSess(); await loadAdmin(); afterLogin(); return;
+        }
+        AUTH_MODE = 'in';
+        screenLogin('Аккаунт создан. Мы отправили письмо на ' + e + ' — откройте ссылку из письма, затем войдите здесь.');
+        $('lEmail').value = e;
+      } catch(err){
+        say(err.message);
+        go.disabled = false; go.textContent = 'Создать аккаунт';
+      }
+    }
+
+    const fg = $('lForgot');
+    if (fg) fg.addEventListener('click', async function(){
+      const e = em.value.trim().toLowerCase();
+      if (typeof IvaEmailGuard !== 'undefined'){ const bad = IvaEmailGuard.check(e); if (bad){ say('Введите почту, на которую зарегистрирован аккаунт'); em.focus(); return; } }
+      fg.disabled = true;
+      try {
+        const r = await fetch(SB + '/auth/v1/recover?redirect_to=' + encodeURIComponent(new URL('reset-password.html', location.href).href), {
+          method:'POST', headers:{ apikey:KEY, 'Content-Type':'application/json' }, body: JSON.stringify({ email:e })
+        });
+        if (!r.ok && r.status !== 429) throw new Error(sbErr(await r.text()));
+        if (r.status === 429) throw new Error('Письмо уже отправлено недавно. Подождите минуту и повторите');
+        good('Если аккаунт с почтой ' + e + ' есть, мы отправили на неё ссылку для нового пароля. Проверьте и папку «Спам».');
+      } catch(err){ say(err.message || 'Не удалось отправить письмо'); }
+      fg.disabled = false;
+    });
+
+    go.addEventListener('click', AUTH_MODE === 'up' ? doSignup : doLogin);
+    $$('input.inp', $('root')).forEach(function(i){
+      i.addEventListener('keydown', function(ev){ if (ev.key === 'Enter') go.click(); });
     });
   }
+  /* Ссылка из письма подтверждения ведёт сюда же (и сохраняет ?next=) */
+  function confirmRedirect(){ return new URL('account.html' + location.search, location.href).href; }
 
   /* ---------- Расчёт статистики по комиссии ---------- */
   function computeFeeStats(){
@@ -260,6 +394,65 @@
     };
   }
 
+  /* ---------- Кабинеты, этап 2 (22.10.2026): «Сводка» арендодателя ----------
+     Первая вкладка в режиме «Сдаю»: что нужно сделать сейчас (новые заявки, просьбы изменить, просрочки, долг, модерация)
+     и главные цифры. Всё считается из уже загруженных данных кабинета — новых запросов к базе нет. */
+  /* режим арендодателя: тот же ключ, что у переключателя в шапке (assets/app.js → ivaMode); m — сменить без перехода */
+  function lordMode(m){
+    if (m){
+      try { localStorage.setItem('iva_mode', m === 'rent' ? 'rent' : 'lend'); } catch(e){}
+      if (typeof paintLordChrome === 'function' && typeof lordHint === 'function') paintLordChrome(lordHint());
+    }
+    return typeof ivaMode === 'function' ? ivaMode() : 'lend';
+  }
+  function homeTodo(){
+    const live = ORDERS.filter(function(p){ return !p.archived; });
+    const nNew = live.filter(function(p){ return (p.status || 'new') === 'new'; }).length;
+    const nLate = LCARDS ? live.filter(function(p){ const k = LCARDS[String(p.id)]; return k && lcLate(k); }).length : 0;
+    const nChange = LCARDS ? live.filter(function(p){ const k = LCARDS[String(p.id)]; return k && k.p.change && k.p.change.state === 'pending'; }).length : 0;
+    const nMod = MY.filter(function(t){ return t.status === 'moderation'; }).length;
+    const fs = computeFeeStats();
+    const out = [];
+    if (nLate)   out.push({ c: 'red', n: nLate, t: plural(nLate, 'Просрочен возврат', 'Просрочены возвраты', 'Просрочены возвраты'), s: 'Свяжитесь с клиентом или отметьте «Вернули»', go: 'orders', sub: 'late', b: 'Открыть' });
+    if (nChange) out.push({ c: 'or', n: nChange, t: 'Клиент просит изменить заявку', s: 'Примите или отклоните — пока действует прежний вариант', go: 'orders', sub: 'change', b: 'Решить' });
+    if (nNew)    out.push({ c: 'grn', n: nNew, t: plural(nNew, 'Новая заявка', 'Новые заявки', 'Новых заявок'), s: 'Когда отдадите инструмент — нажмите «Выдал инструмент»', go: 'orders', sub: 'new', b: 'Открыть' });
+    if (fs.debt > 0) out.push({ c: fs.isBlocked ? 'red' : 'or', n: rub(fs.debt), t: 'Комиссия к оплате', s: fs.isBlocked ? 'Превышен лимит задолженности — оплатите комиссию' : 'Оплатите удобным способом во вкладке «Комиссия и оплата»', go: 'fee', b: 'Оплатить' });
+    if (nMod)    out.push({ c: 'gr', n: nMod, t: plural(nMod, 'Объявление на модерации', 'Объявления на модерации', 'Объявлений на модерации'), s: 'Обычно проверка занимает немного времени', go: 'ads', st: 'moderation', b: 'Смотреть' });
+    return { list: out, fs: fs };
+  }
+  function viewHome(){
+    const td = homeTodo(), fs = td.fs;
+    const rented = ORDERS.filter(function(p){ return !p.archived && p.status === 'rented'; }).length;
+    const active = MY.filter(function(t){ return (t.status || 'active') === 'active'; }).length;
+    const pub = REVIEWS.filter(function(r){ return r.status === 'published'; });
+    const avg = pub.length ? (pub.reduce(function(a, r){ return a + (Number(r.rating) || 0); }, 0) / pub.length) : 0;
+    let h = '<div class="home-sec"><h3>Что сделать сейчас</h3>';
+    if (!td.list.length){
+      h += '<div class="home-done"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 16.2 4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4z"/></svg>' +
+        '<div><b>Всё сделано</b><span>Новых заявок, просрочек и долгов нет.</span></div></div>';
+    } else {
+      h += '<div class="home-todo">' + td.list.map(function(x){
+        return '<button type="button" class="home-row c-' + x.c + '" data-go-tab="' + x.go + '"' + (x.sub ? ' data-go-sub="' + x.sub + '"' : '') + (x.st ? ' data-go-st="' + x.st + '"' : '') + '>' +
+          '<span class="home-n">' + esc(String(x.n)) + '</span>' +
+          '<span class="home-t"><b>' + esc(x.t) + '</b><span>' + esc(x.s) + '</span></span>' +
+          '<span class="home-b">' + esc(x.b) + ' →</span></button>';
+      }).join('') + '</div>';
+    }
+    h += '</div>';
+    h += '<div class="home-sec"><h3>Коротко о прокате</h3><div class="kpis">' +
+      '<button type="button" class="kpi home-kpi" data-go-tab="orders" data-go-sub="rented"><div class="lb">В аренде сейчас</div><div class="vl">' + rented + '</div><div class="sub">' + plural(rented, 'заявка', 'заявки', 'заявок') + '</div></button>' +
+      '<button type="button" class="kpi home-kpi" data-go-tab="ads" data-go-st="active"><div class="lb">Объявлений в каталоге</div><div class="vl">' + active + '</div><div class="sub">всего ' + MY.length + '</div></button>' +
+      '<button type="button" class="kpi home-kpi" data-go-tab="fee"><div class="lb">Выручка за месяц</div><div class="vl">' + rub(fs.per.mo[0]) + '</div><div class="sub">комиссия ' + rub(fs.per.mo[1]) + '</div></button>' +
+      '<button type="button" class="kpi home-kpi" data-go-tab="reviews"><div class="lb">Рейтинг</div><div class="vl">' + (pub.length ? '★ ' + avg.toFixed(1) : '—') + '</div><div class="sub">' + pub.length + ' ' + plural(pub.length, 'отзыв', 'отзыва', 'отзывов') + '</div></button>' +
+    '</div></div>';
+    h += '<div class="home-sec"><h3>Быстрые действия</h3><div class="home-quick">' +
+      '<a class="btn" href="new.html">+ Добавить инструмент</a>' +
+      '<a class="btn sec" href="chat.html">Сообщения</a>' +
+      '<button type="button" class="btn sec" data-go-tab="prof">Профиль проката</button>' +
+    '</div></div>';
+    return h;
+  }
+
   /* ---------- Каркас кабинета ---------- */
   function shell(inner){
     const cnt = {
@@ -276,30 +469,50 @@
 
     const fStat = isAdmin() ? computeFeeStats() : { debt: 0 };
 
-    const tabsHtml =
-      (isAdmin() ?
-        '<button data-tab="ads" class="' + (TAB==='ads'?'on':'') + '">' +
-          'Мои объявления<span class="n">' + cnt.all + '</span></button>' +
-        '<button data-tab="orders" class="' + (TAB==='orders'?'on':'') + '">' +
-          'Заявки' + (activeOrdersCnt ? '<span class="n">' + activeOrdersCnt + '</span>' : '') + '</button>' +
-        '<button data-tab="fee" class="' + (TAB==='fee'?'on':'') + '">' +
-          'Комиссия и оплата' + (fStat.debt > 0 ? '<span class="n warn">!</span>' : '') + '</button>' +
-        '<button data-tab="reviews" class="' + (TAB==='reviews'?'on':'') + '">' +
-          'Отзывы' + (REVIEWS.length ? '<span class="n">' + REVIEWS.length + '</span>' : '') + '</button>'
-      :
-        '<button data-tab="orders" class="' + (TAB==='orders'?'on':'') + '">' +
-          'Мои заявки' + (ORDERS.length ? '<span class="n">' + ORDERS.length + '</span>' : '') + '</button>'
-      ) +
-      '<button data-tab="fav" class="' + (TAB==='fav'?'on':'') + '">' +
-        'Избранное<span class="n fav-n">' + favList().length + '</span></button>' +
-      '<button data-tab="msg" class="' + (TAB==='msg'?'on':'') + '">Сообщения</button>' +
-      '<button data-tab="prof" class="' + (TAB==='prof'?'on':'') + '">Профиль</button>';
+    /* Этап 2 кабинетов: у арендодателя вкладки зависят от режима «Сдаю» / «Арендую» (как у Airbnb) */
+    const tbtn = function(t, label, badge){ return '<button data-tab="' + t + '" class="' + (TAB === t ? 'on' : '') + '">' + label + (badge || '') + '</button>'; };
+    const profBtn = '<button data-tab="prof" class="' + (TAB === 'prof' ? 'on' : '') + '">Профиль</button>';
+    const nTodo = isAdmin() && lordMode() === 'lend' ? homeTodo().list.length : 0;
+    let tabsHtml;
+    if (isAdmin() && lordMode() === 'lend'){
+      tabsHtml = tbtn('home', 'Сводка', nTodo ? '<span class="n warn">' + nTodo + '</span>' : '') +
+        tbtn('orders', 'Заявки', activeOrdersCnt ? '<span class="n">' + activeOrdersCnt + '</span>' : '') +
+        tbtn('ads', 'Мои объявления', '<span class="n">' + cnt.all + '</span>') +
+        tbtn('fee', 'Комиссия и оплата', fStat.debt > 0 ? '<span class="n warn">!</span>' : '') +
+        tbtn('reviews', 'Отзывы', REVIEWS.length ? '<span class="n">' + REVIEWS.length + '</span>' : '') +
+        tbtn('msg', 'Сообщения') + profBtn;
+    } else if (isAdmin()){
+      tabsHtml = tbtn('sent', 'Я арендую', SENT.length ? '<span class="n">' + SENT.length + '</span>' : '') +
+        tbtn('fav', 'Избранное', '<span class="n fav-n">' + favList().length + '</span>') +
+        tbtn('msg', 'Сообщения') + profBtn;
+    } else {
+      tabsHtml = (STAFF ? tbtn('staff', STAFF.status === 'invited' ? 'Приглашение' : 'Работа', staffNewBadge()) : '') +
+        tbtn('orders', 'Мои заявки', ORDERS.length ? '<span class="n">' + ORDERS.length + '</span>' : '') +
+        tbtn('fav', 'Избранное', '<span class="n fav-n">' + favList().length + '</span>') +
+        tbtn('msg', 'Сообщения') + profBtn;
+    }
 
-    return '<div class="sect" style="padding-bottom:0"><div class="sect-h">' +
-        '<h2>' + esc(A.uname || 'Кабинет') + '</h2>' +
-        '<span class="cnt">' + esc(A.me) + (isCreator() ? ' · создатель' : isAdmin() ? ' · арендодатель' : '') + '</span>' +
-      '</div></div>' +
-      '<div class="tabs">' + tabsHtml + '</div>' + inner;
+    /* Шапка кабинета (этап 2): своё фото, имя, прокат и роль; переключатель режима — справа */
+    const ad = A.admin || {};
+    const who = esc(A.uname || ad.full_name || 'Кабинет');
+    const org = isAdmin() && ad.company ? '«' + esc(ad.company) + '»' : (STAFF && STAFF.status === 'active' && STAFF.company ? '«' + esc(STAFF.company) + '»' : '');
+    const role = isCreator() ? ' · создатель' : isAdmin() ? ' · арендодатель' : (STAFF && STAFF.status === 'active' ? ' · сотрудник проката' : '');
+    const meta = (org + role + ' · ' + esc(A.me)).replace(/^ · /, '');
+    return '<div class="sect" style="padding-bottom:0"><div class="acct-head">' +
+        '<span class="ava acct-head-ava" data-ava="' + esc(A.me) + '">' + esc(initials(A.uname || A.me)) + '</span>' +
+        '<div class="acct-head-t"><h2>' + who + '</h2><div class="small muted">' + meta + '</div></div>' +
+        (isAdmin() && typeof modeSwitchHTML === 'function' ? '<div class="acct-head-mode">' + modeSwitchHTML() + '</div>' : '') +
+      '</div>' +
+      '</div>' +
+      '<div class="tabs">' + tabsHtml + '</div>' + inner + (isAdmin() || STAFF ? '' : lendCardHTML());
+  }
+
+  /* Клиенту: сдавать инструмент можно только после разговора с владельцем (решение владельца 20.10.2026) */
+  function lendCardHTML(){
+    return '<div class="lend-card">' +
+      '<div><b>Хотите сдавать свой инструмент?</b>' +
+      '<p>Напишите владельцу площадки: обсудим условия, и после его одобрения вы станете арендодателем.</p></div>' +
+      '<a class="btn sec sm" href="' + lendChatHref() + '">Написать владельцу</a></div>';
   }
 
   /* ---------- Мои объявления ---------- */
@@ -333,30 +546,25 @@
       return h;
     }
 
+    /* Этап 3 кабинетов (22.10.2026): компактная карточка — статус меткой на фото, одна главная кнопка
+       «Редактировать», остальное (смотреть, снять / опубликовать, удалить) — в меню «⋯» */
     h += f.map(function(t){
       const st  = t.status || 'active';
       const img = (t.imgs && t.imgs[0]) || t.img || '';
       const dep = Number(t.deposit) || Number(t.price) * 5;
-      return '<div class="row-ad" data-id="' + esc(t.id) + '">' +
-        '<div class="rph">' +
-          (img ? '<img src="' + esc(img) + '" alt="">' :
-                 '<div style="width:100%;height:100%;display:flex;align-items:center;' +
-                 'justify-content:center;color:var(--g2);font-size:11px">нет фото</div>') +
-        '</div>' +
+      return '<div class="row-ad ad-c" data-id="' + esc(t.id) + '">' +
+        '<a class="rph" href="tool.html?id=' + encodeURIComponent(t.id) + '" aria-label="Смотреть объявление">' +
+          (img ? '<img src="' + esc(img) + '" alt="" loading="lazy">' : '<span class="ad-noimg">нет фото</span>') +
+          '<span class="ad-st"><span class="badge ' + statusCls(st) + '">' + statusTitle(st) + '</span></span>' +
+        '</a>' +
         '<div class="rmid">' +
           '<div class="rnm">' + esc(t.name) + '</div>' +
           '<div class="rpr">' + rub(t.price) + ' <span>/ сутки</span></div>' +
           '<div class="rmeta">Залог ' + rub(dep) + ' · ' + esc(catTitle(t.cat) || t.cat) +
             (t.delivery ? ' · доставка' : '') + '</div>' +
-          '<div class="racts">' +
-            '<span class="badge ' + statusCls(st) + '" style="padding:7px 12px">' +
-              statusTitle(st) + '</span>' +
-            '<a href="tool.html?id=' + encodeURIComponent(t.id) + '">Смотреть</a>' +
-            (st === 'active'
-              ? '<button data-act="hide">Снять с публикации</button>'
-              : '<button class="pub" data-act="show">Опубликовать</button>') +
-            '<a href="new.html?edit=' + encodeURIComponent(t.id) + '">Редактировать</a>' +
-            '<button class="del" data-act="del">Удалить</button>' +
+          '<div class="ad-acts">' +
+            '<a class="btn sec sm" href="new.html?edit=' + encodeURIComponent(t.id) + '">Редактировать</a>' +
+            '<button type="button" class="btn sec sm ad-more" data-ad-menu="1" aria-label="Ещё действия" title="Ещё действия">⋯</button>' +
           '</div>' +
         '</div>' +
       '</div>';
@@ -373,50 +581,473 @@
     return viewTenantOrders();
   }
 
-  function viewAdminOrders(){
-    const ordFilter = SUB_TAB_ORD || 'all';
+  /* ---------- Кабинеты, этап 1 (21.10.2026): заявки проката — как в приложении ----------
+     Та же функция базы, что у приложения: iva_order_cards('admin') владельцу и ('staff') сотруднику (SQL 10.121–10.126).
+     В карточке: ход заявки, пункт, инструменты со сроками и «чеком», таймер «осталось / просрочено» на каждый срок,
+     «Вернули» по сроку (iva_staff_return), просьба клиента изменить заявку («Принять» / «Отклонить» — iva_order_edit_decide),
+     причина отмены, «Позвонить» и «Написать» клиенту. Если функции в базе нет — остаётся прежняя простая карточка. */
+  let LCARDS = null;         // владелец: part_id → { c: заявка, p: часть } или null
+  let SCARDS = null;         // сотрудник: то же для его пунктов
 
-    const filtered = ordFilter === 'all' ? ORDERS : ORDERS.filter(function(p){
-      if (ordFilter === 'archived') return !!p.archived;
-      if (p.archived) return false;
-      return (p.status || 'new') === ordFilter;
+  function lcMap(r){
+    if (!Array.isArray(r)) return null;
+    const m = {};
+    r.forEach(function(x){
+      const c = x && x.iva_order_cards ? x.iva_order_cards : x;
+      const p = c && Array.isArray(c.parts) ? c.parts[0] : null;
+      if (p && p.part_id != null) m[String(p.part_id)] = { c: c, p: p };
+    });
+    return m;
+  }
+  async function loadLordCards(){
+    try { LCARDS = lcMap(await api('/rest/v1/rpc/iva_order_cards', 'POST', { p_scope: 'admin' })); }
+    catch(e){ LCARDS = null; }
+    await loadLordJournal();
+  }
+  /* 24.10.2026: кто выдал и кто принял — одним запросом по всем выданным и закрытым частям (iva_parts_journal, SQL 20261118).
+     Пишет только база (триггер 10.107, возврат по срокам 10.124). Нет функции в базе — строк просто нет. */
+  async function loadLordJournal(){
+    if (LJ_OFF || !LCARDS) return;
+    const ids = Object.keys(LCARDS).filter(function(id){
+      const st = LCARDS[id].p.status || 'new';
+      return /^\d+$/.test(id) && (st === 'rented' || st === 'closed');
+    }).slice(0, 500).map(Number);
+    if (!ids.length){ LJ = {}; return; }
+    try {
+      const r = await api('/rest/v1/rpc/iva_parts_journal', 'POST', { p_parts: ids });
+      const m = {};
+      (Array.isArray(r) ? r : []).forEach(function(x){ const j = x && x.iva_parts_journal ? x.iva_parts_journal : x; if (j && j.part_id != null) m[String(j.part_id)] = j; });
+      LJ = m;
+    } catch(e){
+      if (/PGRST202|404|Could not find the function/i.test(String(e && e.message || ''))) LJ_OFF = true;
+    }
+  }
+  /* строка журнала: «Выдал: Иван · 24 окт., 14:05» */
+  function ljLine(lb, who, at, tz){
+    if (!who) return '';
+    const t = Date.parse(at || '');
+    return '<div class="hint lc-who">' + lb + ': <b style="color:var(--tx)">' + esc(who) + '</b>' + (t ? ' · ' + esc(coWhen(t, tz)) : '') + '</div>';
+  }
+
+  /* сроки выданной части: { дни: конец срока } — только у ещё не возвращённых инструментов */
+  function lcTerms(k){
+    const c = k.c, p = k.p, items = Array.isArray(p.items) ? p.items : [], out = {};
+    if ((p.status || 'new') !== 'rented' || !p.rented_at) return out;
+    const tz = p.tz || 'Europe/Moscow';
+    items.forEach(function(it){
+      if (it.returned_at) return;
+      const d = coDays(it, c.days);
+      if (!out[d]) out[d] = coRentEnd(p.rented_at, d, p.rent_mode, p.close_min, tz);
+    });
+    if (!items.length){ const d = coDays({}, c.days); out[d] = coRentEnd(p.rented_at, d, p.rent_mode, p.close_min, tz); }
+    return out;
+  }
+  function lcLate(k){
+    const t = lcTerms(k), now = Date.now();
+    return Object.keys(t).some(function(d){ return t[d] && t[d] < now; });
+  }
+  function lcDaysTxt(d){ d = parseInt(d, 10) || 0; return d > 0 ? d + ' ' + plural(d, 'сутки', 'суток', 'суток') : 'срок заявки'; }
+  /* что клиент просит изменить — как в приложении (IvaOrderEditPatch.diff) */
+  function lcDiff(b, a){
+    const out = [];
+    if (!b || !a) return out;
+    const bi = Array.isArray(b.items) ? b.items : [], ai = Array.isArray(a.items) ? a.items : [];
+    bi.forEach(function(x){
+      const y = ai.find(function(z){ return String(z.id || '') === String(x.id || ''); });
+      const n = x.name || 'Инструмент';
+      if (!y) out.push('Убрать: ' + n);
+      else if ((parseInt(x.days, 10) || 0) !== (parseInt(y.days, 10) || 0)) out.push(n + ': ' + lcDaysTxt(x.days) + ' → ' + lcDaysTxt(y.days));
+    });
+    if ((b.get_method || '') !== (a.get_method || '')) out.push('Получение: ' + (b.get_method || '—') + ' → ' + (a.get_method || '—'));
+    if ((b.comment || '') !== (a.comment || '')) out.push('Комментарий: ' + (a.comment ? '«' + a.comment + '»' : 'убрать'));
+    return out;
+  }
+
+  /* row — строка order_parts (владелец) или iva_staff_parts (сотрудник); k — { c, p } из iva_order_cards */
+  function lcCardHTML(row, k, staff){
+    const c = k.c, p = k.p;
+    const st = p.status || row.status || 'new';
+    const isArc = !staff && !!row.archived;
+    const tz = p.tz || 'Europe/Moscow';
+    const items = Array.isArray(p.items) ? p.items : [];
+    const terms = lcTerms(k), tKeys = Object.keys(terms).map(Number).sort(function(a, b){ return a - b; });
+    const now = Date.now();
+    const late = tKeys.some(function(d){ return terms[d] && terms[d] < now; });
+    const tint = st === 'cancelled' || st === 'closed' || isArc ? 'off' : (late ? 'late' : st);
+    const badge = st === 'new' ? 'Новая заявка' : st === 'rented' ? (late ? 'Просрочена' : 'В аренде') : st === 'cancelled' ? 'Отменена клиентом' : 'Завершена';
+    const bcls = st === 'rented' && late ? 'b-cancelled' : 'b-' + st;
+    const canAct = staff ? !!row.can_act : !isArc;
+    const pid = esc(p.part_id);
+    const jr = !staff && LJ ? LJ[String(p.part_id)] || null : null;      // кто выдал / кто принял — только владельцу
+    const jItems = {}, jWhos = {};
+    if (jr && Array.isArray(jr.items)) jr.items.forEach(function(x){ if (x && x.n != null){ jItems[x.n] = x; if (x.returned_who) jWhos[x.returned_who + '|' + x.returned_at] = 1; } });
+    const jPerItem = Object.keys(jWhos).length > 1;   // принимали по частям — «принял …» у каждого инструмента
+
+    /* сроки: таймер у каждого; «Вернули» по сроку, когда сроков несколько */
+    let termsHTML = '';
+    tKeys.forEach(function(d){
+      const end = terms[d];
+      if (!end) return;
+      const names = items.filter(function(it){ return !it.returned_at && coDays(it, c.days) === d; }).map(function(it){ return it.name || 'Инструмент'; }).join(', ');
+      termsHTML += '<div class="co-term lc-term' + (end < now ? ' late' : '') + '"><div>' +
+        (tKeys.length > 1 ? '<b>' + lcDaysTxt(d) + ':</b> ' : '') +
+        'вернуть до <b>' + esc(coWhen(end, tz)) + '</b> · <span data-co-end="' + end + '">' + coTimer(end) + '</span>' +
+        (tKeys.length > 1 && names ? '<div class="small" style="color:var(--gr);margin-top:2px">' + esc(names) + '</div>' : '') + '</div>' +
+        (tKeys.length > 1 && canAct && items.length ? '<button class="btn sm lc-ret" data-lc-ret="' + pid + '" data-days="' + d + '" data-last="0" data-names="' + esc(names) + '">Вернули</button>' : '') +
+      '</div>';
     });
 
-    const cnt = function(st){
-      if (st === 'all') return ORDERS.length;
-      if (st === 'archived') return ORDERS.filter(function(p){ return !!p.archived; }).length;
-      return ORDERS.filter(function(p){ return !p.archived && (p.status || 'new') === st; }).length;
-    };
+    /* инструменты и «чек»: цена × сутки; после возврата — начатые сутки (считает база). Сотруднику — без денег */
+    let sum = 0;
+    const list = items.map(function(it, ix){
+      const price = staff ? 0 : (Number(it.price) || 0), plan = coDays(it, c.days);
+      const used = parseInt(it.used_days, 10) >= 1 ? parseInt(it.used_days, 10) : 0;
+      const d = used || plan;
+      sum += price * d;
+      const img = /^https:\/\//.test(it.img || '') ? '<img src="' + esc(it.img) + '" alt="" loading="lazy">' : '<span class="co-noimg"></span>';
+      const name = esc(it.name || 'Инструмент');
+      return '<div class="co-item">' + img + '<div class="co-item-t">' +
+        (it.id ? '<a href="tool.html?id=' + encodeURIComponent(it.id) + '">' + name + '</a>' : '<b>' + name + '</b>') +
+        '<span>' + (price ? rub(price) + ' × ' : '') + lcDaysTxt(d) + (used && used !== plan ? ' (по факту, бронь ' + plan + ')' : '') +
+        (price ? ' = <b>' + rub(price * d) + '</b>' : '') + '</span>' +
+        (it.returned_at && (st === 'rented' || (st === 'closed' && jPerItem && jItems[ix])) ? '<span class="co-ok">возвращён ' + esc(coWhen(Date.parse(it.returned_at), tz)) +
+          (jItems[ix] && jItems[ix].returned_who ? ' · принял: ' + esc(jItems[ix].returned_who) : '') + '</span>' : '') +
+        '</div></div>';
+    }).join('');
+    const total = !staff && st === 'closed' && Number(row.rent_sum) > 0 ? Number(row.rent_sum) : sum;
 
-    let h = '<div class="chips" style="margin-bottom:16px">' +
-      [['all','Все'],['new','Новые'],['rented','В аренде'],['closed','Завершены'],['archived','Архив']]
-        .map(function(p){
-          return '<button class="chip" data-ost="' + p[0] + '"' +
-                 (ordFilter === p[0] ? ' style="border-color:var(--or);color:var(--or)"' : '') +
-                 '>' + p[1] + ' · ' + cnt(p[0]) + '</button>';
-        }).join('') +
-      '</div>';
+    const pt = p.point || null;
+    const ptLine = pt ? (pt.name ? esc(pt.name) : 'Пункт') + (pt.address ? ' — ' + esc([pt.city, pt.address].filter(Boolean).join(', ')) : '') : '';
+    const o = row.orders || {};
+    const cName = c.client_name || o.name || row.client_name || '';
+    const cTel = c.client_tel || o.phone || row.client_tel || '';
+    const tel = String(cTel).replace(/[^\d+]/g, '');
+    const cMail = staff ? '' : (o.user_email || '');
+    const firstTool = items.length && items[0].id ? '&tool=' + encodeURIComponent(items[0].id) : '';
 
-    if (!filtered.length){
-      return h + '<div class="empty">' +
-        '<svg viewBox="0 0 24 24"><path d="M7 4h-2l-1 2H2v13a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V6h-2l-1-2h-2l1 2H6zM5 8h14v11H5zm4 2h6v2H9z"/></svg>' +
-        '<b>' + (ORDERS.length ? 'В этой вкладке пусто' : 'Заявок пока нет') + '</b>' +
-        '<p>' + (ORDERS.length ? 'Переключитесь на другой статус.' : 'Когда клиенты оформят заявку на ваш инструмент, она появится здесь.') + '</p>' +
+    const ch = p.change || null, cn = p.cancel || null;
+    let chHTML = '';
+    if (ch && ch.state && ch.state !== 'void'){
+      const lines = lcDiff(ch.before, ch.after);
+      const pend = ch.state === 'pending';
+      chHTML = '<div class="co-note' + (ch.state === 'accepted' ? ' ok' : '') + '"><b>' +
+        (pend ? 'Клиент просит изменить заявку' : ch.state === 'accepted' ? 'Вы приняли изменение заявки' : 'Вы отклонили изменение заявки') + '</b>' +
+        (lines.length ? '<ul class="lc-diff">' + lines.map(function(l){ return '<li>' + esc(l) + '</li>'; }).join('') + '</ul>' : '') +
+        (pend && !staff ? '<div class="small" style="color:var(--gr);margin-top:6px">Пока вы не решили, действует прежний вариант заявки.</div>' +
+          '<div class="acts" style="margin-top:8px"><button class="btn sm" data-lc-decide="' + esc(ch.id) + '" data-ok="1">Принять</button>' +
+          '<button class="btn sm sec" data-lc-decide="' + esc(ch.id) + '" data-ok="0">Отклонить</button></div>' : '') +
       '</div>';
     }
 
-    h += filtered.map(function(p){
+    let btns = '';
+    if (staff){
+      if (canAct && st === 'new') btns += '<button class="btn sm" data-staff-do="rented" data-id="' + pid + '">Выдал инструмент</button>';
+      if (canAct && st === 'rented' && tKeys.length <= 1)
+        btns += items.length && tKeys.length
+          ? '<button class="btn sm lc-ok" data-lc-ret="' + pid + '" data-days="' + tKeys[0] + '" data-last="1" data-names="">Инструмент вернули</button>'
+          : '<button class="btn sm lc-ok" data-staff-do="closed" data-id="' + pid + '">Инструмент вернули</button>';
+      if (!row.can_act && row.mine && (st === 'new' || st === 'rented')) btns += '<span class="small muted">Это ваша заявка — отмечает другой сотрудник или владелец</span>';
+    } else if (isArc){
+      btns += '<button class="btn sm sec" data-ord-do="unarch" data-id="' + esc(row.id) + '">Вернуть из архива</button>';
+    } else if (st === 'new'){
+      btns += '<button class="btn sm" data-ord-do="rented" data-id="' + esc(row.id) + '">Выдал инструмент</button>';
+    } else if (st === 'rented' && tKeys.length <= 1){
+      btns += items.length && tKeys.length
+        ? '<button class="btn sm lc-ok" data-lc-ret="' + pid + '" data-days="' + tKeys[0] + '" data-last="1" data-names="">Инструмент вернули</button>'
+        : '<button class="btn sm lc-ok" data-ord-do="closed" data-id="' + esc(row.id) + '">Инструмент вернули</button>';
+    } else if (st === 'closed' || st === 'cancelled'){
+      btns += '<button class="btn sm sec" data-ord-do="arch" data-id="' + esc(row.id) + '">В архив</button>';
+    }
+    if (st !== 'closed' && st !== 'cancelled' && !isArc){
+      if (tel) btns += '<a class="btn sm sec" href="tel:' + esc(tel) + '">Позвонить</a>';
+      if (cMail) btns += '<a class="btn sm sec" href="chat.html?who=' + encodeURIComponent(cMail) + firstTool + '">Написать</a>';
+      /* «Маршрут» к адресу доставки — Яндекс Карты в новой вкладке */
+      if (c.address && /достав/i.test(c.get_method || '')) btns += '<a class="btn sm sec" href="https://yandex.ru/maps/?text=' + encodeURIComponent(c.address) + '" target="_blank" rel="noopener">Маршрут</a>';
+    }
+
+    return '<div class="order-card lc-card t-' + tint + '" data-order-id="' + esc(staff ? p.part_id : row.id) + '">' +
+      '<div class="top"><span class="badge ' + bcls + '">' + badge + '</span>' +
+        '<span class="small muted">' + (staff ? esc(stWhen(Date.parse(c.created_at || row.created_at))) : niceDate(c.created_at || row.created_at)) + ' · №' + esc(c.order_id || row.order_id) + '</span></div>' +
+      (st !== 'cancelled' ? coSteps(st) : '') +
+      (cName || cTel ? '<div class="hint">Клиент: <b style="color:var(--tx)">' + esc(cName || '—') + '</b>' +
+        (tel ? ' · <a href="tel:' + esc(tel) + '" style="color:var(--or);font-weight:600">' + esc(cTel) + '</a>' : '') + '</div>' : '') +
+      (ptLine ? '<div class="hint">Пункт: ' + ptLine + '</div>' : (staff && row.point_name ? '<div class="hint">Пункт: ' + esc(row.point_name) + '</div>' : '')) +
+      (c.get_method ? '<div class="hint">Получение: ' + esc(c.get_method) + (c.address ? ' — ' + esc(c.address) : '') + '</div>' : '') +
+      (jr && jr.issued_who && (st === 'rented' || st === 'closed')
+        ? ljLine('Выдал', jr.issued_who, jr.issued_at || p.rented_at, tz)
+        : (st === 'rented' && p.rented_at ? '<div class="hint">Выдан ' + esc(coWhen(Date.parse(p.rented_at), tz)) + '</div>' : '')) +
+      (jr && st === 'closed' && !jPerItem ? ljLine(p.rented_at ? 'Принял' : 'Закрыл', jr.returned_who, jr.returned_at, tz) : '') +
+      termsHTML +
+      (list ? '<div class="co-items">' + list + '</div>' : (p.tools_text || row.tools_text ? '<div class="title" style="margin-top:8px">' + esc(p.tools_text || row.tools_text) + '</div>' : '')) +
+      (!staff && total && st !== 'cancelled' ? '<div class="co-sum"><span>' + (st === 'closed' ? 'Итого за аренду' : 'Аренда по заявке') + '</span><b>' + rub(total) + '</b></div>' : '') +
+      (!staff && Number(row.fee) > 0 && st !== 'cancelled' ? '<div class="co-sum sm"><span>Комиссия площадки' + (row.fee_pct ? ' (' + row.fee_pct + '%)' : '') + '</span><b>' + rub(row.fee) + '</b></div>' : '') +
+      (!staff && st === 'rented' && total ? '<div class="hint">Итог посчитается при возврате: начатые сутки от выдачи (час запаса).</div>' : '') +
+      (c.comment ? '<div class="hint lc-comment">' + esc(c.comment) + '</div>' : '') +
+      chHTML +
+      (st === 'cancelled' ? '<div class="hint">' + (cn && cn.reason ? 'Причина отмены: <b style="color:var(--tx)">' + esc(cn.reason) + '</b>' : 'Клиент отменил заявку до выдачи') +
+        (cn && cn.answer === 'took' ? ' · клиент ответил, что всё же взял инструмент' : '') + ' · без комиссии</div>' : '') +
+      (btns ? '<div class="acts">' + btns + '</div>' : '') +
+    '</div>';
+  }
+
+  async function lcReload(){
+    if (isAdmin()){
+      const r = await Promise.allSettled([loadMyOrderParts(), loadLordCards()]);
+      if (r[0].status === 'fulfilled') ORDERS = r[0].value || [];
+    } else await loadStaff();
+    render();
+  }
+
+  /* ---------- «Всё по порядку», пункт 4 (24.10.2026): «Заявки» владельца — как «Смена» сотрудника ----------
+     Плитки-фильтры (Новые / Просрочены / Вернуть сегодня / В аренде), группы: «Клиент просит изменить» → «Просрочены» → «Новые» →
+     «В аренде» (ближайший возврат сверху) → «Завершены» → «Отменены»; поиск по №, клиенту, телефону, инструменту, пункту;
+     выбор пункта (когда пунктов больше одного); автообновление раз в 30 секунд, новая заявка подсвечивается и всплывает сообщение.
+     Данные — те же order_parts + iva_order_cards('admin'); новых запросов к базе нет. Без iva_order_cards — прежние простые карточки. */
+  const O_GROUPS = [
+    ['change', 'Клиент просит изменить'], ['late', 'Просрочены'], ['new', 'Новые'], ['rented', 'В аренде'],
+    ['closed', 'Завершены'], ['cancelled', 'Отменены клиентом'], ['archived', 'Архив']
+  ];
+  const O_FN = { new: 'Новые', late: 'Просрочены', today: 'Вернуть сегодня', rented: 'В аренде', change: 'Ждут решения',
+                 closed: 'Завершены', cancelled: 'Отменены', archived: 'Архив' };
+  function oCard(p){ return LCARDS ? LCARDS[String(p.id)] || null : null; }
+  function oInfo(p){
+    const st = p.status || 'new', k = oCard(p), arc = !!p.archived;
+    let end = 0;
+    if (!arc && st === 'rented' && k){ const t = lcTerms(k); Object.keys(t).forEach(function(d){ if (t[d] && (!end || t[d] < end)) end = t[d]; }); }
+    const now = Date.now(), t1 = new Date(); t1.setHours(23, 59, 59, 999);
+    const late = !!end && end < now;
+    const change = !arc && !!(k && k.p.change && k.p.change.state === 'pending');
+    return { st: st, arc: arc, end: end, late: late, today: !!end && !late && end <= t1.getTime(), change: change,
+             g: arc ? 'archived' : change ? 'change' : late ? 'late' : st };
+  }
+  function oPts(){
+    const m = {}, out = [];
+    ORDERS.forEach(function(p){
+      const k = oCard(p), pt = k && k.p.point;
+      if (pt && pt.id != null && !m[pt.id]){ m[pt.id] = 1; out.push({ id: String(pt.id), name: pt.name || 'Пункт' }); }
+    });
+    return out;
+  }
+  function oScope(){
+    if (O_PT === 'all') return ORDERS;
+    return ORDERS.filter(function(p){ const k = oCard(p); return !!(k && k.p.point && String(k.p.point.id) === O_PT); });
+  }
+  function oCounts(list){
+    const c = { new: 0, late: 0, today: 0, rented: 0, change: 0, closed: 0, cancelled: 0, archived: 0, all: 0 };
+    list.forEach(function(p){
+      const i = oInfo(p);
+      if (i.arc){ c.archived++; return; }
+      c.all++;
+      if (i.st === 'new') c.new++;
+      if (i.st === 'rented') c.rented++;
+      if (i.st === 'closed') c.closed++;
+      if (i.st === 'cancelled') c.cancelled++;
+      if (i.late) c.late++;
+      if (i.today) c.today++;
+      if (i.change) c.change++;
+    });
+    return c;
+  }
+  function oKpisHTML(){
+    const c = oCounts(oScope()), F = SUB_TAB_ORD || 'all';
+    const k = function(f, cls, lb, n, sub){
+      return '<button type="button" class="kpi home-kpi st-k ' + cls + (n ? ' has' : '') + (F === f ? ' on' : '') + '" data-ord-f="' + f + '" aria-pressed="' + (F === f) + '">' +
+        '<div class="lb">' + lb + '</div><div class="vl">' + n + '</div><div class="sub">' + sub + '</div></button>';
+    };
+    return k('new', 'k-new', 'Новые', c.new, 'ждут выдачи') +
+      k('late', 'k-late', 'Просрочены', c.late, c.late ? 'свяжитесь с клиентом' : 'всё в срок') +
+      k('today', 'k-today', 'Вернуть сегодня', c.today, 'срок до конца дня') +
+      k('rented', 'k-rented', 'В аренде', c.rented, 'выдано сейчас');
+  }
+  function oChipsHTML(){
+    const c = oCounts(oScope()), F = SUB_TAB_ORD || 'all';
+    return [['all', 'Все'], ['change', 'Ждут решения'], ['closed', 'Завершены'], ['cancelled', 'Отменены'], ['archived', 'Архив']]
+      .filter(function(x){ return x[0] !== 'change' || c.change || F === 'change'; })
+      .map(function(x){
+        const on = F === x[0];
+        return '<button class="chip' + (on ? ' on' : '') + '" data-ost="' + x[0] + '" aria-pressed="' + on + '"' +
+          (on ? ' style="border-color:var(--or);color:var(--or)"' : '') + '>' + x[1] + ' · ' + c[x[0]] + '</button>';
+      }).join('');
+  }
+  function oText(p){
+    const k = oCard(p), o = p.orders || {}, c = k ? k.c : {}, pp = k ? k.p : {};
+    const items = Array.isArray(pp.items) ? pp.items.map(function(it){ return it.name || ''; }).join(' ') : '';
+    const tel = [o.phone, c.client_tel].join(' ');
+    const j = LJ && LJ[String(p.id)], jw = j ? [j.issued_who, j.returned_who].concat((j.items || []).map(function(x){ return x.returned_who; })).join(' ') : '';
+    return [p.order_id, o.name, c.client_name, tel, tel.replace(/\D/g, ''), p.tools_text, items, pp.point && pp.point.name, o.address, c.address, jw]
+      .join(' ').toLowerCase();
+  }
+  function oListHTML(){
+    const F = SUB_TAB_ORD || 'all';
+    const q = OQ.trim().toLowerCase().replace(/^№\s*/, '');
+    const pass = function(i){
+      if (F === 'archived') return i.arc;
+      if (i.arc) return false;
+      if (F === 'all') return true;
+      if (F === 'late') return i.late;
+      if (F === 'today') return i.today;
+      if (F === 'change') return i.change;
+      return i.st === F;
+    };
+    const list = oScope().filter(function(p){ return pass(oInfo(p)) && (!q || oText(p).indexOf(q) >= 0); });
+    let h = '';
+    O_GROUPS.forEach(function(g){
+      const rows = list.filter(function(p){ return oInfo(p).g === g[0]; });
+      if (!rows.length) return;
+      rows.sort(function(a, b){
+        const ea = oInfo(a).end, eb = oInfo(b).end;
+        return (ea && eb ? ea - eb : 0) || (Date.parse(b.created_at) || 0) - (Date.parse(a.created_at) || 0);
+      });
+      h += '<div class="st-g st-g-' + g[0] + '">' + g[1] + ' · ' + rows.length + '</div>' +
+        rows.map(function(p){
+          const fr = O_FRESH[p.id] && Date.now() - O_FRESH[p.id] < 120000;
+          const k = oCard(p);
+          return '<div class="st-wrap' + (fr ? ' st-fresh' : '') + '">' + (k ? lcCardHTML(p, k, false) : oPlainCardHTML(p)) + '</div>';
+        }).join('');
+    });
+    if (h) return h;
+    if (!ORDERS.length){
+      return '<div class="empty">' +
+        '<svg viewBox="0 0 24 24"><path d="M7 4h-2l-1 2H2v13a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V6h-2l-1-2h-2l1 2H6zM5 8h14v11H5zm4 2h6v2H9z"/></svg>' +
+        '<b>Заявок пока нет</b><p>Когда клиенты оформят заявку на ваш инструмент, она появится здесь — страница обновляется сама.</p></div>';
+    }
+    return '<div class="empty"><b>Ничего не найдено</b><p>' + (q ? 'Измените строку поиска' : 'По этому фильтру заявок нет') + '.</p>' +
+      '<button type="button" class="btn sec sm" data-ord-f="all" data-ord-clear="1">Показать все заявки</button></div>';
+  }
+  function oUpdTxt(){
+    return (O_UPD ? 'Обновлено ' + stWhen(O_UPD).replace(/^сегодня /, '') + ' · ' : '') + liveTxt();
+  }
+  function liveTxt(){ return typeof IvaLive !== 'undefined' ? IvaLive.updTxt() : 'обновляется само каждые 30 секунд'; }
+  function livePerm(){ return typeof IvaLive !== 'undefined' ? IvaLive.permHTML() : ''; }
+  function oUpdLine(){
+    const F = SUB_TAB_ORD || 'all';
+    return '<span id="ordUpd">' + oUpdTxt() + '</span>' + livePerm() +
+      (F !== 'all' ? ' · фильтр «' + (O_FN[F] || F) + '» — <button type="button" class="st-link" data-ord-f="all">показать все</button>' : '');
+  }
+
+  function oPtsHTML(pts){
+    return [{ id: 'all', name: 'Все пункты' }].concat(pts).map(function(x){
+      const on = O_PT === x.id;
+      const n = ORDERS.filter(function(p){ const i = oInfo(p), k = oCard(p);
+        return !i.arc && (i.st === 'new' || i.st === 'rented') && (x.id === 'all' || (k && k.p.point && String(k.p.point.id) === x.id)); }).length;
+      return '<button class="chip' + (on ? ' on' : '') + '" data-ord-pt="' + esc(x.id) + '"' +
+        (on ? ' style="border-color:var(--or);color:var(--or)"' : '') + '>' + esc(x.name) + (n ? ' · ' + n : '') + '</button>';
+    }).join('');
+  }
+  function viewAdminOrders(){
+    if (!O_UPD) O_UPD = Date.now();
+    const pts = oPts();
+    if (O_PT !== 'all' && !pts.some(function(x){ return x.id === O_PT; })) O_PT = 'all';
+    let h = '';
+    if (pts.length > 1) h += '<div class="chips st-pts" id="ordPts" role="group" aria-label="Пункт выдачи">' + oPtsHTML(pts) + '</div>';
+    h += '<div class="kpis st-kpis" id="ordKpis">' + oKpisHTML() + '</div>';
+    h += '<div class="st-bar">' +
+        '<label for="ordQ" class="sr-lbl">Поиск по заявкам</label>' +
+        '<input class="inp" id="ordQ" type="search" autocomplete="off" placeholder="№, клиент, телефон, инструмент, сотрудник" value="' + esc(OQ) + '">' +
+        '<button class="btn sec sm" data-ord-reload="1">Обновить</button>' +
+      '</div>' +
+      '<div class="small muted st-upd" id="ordUpdLine">' + oUpdLine() + '</div>' +
+      '<div class="chips ord-chips" id="ordChips" style="margin:10px 0 0">' + oChipsHTML() + '</div>';
+    h += '<div id="ordList">' + oListHTML() + '</div>';
+    return h;
+  }
+  /* обновить плитки, фильтры и список, не трогая поле поиска */
+  function oPaintList(){
+    const k = $('ordKpis'), c = $('ordChips'), l = $('ordList'), u = $('ordUpdLine');
+    if (k) k.innerHTML = oKpisHTML();
+    if (c) c.innerHTML = oChipsHTML();
+    if (l) l.innerHTML = oListHTML();
+    if (u) u.innerHTML = oUpdLine();
+    const pe = $('ordPts');
+    if (pe) pe.innerHTML = oPtsHTML(oPts());
+    /* число у вкладки «Заявки» — новые и выданные */
+    const tb = document.querySelector('.tabs button[data-tab="orders"]');
+    if (tb){
+      const n = ORDERS.filter(function(o){ const st = o.status || 'new'; return !o.archived && (st === 'new' || st === 'rented'); }).length;
+      let b = tb.querySelector('.n');
+      if (!n){ if (b) b.remove(); }
+      else { if (!b){ b = document.createElement('span'); b.className = 'n'; tb.appendChild(b); } b.textContent = n; }
+    }
+  }
+  function oRepaint(){
+    if (TAB !== 'orders' || !isAdmin()) return;
+    if (document.activeElement && document.activeElement.id === 'ordQ') { oPaintList(); return; }
+    const y = window.scrollY; render(); window.scrollTo(0, y);
+  }
+  async function oReload(){
+    const r = await Promise.allSettled([loadMyOrderParts(), loadLordCards()]);
+    if (r[0].status !== 'fulfilled') throw r[0].reason;
+    const seen = {}; ORDERS.forEach(function(p){ seen[p.id] = 1; });
+    const had = ORDERS.length > 0 || O_UPD > 0;
+    ORDERS = r[0].value || [];
+    O_UPD = Date.now();
+    const fresh = had ? ORDERS.filter(function(p){ return !seen[p.id] && (p.status || 'new') === 'new' && !p.archived; }) : [];
+    fresh.forEach(function(p){ O_FRESH[p.id] = Date.now(); });
+    return fresh;
+  }
+  function oSig(){
+    return JSON.stringify(ORDERS.map(function(p){
+      const k = oCard(p);
+      return [p.id, p.status, !!p.archived, k ? [k.p.rented_at || '', k.p.change ? k.p.change.state : '', k.p.cancel ? 1 : 0,
+        (k.p.items || []).map(function(it){ return it.returned_at ? 1 : 0; }).join('')] : 0];
+    })) + '|' + (LCARDS ? 1 : 0);
+  }
+  /* автообновление (24.10.2026): сразу по сигналу базы (IvaLive, SQL 20261119) и раз в 30 секунд — на любой вкладке
+     кабинета, не только в «Заявках»; о новой заявке — сообщение, звук и уведомление браузера; таймеры тикают отдельно */
+  let O_BUSY = false;
+  async function oTick(){
+    if (O_BUSY || !isAdmin() || $('sheet') || document.querySelector('#ordList button:disabled')) return;
+    O_BUSY = true;
+    try {
+      const s0 = oSig();
+      let fresh;
+      try { fresh = await oReload(); } catch(e){ return; }
+      if (fresh.length) liveNew(fresh.length, fresh[0].tools_text || '');
+      if (oSig() === s0){ const u = $('ordUpd'); if (u) u.textContent = oUpdTxt(); return; }
+      if (TAB === 'orders') oRepaint();
+      else if (TAB === 'home') liveRender();
+      else oTabBadge();
+    } finally { O_BUSY = false; }
+  }
+  function oAuto(){
+    if (O_TIMER) return;
+    O_TIMER = setInterval(oTick, 30000);
+  }
+  /* число у вкладки «Заявки» — новые и выданные (когда открыта другая вкладка) */
+  function oTabBadge(){
+    const tb = document.querySelector('.tabs button[data-tab="orders"]');
+    if (!tb || !isAdmin()) return;
+    const n = ORDERS.filter(function(o){ const st = o.status || 'new'; return !o.archived && (st === 'new' || st === 'rented'); }).length;
+    let b = tb.querySelector('.n');
+    if (!n){ if (b) b.remove(); }
+    else { if (!b){ b = document.createElement('span'); b.className = 'n'; tb.appendChild(b); } b.textContent = n; }
+  }
+  /* перерисовать вкладку, не мешая человеку: не во время ввода и не при открытой панели */
+  function liveRender(){
+    const ae = document.activeElement;
+    if ($('sheet') || (ae && /^(INPUT|TEXTAREA|SELECT)$/.test(ae.tagName))) return;
+    const y = window.scrollY; render(); window.scrollTo(0, y);
+  }
+  function liveNew(n, what){
+    if (typeof IvaLive !== 'undefined') IvaLive.alertNew(n, what);
+    else toast(n === 1 ? 'Новая заявка: ' + what : 'Новых заявок: ' + n);
+  }
+
+  /* простая карточка — когда в базе ещё нет iva_order_cards */
+  function oPlainCardHTML(p){
       const o = p.orders || {};
       const st = p.status || 'new';
       const isArc = !!p.archived;
 
       let btns = '';
       if (!isArc){
+        /* «В архив» — только у закрытой (и отменённой клиентом) заявки и с подтверждением — как в приложении */
         if (st === 'new'){
           btns += '<button class="btn sm" data-ord-do="rented" data-id="' + p.id + '">Выдал инструмент</button>';
-          btns += '<button class="btn sm sec" data-ord-do="arch" data-id="' + p.id + '">В архив</button>';
         } else if (st === 'rented'){
           btns += '<button class="btn sm" data-ord-do="closed" data-id="' + p.id + '" style="background:var(--grn);border-color:var(--grn)">Инструмент вернули</button>';
+        } else if (st === 'cancelled'){
+          btns += '<span class="badge b-cancelled" style="padding:6px 12px">Отменена клиентом · без комиссии</span>';
           btns += '<button class="btn sm sec" data-ord-do="arch" data-id="' + p.id + '">В архив</button>';
         } else {
           btns += '<span class="badge b-closed" style="padding:6px 12px">Завершена · комиссия учтена</span>';
@@ -428,7 +1059,7 @@
 
       return '<div class="order-card" data-order-id="' + p.id + '">' +
         '<div class="top">' +
-          '<span class="badge b-' + st + '">' + (st === 'new' ? 'Новая заявка' : (st === 'rented' ? 'В аренде' : 'Завершена')) + '</span>' +
+          '<span class="badge b-' + st + '">' + ({ new:'Новая заявка', rented:'В аренде', cancelled:'Отменена' }[st] || 'Завершена') + '</span>' +
           '<span class="small muted">' + niceDate(p.created_at) + (p.order_id ? (' · №' + p.order_id) : '') + '</span>' +
         '</div>' +
         '<div class="title">' + esc(p.tools_text || 'Инструмент') + '</div>' +
@@ -444,13 +1075,301 @@
         '</div>' +
         (btns ? '<div class="acts">' + btns + '</div>' : '') +
       '</div>';
-    }).join('');
-
-    return h;
   }
 
-  function viewTenantOrders(){
-    if (!ORDERS.length){
+  /* ---------- Этап F сайта (20.10.2026): заявки клиента — как в приложении ----------
+     Одна функция базы iva_order_cards('client') (та же, что у приложения): прокат, пункт с телефоном, инструменты со сроками,
+     время выдачи, причина отмены, ожидающее изменение. Если функции в базе ещё нет — остаётся прежний простой список.
+     Отмена — iva_order_cancel (пока ничего не выдано, с причиной, без комиссии); вопрос «Вы взяли инструмент?» — iva_order_followups. */
+  let CCARDS = null;         // карточки заявок клиента (iva_order_cards) или null — тогда прежний список
+  let CFOLLOW = [];          // вопросы «Вы в итоге взяли инструмент?»
+  let CO_F = '';             // фильтр: active | done | cancelled | all
+  const CO_REASONS = ['Передумал(а)', 'Нашёл(ла) в другом месте', 'Изменились планы', 'Ошибся(лась) в заявке'];
+
+  async function loadClientCards(){
+    try {
+      const r = await api('/rest/v1/rpc/iva_order_cards', 'POST', { p_scope: 'client' });
+      CCARDS = Array.isArray(r) ? r.map(function(x){ return x && x.iva_order_cards ? x.iva_order_cards : x; }).filter(Boolean) : null;
+    } catch(e){ CCARDS = null; }
+    try {
+      const f = await api('/rest/v1/rpc/iva_order_followups', 'POST', {});
+      CFOLLOW = Array.isArray(f) ? f : [];
+    } catch(e){ CFOLLOW = []; }
+  }
+
+  /* часовой пояс проката → время */
+  function coParts(ms, tz){
+    const o = {};
+    try {
+      new Intl.DateTimeFormat('en-CA', { timeZone: tz, hourCycle: 'h23', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })
+        .formatToParts(new Date(ms)).forEach(function(p){ o[p.type] = Number(p.value); });
+    } catch(e){ const d = new Date(ms); return { year: d.getFullYear(), month: d.getMonth() + 1, day: d.getDate(), hour: d.getHours(), minute: d.getMinutes() }; }
+    return o;
+  }
+  function coZoned(y, m, d, min, tz){
+    const guess = Date.UTC(y, m - 1, d, 0, min);
+    const p = coParts(guess, tz);
+    return guess - (Date.UTC(p.year, p.month - 1, p.day, p.hour % 24, p.minute) - guess);
+  }
+  /* то же правило, что iva_rent_end в базе: «сутки» — выдача + N × 24 ч; «до закрытия пункта» — закрытие N-го дня (выходные пропускаются) */
+  function coRentEnd(at, days, mode, close, tz){
+    const t = Date.parse(at);
+    if (!t || !(days > 0)) return 0;
+    const ok = mode === 'close' && Array.isArray(close) && close.length === 7 && close.some(function(c){ return c != null && c >= 0; });
+    if (!ok) return t + days * 864e5;
+    const p = coParts(t, tz);
+    const base = Date.UTC(p.year, p.month - 1, p.day) + days * 864e5;
+    for (let i = 0; i < 7; i++){
+      const dt = new Date(base + i * 864e5);
+      const m = close[(dt.getUTCDay() || 7) - 1];
+      if (m != null && m >= 0) return coZoned(dt.getUTCFullYear(), dt.getUTCMonth() + 1, dt.getUTCDate(), m, tz);
+    }
+    return t + days * 864e5;
+  }
+  function coWhen(ms, tz){
+    try { return new Date(ms).toLocaleString('ru-RU', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', timeZone: tz || 'Europe/Moscow' }); }
+    catch(e){ return new Date(ms).toLocaleString('ru-RU', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }); }
+  }
+  function coSpan(ms){
+    const m = Math.max(1, Math.round(Math.abs(ms) / 60000)), d = Math.floor(m / 1440), h = Math.floor((m % 1440) / 60), mi = m % 60;
+    if (d) return d + ' д' + (h ? ' ' + h + ' ч' : '');
+    if (h) return h + ' ч' + (mi ? ' ' + mi + ' мин' : '');
+    return mi + ' мин';
+  }
+  function coTimer(end){
+    const left = end - Date.now();
+    return left > 0 ? 'осталось ' + coSpan(left) : 'просрочено на ' + coSpan(left);
+  }
+  function coDays(it, orderDays){
+    const d = parseInt(it && it.days, 10);
+    if (d >= 1) return Math.min(365, d);
+    return Math.max(1, Math.min(365, parseInt(orderDays, 10) || 1));
+  }
+  function coOrderStatus(c){
+    const ps = (c.parts || []).map(function(p){ return p.status || 'new'; });
+    if (!ps.length) return 'new';
+    if (ps.every(function(x){ return x === 'cancelled'; })) return 'cancelled';
+    if (ps.some(function(x){ return x === 'rented'; })) return 'rented';
+    if (ps.some(function(x){ return x === 'new'; })) return 'new';
+    return 'closed';
+  }
+  function coOwnerMap(rows){
+    const m = {};
+    (rows || []).forEach(function(o){ (o.order_parts || []).forEach(function(p){ if (p && p.id != null && p.owner_email) m[String(p.id)] = p.owner_email; }); });
+    return m;
+  }
+  function coSteps(st){
+    const n = st === 'new' ? 1 : st === 'rented' ? 2 : 3;
+    return '<div class="co-steps" aria-label="Ход заявки">' +
+      ['Отправлена', 'Выдана', 'Возвращена'].map(function(t, i){
+        return '<span class="co-step' + (i < n ? ' on' : '') + (i === n - 1 && st !== 'closed' ? ' cur' : '') + '"><i></i>' + t + '</span>';
+      }).join('') + '</div>';
+  }
+
+  function coPartHTML(c, p, owners){
+    const st = p.status || 'new';
+    const items = Array.isArray(p.items) ? p.items : [];
+    const tz = p.tz || 'Europe/Moscow';
+    let late = false;
+    /* сроки (у разных инструментов может быть свой) — у выданной части таймер на каждый срок */
+    const terms = {};
+    items.forEach(function(it){ if (!it.returned_at){ const d = coDays(it, c.days); terms[d] = true; } });
+    let termsHTML = '';
+    if (st === 'rented' && p.rented_at){
+      Object.keys(terms).map(Number).sort(function(a, b){ return a - b; }).forEach(function(d){
+        const end = coRentEnd(p.rented_at, d, p.rent_mode, p.close_min, tz);
+        if (!end) return;
+        if (end < Date.now()) late = true;
+        termsHTML += '<div class="co-term' + (end < Date.now() ? ' late' : '') + '">' +
+          (Object.keys(terms).length > 1 ? '<b>' + d + ' ' + plural(d, 'сутки', 'суток', 'суток') + ':</b> ' : '') +
+          'вернуть до <b>' + esc(coWhen(end, tz)) + '</b> · <span data-co-end="' + end + '">' + coTimer(end) + '</span></div>';
+      });
+      if (!items.length){
+        const d = coDays({}, c.days), end = coRentEnd(p.rented_at, d, p.rent_mode, p.close_min, tz);
+        if (end){ if (end < Date.now()) late = true;
+          termsHTML += '<div class="co-term' + (end < Date.now() ? ' late' : '') + '">вернуть до <b>' + esc(coWhen(end, tz)) + '</b> · <span data-co-end="' + end + '">' + coTimer(end) + '</span></div>'; }
+      }
+    }
+    const tint = st === 'cancelled' || st === 'closed' ? 'off' : (late ? 'late' : st);
+    const badge = st === 'new' ? 'На рассмотрении' : st === 'rented' ? (late ? 'Просрочена' : 'В аренде') : st === 'cancelled' ? 'Отменена' : 'Завершена';
+    const bcls = st === 'rented' && late ? 'b-cancelled' : 'b-' + st;
+
+    /* инструменты и «чек»: цена × сутки; после возврата — начатые сутки (считает база) */
+    let sum = 0, dep = 0, fact = false;
+    const list = items.map(function(it){
+      const price = Number(it.price) || 0, plan = coDays(it, c.days);
+      const used = parseInt(it.used_days, 10) >= 1 ? parseInt(it.used_days, 10) : 0;
+      const d = used || plan;
+      if (used) fact = true;
+      sum += price * d; dep += Number(it.deposit) || 0;
+      const img = /^https:\/\//.test(it.img || '') ? '<img src="' + esc(it.img) + '" alt="" loading="lazy">' : '<span class="co-noimg"></span>';
+      const name = esc(it.name || 'Инструмент');
+      return '<div class="co-item">' + img + '<div class="co-item-t">' +
+        (it.id ? '<a href="tool.html?id=' + encodeURIComponent(it.id) + '">' + name + '</a>' : '<b>' + name + '</b>') +
+        '<span>' + (price ? rub(price) + ' × ' : '') + d + ' ' + plural(d, 'сутки', 'суток', 'суток') + (used && used !== plan ? ' (по факту, было ' + plan + ')' : '') +
+        (price ? ' = <b>' + rub(price * d) + '</b>' : '') + '</span>' +
+        (it.returned_at && st === 'rented' ? '<span class="co-ok">возвращён ' + esc(coWhen(Date.parse(it.returned_at), tz)) + '</span>' : '') +
+        '</div></div>';
+    }).join('');
+
+    const pt = p.point || null;
+    const tel = (pt && pt.tel) || p.prokat_tel || '';
+    const addr = pt ? [pt.city, pt.address].filter(Boolean).join(', ') : (p.prokat_addr || '');
+    const owner = owners[String(p.part_id)] || '';
+    const firstTool = items.length && items[0].id ? '&tool=' + encodeURIComponent(items[0].id) : '';
+
+    let acts = '';
+    if (st !== 'cancelled'){
+      if (tel) acts += '<a class="btn sm sec" href="tel:' + esc(String(tel).replace(/[^\d+]/g, '')) + '">Позвонить</a>';
+      if (owner) acts += '<a class="btn sm sec" href="chat.html?who=' + encodeURIComponent(owner) + firstTool + '">Написать</a>';
+      if (addr && st !== 'closed') acts += '<a class="btn sm sec" target="_blank" rel="noopener noreferrer" href="https://yandex.ru/maps/?text=' + encodeURIComponent(addr) + '">Как добраться ↗</a>';
+    }
+
+    const ch = p.change || null, cn = p.cancel || null;
+    return '<div class="co-part t-' + tint + '">' +
+      '<div class="co-part-h"><b>' + esc(p.company || 'Прокат') + '</b><span class="badge ' + bcls + '">' + badge + '</span></div>' +
+      (st !== 'cancelled' ? coSteps(st) : '') +
+      (addr ? '<div class="hint">' + (pt && pt.name ? esc(pt.name) + ' — ' : 'Адрес: ') + esc(addr) + (p.work_hours ? ' · ' + esc(p.work_hours) : '') + '</div>' : '') +
+      (st === 'rented' && p.rented_at ? '<div class="hint">Выдан ' + esc(coWhen(Date.parse(p.rented_at), tz)) + '</div>' : '') +
+      termsHTML +
+      (list ? '<div class="co-items">' + list + '</div>' : (p.tools_text ? '<div class="hint">' + esc(p.tools_text) + '</div>' : '')) +
+      (sum && st !== 'cancelled' ? '<div class="co-sum"><span>' + (st === 'closed' ? 'Итого за аренду' : 'Аренда по заявке') + '</span><b>' + rub(sum) + '</b></div>' : '') +
+      (dep && st !== 'closed' && st !== 'cancelled' ? '<div class="co-sum sm"><span>Залог (вернут после возврата инструмента)</span><b>' + rub(dep) + '</b></div>' : '') +
+      (sum && st === 'rented' ? '<div class="hint">Итог считает прокат при возврате: начатые сутки от выдачи (час запаса).</div>' : '') +
+      (fact && st === 'closed' ? '<div class="hint">Посчитано по факту: начатые сутки от выдачи до возврата.</div>' : '') +
+      (ch && ch.state === 'pending' ? '<div class="co-note">Вы попросили изменить заявку — ждём ответа проката.</div>' : '') +
+      (ch && (ch.state === 'accepted' || ch.state === 'approved') ? '<div class="co-note ok">Прокат принял изменение заявки.</div>' : '') +
+      (ch && ch.state === 'rejected' ? '<div class="co-note">Прокат не принял изменение — действует прежняя заявка.</div>' : '') +
+      (st === 'cancelled' && cn && cn.reason ? '<div class="hint">Причина отмены: ' + esc(cn.reason) + '</div>' : '') +
+      (acts ? '<div class="acts">' + acts + '</div>' : '') +
+    '</div>';
+  }
+
+  function coCardHTML(c, owners){
+    const parts = c.parts || [];
+    const st = coOrderStatus(c);
+    const canCancel = parts.some(function(p){ return (p.status || 'new') === 'new'; }) &&
+                      !parts.some(function(p){ return p.status === 'rented' || p.status === 'closed'; });
+    return '<div class="order-card co-card">' +
+      '<div class="top"><b>Заявка №' + esc(c.order_id) + '</b><span class="small muted">' + niceDate(c.created_at) + '</span></div>' +
+      (parts.length ? parts.map(function(p){ return coPartHTML(c, p, owners); }).join('')
+                    : '<div class="title">' + esc(c.tools || 'Инструмент') + '</div>') +
+      (c.get_method ? '<div class="hint">Получение: ' + esc(c.get_method) + '</div>' : '') +
+      (c.comment ? '<details class="co-more"><summary>Подробности заявки</summary><div>' + esc(c.comment) + '</div></details>' : '') +
+      (canCancel ? '<div class="acts"><button class="btn sm sec co-cancel" data-co-cancel="' + esc(c.order_id) + '">Отменить заявку</button>' +
+        '<span class="small muted">Изменить состав или срок — в приложении или напишите в прокат</span></div>' : '') +
+      (st === 'closed' && parts.some(function(p){ return (p.items || []).length; }) ? '<div class="small muted" style="margin-top:8px">Оцените инструмент — откройте его карточку и оставьте отзыв.</div>' : '') +
+    '</div>';
+  }
+
+  function coFollowHTML(){
+    return CFOLLOW.map(function(f){
+      return '<div class="box co-follow">' +
+        '<b>Вы в итоге взяли инструмент?</b>' +
+        '<p class="small muted">Вы отменили заявку №' + esc(f.order_id) + (f.company ? ' в прокате «' + esc(f.company) + '»' : '') + (f.tools_text ? ' (' + esc(f.tools_text) + ')' : '') + '.</p>' +
+        '<div class="acts"><button class="btn sm" data-co-follow="took" data-id="' + esc(f.id) + '">Да, взял(а)</button>' +
+        '<button class="btn sm sec" data-co-follow="not" data-id="' + esc(f.id) + '">Нет</button>' +
+        '<button class="btn sm sec" data-co-follow="later" data-id="' + esc(f.id) + '">Спросить позже</button></div>' +
+      '</div>';
+    }).join('');
+  }
+
+  function viewClientCards(rows){
+    const owners = coOwnerMap(rows);
+    const all = CCARDS || [];
+    const grp = function(c){ const s = coOrderStatus(c); return s === 'new' || s === 'rented' ? 'active' : s === 'cancelled' ? 'cancelled' : 'done'; };
+    const cnt = { all: all.length, active: 0, done: 0, cancelled: 0 };
+    all.forEach(function(c){ cnt[grp(c)]++; });
+    if (!CO_F) CO_F = cnt.active ? 'active' : 'all';
+    const list = CO_F === 'all' ? all : all.filter(function(c){ return grp(c) === CO_F; });
+    let h = coFollowHTML();
+    h += '<div class="chips" style="margin-bottom:14px">' +
+      [['active', 'Активные'], ['done', 'Завершённые'], ['cancelled', 'Отменённые'], ['all', 'Все']].map(function(x){
+        return '<button class="chip' + (CO_F === x[0] ? ' on' : '') + '" data-co-f="' + x[0] + '"' +
+          (CO_F === x[0] ? ' style="border-color:var(--or);color:var(--or)"' : '') + '>' + x[1] + ' · ' + cnt[x[0]] + '</button>';
+      }).join('') + '</div>';
+    if (!list.length){
+      return h + '<div class="empty"><b>' + (all.length ? 'Здесь пусто' : 'Заявок пока нет') + '</b>' +
+        '<p>' + (all.length ? 'Переключитесь на другую вкладку.' : 'Выберите подходящий инструмент в каталоге и нажмите «Оформить заявку».') + '</p>' +
+        '<a class="btn" href="catalog.html">Перейти в каталог</a></div>';
+    }
+    return h + list.map(function(c){ return coCardHTML(c, owners); }).join('');
+  }
+
+  /* таймеры «осталось / просрочено» обновляются раз в минуту без перерисовки страницы */
+  setInterval(function(){
+    document.querySelectorAll('[data-co-end]').forEach(function(el){
+      const end = Number(el.getAttribute('data-co-end'));
+      if (end) el.textContent = coTimer(end);
+    });
+  }, 60000);
+
+  function coCancel(orderId){
+    openSheet('Отмена заявки №' + esc(orderId),
+      '<p class="small muted" style="line-height:1.6;margin-bottom:10px">Отменить можно, пока инструмент не выдан. Комиссия с проката не берётся.</p>' +
+      '<label class="small" style="display:block;margin-bottom:8px">Почему отменяете? Прокат увидит причину</label>' +
+      '<div class="chips" style="margin-bottom:10px">' + CO_REASONS.map(function(r){ return '<button class="chip" type="button" data-co-why="' + esc(r) + '">' + esc(r) + '</button>'; }).join('') + '</div>' +
+      '<textarea id="coWhy" class="inp" rows="3" maxlength="300" placeholder="Причина" style="width:100%"></textarea>' +
+      '<p class="small muted" style="margin-top:8px">Через пару дней спросим, взяли ли вы всё же инструмент в этом прокате.</p>' +
+      '<p class="small" id="coErr" style="color:var(--red);display:none;margin-top:8px"></p>',
+      '<button class="btn sec" id="coNo" style="flex:1">Не отменять</button>' +
+      '<button class="btn" id="coYes" style="flex:1">Отменить</button>');
+    document.querySelectorAll('[data-co-why]').forEach(function(b){
+      b.addEventListener('click', function(){ $('coWhy').value = b.getAttribute('data-co-why'); $('coWhy').focus(); });
+    });
+    $('coNo').addEventListener('click', function(){ closeSheet(); });
+    $('coYes').addEventListener('click', async function(){
+      const why = ($('coWhy').value || '').replace(/\s+/g, ' ').trim();
+      const err = $('coErr');
+      if (why.length < 2){ err.textContent = 'Укажите причину отмены'; err.style.display = 'block'; return; }
+      const btn = this; btn.disabled = true; btn.textContent = 'Отменяем…';
+      try {
+        await api('/rest/v1/rpc/iva_order_cancel', 'POST', { p_order: Number(orderId), p_reason: why });
+        closeSheet();
+        toast('Заявка отменена. Прокат увидит причину');
+        await coReload();
+      } catch(e){
+        btn.disabled = false; btn.textContent = 'Отменить';
+        const msg = String(e && e.message || '');
+        err.textContent = /iva_order_cancel|PGRST202|Could not find|schema cache/i.test(msg)
+          ? 'Отмена на сайте заработает после обновления базы. Пока напишите или позвоните в прокат.'
+          : 'Не удалось отменить: ' + msg;
+        err.style.display = 'block';
+      }
+    });
+  }
+
+  async function coReload(){
+    try {
+      const rows = await loadClientOrders();
+      if (isAdmin()) SENT = rows || []; else ORDERS = rows || [];
+    } catch(e){}
+    await loadClientCards();
+    render();
+  }
+
+  document.addEventListener('click', function(e){
+    const f = e.target.closest('[data-co-f]');
+    if (f){ CO_F = f.getAttribute('data-co-f'); render(); return; }
+    const c = e.target.closest('[data-co-cancel]');
+    if (c){ const id = c.getAttribute('data-co-cancel'); if (/^\d{1,18}$/.test(id || '')) coCancel(id); return; }
+    const fu = e.target.closest('[data-co-follow]');
+    if (fu){
+      const ans = fu.getAttribute('data-co-follow'), id = fu.getAttribute('data-id');
+      if (!/^\d{1,18}$/.test(id || '')) return;
+      if (ans === 'took' && !confirm('Отметить, что вы взяли инструмент в этом прокате? Заявка станет завершённой.')) return;
+      fu.disabled = true;
+      api('/rest/v1/rpc/iva_order_followup_answer', 'POST', { p_id: Number(id), p_answer: ans }).then(function(){
+        toast(ans === 'took' ? 'Спасибо! Заявка завершена' : ans === 'not' ? 'Спасибо за ответ' : 'Спросим завтра');
+        return coReload();
+      }).catch(function(err){ fu.disabled = false; toast('Не удалось: ' + err.message); });
+    }
+  });
+
+  function viewTenantOrders(list){
+    list = list || ORDERS;
+    if (CCARDS) return viewClientCards(list);
+    if (!list.length){
       return '<div class="empty">' +
         '<svg viewBox="0 0 24 24"><path d="M7 4h-2l-1 2H2v13a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V6h-2l-1-2h-2l1 2H6zM5 8h14v11H5zm4 2h6v2H9z"/></svg>' +
         '<b>Заявок пока нет</b>' +
@@ -459,11 +1378,11 @@
       '</div>';
     }
 
-    return ORDERS.map(function(o){
+    return list.map(function(o){
       const st = o.status || 'new';
       return '<div class="order-card">' +
         '<div class="top">' +
-          '<span class="badge b-' + st + '">' + (st === 'new' ? 'На рассмотрении' : (st === 'rented' ? 'В аренде' : 'Завершена')) + '</span>' +
+          '<span class="badge b-' + st + '">' + ({ new:'На рассмотрении', rented:'В аренде', cancelled:'Отменена' }[st] || 'Завершена') + '</span>' +
           '<span class="small muted">' + niceDate(o.created_at) + '</span>' +
         '</div>' +
         '<div class="title">' + esc(o.tools || 'Инструмент') + '</div>' +
@@ -475,168 +1394,106 @@
   }
 
   /* ---------- Комиссия и оплата ---------- */
+  /* Этап 5 кабинетов (23.10.2026): «Комиссия и оплата» — сверху сумма к оплате с реквизитами и одной кнопкой,
+     долг без знака «−»; на телефоне таблицы карточками со всеми столбцами (раньше «Комиссия» скрывалась). */
   function viewFee(){
     if (!isAdmin()){
       return '<div class="empty"><b>Раздел доступен арендодателям</b><p>Здесь отображаются начисления комиссии и история оплат.</p></div>';
     }
 
     const s = computeFeeStats();
+    const td = function(l, v, cls, st){ return '<td data-l="' + l + '"' + (cls ? ' class="' + cls + '"' : '') + (st ? ' style="' + st + '"' : '') + '>' + v + '</td>'; };
     let h = '';
 
-    if (s.isBlocked){
-      h += '<div class="box" style="border-color:var(--red);background:rgba(255,138,128,.1);margin-bottom:16px">' +
-        '<b style="color:var(--red);font-size:15px">Внимание: задолженность превышает лимит!</b>' +
-        '<p class="small" style="color:var(--tx);margin-top:4px">Лимит долга: ' + rub(s.debtLimit) + ', текущий долг: ' + rub(s.debt) + '. Погасите комиссию, чтобы объявления оставались активными.</p>' +
-      '</div>';
-    }
+    h += '<div class="sect-h" style="margin-bottom:12px"><div>' +
+        '<h2>Комиссия и оплата</h2>' +
+        '<p class="small muted" style="margin-top:2px">Взаиморасчёты с площадкой «Ива» и статистика доходов</p>' +
+      '</div></div>';
 
-    h += '<div class="sect-h" style="margin-bottom:14px;align-items:flex-start">' +
-        '<div>' +
-          '<h2>Комиссия и оплата</h2>' +
-          '<p class="small muted" style="margin-top:2px">Взаиморасчёты с площадкой «Ива» и статистика доходов</p>' +
+    // Главное: сколько оплатить и куда
+    const sub = s.debt > 0
+      ? (s.pendingPaid > 0 ? 'На проверке ' + rub(s.pendingPaid) + ' — площадка подтвердит перевод' : 'Комиссия с закрытых заказов')
+      : (s.pendingPaid > 0 ? 'На проверке ' + rub(s.pendingPaid) : 'Задолженности нет');
+    h += '<div class="box fee-hero' + (s.isBlocked ? ' bad' : s.debt > 0 ? ' due' : ' ok') + '">' +
+        '<div class="fee-top">' +
+          '<div><div class="small muted">К оплате</div>' +
+            '<div class="fee-amt">' + rub(s.debt) + '</div>' +
+            '<div class="small fee-sub">' + esc(sub) + '</div></div>' +
+          '<button class="btn' + (s.debt > 0 ? '' : ' sec') + '" id="btnPayFeeTop">' + (s.debt > 0 ? 'Оплатить комиссию' : 'Внести платёж') + '</button>' +
         '</div>' +
-        '<button class="btn sm" id="btnPayFeeTop">Оплатить комиссию</button>' +
+        (s.isBlocked
+          ? '<div class="fee-warn">Долг больше лимита (' + rub(s.debtLimit) + '), который установил владелец площадки. Оплатите комиссию.</div>'
+          : (s.debtLimit > 0 ? '<div class="small muted" style="margin-top:8px">Лимит долга: ' + rub(s.debtLimit) + '</div>' : '')) +
+        '<div class="fee-req">' +
+          '<div><span>Перевод по СБП на телефон</span>' +
+            '<b>+7 (908) 173-14-10 <button type="button" class="mini-btn" id="btnCopyPhone">Копировать</button></b></div>' +
+          '<div><span>Получатель</span><b>Илья Игоревич Г. (Т-Банк / Сбербанк)</b></div>' +
+          '<div><span>Назначение</span><b>Комиссия Ива (' + esc(A.me) + ')</b></div>' +
+        '</div>' +
+        '<p class="small muted" style="margin-top:10px">После перевода нажмите «' + (s.debt > 0 ? 'Оплатить комиссию' : 'Внести платёж') + '» и укажите сумму — платёж уйдёт на подтверждение.</p>' +
       '</div>';
 
-    // Карточки KPI
     h += '<div class="kpis">' +
-        '<div class="kpi' + (s.debt > 0 ? ' warn' : ' good') + '">' +
-          '<div class="lb">К оплате (долг)</div>' +
-          '<div class="vl">' + (s.debt > 0 ? ('−' + rub(s.debt)) : '0 ₽') + '</div>' +
-          '<div class="sub">' + (s.debt > 0 ? (s.pendingPaid > 0 ? 'На проверке ' + rub(s.pendingPaid) : 'Ожидает оплаты') : 'Задолженности нет') + '</div>' +
-        '</div>' +
-
-        '<div class="kpi">' +
-          '<div class="lb">Ставка комиссии</div>' +
-          '<div class="vl">' + s.feePct + ' %</div>' +
-          '<div class="sub">от стоимости аренды</div>' +
-        '</div>' +
-
-        '<div class="kpi">' +
-          '<div class="lb">Лимит задолженности</div>' +
-          '<div class="vl">' + (s.debtLimit > 0 ? rub(s.debtLimit) : '0 ₽') + '</div>' +
-          '<div class="sub">' + (s.debtLimit > 0 ? 'порог без ограничений' : 'без блокировки') + '</div>' +
-        '</div>' +
-
-        '<div class="kpi">' +
-          '<div class="lb">Начислено всего</div>' +
-          '<div class="vl">' + rub(s.feeAll) + '</div>' +
-          '<div class="sub">из ' + rub(s.rentAll) + ' выручки</div>' +
-        '</div>' +
-
-        '<div class="kpi good">' +
-          '<div class="lb">Оплачено комиссии</div>' +
-          '<div class="vl">' + rub(s.paidAll) + '</div>' +
-          '<div class="sub">подтверждено площадкой</div>' +
-        '</div>' +
+        '<div class="kpi"><div class="lb">Ставка комиссии</div><div class="vl">' + s.feePct + ' %</div><div class="sub">от стоимости аренды</div></div>' +
+        '<div class="kpi"><div class="lb">Начислено всего</div><div class="vl">' + rub(s.feeAll) + '</div><div class="sub">из ' + rub(s.rentAll) + ' выручки</div></div>' +
+        '<div class="kpi good"><div class="lb">Оплачено комиссии</div><div class="vl">' + rub(s.paidAll) + '</div><div class="sub">подтверждено площадкой</div></div>' +
       '</div>';
 
-    // Сводка по периодам
-    h += '<div class="box" style="margin-bottom:20px">' +
-        '<h3 style="font-size:15px;margin-bottom:12px">Доход и начисления по периодам</h3>' +
-        '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px">' +
-          '<div class="stat-card" style="background:var(--field);padding:12px;border-radius:10px">' +
-            '<div class="small muted">Сегодня</div>' +
-            '<div style="font-size:16px;font-weight:700;margin:4px 0">' + rub(s.per.d[0]) + '</div>' +
-            '<div class="small" style="color:var(--gr)">Комиссия: ' + rub(s.per.d[1]) + '<br>Чистыми: ' + rub(s.per.d[2]) + '</div>' +
-          '</div>' +
-          '<div class="stat-card" style="background:var(--field);padding:12px;border-radius:10px">' +
-            '<div class="small muted">За 7 дней</div>' +
-            '<div style="font-size:16px;font-weight:700;margin:4px 0">' + rub(s.per.w[0]) + '</div>' +
-            '<div class="small" style="color:var(--gr)">Комиссия: ' + rub(s.per.w[1]) + '<br>Чистыми: ' + rub(s.per.w[2]) + '</div>' +
-          '</div>' +
-          '<div class="stat-card" style="background:var(--field);padding:12px;border-radius:10px">' +
-            '<div class="small muted">Этот месяц</div>' +
-            '<div style="font-size:16px;font-weight:700;margin:4px 0">' + rub(s.per.mo[0]) + '</div>' +
-            '<div class="small" style="color:var(--gr)">Комиссия: ' + rub(s.per.mo[1]) + '<br>Чистыми: ' + rub(s.per.mo[2]) + '</div>' +
-          '</div>' +
-          '<div class="stat-card" style="background:var(--field);padding:12px;border-radius:10px">' +
-            '<div class="small muted">За всё время</div>' +
-            '<div style="font-size:16px;font-weight:700;margin:4px 0">' + rub(s.per.a[0]) + '</div>' +
-            '<div class="small" style="color:var(--gr)">Комиссия: ' + rub(s.per.a[1]) + '<br>Чистыми: ' + rub(s.per.a[2]) + '</div>' +
-          '</div>' +
-        '</div>' +
-      '</div>';
-
-    // Реквизиты и оплата через СБП
-    h += '<div class="box" style="margin-bottom:20px">' +
-        '<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:12px">' +
-          '<div>' +
-            '<h3 style="font-size:15px;margin-bottom:3px">Реквизиты для оплаты комиссии</h3>' +
-            '<p class="small muted">Перевод по номеру телефона через Систему быстрых платежей (СБП) любого банка</p>' +
-          '</div>' +
-          '<button class="btn sm" id="btnPayFeeCard">Внести платёж</button>' +
-        '</div>' +
-        '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;background:var(--field);padding:14px;border-radius:10px">' +
-          '<div>' +
-            '<div class="small muted">Телефон получателя (СБП):</div>' +
-            '<div style="display:flex;align-items:center;gap:8px;margin-top:3px">' +
-              '<b style="font-size:15px;letter-spacing:.3px">+7 (908) 173-14-10</b>' +
-              '<button type="button" class="mini-btn" id="btnCopyPhone">Копировать</button>' +
-            '</div>' +
-          '</div>' +
-          '<div>' +
-            '<div class="small muted">Получатель:</div>' +
-            '<div style="font-weight:600;margin-top:3px">Илья Игоревич Г. (Т-Банк / Сбербанк)</div>' +
-          '</div>' +
-          '<div>' +
-            '<div class="small muted">Назначение перевода:</div>' +
-            '<div style="font-weight:600;margin-top:3px">Комиссия Ива (' + esc(A.me) + ')</div>' +
-          '</div>' +
-        '</div>' +
-      '</div>';
+    // Доход по периодам (закрытые заказы, по дате заявки)
+    const per = [['Сегодня', s.per.d], ['За 7 дней', s.per.w], ['Этот месяц', s.per.mo], ['За всё время', s.per.a]];
+    h += '<div class="home-sec"><h3>Доход по периодам</h3><div class="fee-per">' +
+      per.map(function(x){
+        return '<div class="fee-pc"><div class="small muted">' + x[0] + '</div><b>' + rub(x[1][0]) + '</b>' +
+          '<div class="small">комиссия ' + rub(x[1][1]) + '</div><div class="small">чистыми ' + rub(x[1][2]) + '</div></div>';
+      }).join('') + '</div>' +
+      '<p class="small muted" style="margin-top:6px">Считаются закрытые заказы, по дате заявки.</p></div>';
 
     // История оплат комиссии
-    h += '<div class="sect-h" style="margin-top:24px;margin-bottom:10px">' +
-        '<h3 style="font-size:16px">История оплат комиссии</h3>' +
-      '</div>';
-
+    h += '<div class="home-sec"><h3>История оплат комиссии</h3>';
     if (!FEES.length){
-      h += '<div class="empty" style="padding:30px 20px"><b>Платежей по комиссии пока нет</b>' +
-        '<p>После совершения перевода нажмите «Внести платёж», чтобы зафиксировать оплату.</p></div>';
+      h += '<div class="empty" style="padding:24px 20px"><b>Платежей по комиссии пока нет</b>' +
+        '<p>После перевода нажмите «' + (s.debt > 0 ? 'Оплатить комиссию' : 'Внести платёж') + '», чтобы зафиксировать оплату.</p></div>';
     } else {
-      h += '<div class="tbl-wrap"><table class="tbl"><thead><tr>' +
-        '<th>Дата</th><th class="num">Сумма</th><th>Статус</th><th>Примечание</th>' +
+      h += '<div class="tbl-wrap tcw"><table class="tbl tc"><thead><tr>' +
+        '<th>Сумма</th><th>Дата</th><th>Статус</th><th>Примечание</th>' +
         '</tr></thead><tbody>' +
         FEES.map(function(f){
           const isOk = f.status === 'confirmed';
           return '<tr>' +
-            '<td class="small muted">' + niceDate(f.created_at) + '</td>' +
-            '<td class="num ' + (isOk ? 'pos' : '') + '" style="font-weight:700">' + rub(f.amount) + '</td>' +
-            '<td><span class="badge ' + (isOk ? 'b-closed' : 'b-mod') + '">' +
-              (isOk ? 'Подтверждено' : 'На проверке') + '</span></td>' +
-            '<td class="small">' + esc(f.note || 'Оплата комиссии') + '</td>' +
+            '<td class="' + (isOk ? 'pos' : '') + '" style="font-weight:700">' + rub(f.amount) + '</td>' +
+            td('Дата', niceDate(f.created_at), 'small muted') +
+            td('Статус', '<span class="badge ' + (isOk ? 'b-closed' : 'b-mod') + '">' + (isOk ? 'Подтверждено' : 'На проверке') + '</span>') +
+            td('Примечание', esc(f.note || 'Оплата комиссии'), 'small') +
           '</tr>';
         }).join('') +
         '</tbody></table></div>';
     }
+    h += '</div>';
 
-    // История начислений по заказам
+    // Начисления по закрытым заказам
     const closed = ORDERS.filter(function(p){ return p.status === 'closed'; });
-    h += '<div class="sect-h" style="margin-top:24px;margin-bottom:10px">' +
-        '<h3 style="font-size:16px">Начисления по закрытым заказам</h3>' +
-      '</div>';
-
+    h += '<div class="home-sec"><h3>Начисления по закрытым заказам' + (closed.length ? ' · ' + closed.length : '') + '</h3>';
     if (!closed.length){
-      h += '<div class="empty" style="padding:30px 20px"><b>Начислений пока нет</b>' +
+      h += '<div class="empty" style="padding:24px 20px"><b>Начислений пока нет</b>' +
         '<p>Комиссия начисляется автоматически при завершении аренды в разделе «Заявки».</p></div>';
     } else {
-      h += '<div class="tbl-wrap"><table class="tbl"><thead><tr>' +
-        '<th>Дата</th><th>Инструмент</th><th>Клиент</th><th class="num">Аренда</th><th class="num">Ставка</th><th class="num">Комиссия</th>' +
+      h += '<div class="tbl-wrap tcw"><table class="tbl tc"><thead><tr>' +
+        '<th>Инструмент</th><th>Дата</th><th>Клиент</th><th class="num">Аренда</th><th class="num">Ставка</th><th class="num">Комиссия</th>' +
         '</tr></thead><tbody>' +
         closed.map(function(p){
           const o = p.orders || {};
           return '<tr>' +
-            '<td class="small muted">' + niceDate(p.created_at) + '</td>' +
             '<td><b>' + esc(p.tools_text || 'Инструмент') + '</b></td>' +
-            '<td class="small">' + esc(o.name || 'Клиент') + (o.phone ? (' · ' + esc(o.phone)) : '') + '</td>' +
-            '<td class="num">' + rub(p.rent_sum || 0) + '</td>' +
-            '<td class="num">' + (p.fee_pct != null ? p.fee_pct : s.feePct) + '%</td>' +
-            '<td class="num" style="color:var(--or);font-weight:700">' + rub(p.fee || 0) + '</td>' +
+            td('Дата', niceDate(p.created_at), 'small muted') +
+            td('Клиент', esc(o.name || 'Клиент') + (o.phone ? (' · ' + esc(o.phone)) : ''), 'small') +
+            td('Аренда', rub(p.rent_sum || 0), 'num') +
+            td('Ставка', (p.fee_pct != null ? p.fee_pct : s.feePct) + '%', 'num') +
+            td('Комиссия', rub(p.fee || 0), 'num', 'color:var(--or);font-weight:700') +
           '</tr>';
         }).join('') +
         '</tbody></table></div>';
     }
+    h += '</div>';
 
     return h;
   }
@@ -715,6 +1572,7 @@
   }
 
   /* ---------- Отзывы ---------- */
+  let RV_F = 'all';
   function viewReviews(){
     if (!isAdmin()){
       return '<div class="empty"><b>Раздел доступен арендодателям</b><p>Здесь отображаются отзывы клиентов о вашем инструменте.</p></div>';
@@ -730,19 +1588,32 @@
     const pub = REVIEWS.filter(function(r){ return r.status === 'published'; });
     const sum = pub.reduce(function(acc, r){ return acc + (Number(r.rating) || 0); }, 0);
     const avg = pub.length ? (sum / pub.length).toFixed(1) : '0.0';
+    /* Этап 5 кабинетов (23.10.2026): разбивка оценок и фильтры — быстро найти недовольных клиентов */
+    const dist = [5, 4, 3, 2, 1].map(function(n){ return [n, pub.filter(function(r){ return Number(r.rating) === n; }).length]; });
+    const maxN = Math.max.apply(null, dist.map(function(d){ return d[1]; }).concat([1]));
+    const isLow = function(r){ return (Number(r.rating) || 0) <= 3; };
+    const hasText = function(r){ return !!String(r.text || '').trim(); };
+    const cnt = { all: REVIEWS.length, low: REVIEWS.filter(isLow).length, text: REVIEWS.filter(hasText).length };
+    if (!cnt[RV_F]) RV_F = 'all';
+    const shown = RV_F === 'low' ? REVIEWS.filter(isLow) : RV_F === 'text' ? REVIEWS.filter(hasText) : REVIEWS;
+    const chips = '<div class="chips" style="margin-bottom:4px">' +
+      [['all', 'Все'], ['low', 'Оценка 1–3'], ['text', 'С текстом']].map(function(x){
+        return '<button class="chip' + (RV_F === x[0] ? ' on' : '') + '" data-rv-f="' + x[0] + '"' +
+          (RV_F === x[0] ? ' style="border-color:var(--or);color:var(--or)"' : '') + '>' + x[1] + ' · ' + cnt[x[0]] + '</button>';
+      }).join('') + '</div>';
 
-    return '<div class="box" style="margin-bottom:18px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:14px">' +
+    return '<div class="box rv-sum">' +
       '<div>' +
         '<div style="font-size:13px;color:var(--g2);margin-bottom:4px">Общий рейтинг вашего проката</div>' +
         '<div class="rating-badge rating-badge-large"><span class="star">★</span> ' + avg +
           ' <span class="muted" style="font-size:14px;font-weight:400">(' + pub.length + ' ' + plural(pub.length, 'отзыв', 'отзыва', 'отзывов') + ')</span>' +
         '</div>' +
       '</div>' +
-      '<div style="font-size:13px;color:var(--gr)">' +
-        'Всего отзывов: <b>' + REVIEWS.length + '</b>' +
-      '</div>' +
-    '</div>' +
-    '<div class="review-list">' + REVIEWS.map(function(r){
+      '<div class="rv-dist">' + dist.map(function(d){
+        return '<div class="rv-row"><span>' + d[0] + ' ★</span><span class="rv-bar"><i style="width:' + Math.round(d[1] / maxN * 100) + '%"></i></span><span>' + d[1] + '</span></div>';
+      }).join('') + '</div>' +
+    '</div>' + chips +
+    '<div class="review-list">' + shown.map(function(r){
       const isHidden = r.status === 'hidden';
       const toolTitle = (r.tools && r.tools.name) || 'Инструмент';
       const modBtn = isChief()
@@ -784,6 +1655,596 @@
     return '<div class="grid">' + list.map(adCard).join('') + '</div>';
   }
 
+  /* ---------- Сотрудник проката на сайте (этап D, 20.10.2026) ----------
+     Как в приложении (IvaStaffPatch / IvaStaffOrdersPatch) и теми же функциями базы:
+       iva_staff_me — приглашение или работа; iva_staff_answer — «Принять» / «Отказаться»;
+       iva_staff_parts — заявки ТОЛЬКО своих пунктов (без денег и почты клиента);
+       iva_staff_set_status — «Выдал» / «Вернули» (право «Выдача», свой пункт, new → rented → closed).
+     Без SQL сотрудников (20261028/1029) функции не найдутся — вкладка просто не появится. */
+  async function loadStaff(){
+    STAFF = null; SPARTS = []; SCARDS = null; STOOLS = null; STCHATS = null;
+    try {
+      const r = await api('/rest/v1/rpc/iva_staff_me', 'POST', {});
+      STAFF = (Array.isArray(r) ? r[0] : r) || null;
+    } catch(e){ STAFF = null; }
+    try { if (STAFF) localStorage.setItem('iva_staff_hint', '1'); else localStorage.removeItem('iva_staff_hint'); } catch(e){}
+    try { if (typeof workPut === 'function'){ workPut(STAFF); paintWork(); } } catch(e){}   // кружок «Работа» в шапке
+    if (STAFF && STAFF.status === 'active' && (STAFF.can_issue || STAFF.can_notify)){
+      try { SPARTS = await api('/rest/v1/rpc/iva_staff_parts', 'POST', {}) || []; } catch(e){ SPARTS = []; }
+      try { SCARDS = lcMap(await api('/rest/v1/rpc/iva_order_cards', 'POST', { p_scope: 'staff' })); } catch(e){ SCARDS = null; }
+    }
+    /* этап 2 «Работы в прокате»: инструмент пунктов сотрудника с правом «Добавляет инструмент» (iva_staff_tools, SQL 10.122) */
+    if (STAFF && STAFF.status === 'active' && STAFF.can_catalog){
+      try {
+        const r = await api('/rest/v1/rpc/iva_staff_tools', 'POST', {});
+        STOOLS = Array.isArray(r) ? r.map(function(x){ return x && x.iva_staff_tools ? x.iva_staff_tools : x; }).filter(Boolean) : null;
+      } catch(e){ STOOLS = null; }
+    }
+    /* этап 3: переписки пунктов сотрудника с правом «Отвечает в чате» */
+    if (STAFF && STAFF.status === 'active' && STAFF.can_chat) await stLoadChats();
+  }
+  function staffNewBadge(){
+    if (!STAFF) return '';
+    if (STAFF.status === 'invited') return '<span class="n warn">!</span>';
+    const n = SPARTS.filter(function(p){ return p.status === 'new'; }).length + stUnread(STCHATS);   // новые заявки + непрочитанные сообщения
+    return n ? '<span class="n">' + n + '</span>' : '';
+  }
+  function staffRights(st){
+    const r = [];
+    if (st.can_issue)   r.push('выдаёт и принимает инструмент');
+    if (st.can_catalog) r.push('добавляет инструмент');
+    if (st.can_chat)    r.push('отвечает в чате пункта');
+    if (st.can_notify)  r.push('получает уведомления о заявках');
+    if (st.can_delete)  r.push('удаляет инструмент (с одобрения владельца)');
+    return r;
+  }
+  function staffPoints(st){
+    const pts = Array.isArray(st.points) ? st.points : [];
+    if (!pts.length) return '<span class="muted">пункт не назначен</span>';
+    return pts.map(function(p){
+      return '<span class="staff-pt"><b>' + esc(p.name || 'Пункт') + '</b>' +
+        (p.address ? '<small>' + esc(p.address) + '</small>' : '') + '</span>';
+    }).join('');
+  }
+  /* «Смена» сотрудника (24.10.2026, этап 1 «Работы в прокате»): короткая шапка с выбором пункта и часами работы,
+     плитки-фильтры, просроченные сверху, поиск, автообновление раз в 30 секунд, подтверждение в нижней панели.
+     Данные и действия — прежние функции базы (iva_staff_me / iva_staff_parts / iva_order_cards('staff') / iva_staff_set_status). */
+  function stPts(){ return STAFF && Array.isArray(STAFF.points) ? STAFF.points : []; }
+  function stHM(min){ min = ((Number(min) % 1440) + 1440) % 1440; return String(Math.floor(min / 60)).padStart(2, '0') + ':' + String(min % 60).padStart(2, '0'); }
+  /* «сегодня 14:05», «вчера 09:30», «22.10 18:00» — время устройства */
+  function stWhen(ms){
+    if (!ms || isNaN(ms)) return '—';
+    const d = new Date(ms), t0 = new Date(); t0.setHours(0, 0, 0, 0);
+    const day = Math.round((new Date(ms).setHours(0, 0, 0, 0) - t0.getTime()) / 86400000);
+    const hm = String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
+    if (day === 0) return 'сегодня ' + hm;
+    if (day === -1) return 'вчера ' + hm;
+    if (day === 1) return 'завтра ' + hm;
+    return String(d.getDate()).padStart(2, '0') + '.' + String(d.getMonth() + 1).padStart(2, '0') + ' ' + hm;
+  }
+  /* открыт ли пункт сейчас — по графику пункта (open_min / close_min), время устройства */
+  function stOpen(pt){
+    const o = Number(pt && pt.open_min), c = Number(pt && pt.close_min);
+    if (!pt || pt.open_min == null || pt.close_min == null || isNaN(o) || isNaN(c) || o === c) return '';
+    const n = new Date(), m = n.getHours() * 60 + n.getMinutes();
+    const open = o < c ? (m >= o && m < c) : (m >= o || m < c);
+    return open ? '<span class="st-open">Открыт до ' + stHM(c) + '</span>'
+                : '<span class="st-shut">Закрыт · откроется в ' + stHM(o) + '</span>';
+  }
+  function stInfo(p){
+    const st = p.status || 'new', sk = SCARDS && SCARDS[String(p.part_id)];
+    let end = 0;
+    if (st === 'rented'){
+      if (sk){ const t = lcTerms(sk); Object.keys(t).forEach(function(d){ if (t[d] && (!end || t[d] < end)) end = t[d]; }); }
+      if (!end && p.rented_at) end = Date.parse(p.rented_at) + (Number(p.days) || 1) * 86400000;
+    }
+    const now = Date.now(), t1 = new Date(); t1.setHours(23, 59, 59, 999);
+    const late = st === 'rented' && !!end && end < now;
+    return { st: st, late: late, today: st === 'rented' && !!end && !late && end <= t1.getTime(), end: end };
+  }
+  function stScope(){
+    return SPARTS.filter(function(p){ return ST_PT === 'all' || String(p.point_id || '') === ST_PT; });
+  }
+  function stCounts(list){
+    const c = { new: 0, today: 0, late: 0, rented: 0 };
+    list.forEach(function(p){
+      const i = stInfo(p);
+      if (i.st === 'new') c.new++;
+      if (i.st === 'rented') c.rented++;
+      if (i.late) c.late++;
+      if (i.today) c.today++;
+    });
+    return c;
+  }
+  function stKpisHTML(){
+    const c = stCounts(stScope());
+    const k = function(f, cls, lb, n, sub){
+      return '<button type="button" class="kpi home-kpi st-k ' + cls + (n ? ' has' : '') + (ST_F === f ? ' on' : '') + '" data-st-f="' + f + '" aria-pressed="' + (ST_F === f) + '">' +
+        '<div class="lb">' + lb + '</div><div class="vl">' + n + '</div><div class="sub">' + sub + '</div></button>';
+    };
+    return k('new', 'k-new', 'Новые', c.new, 'ждут выдачи') +
+      k('late', 'k-late', 'Просрочены', c.late, c.late ? 'свяжитесь с клиентом' : 'всё в срок') +
+      k('today', 'k-today', 'Вернуть сегодня', c.today, 'срок до конца дня') +
+      k('rented', 'k-rented', 'В аренде', c.rented, 'выдано сейчас');
+  }
+  function stListHTML(){
+    const q = ST_Q.trim().toLowerCase().replace(/^№\s*/, '');
+    const list = stScope().filter(function(p){
+      if (!q) return true;
+      return [p.order_id, p.client_name, p.client_tel, String(p.client_tel || '').replace(/\D/g, ''), p.tools_text, p.point_name]
+        .join(' ').toLowerCase().indexOf(q) >= 0;
+    });
+    const groups = [
+      ['late', 'Просрочены', function(i){ return i.late; }],
+      ['new', 'Новые', function(i){ return i.st === 'new'; }],
+      ['rented', 'В аренде', function(i){ return i.st === 'rented' && !i.late; }],
+      ['closed', 'Закрыты за 7 дней', function(i){ return i.st === 'closed'; }],
+      ['cancelled', 'Отменены клиентом', function(i){ return i.st === 'cancelled'; }]
+    ];
+    const want = { new: ['new'], late: ['late'], today: ['rented'], rented: ['late', 'rented'] }[ST_F] || null;
+    let h = '', shown = 0;
+    groups.forEach(function(g){
+      if (want && want.indexOf(g[0]) < 0) return;
+      let rows = list.filter(function(p){ return g[2](stInfo(p)); });
+      if (ST_F === 'today') rows = rows.filter(function(p){ return stInfo(p).today; });
+      if (!rows.length) return;
+      rows.sort(function(a, b){
+        const ea = stInfo(a).end || 0, eb = stInfo(b).end || 0;
+        return (ea && eb ? ea - eb : 0) || (Date.parse(b.created_at) || 0) - (Date.parse(a.created_at) || 0);
+      });
+      shown += rows.length;
+      h += '<div class="st-g st-g-' + g[0] + '">' + g[1] + ' · ' + rows.length + '</div>' +
+        rows.map(function(p){
+          const fr = ST_FRESH[p.part_id] && Date.now() - ST_FRESH[p.part_id] < 120000;
+          return '<div class="st-wrap' + (fr ? ' st-fresh' : '') + '">' + staffPartCard(p) + '</div>';
+        }).join('');
+    });
+    if (!shown){
+      if (!SPARTS.length) return '<div class="empty"><b>Заявок нет</b><p>Новые, выданные и закрытые за 7 дней заявки ваших пунктов появятся здесь — страница обновляется сама.</p></div>';
+      return '<div class="empty"><b>Ничего не найдено</b><p>' + (q ? 'Измените строку поиска' : 'По этому фильтру заявок нет') + '.</p>' +
+        '<button type="button" class="btn sec sm" data-st-f="all" data-st-clear="1">Показать все заявки</button></div>';
+    }
+    return h;
+  }
+  function stUpdTxt(){
+    return (ST_UPD ? 'Обновлено ' + stWhen(ST_UPD).replace(/^сегодня /, '') + ' · ' : '') + liveTxt();
+  }
+  /* «Инструмент пунктов» (24.10.2026, этап 2 «Работы в прокате»): сотрудник с правом «Добавляет инструмент» видит инструмент
+     своих пунктов — что в каталоге, что ждёт одобрения владельца, что отклонено; с правом «Удаляет» — отправляет запрос на удаление.
+     Добавление и правка — пока в приложении. Функции базы: iva_staff_tools, iva_staff_tool_delete (SQL 10.122). */
+  function stToolScope(){
+    return (STOOLS || []).filter(function(t){ return ST_PT === 'all' || String(t.point_id || '') === ST_PT; });
+  }
+  function stToolState(t){
+    if (t.edit_state === 'delete') return { k: 'wait', cls: 'mod', title: 'Удаление ждёт владельца', note: 'Вы или другой сотрудник попросили удалить — ждём решения владельца.' };
+    if (t.review === 'pending') return { k: 'wait', cls: 'mod', title: 'На одобрении', note: 'Новый инструмент появится в каталоге после одобрения владельцем.' };
+    if (t.review === 'rejected') return { k: 'rej', cls: 'off', title: 'Отклонён', note: 'Владелец не одобрил публикацию.' };
+    if (t.edit_state === 'pending') return { k: 'wait', cls: 'mod', title: 'Правка на одобрении', note: 'В каталоге прежнее описание, пока владелец не одобрит правку.' };
+    if (t.edit_state === 'rejected') return { k: 'rej', cls: 'off', title: 'Правка отклонена', note: 'Владелец не одобрил последнюю правку — в каталоге прежнее описание.' };
+    if (t.active === false || (t.status && t.status !== 'active')) return { k: 'off', cls: 'off', title: 'Снят', note: '' };
+    return { k: 'on', cls: 'act', title: 'В каталоге', note: '' };
+  }
+  function stToolListHTML(){
+    if (!STOOLS) return '<div class="empty"><b>Список не загрузился</b><p>Нажмите «Обновить». Если не поможет — откройте инструмент в приложении «Ива».</p></div>';
+    const q = ST_TQ.trim().toLowerCase();
+    const list = stToolScope().filter(function(t){
+      if (ST_TF !== 'all' && stToolState(t).k !== ST_TF) return false;
+      if (!q) return true;
+      return [t.name, t.brand, t.model, t.point_name, catTitle(t.cat) || t.cat].join(' ').toLowerCase().indexOf(q) >= 0;
+    });
+    if (!list.length){
+      if (!STOOLS.length) return '<div class="empty"><b>Инструмента пока нет</b><p>Добавленный в ваших пунктах инструмент появится здесь.</p></div>';
+      return '<div class="empty"><b>Ничего не найдено</b><p>' + (q ? 'Измените строку поиска' : 'В этом разделе пусто') + '.</p>' +
+        '<button type="button" class="btn sec sm" data-st-tf="all" data-st-clear="1">Показать весь инструмент</button></div>';
+    }
+    const ord = { wait: 0, rej: 1, on: 2, off: 3 };
+    list.sort(function(a, b){ return ord[stToolState(a).k] - ord[stToolState(b).k] || String(a.name || '').localeCompare(String(b.name || ''), 'ru'); });
+    return list.map(function(t){
+      const s = stToolState(t);
+      const imgs = Array.isArray(t.imgs) ? t.imgs : [];
+      const img = imgs[0] || t.img || '';
+      const okImg = /^https:\/\//.test(img);
+      const inCat = s.k === 'on' || (s.k === 'wait' && t.edit_state && t.review !== 'pending') || (s.k === 'rej' && t.edit_state === 'rejected');
+      const ph = (okImg ? '<img src="' + esc(img) + '" alt="" loading="lazy">' : '<span class="ad-noimg">нет фото</span>') +
+        '<span class="ad-st"><span class="badge ' + s.cls + '">' + esc(s.title) + '</span></span>';
+      let acts = '';
+      if (t.edit_state !== 'delete') acts += '<a class="btn sec sm" href="new.html?edit=' + encodeURIComponent(t.id) + '">Изменить</a>';
+      if (inCat) acts += '<a class="btn sec sm" href="tool.html?id=' + encodeURIComponent(t.id) + '">Открыть</a>';
+      if (t.can_delete && t.edit_state !== 'delete') acts += '<button type="button" class="btn sec sm st-del" data-st-tdel="' + esc(t.id) + '">Удалить</button>';
+      return '<div class="row-ad ad-c st-tool" data-id="' + esc(t.id) + '">' +
+        (inCat ? '<a class="rph" href="tool.html?id=' + encodeURIComponent(t.id) + '" aria-label="Открыть в каталоге">' + ph + '</a>'
+               : '<div class="rph">' + ph + '</div>') +
+        '<div class="rmid">' +
+          '<div class="rnm">' + esc(t.name || 'Инструмент') + '</div>' +
+          (Number(t.price) ? '<div class="rpr">' + rub(t.price) + ' <span>/ сутки</span></div>' : '') +
+          '<div class="rmeta">' + esc(t.point_name || 'Пункт') + (t.mine ? ' · добавили вы' : '') + '</div>' +
+          (s.note ? '<div class="rmeta st-tnote st-tnote-' + s.k + '">' + esc(s.note) + '</div>' : '') +
+          (acts ? '<div class="ad-acts">' + acts + '</div>' : '') +
+        '</div>' +
+      '</div>';
+    }).join('');
+  }
+  function stToolsView(){
+    const all = stToolScope();
+    const cnt = function(k){ return all.filter(function(t){ return k === 'all' || stToolState(t).k === k; }).length; };
+    let h = '<div class="chips st-tf">' +
+      [['all', 'Весь'], ['on', 'В каталоге'], ['wait', 'Ждут владельца'], ['rej', 'Отклонены'], ['off', 'Сняты']].map(function(c){
+        const n = cnt(c[0]);
+        if (c[0] !== 'all' && c[0] !== 'on' && !n && ST_TF !== c[0]) return '';
+        return '<button class="chip' + (ST_TF === c[0] ? ' on' : '') + '" data-st-tf="' + c[0] + '"' +
+          (ST_TF === c[0] ? ' style="border-color:var(--or);color:var(--or)"' : '') + '>' + c[1] + ' · ' + n + '</button>';
+      }).join('') + '</div>';
+    h += '<div class="st-bar">' +
+        '<label for="stTq" class="sr-lbl">Поиск по инструменту</label>' +
+        '<input class="inp" id="stTq" type="search" autocomplete="off" placeholder="Название, бренд, модель" value="' + esc(ST_TQ) + '">' +
+        '<button class="btn sec sm" data-staff-reload="1">Обновить</button>' +
+      '</div>' +
+      '<div class="st-tadd"><span class="small muted">Новый инструмент и правки опубликованного клиенты увидят после одобрения владельцем проката.</span>' +
+        '<a class="btn sm" href="new.html">+ Добавить инструмент</a></div>';
+    h += '<div id="stTList" class="st-tlist">' + stToolListHTML() + '</div>';
+    return h;
+  }
+  /* «Сообщения пункта» (24.10.2026, этап 3 «Работы в прокате»): сотрудник с правом «Отвечает в чате» видит переписки клиентов
+     по инструменту своих пунктов и чаты пунктов, читает и отвечает от имени проката; «кто отвечает» и «Отвечу я» — как в приложении.
+     Функции базы: iva_staff_chats / iva_staff_chat / _read / _send (SQL 10.112), iva_staff_point_chats / iva_staff_point_chat /
+     _read / _send (SQL 10.120), iva_chat_mark / iva_chat_who (SQL 10.122). */
+  async function stLoadChats(){
+    const r = await Promise.allSettled([
+      api('/rest/v1/rpc/iva_staff_chats', 'POST', {}),
+      api('/rest/v1/rpc/iva_staff_point_chats', 'POST', {})
+    ]);
+    if (r[0].status === 'rejected' && r[1].status === 'rejected'){ STCHATS = null; return; }
+    const a = r[0].status === 'fulfilled' && Array.isArray(r[0].value) ? r[0].value.map(function(c){ return Object.assign({ kind: 't', key: c.tool_id }, c); }) : [];
+    const b = r[1].status === 'fulfilled' && Array.isArray(r[1].value) ? r[1].value.map(function(c){ return Object.assign({ kind: 'p', key: c.point_id }, c); }) : [];
+    STCHATS = a.concat(b).filter(function(c){ return c.key && c.peer; })
+      .sort(function(x, y){ return (Date.parse(y.last_at) || 0) - (Date.parse(x.last_at) || 0); });
+  }
+  function stChatScope(){
+    if (!STCHATS) return [];
+    if (ST_PT === 'all') return STCHATS;
+    const pt = stPts().find(function(p){ return String(p.id) === ST_PT; });
+    return STCHATS.filter(function(c){ return c.kind === 'p' ? String(c.point_id) === ST_PT : !!pt && c.point_name === pt.name; });
+  }
+  function stUnread(list){ return (list || []).reduce(function(s, c){ return s + (Number(c.unread) || 0); }, 0); }
+  function stChatsView(){
+    if (!STCHATS) return '<div class="empty"><b>Переписки не загрузились</b><p>Нажмите «Обновить». Если не поможет — ответьте в приложении «Ива».</p>' +
+      '<button class="btn sec sm" data-staff-reload="1">Обновить</button></div>';
+    const list = stChatScope();
+    let h = '<div class="small muted st-upd" style="margin:0 2px 10px">Переписки клиентов с вашими пунктами за 90 дней — где клиент писал сам. ' +
+      'Отвечаете от имени проката; владелец видит переписку.</div>';
+    if (!list.length) return h + '<div class="empty"><b>Сообщений нет</b><p>Когда клиент напишет про инструмент вашего пункта или в чат пункта, переписка появится здесь.</p></div>';
+    return h + '<div class="st-chats">' + list.map(function(c){
+      const n = Number(c.unread) || 0;
+      const nm = String(c.client_name || 'Клиент');
+      const img = /^https:\/\//.test(c.tool_img || '') ? '<img src="' + esc(c.tool_img) + '" alt="" loading="lazy">' : '<span>' + esc(nm.charAt(0).toUpperCase()) + '</span>';
+      return '<button type="button" class="st-chat' + (n ? ' unread' : '') + '" data-st-chat="' + esc(c.kind + ':' + c.key + ':' + c.peer) + '">' +
+        '<span class="st-chat-ava">' + img + '</span>' +
+        '<span class="st-chat-mid">' +
+          '<span class="st-chat-top"><b>' + esc(nm) + '</b><small>' + esc(stWhen(Date.parse(c.last_at))) + '</small></span>' +
+          '<span class="st-chat-sub">' + esc(c.kind === 't' ? (c.tool_name || 'Инструмент') : 'Чат пункта') + ' · ' + esc(c.point_name || 'Пункт') + '</span>' +
+          '<span class="st-chat-last">' + (c.last_mine ? '<i>Прокат:</i> ' : '') + esc(String(c.last_text || '').slice(0, 140)) + '</span>' +
+        '</span>' +
+        (n ? '<span class="st-chat-n">' + n + '</span>' : '') +
+      '</button>';
+    }).join('') + '</div>';
+  }
+  /* открытая переписка — в нижней панели; обновляется каждые 5 секунд, пока панель открыта */
+  let ST_CH = null;
+  function stChatMsgsHTML(ms){
+    if (!ms.length) return '<div class="empty" style="padding:30px 10px"><b style="font-size:15px">Сообщений нет</b></div>';
+    let h = '', day = '';
+    ms.forEach(function(m){
+      const d = new Date(m.created_at);
+      const dl = stWhen(d.getTime()).replace(/ \d\d:\d\d$/, '');
+      if (dl !== day){ h += '<div class="th-day">' + esc(dl) + '</div>'; day = dl; }
+      let inner = '';
+      if (/^https:\/\//.test(m.img || '')) inner += '<a href="' + esc(m.img) + '" target="_blank" rel="noopener"><img class="bimg" src="' + esc(m.img) + '" alt="фото"></a>';
+      if (/^https:\/\//.test(m.audio || '')) inner += '<audio controls preload="none" src="' + esc(m.audio) + '"></audio>';
+      if (m.text) inner += esc(m.text);
+      const hm = String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
+      h += '<div class="bub ' + (m.mine ? 'me' : 'they') + '">' +
+        (m.mine ? '<div class="st-by">' + (m.by_me ? 'Вы' : 'Прокат') + '</div>' : '') + inner +
+        '<div class="btime">' + hm + (m.mine ? '<span>' + (m.is_read ? '✓✓' : '✓') + '</span>' : '') + '</div></div>';
+    });
+    return h;
+  }
+  function stWhoHTML(w){
+    if (!w) return '';
+    const parts = [];
+    (w.others || []).forEach(function(o){
+      const nm = esc(o.name || (o.role === 'owner' ? 'Владелец' : 'Сотрудник'));
+      if (o.claim) parts.push('<b>' + nm + '</b> отвечает');
+      else if (o.typing) parts.push('<b>' + nm + '</b> печатает…');
+      else if (o.open) parts.push(nm + ' сейчас в переписке');
+    });
+    if (w.last && w.last.name) parts.push('последним ответил' + (w.last.me ? 'и вы' : ' ' + esc(w.last.name)) + ' ' + esc(stWhen(Date.parse(w.last.at))));
+    return parts.join(' · ');
+  }
+  async function stChatPoll(first){
+    const ch = ST_CH;
+    if (!ch || !$('sheet') || !$('stChBody')) return;
+    const p = ch.kind === 't' ? { p_tool: ch.key, p_peer: ch.peer } : { p_point: ch.key, p_peer: ch.peer };
+    const fn = ch.kind === 't' ? 'iva_staff_chat' : 'iva_staff_point_chat';
+    try {
+      const ms = await api('/rest/v1/rpc/' + fn, 'POST', p) || [];
+      if (ST_CH !== ch || !$('stChBody')) return;
+      const sig = JSON.stringify(ms.map(function(m){ return [m.id, m.is_read]; }));
+      if (sig !== ch.sig){
+        const b = $('stChBody'), atEnd = first || b.scrollHeight - b.scrollTop - b.clientHeight < 60;
+        ch.sig = sig; b.innerHTML = stChatMsgsHTML(ms);
+        if (atEnd) b.scrollTop = b.scrollHeight;
+        if (ms.some(function(m){ return !m.mine && !m.is_read; })) api('/rest/v1/rpc/' + fn + '_read', 'POST', p).catch(function(){});
+      }
+    } catch(e){ if (first && $('stChBody')) $('stChBody').innerHTML = '<div class="empty" style="padding:30px 10px"><b>Не удалось открыть</b><p>' + esc(e.message) + '</p></div>'; }
+    try {
+      const w = await api('/rest/v1/rpc/iva_chat_who', 'POST', { p_thread: ch.thread });
+      if (ST_CH === ch && $('stChWho')){
+        $('stChWho').innerHTML = stWhoHTML(w) || 'Пока никто из проката не отвечает';
+      }
+    } catch(e){ if ($('stChWho')) $('stChWho').textContent = ''; }
+  }
+  function stOpenChat(id){
+    const m = String(id).split(':');
+    const c = (STCHATS || []).find(function(x){ return x.kind === m[0] && String(x.key) === m[1] && x.peer === m[2]; });
+    if (!c) return;
+    const ch = { kind: c.kind, key: c.key, peer: c.peer, thread: c.kind + ':' + c.key + ':' + c.peer, sig: '', claim: false };
+    ST_CH = ch;
+    openSheet(String(c.client_name || 'Клиент') + ' · ' + (c.kind === 't' ? (c.tool_name || 'Инструмент') : 'чат пункта'),
+      '<div class="st-ch-head"><span class="small muted">' + esc(c.point_name || 'Пункт') + '</span>' +
+        '<span class="small st-ch-who" id="stChWho">…</span>' +
+        '<button type="button" class="btn sec sm" id="stChClaim">Отвечу я</button></div>' +
+      '<div class="th-body st-ch-body" id="stChBody"><div class="empty" style="padding:30px 10px">Загрузка…</div></div>',
+      '<div class="st-ch-draft" id="stChDraft" hidden></div>' +
+      '<label class="btn sec st-ch-ph" title="Приложить фото" aria-label="Приложить фото">' +
+        '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h3l2-3h6l2 3h3v13H4z"/><circle cx="12" cy="13" r="4"/></svg>' +
+        '<input type="file" id="stChFile" accept="image/*" hidden></label>' +
+      '<textarea class="inp st-ch-inp" id="stChTxt" rows="1" maxlength="2000" placeholder="Ответ клиенту"></textarea>' +
+      '<button class="btn" id="stChSend">Отправить</button>');
+    const sh = $('sheet'); sh.classList.add('st-ch-sheet');
+    api('/rest/v1/rpc/iva_chat_mark', 'POST', { p_thread: ch.thread, p_state: 'open' }).catch(function(){});
+    stChatPoll(true);
+    const tm = setInterval(function(){
+      if (ST_CH !== ch || !document.body.contains(sh)){ clearInterval(tm); return; }
+      if (!document.hidden) stChatPoll(false);
+    }, 5000);
+    const mo = new MutationObserver(function(){
+      if (document.body.contains(sh)) return;
+      mo.disconnect(); clearInterval(tm);
+      api('/rest/v1/rpc/iva_chat_mark', 'POST', { p_thread: ch.thread, p_state: 'close' }).catch(function(){});
+      if (ST_CH === ch) ST_CH = null;
+      stLoadChats().then(function(){ if (TAB === 'staff' && ST_VIEW === 'chats') stRepaint(); else render(); });
+    });
+    mo.observe(document.body, { childList: true });
+    $('stChClaim').onclick = function(){
+      ch.claim = !ch.claim;
+      this.textContent = ch.claim ? 'Не буду отвечать' : 'Отвечу я';
+      api('/rest/v1/rpc/iva_chat_mark', 'POST', { p_thread: ch.thread, p_state: ch.claim ? 'claim' : 'unclaim' })
+        .then(function(){ stChatPoll(false); }).catch(function(){});
+    };
+    let typT = 0;
+    const ta = $('stChTxt');
+    ta.oninput = function(){
+      ta.style.height = '46px'; ta.style.height = Math.min(Math.max(ta.scrollHeight, 46), 140) + 'px';
+      if (Date.now() - typT > 5000){ typT = Date.now(); api('/rest/v1/rpc/iva_chat_mark', 'POST', { p_thread: ch.thread, p_state: 'typing' }).catch(function(){}); }
+    };
+    ta.onkeydown = function(e){ if (e.key === 'Enter' && !e.shiftKey && !e.isComposing){ e.preventDefault(); $('stChSend').click(); } };
+    /* фото к ответу: сжимается до 1280 px и загружается в хранилище (как у клиента), отправляется вместе с текстом */
+    let img = '';
+    const draft = function(){
+      const d = $('stChDraft'); if (!d) return;
+      d.hidden = !img;
+      d.innerHTML = img ? '<span><img src="' + esc(img) + '" alt="Фото к отправке"><button type="button" class="x" id="stChDraftX" aria-label="Убрать фото">×</button></span>' : '';
+      if (img) $('stChDraftX').onclick = function(){ img = ''; draft(); };
+    };
+    $('stChFile').onchange = async function(){
+      const f = this.files && this.files[0]; this.value = '';
+      if (!f) return;
+      const lb = this.parentNode; lb.classList.add('busy');
+      try { img = await uploadPhoto(f); draft(); ta.focus(); }
+      catch(e){ toast('Фото не загрузилось: ' + e.message); }
+      lb.classList.remove('busy');
+    };
+    $('stChSend').onclick = async function(){
+      const t = ta.value.trim();
+      if (!t && !img) { ta.focus(); return; }
+      const btn = this; btn.disabled = true;
+      const p = ch.kind === 't' ? { p_tool: ch.key, p_peer: ch.peer, p_text: t } : { p_point: ch.key, p_peer: ch.peer, p_text: t };
+      if (img) p.p_img = img;
+      try {
+        await api('/rest/v1/rpc/' + (ch.kind === 't' ? 'iva_staff_chat_send' : 'iva_staff_point_chat_send'), 'POST', p);
+        ta.value = ''; ta.style.height = '46px'; img = ''; draft();
+        await stChatPoll(true);
+      } catch(e){
+        toast(img && /PGRST202|could not find|not find the function|404/i.test(e.message)
+          ? 'Фото с сайта заработает после обновления базы (SQL 20261117) — пока отправьте текстом'
+          : 'Не отправлено: ' + e.message);
+      }
+      btn.disabled = false; ta.focus();
+    };
+  }
+  function viewStaff(){
+    const st = STAFF;
+    if (!st) return '';
+    const rights = staffRights(st);
+    if (st.status === 'invited'){
+      return '<div class="box staff-head">' +
+        '<div class="small muted">Приглашение в прокат</div>' +
+        '<b style="font-size:17px">«' + esc(st.company || 'Прокат') + '»</b>' +
+        '<div class="staff-pts">' + staffPoints(st) + '</div>' +
+        (rights.length ? '<div class="small" style="color:var(--gr);margin-top:10px;line-height:1.55">Права: ' + esc(rights.join(', ')) + '</div>' : '') +
+        '</div>' +
+        '<div class="box" style="margin-top:12px">' +
+        '<p style="line-height:1.6;color:var(--gr)">Владелец проката добавил вас сотрудником. Примите приглашение, чтобы видеть заявки своих пунктов ' +
+        'и отмечать «Выдал» / «Вернули». Отказаться можно сейчас; позже убрать вас сможет только владелец проката.</p>' +
+        '<div style="display:flex;gap:10px;margin-top:14px;flex-wrap:wrap">' +
+          '<button class="btn" data-staff-ans="1">Принять приглашение</button>' +
+          '<button class="btn sec" data-staff-ans="0">Отказаться</button>' +
+        '</div></div>';
+    }
+    const pts = stPts();
+    if (ST_PT !== 'all' && !pts.some(function(p){ return String(p.id) === ST_PT; })) ST_PT = 'all';
+    const cur = ST_PT !== 'all' ? pts.find(function(p){ return String(p.id) === ST_PT; }) : (pts.length === 1 ? pts[0] : null);
+    const app = [];
+
+    /* шапка смены: прокат, пункты (выбор), часы и телефон выбранного пункта */
+    let h = '<div class="st-head"><div class="st-co"><b>«' + esc(st.company || 'Прокат') + '»</b><span class="small muted">смена сотрудника</span></div>';
+    if (pts.length > 1){
+      const act = ST_VIEW === 'chats'
+        ? function(id){ const keep = ST_PT; ST_PT = id; const n = stUnread(stChatScope()); ST_PT = keep; return n; }
+        : ST_VIEW === 'tools'
+        ? function(id){ return (STOOLS || []).filter(function(t){ return id === 'all' || String(t.point_id || '') === id; }).length; }
+        : function(id){ return SPARTS.filter(function(p){ const s = p.status || 'new'; return (s === 'new' || s === 'rented') && (id === 'all' || String(p.point_id || '') === id); }).length; };
+      h += '<div class="chips st-pts" role="group" aria-label="Пункт выдачи">' +
+        [['all', 'Все пункты']].concat(pts.map(function(p){ return [String(p.id), p.name || 'Пункт']; })).map(function(x){
+          const n = act(x[0]);
+          return '<button class="chip' + (ST_PT === x[0] ? ' on' : '') + '" data-st-pt="' + esc(x[0]) + '"' +
+            (ST_PT === x[0] ? ' style="border-color:var(--or);color:var(--or)"' : '') + '>' + esc(x[1]) + (n ? ' · ' + n : '') + '</button>';
+        }).join('') + '</div>';
+    }
+    if (cur){
+      const tel = String(cur.tel || '').replace(/\D/g, '');
+      const line = [cur.name && pts.length === 1 ? '<b>' + esc(cur.name) + '</b>' : '',
+        cur.address ? esc([cur.city, cur.address].filter(Boolean).join(', ')) : '',
+        stOpen(cur),
+        tel ? 'телефон пункта <a href="tel:+' + esc(tel) + '">' + esc(tel.length === 11 ? '+7 (' + tel.slice(1, 4) + ') ' + tel.slice(4, 7) + '-' + tel.slice(7, 9) + '-' + tel.slice(9) : tel) + '</a>' : ''
+      ].filter(Boolean);
+      if (line.length) h += '<div class="st-pt-info">' + line.map(function(x){ return '<span>' + x + '</span>'; }).join('') + '</div>';
+    }
+    h += '</div>';
+    h += '<details class="st-about"><summary>О моей работе: пункты и права</summary>' +
+      '<div class="staff-pts">' + staffPoints(st) + '</div>' +
+      (rights.length ? '<div class="small" style="color:var(--gr);margin-top:10px;line-height:1.55">Права: ' + esc(rights.join(', ')) + '</div>' : '') +
+      (app.length ? '<div class="small muted" style="margin-top:8px">' + esc(app.join(' и ')).replace(/^./, function(c){ return c.toUpperCase(); }) +
+        ' — пока в приложении «Ива» для Android.</div>' : '') +
+      '</details>';
+
+    const canOrd = !!(st.can_issue || st.can_notify), canTools = !!st.can_catalog, canChat = !!st.can_chat;
+    const views = [];
+    if (canOrd) views.push(['orders', 'Заявки', stScope().filter(function(p){ const s = p.status || 'new'; return s === 'new' || s === 'rented'; }).length]);
+    if (canTools) views.push(['tools', 'Инструмент', STOOLS ? stToolScope().length : 0]);
+    if (canChat) views.push(['chats', 'Сообщения', stUnread(stChatScope())]);
+    if (views.length && !views.some(function(v){ return v[0] === ST_VIEW; })) ST_VIEW = views[0][0];
+    if (views.length > 1){
+      h += '<div class="st-seg" role="tablist" aria-label="Раздел работы">' + views.map(function(v){
+        const on = ST_VIEW === v[0];
+        return '<button type="button" role="tab" data-st-view="' + v[0] + '" aria-selected="' + on + '"' + (on ? ' class="on"' : '') + '>' + v[1] +
+          (v[2] ? (v[0] === 'chats' ? ' <span class="st-seg-n">' + v[2] + '</span>' : ' · ' + v[2]) : '') + '</button>';
+      }).join('') + '</div>';
+    }
+    if (ST_VIEW === 'tools' && canTools) return h + stToolsView();
+    if (ST_VIEW === 'chats' && canChat) return h + stChatsView();
+    if (!canOrd){
+      return h + '<div class="empty" style="margin-top:14px"><b>Заявки вам не показываются</b>' +
+        '<p>Владелец проката не дал право «Выдача» или «Уведомления о заявках».</p></div>';
+    }
+    h += '<div class="kpis st-kpis" id="stKpis">' + stKpisHTML() + '</div>';
+    h += '<div class="st-bar">' +
+        '<label for="stQ" class="sr-lbl">Поиск по заявкам</label>' +
+        '<input class="inp" id="stQ" type="search" autocomplete="off" placeholder="№, клиент, телефон, инструмент" value="' + esc(ST_Q) + '">' +
+        '<button class="btn sec sm" data-staff-reload="1">Обновить</button>' +
+      '</div>' +
+      '<div class="small muted st-upd"><span id="stUpd">' + stUpdTxt() + '</span>' + livePerm() +
+        (ST_F !== 'all' ? ' · фильтр «' + { new: 'Новые', late: 'Просрочены', today: 'Вернуть сегодня', rented: 'В аренде' }[ST_F] +
+          '» — <button type="button" class="st-link" data-st-f="all">показать все</button>' : '') + '</div>';
+    h += '<div id="stList">' + stListHTML() + '</div>';
+    return h;
+  }
+  /* обновить только список и плитки — когда курсор в поиске (не сбивать ввод) */
+  function stPaintList(){
+    const k = $('stKpis'), l = $('stList'), u = $('stUpd');
+    if (k) k.innerHTML = stKpisHTML();
+    if (l) l.innerHTML = stListHTML();
+    if (u) u.textContent = stUpdTxt();
+  }
+  function stRepaint(){
+    if (TAB !== 'staff') { render(); return; }
+    if (document.activeElement && document.activeElement.id === 'stQ') { stPaintList(); return; }
+    if (document.activeElement && document.activeElement.id === 'stTq') { const l = $('stTList'); if (l) l.innerHTML = stToolListHTML(); return; }
+    const y = window.scrollY; render(); window.scrollTo(0, y);
+  }
+  /* автообновление (24.10.2026): сразу по сигналу базы (IvaLive, SQL 20261119) и раз в 30 секунд — на любой вкладке
+     кабинета, не только в «Работе»; о новой заявке — сообщение, звук и уведомление браузера */
+  let ST_BUSY = false;
+  function stAuto(){
+    if (ST_TIMER) return;
+    ST_TIMER = setInterval(stTick, 30000);
+  }
+  async function stTick(){
+    if (ST_BUSY || !STAFF || STAFF.status !== 'active' || $('sheet')) return;
+    ST_BUSY = true;
+    try { await stTick1(); } finally { ST_BUSY = false; }
+  }
+  async function stTick1(){
+    {
+      const seen = {}; SPARTS.forEach(function(p){ seen[p.part_id] = 1; });
+      const sig = function(){ return JSON.stringify(SPARTS.map(function(p){ return [p.part_id, p.status, p.rented_at || '']; })) + '|' + (SCARDS ? Object.keys(SCARDS).length : -1) +
+        '|' + JSON.stringify((STOOLS || []).map(function(t){ return [t.id, t.review || '', t.edit_state || '', t.status || '', t.active]; })) +
+        '|' + JSON.stringify((STCHATS || []).map(function(c){ return [c.kind, c.key, c.peer, c.unread, c.last_at]; })); };
+      const s0 = sig(), u0 = stUnread(STCHATS);
+      try { await loadStaff(); } catch(e){ return; }
+      ST_UPD = Date.now();
+      if (!STAFF || STAFF.status !== 'active'){ render(); return; }
+      const fresh = SPARTS.filter(function(p){ return !seen[p.part_id] && (p.status || 'new') === 'new'; });
+      fresh.forEach(function(p){ ST_FRESH[p.part_id] = Date.now(); });
+      if (fresh.length && STAFF.can_notify) liveNew(fresh.length, fresh[0].tools_text || '');
+      else if (fresh.length) toast(fresh.length === 1 ? 'Новая заявка: ' + (fresh[0].tools_text || '') : 'Новых заявок: ' + fresh.length);
+      else if (stUnread(STCHATS) > u0) toast('Новое сообщение от клиента');
+      if (sig() === s0){ const u = $('stUpd'); if (u) u.textContent = stUpdTxt(); return; }
+      if (TAB === 'staff') stRepaint();
+      else {
+        const tb = document.querySelector('.tabs button[data-tab="staff"]');
+        if (tb){ const old = tb.querySelector('.n'); if (old) old.remove(); tb.insertAdjacentHTML('beforeend', staffNewBadge()); }
+      }
+    }
+  }
+  /* подтверждение в нижней панели (вместо окна браузера) */
+  function askSheet(title, body, okLabel){
+    return new Promise(function(res){
+      let done = false;
+      const fin = function(v){ if (!done){ done = true; res(v); } };
+      openSheet(title, body,
+        '<button class="btn sec" id="askNo" style="flex:1">Отмена</button>' +
+        '<button class="btn" id="askYes" style="flex:1">' + esc(okLabel) + '</button>');
+      const sh = $('sheet');
+      $('askNo').onclick = function(){ fin(false); closeSheet(); };
+      $('askYes').onclick = function(){ fin(true); closeSheet(true); };
+      const mo = new MutationObserver(function(){ if (!document.body.contains(sh)){ mo.disconnect(); fin(false); } });
+      mo.observe(document.body, { childList: true });
+    });
+  }
+  function staffPartCard(p){
+    const sk = SCARDS && SCARDS[String(p.part_id)];
+    if (sk) return lcCardHTML(p, sk, true);
+    const i = stInfo(p), st = i.st;
+    const days = Number(p.days) || 1;
+    let due = '';
+    if (st === 'rented' && p.rented_at){
+      due = '<div class="hint"' + (i.late ? ' style="color:var(--red)"' : '') + '>Выдан ' + esc(stWhen(Date.parse(p.rented_at))) +
+        ' · вернуть до <b>' + esc(stWhen(i.end)) + '</b>' + (i.late ? ' — просрочено' : '') + '</div>';
+    }
+    const tel = String(p.client_tel || '').replace(/[^\d+]/g, '');
+    let btns = '';
+    if (p.can_act && st === 'new')    btns = '<button class="btn sm" data-staff-do="rented" data-id="' + esc(p.part_id) + '">Выдал</button>';
+    if (p.can_act && st === 'rented') btns = '<button class="btn sm lc-ok" data-staff-do="closed" data-id="' + esc(p.part_id) + '">Вернули</button>';
+    if (!p.can_act && p.mine && (st === 'new' || st === 'rented')) btns = '<span class="small muted">Это ваша заявка — отмечает другой сотрудник или владелец</span>';
+    if (tel && (st === 'new' || st === 'rented')) btns += '<a class="btn sm sec" href="tel:' + esc(tel) + '">Позвонить</a>';
+    const tint = st === 'new' ? 'new' : st === 'rented' ? (i.late ? 'late' : 'rented') : 'off';
+    const badge = st === 'rented' && i.late ? '<span class="badge b-cancelled">Просрочена</span>'
+      : '<span class="badge b-' + esc(st) + '">' + ({ new:'Новая', rented:'В аренде', closed:'Закрыта', cancelled:'Отменена' }[st] || esc(st)) + '</span>';
+    return '<div class="order-card lc-card t-' + tint + '">' +
+      '<div class="top">' + badge +
+        '<span class="small muted">' + esc(stWhen(Date.parse(p.created_at))) + ' · №' + esc(p.order_id) + '</span></div>' +
+      '<div class="title">' + esc(p.tools_text || 'Инструмент') + '</div>' +
+      '<div class="hint">Пункт: ' + esc(p.point_name || '—') + ' · срок ' + days + ' ' + plural(days, 'сутки', 'суток', 'суток') + '</div>' +
+      due +
+      (p.client_name || tel ? '<div class="hint">Клиент: <b style="color:var(--tx)">' + esc(p.client_name || '—') + '</b>' +
+        (tel ? ' · <a href="tel:' + esc(tel) + '" style="color:var(--or)">' + esc(p.client_tel) + '</a>' : '') + '</div>' : '') +
+      (p.get_method ? '<div class="hint">Получение: ' + esc(p.get_method) + '</div>' : '') +
+      (p.comment ? '<div class="hint lc-comment">' + esc(p.comment) + '</div>' : '') +
+      (btns ? '<div class="acts" style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap">' + btns + '</div>' : '') +
+    '</div>';
+  }
+
   /* ---------- Сообщения ---------- */
   function viewMsg(){
     return '<div class="empty">' +
@@ -798,16 +2259,44 @@
   /* Вкладка «Профиль» здесь — только для арендодателя: данные проката,
      город поиска и карточки приложения. Настройки профиля клиента
      (арендатора) вынесены на отдельную страницу profile.html. */
+  /* Этап 3 кабинетов (22.10.2026): «Профиль» арендодателя по разделам — «Мой профиль», «Прокат», «Приложение»
+     (раньше всё шло одной длинной лентой). Адреса: #prof, #prof-org, #prof-app. */
+  let PROF_SUB = 'me';
   function viewProf(){
     const a = A.admin || {};
-    return '<div class="box profile-account" style="max-width:1000px">' +
-      '<div style="display:flex;align-items:center;gap:14px;margin-bottom:18px">' +
-        '<div class="ava" style="width:56px;height:56px;font-size:20px">' +
-          esc(initials(A.uname || A.me)) + '</div>' +
-        '<div><div style="font-weight:700;font-size:17px">' + esc(A.uname || '—') + '</div>' +
-          '<div class="small muted">' + esc(A.me) + '</div></div>' +
+    const subs = [['me', 'Мой профиль'], ['org', 'Прокат'], ['app', 'Приложение']];
+    let h = '<div class="chips prof-subs" style="margin-bottom:16px">' + subs.map(function(x){
+      return '<button class="chip" data-prof-sub="' + x[0] + '"' + (PROF_SUB === x[0] ? ' style="border-color:var(--or);color:var(--or)"' : '') + '>' + x[1] + '</button>';
+    }).join('') + '</div>';
+    if (PROF_SUB === 'org'){
+      return h + '<div class="box profile-account" style="max-width:1000px">' +
+        '<div class="ava-one">' +
+          '<button type="button" class="ava ava-edit" id="orgAva" data-ava-org="1" title="Изменить аватарку проката" ' +
+            'style="width:72px;height:72px;font-size:24px">' + esc(initials(a.company || A.uname || A.me)) + '</button>' +
+          '<div style="min-width:0"><div style="font-weight:700;font-size:15px">Аватарка проката</div>' +
+            '<div class="small muted">Видна клиентам в карточке инструмента</div>' +
+            '<button type="button" class="btn sec sm" id="orgAvaBtn" style="margin-top:8px">Изменить</button></div>' +
+        '</div>' +
+        '<p class="small muted" style="margin-top:14px;line-height:1.5">Пункты выдачи, сотрудники и настройки проката — в приложении, раздел «Настройки проката».</p>' +
+      '</div><div id="rentalProfile"></div>';
+    }
+    if (PROF_SUB === 'app'){
+      return h + '<div class="box profile-account" style="max-width:1000px">' +
+        '<b style="font-size:15px">Приложение для Android</b>' +
+        '<p class="small muted" style="margin-top:4px;line-height:1.5">Заявки, чат и уведомления о новых заявках — на телефоне.</p>' +
+        // Карточки приложения (assets/app.js → mountAppCards): у всех — выпущенная версия; у создателя на телефоне — ещё новая с «Подтвердить релиз»
+        '<div class="apk-cards" id="apkCards"></div>' +
+      '</div>';
+    }
+    return h + '<div class="box profile-account" style="max-width:1000px">' +
+      '<div class="ava-one">' +
+        '<button type="button" class="ava ava-edit" id="profAva" data-ava="' + esc(A.me) + '" title="Изменить фото" ' +
+          'style="width:72px;height:72px;font-size:24px">' + esc(initials(A.uname || A.me)) + '</button>' +
+        '<div style="min-width:0"><div style="font-weight:700;font-size:17px">' + esc(A.uname || '—') + '</div>' +
+          '<div class="small muted">' + esc(A.me) + '</div>' +
+          '<button type="button" class="btn sec sm" id="profAvaBtn" style="margin-top:8px">Изменить фото</button></div>' +
       '</div>' +
-      '<dl>' +
+      '<dl style="margin-top:14px">' +
         '<div class="prof-row"><dt>Статус</dt><dd>' +
           (isAdmin() ? 'Арендодатель' + (a.role === 'chief' ? ' (главный)' : '') : 'Арендатор') + '</dd></div>' +
         (a.fee_pct != null ? '<div class="prof-row"><dt>Комиссия площадки</dt><dd>' +
@@ -822,14 +2311,13 @@
         '<button class="btn sec sm" type="submit">Сохранить город</button>' +
         '<p id="profileCityError" role="alert" style="color:var(--red);margin-top:8px"></p>' +
       '</form>' +
-      '<div style="display:flex;gap:10px;margin-top:20px;flex-wrap:wrap">' +
-        '<a class="btn sec sm" href="#rentalProfile" id="jumpRental">Данные проката ↓</a>' +
-        '<a class="btn sec sm" href="profile.html">Личные настройки</a>' +
-        '<button class="btn ghost sm" id="bOut">Выйти</button>' +
+      '<div class="prof-links">' +
+        '<button type="button" class="prof-link" data-prof-sub="org"><b>Прокат</b><span>Название, контакты, адрес, аватарка проката</span></button>' +
+        '<a class="prof-link" href="profile.html"><b>Личные настройки</b><span>Имя, телефон, вход и безопасность</span></a>' +
+        '<button type="button" class="prof-link" data-prof-sub="app"><b>Приложение</b><span>Скачать Android-приложение</span></button>' +
       '</div>' +
-      // Карточки приложения (assets/app.js → mountAppCards): у всех — выпущенная версия; у создателя на телефоне — ещё новая с «Подтвердить релиз»
-      '<div class="apk-cards" id="apkCards"></div>' +
-    '</div><div id="rentalProfile"></div>';
+      '<button class="btn ghost sm" id="bOut" style="margin-top:16px">Выйти</button>' +
+    '</div>';
   }
 
   /* ---------- Рендер ---------- */
@@ -837,28 +2325,77 @@
     /* Настройки профиля клиента — отдельная страница profile.html:
        старые ссылки account.html#prof у клиента тоже ведут туда.
        Вкладка «Профиль» в кабинете остаётся для арендодателя. */
+    { const pm = /^prof-(me|org|app)$/.exec(TAB); if (pm){ PROF_SUB = pm[1]; TAB = 'prof'; } }
     if (TAB === 'prof' && !isAdmin()){ location.replace('profile.html'); return; }
+    if (isAdmin()){
+      /* вкладка другого режима (ссылка из уведомления, #orders и т. п.) — режим переключается сам, без перехода */
+      const LEND = ['home', 'orders', 'ads', 'fee', 'reviews'], RENT = ['sent', 'fav'];
+      if (LEND.indexOf(TAB) >= 0 && lordMode() !== 'lend') lordMode('lend');
+      else if (RENT.indexOf(TAB) >= 0 && lordMode() !== 'rent') lordMode('rent');
+      if (!TAB) TAB = lordMode() === 'rent' ? 'sent' : 'home';
+    } else if (!TAB || TAB === 'home') TAB = STAFF ? 'staff' : 'orders';
     let inner;
     if (TAB === 'fee')           inner = viewFee();
     else if (TAB === 'orders')   inner = viewOrders();
     else if (TAB === 'reviews')  inner = viewReviews();
+    else if (TAB === 'sent')     inner = viewTenantOrders(SENT);
+    else if (TAB === 'staff')    inner = viewStaff();
     else if (TAB === 'fav')      inner = viewFav();
     else if (TAB === 'msg')      inner = viewMsg();
     else if (TAB === 'prof')     inner = viewProf();
-    else                         inner = isAdmin() ? viewAds() : viewFav();
+    else if (TAB === 'home' && isAdmin()) inner = viewHome();
+    else if (TAB === 'ads' && isAdmin())  inner = viewAds();
+    else                         inner = isAdmin() ? viewHome() : viewFav();
 
     $('root').innerHTML = shell(inner);
     paintFavCount();
+    /* выбранная вкладка видна и на узком экране (строка вкладок прокручивается) */
+    (function(){ const tb = document.querySelector('.tabs'), on = tb && tb.querySelector('button.on');
+      if (on && tb.scrollWidth > tb.clientWidth) tb.scrollLeft = on.offsetLeft - tb.offsetLeft - (tb.clientWidth - on.offsetWidth) / 2; })();
 
+    if (STAFF && STAFF.status === 'active') stAuto();      // 24.10.2026: на любой вкладке кабинета
+    if (isAdmin()) oAuto();
+    if (typeof IvaLive !== 'undefined' && ((TAB === 'staff' && STAFF) || (TAB === 'orders' && isAdmin()))) IvaLive.seen();
+    if (typeof paintWork === 'function') paintWork();
+    if (TAB === 'orders' && isAdmin()){
+      if ($('ordQ')){
+        let oT = null;
+        $('ordQ').oninput = function(){
+          const v = this.value; clearTimeout(oT);
+          oT = setTimeout(function(){ OQ = v; const l = $('ordList'); if (l) l.innerHTML = oListHTML(); }, 150);
+        };
+      }
+    }
+    if ($('stTq')){
+      let stT2 = null;
+      $('stTq').oninput = function(){
+        const v = this.value; clearTimeout(stT2);
+        stT2 = setTimeout(function(){ ST_TQ = v; const l = $('stTList'); if (l) l.innerHTML = stToolListHTML(); }, 150);
+      };
+    }
+    if ($('stQ')){
+      let stT = null;
+      $('stQ').oninput = function(){
+        const v = this.value; clearTimeout(stT);
+        stT = setTimeout(function(){ ST_Q = v; const l = $('stList'); if (l) l.innerHTML = stListHTML(); }, 150);
+      };
+    }
     if ($('btnPayFeeTop')) $('btnPayFeeTop').onclick = openPayModal;
-    if ($('btnPayFeeCard')) $('btnPayFeeCard').onclick = openPayModal;
     if ($('btnCopyPhone')) $('btnCopyPhone').onclick = function(){
       copyToClipboard('89081731410', 'Номер телефона получателя скопирован');
     };
 
     if($('apkCards'))mountAppCards($('apkCards'));
+    if (typeof ivaTabsFade === 'function') ivaTabsFade(document.querySelector('#root .tabs'));
+    /* Аватарки (21.10.2026): своё фото (admins.avatar) и аватарка проката (admins.org_avatar) — те же поля, что в приложении */
+    if (typeof IvaAva !== 'undefined'){
+      const me1 = function(){ IvaAva.pick('Фото профиля', IvaAva.saveMine); };
+      const org1 = function(){ IvaAva.pick('Аватарка проката', IvaAva.saveOrg); };
+      if ($('profAva')){ $('profAva').onclick = me1; if ($('profAvaBtn')) $('profAvaBtn').onclick = me1; }
+      if ($('orgAva')){ $('orgAva').onclick = org1; if ($('orgAvaBtn')) $('orgAvaBtn').onclick = org1; }
+      IvaAva.paint($('root'));
+    }
     if($('rentalProfile'))RentalProfile.mount($('rentalProfile'));
-    const jump=$('jumpRental');if(jump)jump.onclick=function(e){e.preventDefault();$('rentalProfile').scrollIntoView({behavior:'smooth'});};
     const cityForm=$('profileCityForm');
     if(cityForm)cityForm.addEventListener('submit',async function(e){
       e.preventDefault();const btn=cityForm.querySelector('button');btn.disabled=true;$('profileCityError').textContent='';
@@ -868,7 +2405,7 @@
 
     const out = $('bOut');
     if (out) out.addEventListener('click', function(){
-      signOut();
+      signOut(); try { localStorage.removeItem("iva_staff_hint"); localStorage.removeItem("iva_lord_hint"); } catch(x){}
       toast('Вы вышли');
       screenLogin();
     });
@@ -879,6 +2416,7 @@
     const tb = e.target.closest('[data-tab]');
     if (tb){
       TAB = tb.getAttribute('data-tab');
+      if (TAB === 'prof') PROF_SUB = 'me';
       history.replaceState(null, '', '#' + TAB);
       render();
       return;
@@ -887,8 +2425,146 @@
     const st = e.target.closest('[data-st]');
     if (st){ SUB_TAB = st.getAttribute('data-st'); render(); return; }
 
+    /* «Профиль»: разделы; несохранённый профиль проката не теряется молча */
+    const ps = e.target.closest('[data-prof-sub]');
+    if (ps){
+      if (typeof RentalProfile !== 'undefined' && RentalProfile.allowLeave && !RentalProfile.allowLeave()) return;
+      PROF_SUB = ps.getAttribute('data-prof-sub');
+      history.replaceState(null, '', '#prof' + (PROF_SUB === 'me' ? '' : '-' + PROF_SUB));
+      render(); window.scrollTo(0, 0);
+      return;
+    }
+
+    /* «Сводка»: строка или плитка ведёт в нужную вкладку с нужным фильтром */
+    const rvf = e.target.closest('[data-rv-f]');
+    if (rvf){ RV_F = rvf.getAttribute('data-rv-f'); render(); return; }
+    const go = e.target.closest('[data-go-tab]');
+    if (go){
+      TAB = go.getAttribute('data-go-tab');
+      if (go.getAttribute('data-go-sub')) SUB_TAB_ORD = go.getAttribute('data-go-sub');
+      if (go.getAttribute('data-go-st')) SUB_TAB = go.getAttribute('data-go-st');
+      history.replaceState(null, '', '#' + TAB);
+      render(); window.scrollTo(0, 0);
+      return;
+    }
+
+    const sAns = e.target.closest('[data-staff-ans]');
+    if (sAns && STAFF){
+      const yes = sAns.getAttribute('data-staff-ans') === '1';
+      if (!yes && !confirm('Отказаться от приглашения в прокат «' + (STAFF.company || '') + '»?')) return;
+      sAns.disabled = true;
+      api('/rest/v1/rpc/iva_staff_answer', 'POST', { p_id: STAFF.id, p_accept: yes }).then(async function(){
+        toast(yes ? 'Готово: вы сотрудник проката' : 'Вы отказались от приглашения');
+        await loadStaff(); if (!STAFF) TAB = 'orders'; render();
+      }).catch(function(err){ sAns.disabled = false; toast('Не удалось: ' + err.message); });
+      return;
+    }
+    /* «Вернули» по сроку заявки — владелец и сотрудник с правом «Выдача» (как в приложении) */
+    const lRet = e.target.closest('[data-lc-ret]');
+    if (lRet){
+      const id = lRet.getAttribute('data-lc-ret'), d = parseInt(lRet.getAttribute('data-days'), 10);
+      if (!/^\d{1,18}$/.test(id || '') || !(d >= 1 && d <= 365)) return;
+      const names = lRet.getAttribute('data-names') || '', last = lRet.getAttribute('data-last') === '1';
+      askSheet('Отметить «Вернули»?', '<div class="st-ask">' + (names ? '<b>' + esc(names) + '</b>' : '') +
+          '<p>Срок ' + esc(lcDaysTxt(d)) + '. ' + (last ? 'Заявка закроется, сумма посчитается по начатым суткам.' : 'Остальные инструменты заявки остаются в аренде.') + '</p></div>',
+        'Вернули').then(function(yes){
+        if (!yes) return;
+        lRet.disabled = true; lRet.textContent = '…';
+        api('/rest/v1/rpc/iva_staff_return', 'POST', { p_part: Number(id), p_days: d }).then(async function(r){
+          toast(String(r).indexOf('closed') >= 0 ? 'Готово: заявка закрыта' : 'Готово: отмечено «Вернули»');
+          await lcReload();
+        }).catch(async function(err){ toast('Не удалось: ' + err.message); await lcReload(); });
+      });
+      return;
+    }
+    /* просьба клиента изменить заявку: «Принять» / «Отклонить» */
+    const lDec = e.target.closest('[data-lc-decide]');
+    if (lDec){
+      const cid = lDec.getAttribute('data-lc-decide'), ok = lDec.getAttribute('data-ok') === '1';
+      if (!/^\d{1,18}$/.test(cid || '')) return;
+      if (!confirm(ok ? 'Принять изменение? Заявка станет такой, как просит клиент.' : 'Отклонить изменение? Останется прежний вариант заявки.')) return;
+      lDec.disabled = true; lDec.textContent = '…';
+      api('/rest/v1/rpc/iva_order_edit_decide', 'POST', { p_change: Number(cid), p_ok: ok }).then(async function(){
+        toast(ok ? 'Изменение принято' : 'Изменение отклонено');
+        await lcReload();
+      }).catch(async function(err){ toast('Не удалось: ' + err.message); await lcReload(); });
+      return;
+    }
+    const sDo = e.target.closest('[data-staff-do]');
+    if (sDo){
+      const act = sDo.getAttribute('data-staff-do'), id = sDo.getAttribute('data-id');
+      if (!/^\d{1,18}$/.test(id || '')) return;
+      const sp = SPARTS.find(function(x){ return String(x.part_id) === String(id); }) || {};
+      const sd = Number(sp.days) || 1;
+      askSheet(act === 'rented' ? 'Отметить «Выдал»?' : 'Отметить «Вернули»?',
+        '<div class="st-ask"><b>' + esc(sp.tools_text || 'Инструмент') + '</b>' +
+          (sp.client_name ? '<div class="small muted">Клиент: ' + esc(sp.client_name) + (sp.point_name ? ' · ' + esc(sp.point_name) : '') + '</div>' : '') +
+          '<p>' + (act === 'rented' ? 'Срок аренды — ' + esc(lcDaysTxt(sd)) + ' — пойдёт с этой минуты.' : 'Заявка закроется целиком (все инструменты в ней).') + '</p></div>',
+        act === 'rented' ? 'Выдал' : 'Вернули').then(function(yes){
+        if (!yes) return;
+        sDo.disabled = true; sDo.textContent = '…';
+        api('/rest/v1/rpc/iva_staff_set_status', 'POST', { p_part: Number(id), p_status: act }).then(async function(){
+          toast(act === 'rented' ? 'Готово: заявка выдана' : 'Готово: заявка закрыта');
+          await loadStaff(); ST_UPD = Date.now(); stRepaint();
+        }).catch(async function(err){ toast('Не удалось: ' + err.message); await loadStaff(); stRepaint(); });
+      });
+      return;
+    }
+    if (e.target.closest('[data-staff-reload]')){
+      loadStaff().then(function(){ ST_UPD = Date.now(); render(); toast('Обновлено'); });
+      return;
+    }
+    /* «Работа»: заявки / инструмент, фильтр инструмента, запрос на удаление */
+    const stCh = e.target.closest('[data-st-chat]');
+    if (stCh){ stOpenChat(stCh.getAttribute('data-st-chat')); return; }
+    const stV = e.target.closest('[data-st-view]');
+    if (stV){ ST_VIEW = stV.getAttribute('data-st-view'); render(); return; }
+    const stTf = e.target.closest('[data-st-tf]');
+    if (stTf){ ST_TF = stTf.getAttribute('data-st-tf'); if (stTf.hasAttribute('data-st-clear')) ST_TQ = ''; render(); return; }
+    const stDel = e.target.closest('[data-st-tdel]');
+    if (stDel){
+      const tid = stDel.getAttribute('data-st-tdel');
+      const t = (STOOLS || []).find(function(x){ return String(x.id) === tid; }) || {};
+      askSheet('Удалить инструмент?', '<div class="st-ask"><b>' + esc(t.name || 'Инструмент') + '</b>' +
+          (t.point_name ? '<div class="small muted">' + esc(t.point_name) + '</div>' : '') +
+          '<p>Запрос уйдёт владельцу проката. Пока он не одобрит, инструмент остаётся в каталоге.</p></div>', 'Отправить запрос').then(function(yes){
+        if (!yes) return;
+        stDel.disabled = true; stDel.textContent = '…';
+        api('/rest/v1/rpc/iva_staff_tool_delete', 'POST', { p_id: tid }).then(async function(){
+          toast('Запрос на удаление отправлен владельцу');
+          await loadStaff(); ST_UPD = Date.now(); stRepaint();
+        }).catch(async function(err){ toast('Не удалось: ' + err.message); await loadStaff(); stRepaint(); });
+      });
+      return;
+    }
+    /* «Смена»: пункт, плитки-фильтры */
+    const stPt = e.target.closest('[data-st-pt]');
+    if (stPt){ ST_PT = stPt.getAttribute('data-st-pt'); render(); return; }
+    const stF = e.target.closest('[data-st-f]');
+    if (stF){
+      const f = stF.getAttribute('data-st-f');
+      ST_F = ST_F === f ? 'all' : f;
+      if (stF.hasAttribute('data-st-clear')){ ST_F = 'all'; ST_Q = ''; }
+      render(); return;
+    }
+
     const ost = e.target.closest('[data-ost]');
     if (ost){ SUB_TAB_ORD = ost.getAttribute('data-ost'); render(); return; }
+    /* «Заявки» владельца: плитки-фильтры, пункт, «Обновить» */
+    const oF = e.target.closest('[data-ord-f]');
+    if (oF){
+      const f = oF.getAttribute('data-ord-f');
+      SUB_TAB_ORD = SUB_TAB_ORD === f ? 'all' : f;
+      if (oF.hasAttribute('data-ord-clear')){ SUB_TAB_ORD = 'all'; OQ = ''; }
+      render(); return;
+    }
+    const oPt = e.target.closest('[data-ord-pt]');
+    if (oPt){ O_PT = oPt.getAttribute('data-ord-pt'); render(); return; }
+    if (e.target.closest('[data-ord-reload]')){
+      oReload().then(function(f){ oRepaint(); toast(f.length ? 'Новых заявок: ' + f.length : 'Обновлено'); })
+        .catch(function(err){ toast('Не удалось обновить: ' + err.message); });
+      return;
+    }
 
     const ordDo = e.target.closest('[data-ord-do]');
     if (ordDo){
@@ -913,6 +2589,33 @@
         modRev.disabled = false;
         toast('Ошибка: ' + err.message);
       });
+      return;
+    }
+
+    /* меню «⋯» карточки объявления */
+    const adm = e.target.closest('[data-ad-menu]');
+    if (adm){
+      const row = adm.closest('[data-id]'), id = row && row.getAttribute('data-id');
+      const t = MY.find(function(x){ return String(x.id) === String(id); });
+      if (!t) return;
+      const st = t.status || 'active';
+      openSheet(t.name || 'Объявление',
+        '<div class="ad-menu" data-ad-id="' + esc(t.id) + '">' +
+          '<a class="ad-mi" href="tool.html?id=' + encodeURIComponent(t.id) + '">Смотреть на сайте</a>' +
+          '<a class="ad-mi" href="new.html?edit=' + encodeURIComponent(t.id) + '">Редактировать</a>' +
+          (st === 'active' ? '<button type="button" class="ad-mi" data-ad-do="hide">Снять с публикации<span>Объявление пропадёт из каталога, его можно вернуть</span></button>'
+                           : '<button type="button" class="ad-mi" data-ad-do="show">Опубликовать</button>') +
+          '<button type="button" class="ad-mi del" data-ad-do="del">Удалить</button>' +
+        '</div>');
+      return;
+    }
+    const adDo = e.target.closest('[data-ad-do]');
+    if (adDo){
+      const box = adDo.closest('[data-ad-id]'), id = box && box.getAttribute('data-ad-id');
+      const a2 = adDo.getAttribute('data-ad-do');
+      const rowBtn = document.querySelector('.row-ad[data-id="' + (window.CSS && CSS.escape ? CSS.escape(id) : id) + '"] .ad-more');
+      closeSheet(true);
+      if (id) doAction(id, a2, rowBtn || adDo);
       return;
     }
 
@@ -980,6 +2683,7 @@
 
     try {
       if (act === 'arch'){
+        if (!confirm('Переместить заявку в архив?')){ btn.disabled = false; btn.textContent = oldText; return; }
         await updateOrderPart(id, { archived: true });
         part.archived = true;
         toast('Заявка перемещена в архив');
@@ -988,16 +2692,19 @@
         part.archived = false;
         toast('Заявка восстановлена из архива');
       } else if (act === 'rented'){
+        if (!confirm('Отметить «Выдал»? Срок аренды пойдёт с этой минуты.')){ btn.disabled = false; btn.textContent = oldText; return; }
         await updateOrderPart(id, { status: 'rented' });
         part.status = 'rented';
         toast('Инструмент переведён в статус «В аренде»');
       } else if (act === 'closed'){
+        if (!confirm('Отметить «Вернули»? Заявка закроется целиком, комиссия будет начислена.')){ btn.disabled = false; btn.textContent = oldText; return; }
         await updateOrderPart(id, { status: 'closed' });
         part.status = 'closed';
         toast('Заказ завершён! Комиссия учтена');
         // Обновляем список для точного расчёта начисленной комиссии
         ORDERS = await loadMyOrderParts();
       }
+      if (LCARDS) await loadLordCards();
       render();
     } catch(err){
       btn.disabled = false;
@@ -1008,43 +2715,109 @@
 
   window.onFavChanged = function(){ if (TAB === 'fav') render(); };
 
+  /* сигнал базы «в ваших заявках что-то поменялось» (IvaLive, SQL 20261119) или вкладка снова видна — перечитать сразу */
+  let LIVE_T = null, LIVE_VIS = 0;
+  window.addEventListener('iva:orders', function(e){
+    const d = (e && e.detail) || {};
+    if (d.visible){ if (Date.now() - LIVE_VIS < 15000) return; LIVE_VIS = Date.now(); }
+    clearTimeout(LIVE_T);
+    LIVE_T = setTimeout(liveTick, 600);
+  });
+  window.addEventListener('iva:live', function(){
+    const a = $('ordUpd'), b = $('stUpd');
+    if (a) a.textContent = oUpdTxt();
+    if (b) b.textContent = stUpdTxt();
+  });
+  async function liveTick(){
+    if (!isAuthed()) return;
+    if (isAdmin()) await oTick();
+    if (STAFF && STAFF.status === 'active') await stTick();
+    /* свои заявки клиента (и «Я арендую» арендодателя): статус, «Выдал», отмена */
+    const mine = isAdmin() ? TAB === 'sent' : (TAB === 'orders' || TAB === 'staff');
+    if (!mine || $('sheet')) return;
+    try {
+      const both = await Promise.all([loadClientOrders(), loadClientCards()]);
+      const rows = both[0] || [], was = JSON.stringify((isAdmin() ? SENT : ORDERS).map(function(o){ return [o.id, o.status]; }));
+      if (isAdmin()) SENT = rows; else ORDERS = rows;
+      if (JSON.stringify(rows.map(function(o){ return [o.id, o.status]; })) !== was && TAB !== 'staff') liveRender();
+    } catch(err){}
+  }
+
   window.addEventListener('hashchange', function(){
     const h = (location.hash || '').replace('#','');
     if (h && h !== TAB){ if(!RentalProfile.allowLeave()){history.replaceState(null,'',location.pathname+'#'+TAB);return;} TAB = h; render(); }
   });
 
   /* ---------- Старт ---------- */
+  /* Заявки клиента со статусами частей (как в приложении): отмена клиентом живёт в order_parts.status = 'cancelled',
+     а у самой заявки статус остаётся «new» — без частей сайт показывал отменённую заявку как «На рассмотрении»/«Завершена». */
+  async function loadClientOrders(){
+    let rows;
+    try {
+      rows = await api('/rest/v1/orders?select=*,order_parts(id,owner_email,status)&user_email=eq.' + encodeURIComponent(A.me) + '&order=id.desc&limit=50') || [];
+    } catch(e){
+      try { rows = await api('/rest/v1/orders?select=*,order_parts(status)&user_email=eq.' + encodeURIComponent(A.me) + '&order=id.desc&limit=50') || []; }
+      catch(e2){ return await loadMySentOrders(); }
+    }
+    rows.forEach(function(o){
+      const ps = (o.order_parts || []).map(function(x){ return x.status || 'new'; });
+      if (!ps.length) return;
+      if (ps.every(function(x){ return x === 'cancelled'; })) o.status = 'cancelled';
+      else if (ps.some(function(x){ return x === 'rented'; })) o.status = 'rented';
+      else if (ps.some(function(x){ return x === 'new'; })) o.status = 'new';
+      else o.status = 'closed';
+    });
+    return rows;
+  }
+
   async function boot(){
     const showcase = hydrateShowcase(); // Избранное берём из живой витрины, а не демо-данных.
     if (isAdmin()){
       try {
-        const [myTools, myParts, myFees, myReviews] = await Promise.allSettled([
+        const [myTools, myParts, myFees, myReviews, mySent] = await Promise.allSettled([
           loadMyTools(),
           loadMyOrderParts(),
           loadMyFeePayments(),
-          loadLandlordReviews(A.me)
+          loadLandlordReviews(A.me),
+          loadClientOrders(),
+          loadClientCards(),
+          loadLordCards()
         ]);
+        SENT = mySent.status === 'fulfilled' ? (mySent.value || []) : [];
         MY = myTools.status === 'fulfilled' ? (myTools.value || []) : [];
         ORDERS = myParts.status === 'fulfilled' ? (myParts.value || []) : [];
         FEES = myFees.status === 'fulfilled' ? (myFees.value || []) : [];
         REVIEWS = myReviews.status === 'fulfilled' ? (myReviews.value || []) : [];
+        if (myParts.status === 'fulfilled') O_UPD = Date.now();   // 24.10.2026: первая же новая заявка — «новая», даже если «Заявки» не открывали
       } catch(e){
         MY = []; ORDERS = []; FEES = []; REVIEWS = [];
         toast('Не удалось загрузить данные: ' + e.message);
       }
     } else if (isAuthed()){
       try {
-        ORDERS = await loadMySentOrders();
+        const both = await Promise.all([loadClientOrders(), loadClientCards()]);
+        ORDERS = both[0] || [];
       } catch(e){ ORDERS = []; }
+      await loadStaff();
     }
     await showcase;
-    if (!isAdmin() && TAB === 'ads') TAB = 'orders';
+    if (!isAdmin() && (TAB === 'ads' || TAB === 'sent' || TAB === 'home')) TAB = STAFF ? 'staff' : 'orders';
+    if (TAB === 'staff' && !STAFF) TAB = 'orders';
     render();
   }
 
   (async function init(){
+    /* Ссылка из письма «подтвердите почту»: #access_token=…&refresh_token=…&type=signup.
+       Ключ берём только из адреса после «#» (на сервер не уходит) и сразу убираем из строки. */
+    const hp = new URLSearchParams((location.hash || '').slice(1));
+    if (hp.get('access_token') && hp.get('refresh_token')){
+      A.tok = hp.get('access_token'); A.rtok = hp.get('refresh_token'); saveSess();
+      history.replaceState(null, '', location.pathname + location.search);
+      TAB = 'orders';
+    }
     await restoreSess();
     if (!isAuthed()){ screenLogin(); return; }
+    if (nextUrl() && hp.get('access_token')){ location.replace(nextUrl()); return; }
     boot();
   })();
 })();

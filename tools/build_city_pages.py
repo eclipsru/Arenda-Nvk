@@ -162,8 +162,8 @@ def card_html(entry):
                  if address.strip() else '')
     invite = (
         '<div style="flex-basis:100%;margin-top:6px">'
-          '<a href="landlord-register.html" style="font-size:12.5px;color:var(--or)">'
-            'Это ваш прокат? Подключитесь — разместим объявление бесплатно'
+          '<a href="chat.html?who=eclips.ru%40mail.ru&amp;lend=1" style="font-size:12.5px;color:var(--or)">'
+            'Это ваш прокат? Напишите нам — обсудим подключение к «Иве»'
           '</a>'
         '</div>'
     )
@@ -298,8 +298,10 @@ def hub_page(targets, cities_by_slug, allow_index=False):
 <meta name="robots" content="{robots}">
 <meta name="theme-color" content="#101217">
 <link rel="canonical" href="{SITE}/city/">
-<link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
-<link rel="stylesheet" href="assets/theme.css?v=20261005-rel">
+<link rel="icon" href="assets/favicon-32.png" type="image/png" sizes="32x32">
+<link rel="icon" href="assets/icon-192.png" type="image/png" sizes="192x192">
+<link rel="apple-touch-icon" href="assets/apple-touch-icon.png">
+<link rel="stylesheet" href="assets/theme.css?v=20261024-live">
 <link rel="stylesheet" href="assets/geo.css?v=20260923-photon">
 <script type="application/ld+json">{json.dumps(jsonld_payload, ensure_ascii=False)}</script>
 </head>
@@ -333,11 +335,11 @@ def hub_page(targets, cities_by_slug, allow_index=False):
           <a class="btn sec sm" href="tel:+79081732475" style="margin-top:12px;display:inline-block">+7 (908) 173-24-75</a>
         </div>
         <div style="padding:16px;background:var(--card);border:1px solid var(--line);border-radius:var(--r)">
-          <b style="font-size:15px">Сдаёте инструмент?</b>
+          <b style="font-size:15px">Хотите сдавать свой инструмент?</b>
           <div style="font-size:13px;color:var(--gr);margin-top:6px;line-height:1.6">
-            Разместите объявление бесплатно — его увидят в вашем городе.
+            Напишите владельцу площадки: обсудим условия, и после его одобрения вы станете арендодателем.
           </div>
-          <a class="btn hot sm" href="landlord-register.html" style="margin-top:12px;display:inline-block">Разместить объявление</a>
+          <a class="btn sec sm" href="chat.html?who=eclips.ru%40mail.ru&amp;lend=1" style="margin-top:12px;display:inline-block">Написать владельцу</a>
         </div>
       </div>
     </div>
@@ -349,9 +351,9 @@ def hub_page(targets, cities_by_slug, allow_index=False):
 
 <script src="assets/data.js"></script>
 <script src="assets/geo.js?v=20260923-photon"></script>
-<script src="assets/email-guard.js?v=20260926-email"></script><script src="assets/sb.js?v=20260926-email"></script>
+<script src="assets/email-guard.js?v=20260926-email"></script><script src="assets/sb.js?v=20261024-live"></script>
 <script src="assets/app-release.js?v=20261009-rel"></script>
-<script src="assets/app.js?v=20261009-rel"></script>
+<script src="assets/app.js?v=20261024-live"></script>
 <script>
 (function(){{ mountChrome('catalog', ''); }})();
 </script>
@@ -391,12 +393,11 @@ def partners_block(city, listings_count, catalog_url):
             '<b style="font-size:15px">Объявлений арендодателей здесь пока нет</b>'
             '<div style="font-size:13px;color:var(--gr);margin-top:6px;line-height:1.6">'
               'Ниже — справочник пунктов проката (они не подключены к «Иве»). '
-              'Если сдаёте инструмент — разместите объявление, это бесплатно.'
+              'Хотите сдавать свой инструмент? <a href="chat.html?who=eclips.ru%40mail.ru&amp;lend=1" style="color:var(--or)">Напишите владельцу площадки</a>.'
             '</div>'
           '</div>'
           '<div style="display:flex;gap:8px;flex-wrap:wrap">'
             f'<a class="btn sec sm" href="{catalog_url}" style="white-space:nowrap">Каталог</a>'
-            '<a class="btn hot sm" href="landlord-register.html" style="white-space:nowrap">Сдать инструмент</a>'
           '</div>'
         '</div>'
     )
@@ -447,8 +448,8 @@ def directory_block(city, entries, collapse):
         '<a href="tel:+79081732475" data-lead="1" style="color:var(--or)">+7 (908) 173-24-75</a>.'
         '</p>'
         '<div style="margin-top:10px">'
-        '<a href="landlord-register.html" style="font-size:12.5px;color:var(--or)">'
-        'Добавить свой инструмент в объявления — бесплатно</a>'
+        '<a href="chat.html?who=eclips.ru%40mail.ru&amp;lend=1" style="font-size:12.5px;color:var(--or)">'
+        'Хотите сдавать свой инструмент? Напишите владельцу площадки</a>'
         '</div>'
     )
 

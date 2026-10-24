@@ -48,22 +48,33 @@ const APK_RE = /^ProkatInstrumenta-[\d.]+\.apk$/;
   assert.match(wf, /branches: \['main', 'arena\/\*\*'\]/, 'build-apk.yml: сборка запускается на любой ветке агента (arena/**), без имени конкретной ветки');
   assert.match(wf, /git cat-file -e "HEAD:\$F"[\s\S]*exit 0/, 'build-apk.yml: выпущенный APK может быть перезаписан');
   assert.match(wf, /git add -f "\$F" app-test\.json/, 'build-apk.yml: app-test.json не коммитится вместе с APK');
-  const snippet = (() => {
-    const lines = wf.split('\n'), start = lines.findIndex(l => /^\s*python3 - <<'PY'\s*$/.test(l));
-    assert.ok(start >= 0, 'build-apk.yml: нет шага, который пишет app-test.json');
-    const body = []; for (let i = start + 1; i < lines.length && lines[i].trim() !== 'PY'; i++) body.push(lines[i]);
-    const indent = Math.min(...body.filter(l => l.trim()).map(l => l.match(/^ */)[0].length));
-    return body.map(l => l.slice(indent)).join('\n');
-  })();
+  const publisher = path.join(ROOT, 'tools/publish-test-apk.py');
+  assert.ok(fs.existsSync(publisher), 'нет tools/publish-test-apk.py');
+  assert.match(wf, /python3 [^\n]*publish-test-apk\.py[^\n]*--site/, 'build-apk.yml: нет публикации через publish-test-apk.py');
   const env = { ...process.env, GITHUB_REF: 'refs/heads/arena/test-session', GITHUB_REPOSITORY: 'eclipsru/Arenda-Nvk',
     NEW_NAME: name, NEW_CODE: code, TEST_NOTES: 'проверка', TEST_REINSTALL: 'false' };
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'iva-test-channel-'));
   let bot = null, botNote = '';
   try {
-    fs.writeFileSync(path.join(tmp, 'snippet.py'), snippet, 'utf8');
-    execFileSync('python3', [path.join(tmp, 'snippet.py')], { cwd: tmp, env, stdio: 'pipe' });
-    bot = JSON.parse(fs.readFileSync(path.join(tmp, 'app-test.json'), 'utf8'));
-    botNote = 'шаг сборки запущен, app-test.json записан';
+    const site = path.join(tmp, 'site'), out = path.join(tmp, 'out');
+    fs.mkdirSync(site); fs.mkdirSync(out);
+    // Model a previous-test → candidate transition. If this test is run after
+    // the candidate has already reached main, use the preceding 10.17 fixture
+    // so the helper still exercises retention rather than an overwrite failure.
+    const previous = t.versionName === name
+      ? { versionCode: Number(code) - 1, versionName: '10.17', apk: 'ProkatInstrumenta-10.17.apk', built: t.built, reinstall: false, notes: '' }
+      : t;
+    fs.copyFileSync(path.join(ROOT, previous.apk), path.join(site, previous.apk));
+    fs.writeFileSync(path.join(site, 'app-test.json'), JSON.stringify(previous), 'utf8');
+    const candidate = `ProkatInstrumenta-${name}.apk`;
+    fs.writeFileSync(path.join(out, candidate), Buffer.from('test-apk-' + name));
+    execFileSync('python3', [publisher, '--site', site, '--apk', path.join(out, candidate), '--code', code,
+      '--name', name, '--notes', 'проверка', '--reinstall', 'false'], { cwd: tmp, env, stdio: 'pipe' });
+    bot = JSON.parse(fs.readFileSync(path.join(site, 'app-test.json'), 'utf8'));
+    assert.ok(fs.existsSync(path.join(site, candidate)), 'скрипт не положил новый APK на сайт');
+    assert.match(fs.readFileSync(path.join(site, 'app-keep-apks.txt'), 'utf8'), new RegExp(previous.apk.replace('.', '\\.'), 'i'),
+      'предыдущий тестовый APK не сохранён в app-keep-apks.txt');
+    botNote = 'publish-test-apk.py запущен, app-test.json записан';
   } catch (e) {
     if (e.code === 'ENOENT') botNote = 'python3 не найден — запуск шага сборки пропущен';
     else throw new Error('шаг сборки не записал app-test.json: ' + String(e.stderr || e.message).split('\n').slice(-3).join(' '));
@@ -151,8 +162,8 @@ const APK_RE = /^ProkatInstrumenta-[\d.]+\.apk$/;
   r = await run({ email: 'eclips.ru@mail.ru', mobile: true, released: row });
   assert.match(r.html, /Новых версий нет/); assert.ok(!/apkConfirm/.test(r.html), 'когда новых версий нет — кнопки «Подтвердить релиз» быть не должно');
   cases += 1;
-  // Случай владельца 11.10.2026: у всех выпущена 10.16, а тестовая сборка — 10.17 (новее).
-  // Тогда у создателя на телефоне обязана появиться жёлтая карточка 10.17 над зелёной 10.16.
+  // Случай владельца 11.10.2026: у всех выпущена 10.16, а тестовая сборка новее.
+  // Тогда у создателя на телефоне обязана появиться жёлтая карточка над зелёной 10.16.
   const relRow = [{ version_code: 90, version_name: '10.16', apk_url: 'ProkatInstrumenta-10.16.apk', reinstall: false, notes: '' }];
   r = await run({ email: 'eclips.ru@mail.ru', mobile: true, released: relRow });
   assert.match(r.html, new RegExp('Новая версия ' + feedNow.versionName.replace(/\./g, '\\.')), 'новая сборка новее выпущенной — жёлтая карточка обязана появиться');

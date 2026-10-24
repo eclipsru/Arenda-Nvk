@@ -35,6 +35,107 @@ function initials(name){
   return ((p[0] || '')[0] + (p[1] ? p[1][0] : '')).toUpperCase();
 }
 
+/* ---------- Расстояние до пункта выдачи и доставка ----------
+   На сайте расстояние считается только по адресу, который клиент сохранил
+   в приватном профиле. Публичная карточка не получает и не показывает этот
+   адрес; она получает только готовый текст результата. */
+const IvaDistance = (function(){
+  const cache = new Map();
+  const pending = new Map();
+  let observerTimer = null;
+  function num(v){ return v !== null && v !== undefined && v !== '' && isFinite(Number(v)) ? Number(v) : null; }
+  function coords(lat, lon){
+    lat=num(lat); lon=num(lon);
+    return lat !== null && lon !== null && lat >= -90 && lat <= 90 && lon >= -180 && lon <= 180
+      ? {lat:lat, lon:lon} : null;
+  }
+  function profileAddress(){
+    if (typeof A === 'undefined') return '';
+    const p=A.customerProfile||{};
+    return String(p.address || (A.userMeta && A.userMeta.address) || '').trim();
+  }
+  function geocode(address){
+    address=String(address||'').trim();
+    if (!address || !window.IvaGeo || typeof IvaGeo.search !== 'function') return Promise.resolve(null);
+    const key='geo:'+address.toLowerCase();
+    if (cache.has(key)) return Promise.resolve(cache.get(key));
+    if (pending.has(key)) return pending.get(key);
+    const job=IvaGeo.search(address,'address').then(function(rows){
+      const r=rows&&rows[0]&&rows[0].coordinates;
+      const c=r&&coords(r[1],r[0]);cache.set(key,c);return c;
+    }).catch(function(){cache.set(key,null);return null;}).finally(function(){pending.delete(key);});
+    pending.set(key,job);return job;
+  }
+  function pickupAddress(ad){
+    if (!ad) return '';
+    return String(ad.pickup_address || ad.address || '').trim();
+  }
+  function pickupCoords(ad){ return coords(ad&&ad.pickup_lat,ad&&ad.pickup_lng); }
+  function haversine(a,b){
+    const r=6371, dLat=(b.lat-a.lat)*Math.PI/180, dLon=(b.lon-a.lon)*Math.PI/180;
+    const q=Math.sin(dLat/2)*Math.sin(dLat/2)+Math.cos(a.lat*Math.PI/180)*Math.cos(b.lat*Math.PI/180)*Math.sin(dLon/2)*Math.sin(dLon/2);
+    return Math.max(1,Math.ceil(r*2*Math.atan2(Math.sqrt(q),Math.sqrt(1-q))));
+  }
+  function key(ad){ return String(ad&&ad.id||'')+'|'+pickupAddress(ad)+'|'+(ad&&ad.pickup_lat||'')+'|'+(ad&&ad.pickup_lng||'|')+'|'+profileAddress(); }
+  function estimate(ad){
+    const k=key(ad);
+    if (cache.has('estimate:'+k)) return Promise.resolve(cache.get('estimate:'+k));
+    if (pending.has('estimate:'+k)) return pending.get('estimate:'+k);
+    let result;
+    if (typeof A === 'undefined' || !A.tok){
+      result={ok:false,reason:'guest'};
+    } else if (!profileAddress()){
+      result={ok:false,reason:'profile'};
+    } else if (!pickupCoords(ad) && !pickupAddress(ad)){
+      result={ok:false,reason:'pickup'};
+    }
+    if (result){cache.set('estimate:'+k,result);return Promise.resolve(result);}
+    const job=Promise.all([
+      Promise.resolve(pickupCoords(ad)||geocode(pickupAddress(ad))),
+      geocode(profileAddress())
+    ]).then(function(pair){
+      if (!pair[0] || !pair[1]) result={ok:false,reason:pair[0]?'destination':'pickup'};
+      else {
+        const km=haversine(pair[0],pair[1]), rate=Number(ad.delivery_price)||40;
+        result={ok:true,km:km,rate:rate,cost:ad.delivery?km*rate:0};
+      }
+      cache.set('estimate:'+k,result);return result;
+    }).catch(function(){result={ok:false,reason:'geocode'};cache.set('estimate:'+k,result);return result;})
+      .finally(function(){pending.delete('estimate:'+k);});
+    pending.set('estimate:'+k,job);return job;
+  }
+  function fallback(reason){
+    if (reason==='guest') return 'Расстояние — войдите и укажите адрес';
+    if (reason==='profile') return 'Расстояние — добавьте адрес в профиле';
+    if (reason==='pickup') return 'Расстояние — адрес пункта не указан';
+    return 'Расстояние — не удалось определить автоматически';
+  }
+  function paintCards(root){
+    const nodes=$$('[data-distance-ad]',root||document);
+    nodes.forEach(function(node){
+      const ad=typeof adById==='function'?adById(node.getAttribute('data-distance-ad')):null;
+      if (!ad) return;
+      const initial=fallback(typeof A!=='undefined'&&A.tok?(profileAddress()?'geocode':'profile'):'guest');
+      if (node.textContent!==initial && !node.dataset.distanceReady) node.textContent=initial;
+      const k=key(ad);
+      if (node.dataset.distanceKey===k) return;
+      node.dataset.distanceKey=k;node.dataset.distanceReady='';
+      estimate(ad).then(function(r){
+        if (node.getAttribute('data-distance-ad')!==String(ad.id)) return;
+        const text=r.ok ? ('Расстояние до пункта: '+r.km+' км') : fallback(r.reason);
+        node.textContent=text;node.dataset.distanceReady='1';
+      });
+    });
+  }
+  function observe(){
+    if (!window.MutationObserver || !document.body) return;
+    const run=function(){clearTimeout(observerTimer);observerTimer=setTimeout(function(){paintCards();},40);};
+    new MutationObserver(run).observe(document.body,{childList:true,subtree:true});
+  }
+  setTimeout(observe,0);
+  return {estimate:estimate,paintCards:paintCards,fallback:fallback,profileAddress:profileAddress,geocode:geocode,haversine:haversine};
+})();
+
 /* ---------- Тост ---------- */
 let _toastT;
 function toast(msg){
@@ -205,6 +306,7 @@ function adCard(ad){
       '<div class="ad-meta">' +
         rHTML +
         '<span>·</span><span>' + esc(ad.city) + '</span>' +
+        '<span class="ad-distance" data-distance-ad="' + esc(ad.id) + '">Расстояние — уточняется</span>' +
       '</div>' +
     '</div>' +
   '</article>';
@@ -245,6 +347,15 @@ function applyFilters(list, f){
 
 function sortAds(list, mode){
   const a = list.slice();
+  /* Этап E (20.10.2026): сортировки, которых ждут на площадках аренды — свежие, цена, рейтинг */
+  const fresh = (x, y) => (x.days || 0) - (y.days || 0);
+  if (mode === 'fresh')  return a.sort(fresh);
+  if (mode === 'cheap')  return a.sort((x, y) => (Number(x.price) || 0) - (Number(y.price) || 0) || fresh(x, y));
+  if (mode === 'dear')   return a.sort((x, y) => (Number(y.price) || 0) - (Number(x.price) || 0) || fresh(x, y));
+  if (mode === 'rating') return a.sort((x, y) => (Number(y.reviews_count) > 0) - (Number(x.reviews_count) > 0) ||
+                                                 (Number(y.rating) || 0) - (Number(x.rating) || 0) ||
+                                                 (Number(y.reviews_count) || 0) - (Number(x.reviews_count) || 0) || fresh(x, y));
+  /* прежние ссылки ?sort=new|good|work — выбранное состояние первым */
   // Выбранное состояние идёт первым; внутри группы — свежие объявления.
   const order = ['new', 'good', 'work'];
   if (order.indexOf(mode) !== -1) {
@@ -332,6 +443,8 @@ function headerHTML(active, q){
     '<button class="city" id="cityBtn">' + IC.pin +
       '<span class="city-name">' + esc(getCity() || 'Все города') + '</span>' +
     '</button>' +
+    '<a class="work-mob hide" id="workMob" href="account.html" aria-label="Работа">' +
+      '<span class="acct-ini work-ini">П</span><span class="work-mob-dot work-count" style="display:none">0</span></a>' +
     '<div class="search">' +
       '<svg class="s-ic" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>' +
       '<input id="q" type="search" placeholder="Поиск инструмента" ' +
@@ -348,17 +461,33 @@ function headerHTML(active, q){
       '<a class="hlink' + (active === 'chat' ? ' on' : '') + '" href="chat.html">' +
         IC.chat + '<span>Сообщения</span>' +
         '<span class="dot chat-count" style="display:none">0</span></a>' +
-      '<a class="hlink' + (active === 'cab' ? ' on' : '') + '" href="account.html">' +
-        IC.user + '<span>Кабинет</span></a>' +
+      /* Меню аккаунта (этап C сайта, 20.10.2026): у вошедшего — выпадающее меню с разделами по роли
+         и переключателем «Арендую / Сдаю» у арендодателя; у гостя — просто вход. См. paintAcct */
+      /* «Работа» / «Прокат» (просьба владельца 24.10.2026): логотип проката в кружке слева от аватарки —
+         сотруднику ведёт в «Работу», владельцу проката — в кабинет проката. Число — новые заявки. См. paintWork */
+      '<a class="hlink work-link hide" id="workLink" href="account.html">' +
+        '<span class="acct-ic"><span class="acct-ini work-ini">П</span></span><span class="work-t">Работа</span>' +
+        '<span class="dot work-count" style="display:none">0</span></a>' +
+      '<div class="acct" id="acct">' +
+        '<a class="hlink' + (active === 'cab' ? ' on' : '') + '" id="acctBtn" href="account.html">' +
+          '<span class="acct-ic">' + IC.user + '</span><span>Кабинет</span></a>' +
+        '<div class="acct-menu hide" id="acctMenu" role="menu" aria-label="Меню аккаунта"></div>' +
+      '</div>' +
       /* Пункт «Управление» дорисовывается после проверки роли — см. paintChiefLink */
       '<a class="hlink chief-link hide' + (active === 'chief' ? ' on' : '') + '" href="chief.html">' +
         IC.chief + '<span>Управление</span></a>' +
-      '<a class="btn sm" href="new.html" style="margin-left:6px">Разместить</a>' +
+      /* 20.10.2026 (решение владельца): размещать могут только арендодатели, которых добавил владелец.
+         Клиенту и гостю кнопки нет вовсе; у арендодателя она появляется после проверки роли — см. paintChiefLink */
+      '<a class="btn sm lord-only' + (lordHint() && ivaMode() === 'lend' ? '' : ' hide') + '" href="new.html" style="margin-left:6px">+ Добавить</a>' +
     '</nav>' +
   '</div></header>';
 }
 
-function bnavHTML(active){
+/* Нижнее меню (телефон). Решение владельца 20.10.2026: у клиента и гостя нет кнопки «Разместить» —
+   сдавать могут только арендодатели, которых добавил владелец. Клиент может только написать владельцу.
+     клиент и гость: Главная · Каталог · Избранное · Сообщения · Кабинет
+     арендодатель:   Главная · Заявки · (+ Добавить) · Сообщения · Кабинет */
+function bnavHTML(active, lord){
   const it = (key, href, icon, label, extra) =>
     '<a class="' + (active === key ? 'on' : '') + '" href="' + href + '"' + (extra || '') + '>' +
       icon + '<span>' + label + '</span>' +
@@ -366,14 +495,37 @@ function bnavHTML(active){
       (key === 'chat' ? '<span class="dot chat-count" style="display:none">0</span>' : '') +
     '</a>';
 
-  return '<nav class="bnav"><div class="bnav-in">' +
+  if (lord) return '<nav class="bnav" data-lord="1"><div class="bnav-in">' +
     it('home','index.html',IC.home,'Главная') +
-    it('fav','favorites.html',IC.heart,'Избранное') +
-    '<a class="mid" href="new.html">' +
-      '<span class="plus">' + IC.plus + '</span><span>Разместить</span></a>' +
+    it('orders','account.html#orders',IC.box,'Заявки') +
+    '<a class="mid' + (active === 'new' ? ' on' : '') + '" href="new.html">' +
+      '<span class="plus">' + IC.plus + '</span><span>Добавить</span></a>' +
     it('chat','chat.html',IC.chat,'Сообщения') +
     it('cab','account.html',IC.user,'Кабинет') +
   '</div></nav>';
+
+  return '<nav class="bnav" data-lord="0"><div class="bnav-in">' +
+    it('home','index.html',IC.home,'Главная') +
+    it('catalog','catalog.html',IC.search,'Каталог') +
+    it('fav','favorites.html',IC.heart,'Избранное') +
+    it('chat','chat.html',IC.chat,'Сообщения') +
+    it('cab','account.html',IC.user,'Кабинет') +
+  '</div></nav>';
+}
+
+/* Подсказка роли до проверки сессии: чтобы у арендодателя «+ Добавить» не мигало при каждом переходе.
+   Это только вид меню — права проверяет база (размещать может только активный арендодатель). */
+const LORD_HINT_KEY = 'iva_lord_hint';
+function lordHint(){ try { return localStorage.getItem(LORD_HINT_KEY) === '1'; } catch(e){ return false; } }
+function setLordHint(on){
+  try { if (on) localStorage.setItem(LORD_HINT_KEY, '1'); else localStorage.removeItem(LORD_HINT_KEY); } catch(e){}
+}
+
+/* «Написать владельцу» — единственный путь клиента к сдаче инструмента (решение владельца 20.10.2026):
+   переписка с владельцем площадки; арендодателем человека делает только владелец после разговора. */
+function lendChatHref(){
+  const owner = (typeof IVA_CREATOR_EMAIL !== 'undefined' && IVA_CREATOR_EMAIL) || 'eclips.ru@mail.ru';
+  return 'chat.html?who=' + encodeURIComponent(owner) + '&lend=1';
 }
 
 function footHTML(){
@@ -392,10 +544,10 @@ function footHTML(){
         '<a href="tel:+79081732475">+7 (908) 173-24-75</a>' +
         '<a href="privacy.html">Обработка данных</a>' +
         '<span>Новочеркасск, ул. Маресьева, 36</span>' +
-        '<span>Ежедневно 8:00–20:00</span></div>' +
+        '<span>Ежедневно 8:00–20:00</span>' +
+        '<a href="' + lendChatHref() + '">Написать владельцу площадки</a></div>' +
     '</div>' +
-    '<div class="small">© ' + new Date().getFullYear() + ' Ива — Инструмент в аренду. ' +
-      'Витрина работает на демонстрационных данных.</div>' +
+    '<div class="small">© ' + new Date().getFullYear() + ' Ива — Инструмент в аренду.</div>' +
   '</div></footer>';
 }
 
@@ -671,9 +823,11 @@ document.addEventListener('click', function(e){
 });
 
 /* ---------- Инициализация общего каркаса ---------- */
+let CHROME_ACTIVE = '';
 function mountChrome(active, q){
   const h = $('hdr');   if (h) h.innerHTML = headerHTML(active, q);
-  const b = $('bnav');  if (b) b.innerHTML = bnavHTML(active);
+  CHROME_ACTIVE = active;
+  const b = $('bnav');  if (b) b.innerHTML = bnavHTML(active, lordHint() && ivaMode() === 'lend');
   const f = $('ftr');   if (f) f.innerHTML = footHTML();
 
   mountAppTopBanner(h);
@@ -705,7 +859,8 @@ function mountChrome(active, q){
 }
 
 
-/* Пункт «Управление» виден только владельцу площадки */
+/* Пункт «Управление» виден только владельцу площадки.
+   «+ Добавить» (шапка и нижнее меню) — только активному арендодателю (20.10.2026). */
 async function paintChiefLink(){
   if (typeof restoreSess !== 'function') return;
   try {
@@ -713,9 +868,350 @@ async function paintChiefLink(){
     if (typeof isChief === 'function' && isChief()){
       $$('.chief-link').forEach(function(el){ el.classList.remove('hide'); });
     }
+    paintLordChrome(isAuthed() && typeof isAdmin === 'function' && isAdmin());
+    if (typeof IvaDistance !== 'undefined') IvaDistance.paintCards();
+    if (isAuthed()){ IvaLive.start(); paintWork(); }
   } catch(e){}
 }
 
+
+function paintLordChrome(lord){
+  setLordHint(lord);
+  $$('.lord-only').forEach(function(el){ el.classList.toggle('hide', !lord); });
+  const lendView = lord && ivaMode() === 'lend';
+  $$('.lord-only').forEach(function(el){ el.classList.toggle('hide', !lendView); });
+  const b = $('bnav'), nav = b && b.querySelector('.bnav');
+  if (nav && (nav.getAttribute('data-lord') === '1') !== lendView){
+    b.innerHTML = bnavHTML(CHROME_ACTIVE, lendView);
+    paintFavCount();
+    paintChatBadge();
+  }
+  paintAcct();
+}
+
+/* ---------- Режим арендодателя «Арендую / Сдаю» (как «Режим хозяина» у Airbnb) ----------
+   Арендодатель тоже берёт инструмент в аренду. В режиме «Арендую» сайт выглядит как у клиента
+   (каталог, избранное), в режиме «Сдаю» — меню арендодателя (заявки, «+ Добавить»).
+   Это только вид меню: права по-прежнему проверяет база. Клиенту переключатель не показывается. */
+const MODE_KEY = 'iva_mode';
+function ivaMode(){ try { return localStorage.getItem(MODE_KEY) === 'rent' ? 'rent' : 'lend'; } catch(e){ return 'lend'; } }
+function setIvaMode(m, go){
+  try { localStorage.setItem(MODE_KEY, m === 'rent' ? 'rent' : 'lend'); } catch(e){}
+  paintLordChrome(lordHint());
+  toast(m === 'rent' ? 'Режим «Арендую»: каталог и избранное' : 'Режим «Сдаю»: объявления и заявки');
+  if (!go) return;
+  /* в кабинете режим меняет вкладки на месте (этап 2 кабинетов, 22.10.2026): «Арендую» — «Я арендую», «Сдаю» — «Сводка» */
+  if (/(^|\/)account\.html$/.test(location.pathname)) { location.hash = m === 'rent' ? 'sent' : 'home'; return; }
+  location.href = m === 'rent' ? 'catalog.html' : 'account.html#home';
+}
+
+/* Строка вкладок на узком экране: затухание у края, за которым есть ещё вкладки (этап 2 кабинетов) */
+function ivaTabsFade(tb){
+  if (!tb) return;
+  const upd = function(){
+    const more = tb.scrollWidth - tb.clientWidth > 4;
+    tb.classList.toggle('fade-l', more && tb.scrollLeft > 4);
+    tb.classList.toggle('fade-r', more && tb.scrollLeft + tb.clientWidth < tb.scrollWidth - 4);
+  };
+  if (!tb._ivaFade){ tb._ivaFade = true; tb.addEventListener('scroll', upd, { passive: true }); window.addEventListener('resize', upd); }
+  upd();
+}
+function modeSwitchHTML(){
+  const m = ivaMode();
+  return '<div class="acct-mode" role="group" aria-label="Режим">' +
+    '<button type="button" data-mode="rent" class="' + (m === 'rent' ? 'on' : '') + '" aria-pressed="' + (m === 'rent') + '">Арендую</button>' +
+    '<button type="button" data-mode="lend" class="' + (m === 'lend' ? 'on' : '') + '" aria-pressed="' + (m === 'lend') + '">Сдаю</button>' +
+  '</div>';
+}
+document.addEventListener('click', function(e){
+  const mb = e.target.closest ? e.target.closest('[data-mode]') : null;
+  if (!mb || mb.classList.contains('on')) return;
+  e.preventDefault();
+  setIvaMode(mb.getAttribute('data-mode'), true);
+});
+
+/* ---------- Заявки сразу, без перезагрузки (просьба владельца 24.10.2026) ----------
+   Одно соединение Supabase Realtime на любой странице: своя строка iva_order_ping (SQL 20261119) поменялась —
+   событие «iva:orders» (кабинет сразу перечитывает заявки). О новой заявке на другой странице — сообщение, звук,
+   число на кружке «Работа» / «Прокат» и, если вкладка свёрнута и уведомления разрешены, уведомление браузера.
+   Без SQL соединение не примется — кабинет обновляет заявки раз в 30 секунд на любой своей вкладке. */
+const IvaLive = (function(){
+  const NK = 'iva_live_new';
+  let sub = null, subFor = '', live = false, ac = null, baseTitle = '', marks = 0;
+  const low = function(x){ return String(x || '').trim().toLowerCase(); };
+  function onAcct(){ return /(^|\/)account\.html$/.test(location.pathname); }
+  function lord(){ return typeof isAdmin === 'function' && isAdmin(); }
+  function label(){ return lord() ? 'Прокат' : 'Работа'; }
+  function href(){ return lord() ? 'account.html#orders' : 'account.html#staff'; }
+  function count(){ try { return Number(sessionStorage.getItem(NK)) || 0; } catch(e){ return 0; } }
+  function setCount(n){
+    try { if (n > 0) sessionStorage.setItem(NK, String(n)); else sessionStorage.removeItem(NK); } catch(e){}
+    if (typeof paintWork === 'function') paintWork(); else paintDot();   // у владельца кружок ведёт в «Заявки», пока есть новые
+  }
+  function paintDot(){
+    const n = count();
+    $$('.work-count').forEach(function(el){ el.textContent = n > 9 ? '9+' : String(n); el.style.display = n ? '' : 'none'; });
+  }
+  function start(){
+    if (typeof subscribeTable !== 'function' || typeof isAuthed !== 'function' || !isAuthed()) return;
+    const me = low(A.me);
+    if (!me || (sub && subFor === me)) return;
+    if (sub) sub.close();
+    subFor = me;
+    sub = subscribeTable('iva_order_ping', onRow, function(ok){
+      if (live === ok) return;
+      live = ok;
+      try { window.dispatchEvent(new CustomEvent('iva:live', { detail: { live: ok } })); } catch(e){}
+    });
+  }
+  function onRow(r){
+    if (!r || low(r.email) !== subFor) return;
+    try { window.dispatchEvent(new CustomEvent('iva:orders', { detail: r })); } catch(e){}
+    if (!onAcct() && r.kind === 'new'){ setCount(count() + 1); alertNew(1, ''); }
+  }
+  /* звук: два коротких тона (без файла); браузер разрешает звук после первого касания страницы */
+  function audio(){
+    try {
+      const C = window.AudioContext || window.webkitAudioContext;
+      if (!C) return null;
+      if (!ac) ac = new C();
+      if (ac.state === 'suspended') ac.resume();
+      return ac;
+    } catch(e){ return null; }
+  }
+  function beep(){
+    const c = audio();
+    if (!c) return;
+    try {
+      [[880, 0], [1320, 0.18]].forEach(function(t){
+        const o = c.createOscillator(), g = c.createGain(), at = c.currentTime + t[1];
+        o.type = 'sine'; o.frequency.value = t[0];
+        g.gain.setValueAtTime(0.0001, at);
+        g.gain.exponentialRampToValueAtTime(0.22, at + 0.02);
+        g.gain.exponentialRampToValueAtTime(0.0001, at + 0.32);
+        o.connect(g); g.connect(c.destination); o.start(at); o.stop(at + 0.35);
+      });
+    } catch(e){}
+  }
+  function sys(title){
+    if (!document.hidden || !('Notification' in window) || Notification.permission !== 'granted') return;
+    try {
+      const n = new Notification(title, { body: 'Ива · ' + label() + ' — нажмите, чтобы открыть', icon: 'assets/icon-192.png', tag: 'iva-order' });
+      n.onclick = function(){ try { window.focus(); } catch(e){} if (!onAcct()) location.href = href(); n.close(); };
+    } catch(e){}
+  }
+  function titleMark(){
+    if (!document.hidden) return;
+    if (!marks) baseTitle = document.title;
+    marks++;
+    document.title = '(' + marks + ') ' + baseTitle;
+  }
+  /* новая заявка: сообщение, звук, уведомление браузера (вкладка свёрнута), число в заголовке вкладки */
+  function alertNew(n, what){
+    const t = n === 1 ? 'Новая заявка' + (what ? ': ' + what : '') : 'Новых заявок: ' + n;
+    toast(onAcct() ? t : t + ' — откройте «' + label() + '» вверху');
+    beep(); sys(t); titleMark();
+  }
+  function permHTML(){
+    if (!('Notification' in window) || Notification.permission !== 'default') return '';
+    return ' · <button type="button" class="st-link" data-iva-notif="1">уведомлять о заявках, даже если вкладка свёрнута</button>';
+  }
+  function updTxt(){ return live ? 'обновляется сразу' : 'обновляется само каждые 30 секунд'; }
+  document.addEventListener('click', function(e){
+    const b = e.target.closest ? e.target.closest('[data-iva-notif]') : null;
+    if (!b || !('Notification' in window)) return;
+    e.preventDefault();
+    audio();
+    Promise.resolve(Notification.requestPermission()).then(function(p){
+      toast(p === 'granted' ? 'Готово: о новой заявке скажем, даже если вкладка свёрнута' : 'Уведомления не разрешены — их можно включить в настройках браузера');
+      $$('[data-iva-notif]').forEach(function(x){ x.remove(); });
+    }).catch(function(){});
+  });
+  document.addEventListener('pointerdown', function(){ audio(); }, { once: true, passive: true });
+  document.addEventListener('visibilitychange', function(){
+    if (document.hidden) return;
+    if (marks){ document.title = baseTitle; marks = 0; }
+    try { window.dispatchEvent(new CustomEvent('iva:orders', { detail: { kind: 'upd', visible: true } })); } catch(e){}
+  });
+  return { start: start, alertNew: alertNew, permHTML: permHTML, updTxt: updTxt, seen: function(){ setCount(0); },
+           paintDot: paintDot, isLive: function(){ return live; } };
+})();
+
+/* Кружок «Работа» (сотрудник) / «Прокат» (владелец проката) в шапке слева от аватарки (просьба владельца 24.10.2026).
+   Сотрудник: логотип проката по его первому пункту (iva_prokat_points), иначе первые буквы названия проката.
+   Что человек — сотрудник, знаем из iva_staff_me (кабинет кладёт ответ сюда же; на других страницах — один запрос
+   раз в 5 минут, у клиента без работы — раз в 30 минут). */
+const WORK_KEY = 'iva_work_v1';
+function workPut(st){
+  try {
+    const me = String((A && A.me) || '').toLowerCase();
+    const on = st && st.status === 'active';
+    const p0 = on && Array.isArray(st.points) && st.points[0] ? String(st.points[0].id || '') : '';
+    sessionStorage.setItem(WORK_KEY, JSON.stringify({ me: me, at: Date.now(), on: !!on, c: on ? String(st.company || '') : '', p: p0 }));
+  } catch(e){}
+}
+async function workGet(){
+  const me = String((A && A.me) || '').toLowerCase();
+  let w = null;
+  try { w = JSON.parse(sessionStorage.getItem(WORK_KEY) || 'null'); } catch(e){}
+  if (w && w.me === me && Date.now() - w.at < (w.on ? 300000 : 1800000)) return w;
+  try {
+    const r = await api('/rest/v1/rpc/iva_staff_me', 'POST', {});
+    workPut((Array.isArray(r) ? r[0] : r) || null);
+  } catch(e){ workPut(null); }
+  try { w = JSON.parse(sessionStorage.getItem(WORK_KEY) || 'null'); } catch(e){ w = null; }
+  return w;
+}
+async function paintWork(){
+  const els = [$('workLink'), $('workMob')].filter(Boolean);
+  if (!els.length) return;
+  const hide = function(){ els.forEach(function(el){ el.classList.add('hide'); }); };
+  if (typeof isAuthed !== 'function' || !isAuthed()) return hide();
+  let kind, name, attr, link;
+  if (typeof isAdmin === 'function' && isAdmin()){
+    const ad = A.admin || {};
+    kind = 'Прокат'; name = ad.company || ad.full_name || 'Прокат'; attr = ['data-ava-org', '1'];
+    link = (Number(sessionStorage.getItem('iva_live_new')) || 0) > 0 ? 'account.html#orders' : 'account.html#home';
+  } else {
+    const w = await workGet();
+    if (!w || !w.on) return hide();
+    kind = 'Работа'; name = w.c || 'Прокат'; attr = w.p ? ['data-ava-point', w.p] : null; link = 'account.html#staff';
+  }
+  els.forEach(function(el){
+    el.classList.remove('hide');
+    el.setAttribute('href', link);
+    el.setAttribute('title', kind + ' · ' + name);
+    el.setAttribute('aria-label', kind + ' · ' + name);
+    el.classList.toggle('on', /(^|\/)account\.html$/.test(location.pathname) &&
+      (location.hash === '#staff' || (kind === 'Прокат' && /^#(home|orders)?$/.test(location.hash))));
+    const t = el.querySelector('.work-t'); if (t) t.textContent = kind;
+    const ini = el.querySelector('.work-ini');
+    if (ini){
+      const key = attr ? attr[0] + '=' + attr[1] : 'none';
+      if (ini.getAttribute('data-work') !== key){
+        ini.removeAttribute('data-ava-org'); ini.removeAttribute('data-ava-point');
+        ini.classList.remove('ava-img'); ini.removeAttribute('data-ava-src');
+        ini.textContent = initials(name);
+        if (attr) ini.setAttribute(attr[0], attr[1]);
+        ini.setAttribute('data-work', key);
+      }
+      if (attr && typeof IvaAva !== 'undefined') IvaAva.paint(el);
+    }
+  });
+  IvaLive.paintDot();
+}
+
+/* ---------- Меню аккаунта в шапке ---------- */
+function acctMenuHTML(){
+  const lord = typeof isAdmin === 'function' && isAdmin();
+  const chief = typeof isChief === 'function' && isChief();
+  const lend = lord && ivaMode() === 'lend';
+  /* сотрудник проката — подсказка из кабинета (account.html → iva_staff_me) */
+  let staff = false; try { staff = !lord && localStorage.getItem('iva_staff_hint') === '1'; } catch(e){}
+  const name = (typeof A !== 'undefined' && A.uname) || 'Кабинет';
+  const me = (typeof A !== 'undefined' && A.me) || '';
+  const role = chief ? 'Владелец площадки' : lord ? 'Арендодатель' : staff ? 'Сотрудник проката' : 'Клиент';
+  const a = (href, label, extra) => '<a role="menuitem" href="' + href + '">' + label + (extra || '') + '</a>';
+  let h = '<div class="acct-head"><span class="acct-ava" data-ava="' + esc(me) + '">' + esc(initials(name)) + '</span>' +
+    '<span style="min-width:0"><b>' + esc(name) + '</b><small>' + esc(me) + '</small>' +
+    '<span class="acct-role">' + role + '</span></span></div>';
+  if (lord) h += modeSwitchHTML();
+  if (lend){
+    h += a('account.html#home', 'Сводка') + a('account.html#orders', 'Заявки на мой инструмент') + a('account.html#ads', 'Мои объявления') +
+         a('account.html#fee', 'Комиссия и оплата') + a('account.html#reviews', 'Отзывы') +
+         a('new.html', '+ Добавить инструмент');
+  } else if (!lord){
+    if (staff) h += a('account.html#staff', 'Работа в прокате');
+    h += a('account.html#orders', 'Мои заявки');
+  } else {
+    h += a('catalog.html', 'Каталог') + a('account.html#sent', 'Я арендую — мои заявки');
+  }
+  h += a('favorites.html', 'Избранное', '<span class="acct-n fav-count" style="display:none">0</span>') +
+       a('chat.html', 'Сообщения', '<span class="acct-n chat-count" style="display:none">0</span>') +
+       a(lord ? 'account.html#prof' : 'profile.html', 'Профиль и настройки');
+  if (chief) h += '<div class="acct-sep"></div>' + a('chief.html', 'Управление площадкой');
+  if (!lord && !staff) h += '<div class="acct-sep"></div>' + a(lendChatHref(), 'Хочу сдавать инструмент');
+  h += '<div class="acct-sep"></div><button type="button" role="menuitem" class="acct-out" id="acctOut">Выйти</button>';
+  return h;
+}
+function closeAcct(){
+  const m = $('acctMenu'), b = $('acctBtn');
+  if (m) m.classList.add('hide');
+  if (b) b.setAttribute('aria-expanded', 'false');
+}
+/* Нижнее меню на телефоне: «Кабинет» — своей аватаркой, как в приложении; фото нет — прежний значок */
+function paintBnavAva(authed){
+  const a = document.querySelector('#bnav a[href="account.html"]');
+  if (!a) return;
+  if (!authed || typeof IvaAva === 'undefined'){
+    const sp = a.querySelector('.bnav-ava');
+    if (sp) sp.outerHTML = IC.user;
+    return;
+  }
+  IvaAva.mine().then(function(url){
+    const link = document.querySelector('#bnav a[href="account.html"]');
+    if (!link || !url) return;
+    let sp = link.querySelector('.bnav-ava');
+    if (!sp){
+      sp = document.createElement('span');
+      sp.className = 'bnav-ava';
+      const svg = link.querySelector('svg');
+      if (svg) svg.replaceWith(sp); else link.insertBefore(sp, link.firstChild);
+    }
+    sp.setAttribute('data-ava', (A && A.me) || '');
+    IvaAva.paint(sp);
+  }).catch(function(){});
+}
+function paintAcct(){
+  const btn = $('acctBtn'), menu = $('acctMenu');
+  if (!btn || !menu) return;
+  const authed = typeof isAuthed === 'function' && isAuthed();
+  const ic = btn.querySelector('.acct-ic');
+  paintBnavAva(authed);
+  if (!authed){
+    if (ic) ic.innerHTML = IC.user;
+    btn.removeAttribute('aria-haspopup'); btn.removeAttribute('aria-expanded');
+    btn.lastChild.textContent = 'Войти';
+    menu.classList.add('hide');
+    return;
+  }
+  btn.setAttribute('aria-haspopup', 'menu');
+  if (!btn.hasAttribute('aria-expanded')) btn.setAttribute('aria-expanded', 'false');
+  btn.lastChild.textContent = 'Кабинет';
+  if (ic){
+    /* аватарка (21.10.2026): кружок не перерисовываем, если в нём уже фото этого же аккаунта */
+    const cur = ic.querySelector('.acct-ini');
+    if (!cur || cur.getAttribute('data-ava') !== ((A && A.me) || '')){
+      ic.innerHTML = '<span class="acct-ini" data-ava="' + esc((A && A.me) || '') + '">' + esc(initials((A && A.uname) || (A && A.me) || '?')) + '</span>';
+    }
+    if (typeof IvaAva !== 'undefined') IvaAva.paint(ic);
+  }
+  if (!menu.classList.contains('hide')){ menu.innerHTML = acctMenuHTML(); if (typeof IvaAva !== 'undefined') IvaAva.paint(menu); }
+}
+document.addEventListener('click', function(e){
+  const btn = e.target.closest ? e.target.closest('#acctBtn') : null;
+  const menu = $('acctMenu');
+  if (btn && menu && btn.getAttribute('aria-haspopup') === 'menu'){
+    e.preventDefault();
+    if (menu.classList.contains('hide')){
+      menu.innerHTML = acctMenuHTML();
+      if (typeof IvaAva !== 'undefined') IvaAva.paint(menu);
+      menu.classList.remove('hide');
+      btn.setAttribute('aria-expanded', 'true');
+      paintFavCount(); paintChatBadge();
+    } else closeAcct();
+    return;
+  }
+  if (e.target.closest && e.target.closest('#acctOut')){
+    if (typeof signOut === 'function') signOut();
+    setLordHint(false);
+    try { localStorage.removeItem('iva_staff_hint'); } catch(err){}
+    location.href = 'index.html';
+    return;
+  }
+  if (menu && !menu.classList.contains('hide') && !(e.target.closest && e.target.closest('#acct'))) closeAcct();
+});
+document.addEventListener('keydown', function(e){ if (e.key === 'Escape') closeAcct(); });
 
 /* Счётчик непрочитанных сообщений в шапке и нижнем меню */
 async function paintChatBadge(){
@@ -825,10 +1321,391 @@ function ivaEmptyStateHTML(o){
         '<a class="btn sec" href="' + dirHref + '">' + dirLabel + '</a>' +
         (hasFilters ? '<button class="btn sec" id="eReset">Сбросить фильтры</button>' : '') +
       '</div>' +
-      '<p class="small mute" style="margin-top:10px">Сдаёте инструмент? ' +
-        '<a href="landlord-register.html" style="color:var(--or)">Разместите объявление бесплатно</a> — ' +
-        'его увидят в вашем городе.</p>' +
+      '<p class="small mute" style="margin-top:10px">Хотите сдавать свой инструмент? ' +
+        '<a href="' + lendChatHref() + '" style="color:var(--or)">Напишите владельцу площадки</a> — ' +
+        'обсудим условия и подключим вас.</p>' +
       '<p class="small mute" style="margin-top:6px">Звонок бесплатный: мы получаем плату только ' +
         'от арендодателей, которые размещают объявления.</p>' +
     '</div>';
 }
+
+/* ===========================================================
+   Аватарки на сайте (21.10.2026, просьба владельца «на сайте нужно сделать аватарки»).
+   Те же фото, что в приложении (10.98 / 10.109), — ничего нового не собирается:
+   • свой кружок: арендодатель — admins.avatar (файл публичный, как в «Мои данные» приложения);
+     клиент — приватный customer-avatars/<uid>/avatar.jpg (ссылка на 1 час; файл видит только сам клиент
+     и администратор, которому клиент писал — правила SQL 10.54);
+   • собеседник-арендодатель — admins.avatar; клиент у администратора — iva_chat_peers() (SQL 10.54);
+   • прокат в карточке инструмента — admins.org_avatar через iva_prokat_points() (SQL 10.120), иначе фото админа.
+   Нет фото, функция ещё не применена или файл не открылся — остаются буквы, как раньше.
+   Разметка: <span class="ava" data-ava="почта">ИН</span> или data-ava-point / data-ava-owner, затем IvaAva.paint(узел).
+   =========================================================== */
+const IvaAva = (function(){
+  const SS = 'iva_ava_v1', TTL_SIGNED = 50 * 60000, TTL_PUBLIC = 6 * 3600000, TTL_NONE = 2 * 60000;
+  let mem = {};
+  try { mem = JSON.parse(sessionStorage.getItem(SS) || '{}') || {}; } catch(e){ mem = {}; }
+  const pend = {};
+  let adm = null, admAt = 0, peers = null, peersFor = '';
+
+  function low(e){ return String(e || '').trim().toLowerCase(); }
+  function isUrl(u){ return /^https:\/\//.test(String(u || '').trim()); }
+  function keep(k, url, ttl){
+    mem[k] = { u: url || '', t: Date.now() + (url ? ttl : TTL_NONE) };
+    try { sessionStorage.setItem(SS, JSON.stringify(mem)); } catch(e){}
+  }
+  function cached(k){ const c = mem[k]; return c && c.t > Date.now() ? c : null; }
+  function drop(prefix){
+    Object.keys(mem).forEach(function(k){ if (k.indexOf(prefix) === 0) delete mem[k]; });
+    try { sessionStorage.setItem(SS, JSON.stringify(mem)); } catch(e){}
+  }
+  async function ready(){
+    try { if (typeof _restoreSessionPending !== 'undefined' && _restoreSessionPending) await _restoreSessionPending; } catch(e){}
+  }
+  function lord(){ return typeof isAdmin === 'function' && isAdmin(); }
+
+  /* Пакетная подпись приватных файлов клиентов: один запрос на весь список */
+  async function signPaths(paths){
+    const out = {};
+    if (!paths.length || !A.tok) return out;
+    try {
+      const r = await fetch(SB + '/storage/v1/object/sign/customer-avatars', {
+        method: 'POST',
+        headers: { apikey: KEY, Authorization: 'Bearer ' + A.tok, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ expiresIn: 3600, paths: paths })
+      });
+      if (!r.ok) return out;
+      (await r.json() || []).forEach(function(x){
+        const s = x && !x.error && (x.signedURL || x.signedUrl);
+        if (s) out[x.path] = s.indexOf('http') === 0 ? s : SB + '/storage/v1' + s;
+      });
+    } catch(e){}
+    return out;
+  }
+
+  /* Фото администраторов (те же, что видит приложение в чате) */
+  async function admins(){
+    if (adm && Date.now() - admAt < 300000) return adm;
+    const m = {};
+    try {
+      (await api('/rest/v1/admins?select=email,avatar') || []).forEach(function(x){
+        if (x && isUrl(x.avatar)) m[low(x.email)] = String(x.avatar).trim();
+      });
+    } catch(e){}
+    adm = m; admAt = Date.now();
+    return m;
+  }
+  /* Администратору — пути к фото клиентов, которые ему писали */
+  async function peerPaths(){
+    const me = low(A.me);
+    if (peers && peersFor === me) return peers;
+    peers = {}; peersFor = me;
+    if (!A.tok || !lord()) return peers;
+    try {
+      (await api('/rest/v1/rpc/iva_chat_peers', 'POST', {}) || []).forEach(function(x){
+        if (x && x.avatar_path) peers[low(x.email)] = String(x.avatar_path);
+      });
+    } catch(e){}
+    return peers;
+  }
+
+  async function mine(){
+    await ready();
+    const me = low(A.me);
+    if (!me || !A.tok) return '';
+    const c = cached('me:' + me);
+    if (c) return c.u;
+    if (pend['me:' + me]) return pend['me:' + me];
+    return pend['me:' + me] = (async function(){
+      let url = '';
+      if (lord()){
+        try {
+          const r = await api('/rest/v1/admins?select=avatar&email=eq.' + encodeURIComponent(me));
+          if (r && r[0] && isUrl(r[0].avatar)) url = String(r[0].avatar).trim();
+        } catch(e){}
+      }
+      if (!url && typeof getCustomerAvatarUrl === 'function'){
+        try { url = await getCustomerAvatarUrl(); } catch(e){}
+      }
+      keep('me:' + me, url, TTL_SIGNED);
+      return url;
+    })().finally(function(){ delete pend['me:' + me]; });
+  }
+
+  /* Заранее одним заходом: фото админов и пакетная подпись фото клиентов */
+  const inflight = {};   // почта → идущий запрос (список диалогов и шапка переписки просят одновременно)
+  async function prefetch(emails){
+    const me = low(A.me);
+    const all = emails.map(low).filter(function(e, i, a){ return e && e !== me && a.indexOf(e) === i && !cached('u:' + e); });
+    const wait = all.filter(function(e){ return inflight[e]; }).map(function(e){ return inflight[e]; });
+    const need = all.filter(function(e){ return !inflight[e]; });
+    if (need.length){
+      const job = load(need);
+      need.forEach(function(e){ inflight[e] = job; });
+      job.finally(function(){ need.forEach(function(e){ if (inflight[e] === job) delete inflight[e]; }); });
+      wait.push(job);
+    }
+    try { await Promise.all(wait); } catch(e){}
+  }
+  async function load(need){
+    const m = await admins();
+    const rest = [];
+    need.forEach(function(e){ if (m[e]) keep('u:' + e, m[e], TTL_PUBLIC); else rest.push(e); });
+    if (!rest.length) return;
+    const p = await peerPaths();
+    const paths = rest.map(function(e){ return p[e]; }).filter(Boolean);
+    const s = await signPaths(paths);
+    rest.forEach(function(e){ keep('u:' + e, p[e] ? (s[p[e]] || '') : '', TTL_SIGNED); });
+  }
+  async function of(email){
+    const e = low(email);
+    if (!e) return '';
+    if (e === low(A.me)) return mine();
+    const c = cached('u:' + e);
+    if (c) return c.u;
+    await ready();
+    await prefetch([e]);
+    const c2 = cached('u:' + e);
+    return c2 ? c2.u : '';
+  }
+
+  /* Прокат: логотип из «Данных проката» (org_avatar), иначе фото арендодателя */
+  async function prokat(point, owner){
+    const k = 'p:' + (point || '') + ':' + low(owner);
+    const c = cached(k);
+    if (c) return c.u;
+    let url = '';
+    if (point){
+      try {
+        const r = await api('/rest/v1/rpc/iva_prokat_points', 'POST', { p_point: point });
+        const row = (r || [])[0];
+        if (row && isUrl(row.avatar)) url = String(row.avatar).trim();
+      } catch(e){}
+    }
+    if (!url && owner) url = (await admins())[low(owner)] || '';
+    keep(k, url, TTL_PUBLIC);
+    return url;
+  }
+
+  function put(el, url){
+    if (!el || !url || el.getAttribute('data-ava-src') === url) return;
+    const im = new Image();
+    im.alt = ''; im.decoding = 'async';
+    im.onload = function(){
+      if (!el.hasAttribute('data-ini')) el.setAttribute('data-ini', el.textContent);
+      el.setAttribute('data-ava-src', url);
+      el.textContent = '';
+      el.appendChild(im);
+      el.classList.add('ava-img');
+    };
+    im.src = url;
+  }
+  function reset(el){
+    if (el.hasAttribute('data-ini')) el.textContent = el.getAttribute('data-ini');
+    el.removeAttribute('data-ava-src');
+    el.classList.remove('ava-img');
+  }
+
+  async function paint(root){
+    root = root || document;
+    let els;
+    try { els = Array.prototype.slice.call(root.querySelectorAll('[data-ava],[data-ava-point],[data-ava-owner],[data-ava-org]')); }
+    catch(e){ return; }
+    if (root.hasAttribute && (root.hasAttribute('data-ava') || root.hasAttribute('data-ava-owner'))) els.unshift(root);
+    if (!els.length) return;
+    try {
+      await ready();
+      await prefetch(els.map(function(el){ return el.getAttribute('data-ava') || ''; }));
+    } catch(e){}
+    els.forEach(function(el){
+      let job;
+      if (el.hasAttribute('data-ava-org')) job = myOrg();
+      else if (el.hasAttribute('data-ava-point') || el.hasAttribute('data-ava-owner'))
+        job = prokat(el.getAttribute('data-ava-point') || '', el.getAttribute('data-ava-owner') || '');
+      else job = of(el.getAttribute('data-ava'));
+      job.then(function(url){ if (url) put(el, url); }).catch(function(){});
+    });
+  }
+
+  function repaintMine(url){
+    const me = low(A.me);
+    keep('me:' + me, url, TTL_SIGNED);
+    document.querySelectorAll('[data-ava]').forEach(function(el){
+      if (low(el.getAttribute('data-ava')) !== me) return;
+      reset(el);
+      if (url) put(el, url);
+    });
+  }
+
+  /* ---------- Логотип проката (свой) ---------- */
+  async function myOrg(){
+    await ready();
+    const me = low(A.me);
+    if (!me || !lord()) return '';
+    const c = cached('org:' + me);
+    if (c) return c.u;
+    let url = '';
+    try {
+      const r = await api('/rest/v1/admins?select=org_avatar&email=eq.' + encodeURIComponent(me));
+      if (r && r[0] && isUrl(r[0].org_avatar)) url = String(r[0].org_avatar).trim();
+    } catch(e){}
+    keep('org:' + me, url, TTL_PUBLIC);
+    return url;
+  }
+
+  /* ---------- Сохранение ---------- */
+  async function uploadPublic(blob){
+    const path = 'tools/avatar_' + Date.now() + '_' + Math.floor(Math.random() * 1e6) + '.jpg';
+    const r = await fetch(SB + '/storage/v1/object/tool-photos/' + path, {
+      method: 'POST',
+      headers: { apikey: KEY, Authorization: 'Bearer ' + A.tok, 'Content-Type': 'image/jpeg' },
+      body: blob
+    });
+    if (!r.ok) throw new Error(sbErr(await r.text()));
+    return SB + '/storage/v1/object/public/tool-photos/' + path;
+  }
+  async function saveMine(blob){
+    await ready();
+    if (!A.tok) throw new Error('Нужно войти');
+    if (lord()){
+      const url = await uploadPublic(blob);
+      await api('/rest/v1/admins?email=eq.' + encodeURIComponent(low(A.me)), 'PATCH', { avatar: url }, { Prefer: 'return=minimal' });
+      adm = null;
+      repaintMine(url);
+      return url;
+    }
+    if (!A.uid) throw new Error('Нужно войти');
+    const path = A.uid + '/avatar.jpg';
+    const r = await fetch(SB + '/storage/v1/object/customer-avatars/' + path, {
+      method: 'PUT',
+      headers: { apikey: KEY, Authorization: 'Bearer ' + A.tok, 'Content-Type': 'image/jpeg', 'x-upsert': 'true' },
+      body: blob
+    });
+    if (!r.ok) throw new Error(sbErr(await r.text()));
+    const prof = A.customerProfile || {}, m = A.userMeta || {};
+    /* база требует имя в записи профиля — берём уже сохранённое имя (как приложение) */
+    const given = String(prof.given_name || m.given_name || m.name || m.full_name || A.uname || '').trim();
+    if (!given) throw new Error('Сначала укажите имя в профиле');
+    await saveCustomerProfile(Object.assign({}, prof, { given_name: prof.given_name || given, avatar_path: path }));
+    const url = await getCustomerAvatarUrl();
+    repaintMine(url);
+    return url;
+  }
+  async function saveOrg(blob){
+    await ready();
+    if (!A.tok || !lord()) throw new Error('Только для арендодателя');
+    const url = await uploadPublic(blob);
+    await api('/rest/v1/admins?email=eq.' + encodeURIComponent(low(A.me)), 'PATCH', { org_avatar: url }, { Prefer: 'return=minimal' });
+    drop('p:');
+    keep('org:' + low(A.me), url, TTL_PUBLIC);
+    document.querySelectorAll('[data-ava-org]').forEach(function(el){ reset(el); put(el, url); });
+    return url;
+  }
+
+  /* ---------- Выбор фото и область кругом (как в приложении 10.98/10.109) ---------- */
+  function pick(title, save){
+    const inp = document.createElement('input');
+    inp.type = 'file'; inp.accept = 'image/*';
+    inp.onchange = function(){
+      const f = inp.files && inp.files[0];
+      if (!f) return;
+      if (!/^image\//.test(f.type)){ toast('Выберите изображение'); return; }
+      const src = URL.createObjectURL(f), img = new Image();
+      img.onload = function(){ editor(img, title, save, src); };
+      img.onerror = function(){ URL.revokeObjectURL(src); toast('Файл не читается — выберите другое фото'); };
+      img.src = src;
+    };
+    inp.click();
+  }
+  function editor(img, title, save, src){
+    const S = 560, M = 10;                 // холст и отступ круга
+    let rot = 0, z = 1, ox = 0, oy = 0;
+    openSheet(title || 'Фото профиля',
+      '<div class="ava-crop"><canvas id="avaCv" width="' + S + '" height="' + S + '" aria-label="Область фото"></canvas></div>' +
+      '<input type="range" class="ava-zoom" id="avaZoom" min="1" max="4" step="0.01" value="1" aria-label="Масштаб">' +
+      '<p class="small muted" style="text-align:center;margin:0">Двигайте фото пальцем или мышью, масштаб — ползунком, колёсиком или двумя пальцами. ' +
+        'В кружке — то, что увидят другие.</p>',
+      '<div style="display:flex;gap:10px;width:100%"><button class="btn sec" type="button" id="avaRot">Повернуть</button>' +
+      '<button class="btn" type="button" id="avaSave" style="flex:1">Сохранить</button></div>');
+    const cv = $('avaCv'), ctx = cv.getContext('2d'), zoom = $('avaZoom');
+    function dims(){ return rot % 2 ? [img.height, img.width] : [img.width, img.height]; }
+    function scale(){ const d = dims(); return (S - 2 * M) / Math.min(d[0], d[1]) * z; }
+    function clamp(){
+      const d = dims(), k = scale();
+      const mx = Math.max(0, (d[0] * k - (S - 2 * M)) / 2), my = Math.max(0, (d[1] * k - (S - 2 * M)) / 2);
+      ox = Math.max(-mx, Math.min(mx, ox)); oy = Math.max(-my, Math.min(my, oy));
+    }
+    function drawImg(c){
+      const k = scale();
+      c.save();
+      c.translate(S / 2 + ox, S / 2 + oy);
+      c.rotate(rot * Math.PI / 2);
+      c.drawImage(img, -img.width * k / 2, -img.height * k / 2, img.width * k, img.height * k);
+      c.restore();
+    }
+    function draw(){
+      clamp();
+      ctx.fillStyle = '#000'; ctx.fillRect(0, 0, S, S);
+      drawImg(ctx);
+      ctx.save();
+      ctx.fillStyle = 'rgba(16,18,23,.62)';
+      ctx.beginPath(); ctx.rect(0, 0, S, S); ctx.arc(S / 2, S / 2, S / 2 - M, 0, Math.PI * 2, true); ctx.fill();
+      ctx.strokeStyle = 'rgba(255,143,31,.9)'; ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.arc(S / 2, S / 2, S / 2 - M, 0, Math.PI * 2); ctx.stroke();
+      ctx.restore();
+    }
+    function setZoom(v){ z = Math.max(1, Math.min(4, v)); zoom.value = z; draw(); }
+    const pts = {};
+    let pinch0 = 0, z0 = 1;
+    function ratio(){ const r = cv.getBoundingClientRect(); return r.width ? S / r.width : 1; }
+    cv.addEventListener('pointerdown', function(e){
+      cv.setPointerCapture(e.pointerId); pts[e.pointerId] = [e.clientX, e.clientY];
+      const ids = Object.keys(pts);
+      if (ids.length === 2){ const a = pts[ids[0]], b = pts[ids[1]]; pinch0 = Math.hypot(a[0] - b[0], a[1] - b[1]); z0 = z; }
+    });
+    cv.addEventListener('pointermove', function(e){
+      const p = pts[e.pointerId];
+      if (!p) return;
+      const ids = Object.keys(pts);
+      if (ids.length === 1){
+        const k = ratio();
+        ox += (e.clientX - p[0]) * k; oy += (e.clientY - p[1]) * k;
+        pts[e.pointerId] = [e.clientX, e.clientY];
+        draw();
+      } else if (ids.length === 2){
+        pts[e.pointerId] = [e.clientX, e.clientY];
+        const a = pts[ids[0]], b = pts[ids[1]], d = Math.hypot(a[0] - b[0], a[1] - b[1]);
+        if (pinch0 > 0) setZoom(z0 * d / pinch0);
+      }
+    });
+    function up(e){ delete pts[e.pointerId]; pinch0 = 0; }
+    cv.addEventListener('pointerup', up); cv.addEventListener('pointercancel', up);
+    cv.addEventListener('wheel', function(e){ e.preventDefault(); setZoom(z * (e.deltaY < 0 ? 1.08 : 1 / 1.08)); }, { passive: false });
+    zoom.addEventListener('input', function(){ setZoom(Number(zoom.value) || 1); });
+    $('avaRot').onclick = function(){ rot = (rot + 1) % 4; const t = ox; ox = -oy; oy = t; draw(); };
+    $('avaSave').onclick = async function(){
+      const b = this, rb = $('avaRot');
+      b.disabled = true; rb.disabled = true; b.textContent = 'Сохраняем…';
+      try {
+        const out = document.createElement('canvas'), O = 512, k = O / (S - 2 * M);
+        out.width = out.height = O;
+        const c = out.getContext('2d');
+        c.fillStyle = '#fff'; c.fillRect(0, 0, O, O);
+        c.scale(k, k); c.translate(-M, -M);
+        drawImg(c);
+        const blob = await new Promise(function(res){ out.toBlob(res, 'image/jpeg', 0.88); });
+        if (!blob) throw new Error('не удалось подготовить фото');
+        await save(blob);
+        try { URL.revokeObjectURL(src); } catch(e){}
+        closeSheet();
+        toast('Фото сохранено');
+      } catch(e){
+        b.disabled = false; rb.disabled = false; b.textContent = 'Сохранить';
+        toast('Фото не сохранено: ' + ((e && e.message) || 'нет связи'));
+      }
+    };
+    draw();
+  }
+
+  return { paint: paint, of: of, mine: mine, prokat: prokat, myOrg: myOrg, pick: pick,
+           saveMine: saveMine, saveOrg: saveOrg, reset: reset };
+})();

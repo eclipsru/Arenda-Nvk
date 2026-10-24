@@ -7,8 +7,10 @@
 <title>Ива — аренда инструмента в Новочеркасске</title>
 <meta name="description" content="Ива — площадка аренды инструмента: электроинструмент, стройоборудование, садовая техника. Цена за сутки, возвратный залог, доставка по городу.">
 <meta name="theme-color" content="#101217">
-<link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
-<link rel="stylesheet" href="assets/theme.css?v=20261005-rel">
+<link rel="icon" href="assets/favicon-32.png" type="image/png" sizes="32x32">
+<link rel="icon" href="assets/icon-192.png" type="image/png" sizes="192x192">
+<link rel="apple-touch-icon" href="assets/apple-touch-icon.png">
+<link rel="stylesheet" href="assets/theme.css?v=20261024-live">
 <link rel="stylesheet" href="assets/partners.css?v=20260923-info-spacing">
 <link rel="stylesheet" href="assets/geo.css?v=20260923-photon">
 </head>
@@ -49,10 +51,11 @@
             <span class="found" id="found"></span>
             <div class="sort">
               <span>Сортировка</span>
-              <select class="inp" id="sort" aria-label="Сначала по состоянию инструмента">
-                <option value="new">Новые</option>
-                <option value="good">Хорошие</option>
-                <option value="work">Рабочие</option>
+              <select class="inp" id="sort" aria-label="Сортировка объявлений">
+                <option value="fresh">Сначала новые</option>
+                <option value="cheap">Сначала дешевле</option>
+                <option value="dear">Сначала дороже</option>
+                <option value="rating">По рейтингу</option>
               </select>
             </div>
           </div>
@@ -66,13 +69,13 @@
         <div class="cats-head"><h2 id="usefulInfoTitle">Полезная информация</h2></div>
         <div class="useful-card">
           <span class="partner-kicker">Для арендодателей</span>
-          <h3>Успей стать <em>первым Арендателем</em> в своём городе!</h3>
+          <h3>Успей стать <em>первым арендодателем</em> в своём городе!</h3>
           <p>Сдавайте инструмент через «Иву». Покажите свой ассортимент людям, которым он нужен для ремонта, стройки и работы.</p>
           <ul><li>Свой каталог инструментов и условия аренды.</li><li>Заявки и сообщения от клиентов.</li><li>Учёт комиссии в кабинете арендодателя.</li></ul>
-          <p>Подключаем самозанятых, ИП и компании. Доступ — после проверки владельцем площадки.</p>
+          <p>Как подключиться: напишите владельцу площадки — обсудим условия, и после его одобрения вы станете арендодателем.</p>
           <div class="partner-actions">
             <button class="btn sec wide" id="partnerDetailsBtn" type="button">Подробнее</button>
-            <a class="btn wide" href="landlord-register.html">Зарегистрироваться</a>
+            <a class="btn wide" id="partnerLendBtn" href="chat.html?who=eclips.ru%40mail.ru&amp;lend=1">Написать владельцу</a>
           </div>
           <p class="partner-note">Комиссия площадки — 1% от суммы аренды в первый год, лимит — индивидуально. Первенство и эксклюзивность в городе не гарантируются.</p>
         </div>
@@ -88,11 +91,11 @@
 
 <script src="assets/data.js"></script>
 <script src="assets/geo.js?v=20260923-photon"></script>
-<script src="assets/email-guard.js?v=20260926-email"></script><script src="assets/sb.js?v=20260926-email"></script>
+<script src="assets/email-guard.js?v=20260926-email"></script><script src="assets/sb.js?v=20261024-live"></script>
 <script src="assets/app-release.js?v=20261009-rel"></script>
-<script src="assets/app.js?v=20261009-rel"></script>
+<script src="assets/app.js?v=20261024-live"></script>
 <script src="assets/clicks.js?v=20261001-p4"></script>
-<script src="assets/partners.js?v=20261003-p6-texts"></script>
+<script src="assets/partners.js?v=20261020-lend"></script>
 <script>
 (function(){
   mountChrome('home', '');
@@ -103,15 +106,82 @@
     q:'', cat:'', sub:'', city:getCity(),
     priceFrom:0, priceTo:0, conds:[], delivery:false
   };
-  var SORT = 'new';
+  var SORT = 'fresh';
 
   /* Уровень плиток: '' — категории, иначе показываем подкатегории этой категории */
   var LEVEL = '';
 
   /* ---------- Плитки ---------- */
+  /* Картинки категорий (предмет без фона, 16.10.2026): ключ → [ширина, высота] файла assets/cat/<ключ>-cut.webp.
+     Категории без картинки показываются обычной плиткой с иконкой. */
+  /* Размеры картинок пишет tools/cat-art-map.py (сам находит assets/cat/<ключ>-cut.webp и assets/cat/sub/<ключ>-cut.webp).
+     Подкатегории (20.10.2026): у каждой свой инструмент; «Другое» (ключ …-other) показывает картинку своей категории;
+     подкатегория без картинки — обычная плитка с иконкой. */
+  /* ART:BEGIN */
+  var CAT_ART = {
+    'auto':[370,640], 'cleaning':[442,624], 'climate':[278,640], 'compressors':[348,640],
+    'construction':[455,640], 'cutting':[309,640], 'garden':[529,640], 'generators':[589,494],
+    'measuring':[331,640], 'moving':[341,640], 'painting':[455,640], 'plumbing':[493,640],
+    'power':[442,608], 'surface':[304,640], 'welding':[405,627]
+  };
+  var SUB_ART = {
+    'aut-lift':[739,640], 'aut-start':[663,565], 'clm-dry':[356,624], 'clm-fan':[320,640],
+    'clm-heat':[630,583], 'cln-floor':[501,640], 'cln-pressure':[317,582], 'cln-vacuum':[381,640],
+    'cln-wash':[313,565], 'cmp-air':[327,640], 'cmp-pumps':[684,552], 'con-compact':[394,640],
+    'con-earth':[378,640], 'con-formwork':[405,570], 'con-rebar':[587,613], 'con-trowel':[772,640],
+    'con-vibro':[302,640], 'concrete':[504,640], 'cut-chasers':[300,640], 'cut-concrete':[526,532],
+    'cut-diamond':[241,640], 'cut-tile':[552,640], 'dlya-lkp':[269,640], 'drills':[427,584],
+    'gar-cleanup':[673,640], 'gar-soil':[590,640], 'gen-gen':[686,584], 'gen-light':[273,640],
+    'gen-power':[500,640], 'grinders':[349,627], 'hammers':[363,508], 'hand-trucks':[632,640],
+    'lawnmowers':[661,640], 'mov-lift':[244,640], 'msr-detect':[332,640], 'msr-level':[329,640],
+    'msr-range':[215,502], 'plb-clean':[336,640], 'plb-solder':[206,640], 'plb-thread':[256,640],
+    'pnt-plaster':[533,640], 'pnt-spray':[340,508], 'power-breakers':[151,640],
+    'power-fasteners':[509,582], 'power-misc':[317,640], 'power-sanders':[433,560],
+    'power-saws':[464,552], 'scaffolding':[412,640], 'semniki':[340,640], 'sur-concrete':[377,640],
+    'sur-walls':[145,640], 'sur-wood':[681,640], 'trimmers':[204,640], 'wld-cut':[337,461],
+    'wld-weld':[430,640]
+  };
+  /* ART:END */
+  /* Подпись на плитке: «Клининговое оборудование» по просьбе владельца — «Уборка и мойка»;
+     длинные слова получают мягкие переносы, чтобы влезать в узкую плитку. */
+  var TILE_TITLE = { cleaning:'Уборка и мойка' };
+  var SOFT = { 'Электроинструмент':'Электро&shy;инстру&shy;мент', 'Стройоборудование':'Строй&shy;обору&shy;дование',
+    'оборудование':'обору&shy;дование', 'Измерительные':'Измери&shy;тельные', 'электропитание':'электро&shy;питание',
+    'инструмент':'инстру&shy;мент', 'Виброоборудование':'Вибро&shy;обору&shy;дование',
+    'Строительные':'Строи&shy;тельные', 'Электроснабжение':'Электро&shy;снабжение' };
+  function tileTitle(c){
+    return esc(TILE_TITLE[c.key] || c.title).split(' ').map(softWord).join(' ');
+  }
+  /* Мягкие переносы для длинных слов подкатегорий («Поломоечные», «Пуско-зарядные»): между гласной и согласной,
+     не ближе 3 букв к краю слова. Перенос виден только там, где слово не влезает в строку. */
+  function softWord(w){
+    if (SOFT[w]) return SOFT[w];
+    var tail = (w.match(/[^а-яёА-ЯЁ]+$/) || [''])[0];
+    if (tail){ w = w.slice(0, w.length - tail.length); if (SOFT[w]) return SOFT[w] + tail; }
+    if (w.length < 10) return w + tail;
+    /* после гласной: одна согласная уходит на новую строку («Изме-ри-тель-ные»), из нескольких — первая остаётся
+       («Шлиф-ма-ши-ны»); «й», «ь», «ъ» не отрываются от предыдущей буквы */
+    var V = /[аеёиоуыэюя]/i, out = '', last = 0;
+    for (var i = 0; i < w.length; i++){
+      if (!V.test(w[i])) continue;
+      var j = i + 1;
+      while (j < w.length && !V.test(w[j]) && /[а-яё]/i.test(w[j])) j++;
+      if (j >= w.length || !V.test(w[j])) break;
+      var cut = (j - i - 1) <= 1 ? i + 1 : i + 2;
+      while (cut < j && 'йьъ'.indexOf(w[cut].toLowerCase()) >= 0) cut++;
+      if (cut - last >= 3 && w.length - cut >= 3 && /[аеёиоуыэюя]/i.test(w.slice(last, cut))){ out += w.slice(last, cut) + '&shy;'; last = cut; }
+    }
+    return out + w.slice(last) + tail;
+  }
+  function subTitle2(t){ return esc(t).split(' ').map(softWord).join(' '); }
+  function artImg(path, art){
+    return '<img src="assets/cat/' + path + '-cut.webp?v=20261021" width="' + art[0] + '" height="' + art[1] + '" alt="" decoding="async" loading="lazy">';
+  }
+
   function renderCats(){
     var box = $('cats');
     var h = '';
+    box.className = 'cats' + (!LEVEL ? ' pop' : '');
 
     if (!LEVEL){
       /* Верхний уровень: все категории */
@@ -122,6 +192,15 @@
         var n = ADS.filter(function(a){
           return a.status === 'active' && (!F.city || cityMatches(a.city,F.city)) && a.cat === c.key;
         }).length;
+        var art = CAT_ART[c.key];
+        if (art){
+          /* Плитка с предметом без фона: предмет слева выходит вверх за плитку, название — справа внизу */
+          return '<button type="button" class="cat pop' + (F.cat === c.key ? ' on' : '') +
+                   '" data-cat="' + esc(c.key) + '" title="' + esc(c.title) + ' — ' + n + ' ' + plural(n,'объявление','объявления','объявлений') + '">' +
+                   '<img src="assets/cat/' + c.key + '-cut.webp?v=20261021" width="' + art[0] + '" height="' + art[1] + '" alt="" decoding="async">' +
+                   '<b>' + tileTitle(c) + '</b>' +
+                 '</button>';
+        }
         return '<button type="button" class="cat' + (F.cat === c.key ? ' on' : '') +
                  '" data-cat="' + esc(c.key) + '">' +
                  '<span class="ico">' + (ICONS[c.key] || ICONS.power) + '</span>' +
@@ -150,6 +229,14 @@
       var nAll = ADS.filter(function(a){
         return a.status === 'active' && (!F.city || cityMatches(a.city,F.city)) && a.cat === LEVEL;
       }).length;
+      var catArt = CAT_ART[LEVEL];
+      var anyArt = !!catArt || subs.some(function(s){ return !!SUB_ART[s.key]; });
+      if (anyArt) box.className = 'cats pop sub';
+      if (anyArt && catArt){
+        h += '<button type="button" class="cat pop' + (!F.sub ? ' on' : '') + '" data-sub="" title="Все: ' + esc(cTitle) + ' — ' + nAll + ' ' + plural(nAll,'объявление','объявления','объявлений') + '">' +
+               artImg(LEVEL, catArt) + '<b>Все ' + subTitle2(cTitle.toLowerCase()) + '</b>' +
+             '</button>';
+      } else
       h += '<button type="button" class="cat' + (!F.sub ? ' on' : '') + '" data-sub="">' +
              '<span class="ico">' + (ICONS[LEVEL] || ICONS.power) + '</span>' +
              '<b>Все ' + esc(cTitle.toLowerCase()) + '</b>' +
@@ -160,6 +247,15 @@
         var n = ADS.filter(function(a){
           return a.status === 'active' && (!F.city || cityMatches(a.city,F.city)) && a.cat === LEVEL && a.sub === s.key;
         }).length;
+        /* своя картинка подкатегории; «Другое» — картинка категории */
+        var sArt = SUB_ART[s.key], sPath = 'sub/' + s.key;
+        if (!sArt && /-other$/.test(s.key) && catArt){ sArt = catArt; sPath = LEVEL; }
+        if (anyArt && sArt){
+          return '<button type="button" class="cat pop' + (F.sub === s.key ? ' on' : '') + '" data-sub="' + esc(s.key) + '" title="' +
+                   esc(s.title) + ' — ' + n + ' ' + plural(n,'объявление','объявления','объявлений') + '">' +
+                   artImg(sPath, sArt) + '<b>' + subTitle2(s.title) + '</b>' +
+                 '</button>';
+        }
         return '<button type="button" class="cat' + (F.sub === s.key ? ' on' : '') +
                  '" data-sub="' + esc(s.key) + '">' +
                  '<span class="ico">' + (ICONS[LEVEL] || ICONS.power) + '</span>' +

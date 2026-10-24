@@ -5,8 +5,10 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Объявление — Ива, аренда инструмента</title>
 <meta name="theme-color" content="#101217">
-<link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
-<link rel="stylesheet" href="assets/theme.css?v=20261005-rel">
+<link rel="icon" href="assets/favicon-32.png" type="image/png" sizes="32x32">
+<link rel="icon" href="assets/icon-192.png" type="image/png" sizes="192x192">
+<link rel="apple-touch-icon" href="assets/apple-touch-icon.png">
+<link rel="stylesheet" href="assets/theme.css?v=20261024-live">
 <link rel="stylesheet" href="assets/profile.css?v=20260923-rental-profile">
 <link rel="stylesheet" href="assets/geo.css?v=20260923-photon">
 <style>
@@ -40,9 +42,10 @@
 
 <script src="assets/data.js"></script>
 <script src="assets/geo.js?v=20260923-photon"></script>
-<script src="assets/sb.js?v=20260924-order-fee"></script>
+<script src="assets/sb.js?v=20261024-live"></script>
+<script src="assets/models.js?v=20261020-power"></script>
 <script src="assets/app-release.js?v=20261009-rel"></script>
-<script src="assets/app.js?v=20261009-rel"></script>
+<script src="assets/app.js?v=20261024-live"></script>
 <script>
 (async function(){
   mountChrome('', '');
@@ -88,8 +91,10 @@
   var specRows = '';
   specRows += '<div class="spec"><dt>Категория</dt><dd>' + esc(catTitle(ad.cat)) +
               (ad.sub ? ' · ' + esc(subTitle(ad.sub)) : '') + '</dd></div>';
-  specRows += '<div class="spec"><dt>Состояние</dt><dd>' + esc(condTitle(ad.cond)) + '</dd></div>';
-  Object.keys(ad.specs).forEach(function(k){
+  specRows += '<div class="spec" id="specCond"><dt>Состояние</dt><dd>' + esc(condTitle(ad.cond)) + '</dd></div>';
+  /* «Доставка» и «Минимальный срок» есть и в ad.specs (sb.js buildSpecs) — раньше показывались дважды */
+  Object.keys(ad.specs || {}).forEach(function(k){
+    if (k === 'Доставка' || k === 'Минимальный срок') return;
     specRows += '<div class="spec"><dt>' + esc(k) + '</dt><dd>' + esc(ad.specs[k]) + '</dd></div>';
   });
   specRows += '<div class="spec"><dt>Доставка</dt><dd>' +
@@ -158,9 +163,8 @@
       '<div class="box">' +
         '<h3>Условия аренды</h3>' +
         '<p style="color:var(--gr);line-height:1.7;font-size:14px">' +
-          'Документы: паспорт РФ, договор оформляется за пару минут.<br>' +
           'Залог возвращается полностью при исправном возврате инструмента.<br>' +
-          'Оплата за сутки вперёд — наличными или переводом.<br>' +
+          'Документы и способ оплаты уточняйте у арендодателя — в чате или по телефону.<br>' +
           'Расходники (диски, буры, леска) — за счёт арендатора.' +
         '</p>' +
       '</div>' +
@@ -195,11 +199,15 @@
           '</button>' +
         '</div>' +
       '</div>' +
+      '<div class="box" id="deliveryEstimate" aria-live="polite">' +
+        '<h3 style="font-size:14px">Расстояние и доставка</h3>' +
+        '<p class="small muted" id="deliveryEstimateText" style="line-height:1.55">Расчёт выполняется…</p>' +
+      '</div>' +
 
       /* Арендодатель */
       '<div class="box">' +
         '<div class="owner">' +
-          '<div class="ava">' + esc(initials(owner.name)) + '</div>' +
+          '<div class="ava" id="ownerAva" data-ava-owner="' + esc(ad.owner || '') + '">' + esc(initials(owner.name)) + '</div>' +
           '<div>' +
             '<div class="nm">' + esc(owner.name) +
               (owner.verified ? ' <span class="badge new" style="margin-left:4px">Проверен</span>' : '') +
@@ -210,7 +218,7 @@
         '</div>' +
         '<div class="small muted" style="margin-top:12px">' +
           'На площадке с ' + esc(owner.since) + '<br>' +
-          'Выдача: ' + esc(((ad.terms||'').match(/Адрес выдачи:\s*(.+)/)||[])[1]||ad.city) +
+          'Выдача: ' + esc(ad.pickup_address || ((ad.terms||'').match(/Адрес выдачи:\s*(.+)/i)||[])[1] || ad.city) +
         '</div>' + contactBlock +
       '</div>' +
 
@@ -232,6 +240,55 @@
         '<a href="catalog.html?cat=' + ad.cat + '">Все в категории →</a></div>' +
       '<div class="grid">' + similar.map(adCard).join('') + '</div>' +
     '</section>' : '');
+
+  /* 10.83: «Вид» и характеристики объявления (tools.kind / tools.specs) — после «Состояния». Нет данных или SQL
+     не применён — блок как раньше. */
+  (async function paintToolSpecs(){
+    try {
+      if (typeof ivaToolSpecs !== 'function') return;
+      const r = await ivaToolSpecs(api, ad.id);
+      const at = $('specCond');
+      if (!r || !r.rows.length || !at || document.querySelector('[data-tspec]')) return;
+      at.insertAdjacentHTML('afterend', r.rows.map(function(x){
+        return '<div class="spec" data-tspec><dt>' + esc(x[0]) + '</dt><dd>' + esc(x[1]) + '</dd></div>';
+      }).join(''));
+    } catch(e){}
+  })();
+
+  /* Аватарка проката (21.10.2026): логотип из «Данных проката» пункта, где лежит инструмент
+     (iva_prokat_points, как в приложении), иначе фото арендодателя, иначе буквы. */
+  (async function paintOwnerAva(){
+    const el = $('ownerAva');
+    if (!el || typeof IvaAva === 'undefined') return;
+    try {
+      const r = await api('/rest/v1/tools?select=point_id&id=eq.' + encodeURIComponent(ad.id));
+      if (r && r[0] && r[0].point_id) el.setAttribute('data-ava-point', r[0].point_id);
+    } catch(e){}
+    IvaAva.paint(el);
+  })();
+
+  /* Карточка сама показывает ориентировочный тариф при открытии. Адрес
+     клиента не выводится — он используется только локально для расчёта. */
+  (async function paintDeliveryEstimate(){
+    try {
+      if (!isAuthed()) await restoreSess();
+      const el = $('deliveryEstimateText');
+      if (!el) return;
+      const r = IvaDistance.estimate(ad);
+      const result = await r;
+      if (result.ok){
+        el.innerHTML = 'До пункта выдачи: <b>' + result.km + ' км</b>.' +
+          (ad.delivery
+            ? '<br>Ориентировочная доставка: <b style="color:var(--or)">' + rub(result.cost) + '</b> (' + result.km + ' км × ' + result.rate + ' ₽/км). Точную сумму подтвердит арендодатель.'
+            : '<br>Доставка в объявлении не указана — <b>самовывоз</b>.');
+      } else {
+        const why = IvaDistance.fallback(result.reason);
+        el.textContent = ad.delivery
+          ? why + '. После входа и сохранения адреса стоимость рассчитуется по тарифу объявления.'
+          : why + '. Доступен самовывоз: ' + pickupAddr + '.';
+      }
+    } catch(e){}
+  })();
 
   /* ---------- Галерея ---------- */
   var cur = 0;
@@ -264,6 +321,32 @@
     }, {passive:true});
   }
 
+  /* ---------- Липкая панель заявки на телефоне (этап B сайта, 20.10.2026) ----------
+     На узком экране правая колонка с ценой и «Оформить заявку» уезжает под фото, описание и характеристики —
+     человек листает несколько экранов, чтобы заказать. Панель внизу появляется, пока основная кнопка не видна,
+     и нажимает те же кнопки (вся логика заявки и чата — прежняя). */
+  (function(){
+    if ((ad.owner || '').toLowerCase() === (A.me || '').toLowerCase() && A.me) return;
+    var bar = document.createElement('div');
+    bar.className = 'tool-cta';
+    bar.id = 'toolCta';
+    bar.innerHTML =
+      '<div class="tool-cta-price"><b>' + rub(ad.price) + ' <small>/ сутки</small></b><span>залог ' + rub(dep) + '</span></div>' +
+      '<button class="btn sec tool-cta-write" type="button" aria-label="Написать арендодателю">' +
+        '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 11.5a8.4 8.4 0 0 1-9 8.4 8.4 8.4 0 0 1-3.8-.9L3 21l2-5.2a8.4 8.4 0 0 1-.9-3.8 8.4 8.4 0 0 1 8.4-8.4h.5a8.4 8.4 0 0 1 8 8z"/></svg>' +
+      '</button>' +
+      '<button class="btn tool-cta-order" type="button"><span class="l">Оформить заявку</span><span class="s">Оформить</span></button>';
+    document.body.appendChild(bar);
+    document.body.classList.add('has-tool-cta');
+    bar.querySelector('.tool-cta-order').addEventListener('click', function(){ $('orderBtn').click(); });
+    bar.querySelector('.tool-cta-write').addEventListener('click', function(){ $('writeBtn').click(); });
+    if ('IntersectionObserver' in window){
+      new IntersectionObserver(function(es){
+        bar.classList.toggle('show', !es[0].isIntersecting);
+      }).observe($('orderBtn'));
+    } else bar.classList.add('show');
+  })();
+
   /* ---------- Кнопка «Оформить заявку» ---------- */
   $('orderBtn').addEventListener('click', async function(){
     if (!isAuthed()) await restoreSess();
@@ -272,7 +355,7 @@
       return;
     }
 
-    var pickupAddr = ((ad.terms||'').match(/Адрес выдачи:\s*(.+)/)||[])[1] || ad.pickup_city || ad.city || 'Уточняйте у арендодателя';
+    var pickupAddr = ad.pickup_address || ((ad.terms||'').match(/Адрес выдачи:\s*(.+)/i)||[])[1] || ad.pickup_city || ad.city || 'Уточняйте у арендодателя';
     var hasDelivery = !!ad.delivery;
     var delivRate = Number(ad.delivery_price) || 40;
     var defaultName = A.uname || (A.userMeta && (A.userMeta.full_name || A.userMeta.name)) || '';
@@ -281,18 +364,30 @@
     var days = 1;
     var isDelivery = false; // toggle switch for delivery
     var isRoundTrip = false; // toggle switch for round trip
-    var savedAddr = '';
+    var savedAddr = (A.customerProfile && A.customerProfile.address) || (A.userMeta && A.userMeta.address) || '';
     var savedComment = '';
     var agreeOn = false; // согласие на обработку ПД — не сбрасываем при перерисовке листа
     var destCoords = null;
     var deliveryKm = 0;
 
-    var originCoords = { lat: 47.4526182, lon: 40.1008652 }; // Базовая точка: Новочеркасск, ул. Маресьева, 36
-    if (window.IvaGeo && pickupAddr){
+    var originCoords = null;
+    if (ad.pickup_lat !== null && ad.pickup_lat !== '' && ad.pickup_lng !== null && ad.pickup_lng !== '' && isFinite(Number(ad.pickup_lat)) && isFinite(Number(ad.pickup_lng))){
+      originCoords = { lat: Number(ad.pickup_lat), lon: Number(ad.pickup_lng) };
+    } else if (window.IvaGeo && pickupAddr){
       IvaGeo.search(pickupAddr, 'address').then(function(res){
         if (res && res[0] && res[0].coordinates){
           originCoords = { lat: res[0].coordinates[1], lon: res[0].coordinates[0] };
           if (destCoords) updateDistance();
+        }
+      }).catch(function(){});
+    }
+    /* Адрес из приватного профиля подставляется только в форму самого
+       клиента и геокодируется для расчёта, но никуда не публикуется. */
+    if (savedAddr && window.IvaGeo){
+      IvaGeo.search(savedAddr, 'address').then(function(res){
+        if (res && res[0] && res[0].coordinates){
+          destCoords = { lat: res[0].coordinates[1], lon: res[0].coordinates[0] };
+          if (originCoords) updateDistance();
         }
       }).catch(function(){});
     }
@@ -309,7 +404,7 @@
     }
 
     function updateDistance(){
-      if (destCoords){
+      if (originCoords && destCoords){
         deliveryKm = havDist(originCoords.lat, originCoords.lon, destCoords.lat, destCoords.lon);
       } else {
         deliveryKm = 0;
@@ -327,8 +422,8 @@
 
     function renderOrderSheet(){
       var rentSum = (Number(ad.price) || 0) * days;
-      var km = deliveryKm > 0 ? deliveryKm : 1;
-      var oneWayCost = km * delivRate;
+      var km = deliveryKm > 0 ? deliveryKm : 0;
+      var oneWayCost = km > 0 ? km * delivRate : 0;
       var deliveryCost = isDelivery ? (isRoundTrip ? oneWayCost * 2 : oneWayCost) : 0;
       var totalSum = rentSum + dep + deliveryCost;
 
@@ -338,7 +433,7 @@
           distText = 'Расстояние: <b>' + deliveryKm + ' км</b> · ' + delivRate + ' ₽/км' +
             (isRoundTrip ? ' · <b>Туда и обратно (×2)</b> = <b>' + rub(deliveryCost) + '</b>' : ' = <b>' + rub(deliveryCost) + '</b>');
         } else if (savedAddr.trim()){
-          distText = 'Расчёт: от <b>' + rub(deliveryCost) + '</b> (' + (isRoundTrip ? 'туда и обратно, 2 × ' : '') + '1 км по ' + delivRate + ' ₽/км, точный километраж подтвердит арендодатель).';
+          distText = 'Адрес сохранён, но расстояние пока не определилось. Тариф — ' + delivRate + ' ₽/км; точную стоимость подтвердит арендодатель.';
         } else {
           distText = 'Укажите адрес доставки для расчёта расстояния по тарифу ' + delivRate + ' ₽/км.';
         }
@@ -467,8 +562,7 @@
           var detail = e.detail;
           if (detail && detail.coordinates){
             destCoords = { lat: detail.coordinates[1], lon: detail.coordinates[0] };
-            deliveryKm = havDist(originCoords.lat, originCoords.lon, destCoords.lat, destCoords.lon);
-            renderOrderSheet();
+            updateDistance();
           }
         });
         addrInp.addEventListener('change', function(){
@@ -477,8 +571,7 @@
             IvaGeo.search(this.value.trim(), 'address').then(function(res){
               if (res && res[0] && res[0].coordinates){
                 destCoords = { lat: res[0].coordinates[1], lon: res[0].coordinates[0] };
-                deliveryKm = havDist(originCoords.lat, originCoords.lon, destCoords.lat, destCoords.lon);
-                renderOrderSheet();
+                updateDistance();
               }
             }).catch(function(){});
           }
@@ -558,18 +651,20 @@
       btn.disabled = true;
       btn.textContent = 'Отправляем…';
 
-      var km = deliveryKm > 0 ? deliveryKm : 1;
-      var oneWay = km * delivRate;
+      var km = deliveryKm > 0 ? deliveryKm : 0;
+      var oneWay = km > 0 ? km * delivRate : 0;
       var delivCost = isDelivery ? (isRoundTrip ? oneWay * 2 : oneWay) : 0;
 
       var getMethodText = isDelivery
-        ? ('Доставка' + (isRoundTrip ? ' (туда-обратно)' : '') + ': ' + dAddr + ' — ' + rub(delivCost) + (deliveryKm ? (' (' + (isRoundTrip ? '2 × ' : '') + deliveryKm + ' км по ' + delivRate + ' ₽/км)') : ''))
+        ? ('Доставка' + (isRoundTrip ? ' (туда-обратно)' : '') + ': ' + dAddr + ' — ' +
+           (delivCost > 0 ? rub(delivCost) : 'стоимость подтвердит арендодатель') +
+           (deliveryKm ? (' (' + (isRoundTrip ? '2 × ' : '') + deliveryKm + ' км по ' + delivRate + ' ₽/км)') : ''))
         : ('Самовывоз, ' + pickupAddr);
 
       var commentPayload = 'Срок аренды: ' + days + ' ' + plural(days, 'сутки', 'суток', 'суток') +
         ' · Стоимость аренды: ' + rub((Number(ad.price)||0) * days) + ' · Залог: ' + rub(dep);
       if (isDelivery){
-        commentPayload += '\nДоставка: ' + (isRoundTrip ? 'туда и обратно (×2)' : 'в одну сторону') + ' — ' + rub(delivCost) + (deliveryKm ? (' (' + (isRoundTrip ? '2 × ' : '') + deliveryKm + ' км)') : '');
+        commentPayload += '\nДоставка: ' + (isRoundTrip ? 'туда и обратно (×2)' : 'в одну сторону') + ' — ' + (delivCost > 0 ? rub(delivCost) : 'стоимость подтвердит арендодатель') + (deliveryKm ? (' (' + (isRoundTrip ? '2 × ' : '') + deliveryKm + ' км)') : '');
       }
       if (cmt) commentPayload += '\n\n' + cmt;
 
@@ -626,7 +721,7 @@
         'пользователям — так арендодатель видит, кому отвечает. ' +
         'Можно и просто позвонить: ' + esc(owner.phone) + '.</p>',
         '<a class="btn sec" href="tel:' + owner.phone.replace(/[^\d+]/g,'') + '" style="flex:1">Позвонить</a>' +
-        '<a class="btn" href="account.html" style="flex:1">Войти</a>');
+        '<a class="btn" href="account.html?next=' + encodeURIComponent('chat.html?who=' + encodeURIComponent(ad.owner) + '&tool=' + encodeURIComponent(ad.id)) + '" style="flex:1">Войти</a>');
       return;
     }
     if ((ad.owner || '').toLowerCase() === A.me){
@@ -779,7 +874,7 @@
     function renderFormArea(){
       if (!isAuthed()){
         formArea.innerHTML = '<div class="review-callout">Оставить отзыв могут арендаторы после оформления заявки на инструмент. ' +
-          '<a href="cabinet.html" style="color:var(--or);font-weight:600">Войдите в аккаунт</a>, если вы уже брали этот инструмент.</div>';
+          '<a href="account.html?next=' + encodeURIComponent((location.pathname.split('/').pop() || 'tool.html') + location.search) + '" style="color:var(--or);font-weight:600">Войдите в аккаунт</a>, если вы уже брали этот инструмент.</div>';
         return;
       }
 

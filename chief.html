@@ -6,8 +6,10 @@
 <title>Управление площадкой — Ива</title>
 <meta name="robots" content="noindex, nofollow">
 <meta name="theme-color" content="#101217">
-<link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
-<link rel="stylesheet" href="assets/theme.css?v=20261005-rel">
+<link rel="icon" href="assets/favicon-32.png" type="image/png" sizes="32x32">
+<link rel="icon" href="assets/icon-192.png" type="image/png" sizes="192x192">
+<link rel="apple-touch-icon" href="assets/apple-touch-icon.png">
+<link rel="stylesheet" href="assets/theme.css?v=20261024-live">
 <style>
 .kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:12px;margin-bottom:22px}
 .kpi{background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:16px}
@@ -31,6 +33,20 @@
 .tabs button.on{color:var(--or);border-bottom-color:var(--or);font-weight:600}
 .tabs button .n{margin-left:6px;font-size:11.5px;background:var(--or);color:#fff;
   border-radius:9px;padding:1px 6px;font-weight:700}
+.chief-nav .cn-g{display:none}
+.chief-main{min-width:0}
+@media (min-width:1100px){
+  .chief-layout{display:grid;grid-template-columns:230px minmax(0,1fr);gap:24px;align-items:start}
+  .chief-nav{flex-direction:column;gap:2px;border-bottom:0;margin:0;overflow:visible;padding:10px;
+    background:var(--card);border:1px solid var(--line);border-radius:var(--r);position:sticky;top:14px}
+  .chief-nav .cn-g{display:block;font-size:11px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;
+    color:var(--g2);padding:12px 10px 4px}
+  .chief-nav .cn-g:first-child{padding-top:4px}
+  .chief-nav button{display:flex;align-items:center;justify-content:space-between;text-align:left;width:100%;
+    border-bottom:0;margin:0;border-radius:9px;padding:9px 10px;font-size:14px}
+  .chief-nav button:hover{background:var(--field)}
+  .chief-nav button.on{background:var(--or-soft);color:var(--or)}
+}
 
 .tbl{width:100%;border-collapse:collapse;font-size:14px}
 .tbl th{text-align:left;padding:10px 12px;color:var(--g2);font-size:12px;font-weight:600;
@@ -73,7 +89,10 @@
   .kpi .vl{font-size:21px}
   .mod-card{flex-wrap:wrap}
   .mod-card .mph{width:84px;height:66px}
-  .tbl th:nth-child(n+4),.tbl td:nth-child(n+4){display:none}
+  .tbl:not(.tc) th:nth-child(n+4),.tbl:not(.tc) td:nth-child(n+4){display:none}
+  .kpis{grid-template-columns:1fr 1fr;gap:10px}
+  .kpi{padding:13px}
+  .kpi .vl{font-size:19px;word-break:break-word}
 }
 </style>
 <link rel="stylesheet" href="assets/partners.css?v=20260923-info-spacing">
@@ -94,10 +113,11 @@
 
 <script src="assets/data.js"></script>
 <script src="assets/geo.js?v=20260923-photon"></script>
-<script src="assets/email-guard.js?v=20260926-email"></script><script src="assets/sb.js?v=20260926-email"></script>
+<script src="assets/email-guard.js?v=20260926-email"></script><script src="assets/sb.js?v=20261024-live"></script>
 <script src="assets/app-release.js?v=20261009-rel"></script>
-<script src="assets/app.js?v=20261009-rel"></script>
-<script src="assets/partners.js?v=20261003-p6-texts"></script>
+<script src="assets/app.js?v=20261024-live"></script>
+<script src="assets/partners.js?v=20261020-lend"></script>
+<script src="assets/model-proposals.js?v=20261018-stage4"></script>
 <script>
 (function(){
   mountChrome('chief', '');
@@ -112,6 +132,49 @@
     const d = new Date(s);
     return d.toLocaleDateString('ru-RU', {day:'2-digit', month:'2-digit', year:'2-digit'});
   };
+
+  /* ---------- Кабинеты, этап 4 (23.10.2026): поиск, статусы заявок, подробности, таблицы карточками на телефоне ---------- */
+  let ORD_Q = '', ADS_FILTER = 'all', ADS_Q = '';
+  /* статус заявки — по её частям (как в кабинете проката): цвета как в приложении — зелёная новая, жёлтая в аренде */
+  const ORD_ST = { new:['Новая','new'], rented:['В аренде','mod'], closed:['Завершена','done'], cancelled:['Отменена','off'] };
+  function partsMap(){
+    const pm = {};
+    D.parts.forEach(function(p){ (pm[p.order_id] = pm[p.order_id] || []).push(p); });
+    return pm;
+  }
+  function ordStatus(o, ps){
+    const st = (ps || []).map(function(p){ return p.status || 'new'; });
+    if (!st.length) return ORD_ST[o.status] ? o.status : 'new';
+    if (st.every(function(x){ return x === 'cancelled'; })) return 'cancelled';
+    if (st.some(function(x){ return x === 'rented'; })) return 'rented';
+    if (st.some(function(x){ return x === 'new'; })) return 'new';
+    return 'closed';
+  }
+  function stBadge(st){
+    const x = ORD_ST[st] || [st || '—', 'done'];
+    return '<span class="badge ' + x[1] + '">' + esc(x[0]) + '</span>';
+  }
+  function lordName(em){
+    em = (em || '').toLowerCase();
+    const a = D.admins.find(function(x){ return (x.email || '').toLowerCase() === em; });
+    return (a && (a.company || a.full_name)) || em.split('@')[0] || '—';
+  }
+  function qHit(q, arr){
+    return !q || arr.join(' ').toLowerCase().indexOf(q) >= 0;
+  }
+  function fChip(attr, val, cur, label, n){
+    return '<button class="chip" data-' + attr + '="' + val + '"' +
+      (cur === val ? ' style="border-color:var(--or);color:var(--or)"' : '') + '>' + label + ' · ' + n + '</button>';
+  }
+  /* на телефоне таблицы .tc показываются карточками: подпись столбца берём из заголовка */
+  function labelTables(root){
+    (root || document).querySelectorAll('table.tbl.tc').forEach(function(t){
+      const hs = Array.prototype.map.call(t.querySelectorAll('thead th'), function(th){ return th.textContent.trim(); });
+      t.querySelectorAll('tbody tr').forEach(function(tr){
+        Array.prototype.forEach.call(tr.children, function(td, i){ if (hs[i]) td.setAttribute('data-l', hs[i]); });
+      });
+    });
+  }
 
   /* ---------- Нет доступа ---------- */
   function screenDeny(msg, sub){
@@ -138,23 +201,54 @@
         '<a class="btn sm" href="ProkatInstrumenta-10.14.apk" data-app-dl="Скачать Android {v}" download>Скачать Android 10.14</a>' +
         '<span class="cnt">' + esc(A.me) + (isCreator() ? ' · создатель' : ' · владелец') + '</span>' +
       '</div></div>' +
-      '<div class="tabs">' +
+      /* Этап C сайта (20.10.2026): на компьютере разделы — боковым меню по группам (10 вкладок в строку не помещались),
+         на телефоне — прежняя прокручиваемая строка. data-tab и обработчики не менялись. */
+      '<div class="chief-layout"><nav class="tabs chief-nav" aria-label="Разделы управления">' +
+        '<span class="cn-g">Площадка</span>' +
         '<button data-tab="dash" class="' + (TAB==='dash'?'on':'') + '">Сводка</button>' +
         '<button data-tab="ord" class="'  + (TAB==='ord'?'on':'')  + '">Заявки</button>' +
         '<button data-tab="mod" class="'  + (TAB==='mod'?'on':'')  + '">Модерация' +
           (nMod ? '<span class="n">' + nMod + '</span>' : '') + '</button>' +
         '<button data-tab="ads" class="'  + (TAB==='ads'?'on':'')  + '">Объявления</button>' +
+        '<span class="cn-g">Люди</span>' +
         '<button data-tab="adm" class="'  + (TAB==='adm'?'on':'')  + '">Арендодатели</button>' +
         '<button data-tab="landlords" class="' + (TAB==='landlords'?'on':'') + '">Заявки арендодателей' +
           (D.landlordApps.filter(a=>a.status==='pending').length ? '<span class="n">' + D.landlordApps.filter(a=>a.status==='pending').length + '</span>' : '') + '</button>' +
+        '<span class="cn-g">Деньги</span>' +
         '<button data-tab="fee" class="'  + (TAB==='fee'?'on':'')  + '">Комиссия' +
           (nFee ? '<span class="n">' + nFee + '</span>' : '') + '</button>' +
+        '<span class="cn-g">Справочники</span>' +
         '<button data-tab="cat" class="'  + (TAB==='cat'?'on':'')  + '">Категории</button>' +
+        /* 10.84: предложенные админами модели справочника */
+        '<button data-tab="models" class="' + (TAB==='models'?'on':'') + '">Модели' +
+          (D.props && ivaPropPending(D.props) ? '<span class="n">' + ivaPropPending(D.props) + '</span>' : '') + '</button>' +
+        '<span class="cn-g">Рост</span>' +
         '<button data-tab="outreach" class="' + (TAB==='outreach'?'on':'') + '">🚀 Рассылка по РФ</button>' +
-      '</div>' + inner;
+      '</nav><div class="chief-main">' + inner + '</div></div>';
   }
 
   /* ---------- Сводка ---------- */
+  function chiefTodo(){
+    const nMod  = D.tools.filter(function(t){ return t.status === 'moderation'; }).length;
+    const nLand = D.landlordApps.filter(function(a){ return a.status === 'pending'; }).length;
+    const nFee  = D.fees.filter(function(f){ return f.status !== 'confirmed'; }).length;
+    const nProp = D.props && typeof ivaPropPending === 'function' ? ivaPropPending(D.props) : 0;
+    const pm = partsMap();
+    const nNew  = D.orders.filter(function(o){ return ordStatus(o, pm[o.id]) === 'new'; }).length;
+    const nOver = D.admins.filter(function(a){
+      const lim = Number(a.debt_limit) || 0, st = D.stats.byAdmin[(a.email || '').toLowerCase()];
+      return lim > 0 && st && st.debt > lim;
+    }).length;
+    const out = [];
+    if (nOver) out.push({ c:'red', n:nOver, t:'Превышен лимит долга', s:'Долг по комиссии больше лимита, который вы поставили арендодателю', go:'fee', b:'Посмотреть' });
+    if (nMod)  out.push({ c:'or', n:nMod, t:plural(nMod, 'Объявление ждёт проверки', 'Объявления ждут проверки', 'Объявлений ждут проверки'), s:'Не прошли автопроверку и пока не видны в каталоге', go:'mod', b:'Проверить' });
+    if (nLand) out.push({ c:'or', n:nLand, t:plural(nLand, 'Заявка в арендодатели', 'Заявки в арендодатели', 'Заявок в арендодатели'), s:'Человек ждёт вашего решения', go:'landlords', b:'Рассмотреть' });
+    if (nFee)  out.push({ c:'grn', n:nFee, t:plural(nFee, 'Выплата ждёт подтверждения', 'Выплаты ждут подтверждения', 'Выплат ждут подтверждения'), s:'Проверьте поступление и подтвердите', go:'fee', b:'Подтвердить' });
+    if (nProp) out.push({ c:'gr', n:nProp, t:plural(nProp, 'Предложенная модель', 'Предложенные модели', 'Предложенных моделей'), s:'Арендодатели предложили модели для справочника', go:'models', b:'Открыть' });
+    if (nNew)  out.push({ c:'gr', n:nNew, t:plural(nNew, 'Новая заявка', 'Новые заявки', 'Новых заявок'), s:'Прокаты ещё не выдали инструмент', go:'ord', of:'new', b:'Смотреть' });
+    return out;
+  }
+
   function viewDash(){
     const s = D.stats;
     const now = new Date();
@@ -164,42 +258,40 @@
     });
     const mRent = monthParts.reduce(function(a,p){ return a + (Number(p.rent_sum)||0); }, 0);
     const mFee  = monthParts.reduce(function(a,p){ return a + (Number(p.fee)||0); }, 0);
-    const newOrders = D.orders.filter(function(o){
-      return !o.status || o.status === 'new';
-    }).length;
+    const pm = partsMap();
+    const newOrders = D.orders.filter(function(o){ return ordStatus(o, pm[o.id]) === 'new'; }).length;
+    const nAct = D.tools.filter(function(t){ return t.status === 'active'; }).length;
+    const nMod = D.tools.filter(function(t){ return t.status === 'moderation'; }).length;
+    const todo = chiefTodo();
+    const kpi = function(go, extra, cls, lb, vl, sub){
+      return '<button type="button" class="kpi home-kpi' + (cls ? ' ' + cls : '') + '" data-ch-go="' + go + '"' + (extra || '') + '>' +
+        '<div class="lb">' + lb + '</div><div class="vl">' + vl + '</div><div class="sub">' + sub + '</div></button>';
+    };
 
-    return '<div class="apk-cards" id="apkCards"></div>' +
-      '<div class="kpis">' +
-        '<div class="kpi"><div class="lb">Оборот за всё время</div>' +
-          '<div class="vl">' + m(s.rent) + '</div>' +
-          '<div class="sub">' + D.parts.length + ' ' +
-            plural(D.parts.length,'заявка','заявки','заявок') + '</div></div>' +
-        '<div class="kpi"><div class="lb">Оборот за месяц</div>' +
-          '<div class="vl">' + m(mRent) + '</div>' +
-          '<div class="sub">комиссия ' + m(mFee) + '</div></div>' +
-        '<div class="kpi good"><div class="lb">Комиссия получена</div>' +
-          '<div class="vl">' + m(s.paid) + '</div>' +
-          '<div class="sub">из ' + m(s.fee) + ' начислено</div></div>' +
-        '<div class="kpi' + (s.owed > 0 ? ' warn' : '') + '"><div class="lb">Ожидает выплаты</div>' +
-          '<div class="vl">' + m(s.owed) + '</div>' +
-          '<div class="sub">' + (s.owed > 0 ? 'долг арендодателей' : 'все рассчитались') + '</div></div>' +
+    return '<div class="home-sec"><h3>Что сделать сейчас</h3>' +
+        (todo.length
+          ? '<div class="home-todo">' + todo.map(function(x){
+              return '<button type="button" class="home-row c-' + x.c + '" data-ch-go="' + x.go + '"' + (x.of ? ' data-ch-of="' + x.of + '"' : '') + '>' +
+                '<span class="home-n">' + esc(String(x.n)) + '</span>' +
+                '<span class="home-t"><b>' + esc(x.t) + '</b><span>' + esc(x.s) + '</span></span>' +
+                '<span class="home-b">' + esc(x.b) + ' →</span></button>';
+            }).join('') + '</div>'
+          : '<div class="home-done"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 16.2 4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4z"/></svg>' +
+            '<div><b>Всё сделано</b><span>Проверка, заявки в арендодатели и выплаты не ждут.</span></div></div>') +
       '</div>' +
 
-      '<div class="kpis">' +
-        '<div class="kpi"><div class="lb">Новые заявки</div>' +
-          '<div class="vl">' + newOrders + '</div>' +
-          '<div class="sub">всего ' + D.orders.length + '</div></div>' +
-        '<div class="kpi"><div class="lb">Объявлений в каталоге</div>' +
-          '<div class="vl">' + D.tools.filter(function(t){ return t.status==='active'; }).length + '</div>' +
-          '<div class="sub">всего ' + D.tools.length + '</div></div>' +
-        '<div class="kpi' + (D.tools.filter(function(t){return t.status==='moderation';}).length ? ' warn' : '') +
-          '"><div class="lb">Ждут проверки</div>' +
-          '<div class="vl">' + D.tools.filter(function(t){ return t.status==='moderation'; }).length + '</div>' +
-          '<div class="sub">не видны в каталоге</div></div>' +
-        '<div class="kpi"><div class="lb">Арендодателей</div>' +
-          '<div class="vl">' + D.admins.filter(function(a){ return a.active !== false; }).length + '</div>' +
-          '<div class="sub">всего ' + D.admins.length + '</div></div>' +
-      '</div>' +
+      '<div class="home-sec"><h3>Площадка в цифрах</h3><div class="kpis">' +
+        kpi('ord', '', '', 'Оборот за всё время', m(s.rent), D.parts.length + ' ' + plural(D.parts.length,'заявка','заявки','заявок')) +
+        kpi('ord', '', '', 'Оборот за месяц', m(mRent), 'комиссия ' + m(mFee)) +
+        kpi('fee', '', 'good', 'Комиссия получена', m(s.paid), 'из ' + m(s.fee) + ' начислено') +
+        kpi('fee', '', s.owed > 0 ? 'warn' : '', 'Ожидает выплаты', m(s.owed), s.owed > 0 ? 'долг арендодателей' : 'все рассчитались') +
+        kpi('ord', ' data-ch-of="new"', '', 'Новые заявки', newOrders, 'всего ' + D.orders.length) +
+        kpi('ads', ' data-ch-af="active"', '', 'Объявлений в каталоге', nAct, 'всего ' + D.tools.length) +
+        kpi('mod', '', nMod ? 'warn' : '', 'Ждут проверки', nMod, 'не видны в каталоге') +
+        kpi('adm', '', '', 'Арендодателей', D.admins.filter(function(a){ return a.active !== false; }).length, 'всего ' + D.admins.length) +
+      '</div></div>' +
+
+      '<div class="apk-cards" id="apkCards"></div>' +
 
       clicksPanel() +
 
@@ -295,6 +387,45 @@
   }
 
   /* ---------- Таблица арендодателей ---------- */
+  /* 20.10.2026 (решение владельца): клиент сам сдавать не может — пишет владельцу в чат,
+     владелец после разговора добавляет его здесь по почте аккаунта. Как «Добавить» в приложении (IvaAdminsPatch):
+     сначала iva_admin_add (SQL 20261102), без него — обычная вставка в admins. */
+  function admAddBar(){
+    return '<div class="box" style="padding:16px;margin-bottom:14px">' +
+      '<b style="font-size:15px">Добавить арендодателя</b>' +
+      '<p class="small muted" style="margin:4px 0 12px;line-height:1.5">Почта, с которой человек зарегистрировался на сайте или в приложении. ' +
+        'После добавления у него появятся «Мои объявления» и «Добавить».</p>' +
+      '<div style="display:flex;gap:8px;flex-wrap:wrap">' +
+        '<label for="admAddEmail" style="position:absolute;left:-9999px">Почта арендодателя</label>' +
+        '<input class="inp" id="admAddEmail" type="email" autocomplete="off" placeholder="ivan@mail.ru" style="flex:1;min-width:200px">' +
+        '<button class="btn" id="admAddGo">Добавить</button>' +
+      '</div></div>';
+  }
+  async function admAdd(btn){
+    const inp = $('admAddEmail');
+    const em = (inp.value || '').trim().toLowerCase();
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]{2,}$/.test(em)){ toast('Похоже, в почте ошибка (пример: ivan@mail.ru)'); inp.focus(); return; }
+    if (D.admins.some(function(x){ return (x.email || '').toLowerCase() === em && x.active !== false && !x.removed_at; })){
+      toast('Этот человек уже арендодатель'); return;
+    }
+    btn.disabled = true; btn.textContent = '…';
+    try {
+      try {
+        await api('/rest/v1/rpc/iva_admin_add', 'POST', { p_email: em });
+      } catch(err){
+        const m = String(err.message || '');
+        if (!/iva_admin_add|PGRST202|schema cache|Could not find the function|404/i.test(m)) throw err;
+        await api('/rest/v1/admins', 'POST', { email: em, role: 'admin', name: '' }, { Prefer:'return=minimal' });
+      }
+      D.admins = await loadAdmins();
+      render(); toast('Добавлен: ' + em + '. Напишите ему, что можно публиковать инструмент');
+    } catch(err){
+      btn.disabled = false; btn.textContent = 'Добавить';
+      const m = String(err.message || '');
+      toast(/duplicate|23505|already exists/i.test(m) ? 'Эта почта уже есть в списке — откройте «Настроить» и включите' : 'Не удалось: ' + m);
+    }
+  }
+
   function admTable(short){
     const rows = D.admins.map(function(a){
       const em = (a.email || '').toLowerCase();
@@ -313,7 +444,7 @@
         '<td class="num">' + m(st.fee) + '</td>' +
         '<td class="num">' + m(st.paid) + '</td>' +
         '<td class="num ' + (st.debt > 0 ? 'neg' : 'pos') + '">' +
-          (st.debt > 0 ? '−' + m(st.debt) : m(0)) +
+          m(st.debt > 0 ? st.debt : 0) +
           (blocked ? '<div class="small" style="color:var(--red)">лимит превышен</div>' : '') + '</td>' +
         (short ? '' :
           '<td><div class="acts">' +
@@ -326,57 +457,101 @@
       '</tr>';
     }).join('');
 
-    return '<div class="tbl-wrap"><table class="tbl"><thead><tr>' +
+    return '<div class="tbl-wrap tcw"><table class="tbl tc"><thead><tr>' +
       '<th>Арендодатель</th><th class="num">Комиссия</th>' +
       '<th class="num" title="Год с даты одобрения заявки (у подключённых вручную — с даты добавления) — когда пересматривать ставку">Год до</th>' +
       '<th class="num">Заявок</th>' +
       '<th class="num">Оборот</th><th class="num">Начислено</th>' +
       '<th class="num">Выплачено</th><th class="num">Долг</th>' +
       (short ? '' : '<th></th>') +
-      '</tr></thead><tbody>' + rows + '</tbody></table></div>';
+      '</tr></thead><tbody>' + (rows || '<tr><td colspan="9" class="muted">Арендодателей пока нет</td></tr>') + '</tbody></table></div>';
   }
 
   /* ---------- Заявки ---------- */
   function viewOrders(){
-    let list = D.orders.slice();
-    if (ORD_FILTER === 'new') list = list.filter(function(o){ return !o.status || o.status === 'new'; });
-
-    const partsBy = {};
-    D.parts.forEach(function(p){
-      (partsBy[p.order_id] = partsBy[p.order_id] || []).push(p);
-    });
-
-    let h = '<div class="f-row2">' +
-      '<button class="chip" data-of="all"' + (ORD_FILTER==='all'?' style="border-color:var(--or);color:var(--or)"':'') + '>Все · ' + D.orders.length + '</button>' +
-      '<button class="chip" data-of="new"' + (ORD_FILTER==='new'?' style="border-color:var(--or);color:var(--or)"':'') + '>Новые · ' +
-        D.orders.filter(function(o){ return !o.status || o.status==='new'; }).length + '</button>' +
-      '</div>';
-
-    if (!list.length){
-      return h + '<div class="empty"><b>Заявок нет</b><p>Здесь появятся заказы от арендаторов.</p></div>';
+    const pm = partsMap();
+    const c = { all: D.orders.length, new: 0, rented: 0, closed: 0, cancelled: 0 };
+    D.orders.forEach(function(o){ c[ordStatus(o, pm[o.id])]++; });
+    if (ORD_FILTER !== 'all' && !ORD_ST[ORD_FILTER]) ORD_FILTER = 'all';
+    if (!D.orders.length){
+      return '<div class="empty"><b>Заявок нет</b><p>Здесь появятся заказы от арендаторов.</p></div>';
     }
-
-    h += '<div class="tbl-wrap"><table class="tbl"><thead><tr>' +
-      '<th>№</th><th>Клиент</th><th>Инструмент</th><th class="num">Срок</th>' +
-      '<th class="num">Аренда</th><th class="num">Комиссия</th><th>Дата</th>' +
+    return '<div class="f-row2">' +
+        fChip('of', 'all', ORD_FILTER, 'Все', c.all) +
+        fChip('of', 'new', ORD_FILTER, 'Новые', c.new) +
+        fChip('of', 'rented', ORD_FILTER, 'В аренде', c.rented) +
+        fChip('of', 'closed', ORD_FILTER, 'Завершены', c.closed) +
+        fChip('of', 'cancelled', ORD_FILTER, 'Отменены', c.cancelled) +
+      '</div>' +
+      '<div class="ch-search"><label for="ordQ" class="sr-lbl">Поиск по заявкам</label>' +
+        '<input class="inp" id="ordQ" type="search" autocomplete="off" placeholder="№, клиент, телефон, инструмент, прокат" value="' + esc(ORD_Q) + '"></div>' +
+      '<div id="ordList">' + ordListHTML(pm) + '</div>';
+  }
+  function ordListHTML(pm){
+    pm = pm || partsMap();
+    const q = ORD_Q.trim().toLowerCase();
+    const list = D.orders.filter(function(o){
+      const ps = pm[o.id] || [];
+      if (ORD_FILTER !== 'all' && ordStatus(o, ps) !== ORD_FILTER) return false;
+      return qHit(q, [o.id, o.name, o.phone, o.user_email, o.tools].concat(ps.map(function(p){
+        return lordName(p.owner_email) + ' ' + (p.owner_email || '') + ' ' + (p.tools_text || '');
+      })));
+    });
+    if (!list.length){
+      return '<div class="empty"><b>Ничего не найдено</b><p>Измените фильтр или строку поиска.</p></div>';
+    }
+    return '<p class="small muted" style="margin:0 0 10px">Нажмите на заявку — откроются подробности.</p>' +
+      '<div class="tbl-wrap tcw"><table class="tbl tc"><thead><tr>' +
+      '<th>Заявка</th><th>Клиент</th><th>Инструмент</th><th>Прокат</th><th>Статус</th>' +
+      '<th class="num">Аренда</th><th class="num">Комиссия</th>' +
       '</tr></thead><tbody>' +
       list.map(function(o){
-        const ps = partsBy[o.id] || [];
+        const ps = pm[o.id] || [];
         const rent = ps.reduce(function(a,p){ return a + (Number(p.rent_sum)||0); }, 0);
         const fee  = ps.reduce(function(a,p){ return a + (Number(p.fee)||0); }, 0);
-        return '<tr>' +
-          '<td><b>' + o.id + '</b></td>' +
+        const lords = [];
+        ps.forEach(function(p){ const n = lordName(p.owner_email); if (lords.indexOf(n) < 0) lords.push(n); });
+        return '<tr class="ch-row" data-ord="' + esc(String(o.id)) + '" tabindex="0">' +
+          '<td><b>№ ' + esc(String(o.id)) + '</b><div class="small muted">' + dt(o.created_at) + ' · ' + (o.days || 1) + ' сут.</div></td>' +
           '<td>' + esc(o.name || '—') +
             '<div class="small muted">' + esc(o.phone || '') + '</div></td>' +
-          '<td style="max-width:230px">' + esc(o.tools || '—') + '</td>' +
-          '<td class="num">' + (o.days || 1) + ' сут.</td>' +
+          '<td class="ch-tools">' + esc(o.tools || '—') + '</td>' +
+          '<td>' + (lords.length ? esc(lords.join(', ')) : '<span class="muted">—</span>') + '</td>' +
+          '<td>' + stBadge(ordStatus(o, ps)) + '</td>' +
           '<td class="num">' + m(rent) + '</td>' +
           '<td class="num">' + m(fee) + '</td>' +
-          '<td>' + dt(o.created_at) + '</td>' +
         '</tr>';
       }).join('') +
       '</tbody></table></div>';
-    return h;
+  }
+  /* подробности заявки — в нижней панели, без перехода на другую страницу */
+  function openOrder(id){
+    const o = D.orders.find(function(x){ return String(x.id) === String(id); });
+    if (!o) return;
+    const ps = partsMap()[o.id] || [];
+    const rent = ps.reduce(function(a,p){ return a + (Number(p.rent_sum)||0); }, 0);
+    const fee  = ps.reduce(function(a,p){ return a + (Number(p.fee)||0); }, 0);
+    const kv = function(k, v){ return '<div class="ch-kv"><span>' + k + '</span><span>' + v + '</span></div>'; };
+    const tel = String(o.phone || '').replace(/[^\d+]/g, '');
+    const when = o.created_at ? new Date(o.created_at).toLocaleString('ru-RU', {day:'2-digit', month:'2-digit', year:'2-digit', hour:'2-digit', minute:'2-digit'}) : '—';
+    const body = '<div class="ch-od">' +
+      '<div class="ch-od-top">' + stBadge(ordStatus(o, ps)) + '<span class="small muted">' + esc(when) + '</span></div>' +
+      kv('Клиент', esc(o.name || '—')) +
+      (o.phone ? kv('Телефон', '<a href="tel:' + esc(tel) + '">' + esc(o.phone) + '</a>') : '') +
+      (o.user_email ? kv('Почта', esc(o.user_email)) : '') +
+      kv('Срок', (o.days || 1) + ' сут.') +
+      (o.get_method ? kv('Получение', esc(o.get_method) + (o.address ? ' — ' + esc(o.address) : '')) : '') +
+      (o.comment ? '<div class="lc-comment">' + esc(o.comment) + '</div>' : '') +
+      '<h4>По прокатам</h4>' +
+      (ps.length ? ps.map(function(p){
+        return '<div class="ch-op"><div class="ch-op-h"><b>' + esc(lordName(p.owner_email)) + '</b>' + stBadge(p.status || 'new') + '</div>' +
+          '<div class="small muted">' + esc(p.tools_text || o.tools || '') + '</div>' +
+          '<div class="ch-op-s">аренда <b>' + m(p.rent_sum) + '</b> · комиссия <b>' + m(p.fee) + '</b>' +
+            (p.fee_pct != null ? ' (' + esc(String(p.fee_pct)) + ' %)' : '') + '</div></div>';
+      }).join('') : '<p class="small muted">Части заявки по прокатам не найдены.</p>') +
+      kv('Итого', 'аренда <b>' + m(rent) + '</b> · комиссия <b>' + m(fee) + '</b>') +
+    '</div>';
+    openSheet('Заявка № ' + o.id, body);
   }
 
   /* ---------- Модерация ---------- */
@@ -435,20 +610,46 @@
   }
 
   /* ---------- Все объявления ---------- */
+  function adSt(t){ return STATUSES[t.status] ? t.status : 'active'; }
   function viewAds(){
     if (!D.tools.length){
       return '<div class="empty"><b>Объявлений нет</b></div>';
     }
-    return '<div class="tbl-wrap"><table class="tbl"><thead><tr>' +
-      '<th>Инструмент</th><th>Владелец</th><th class="num">Цена</th>' +
+    const c = { all: D.tools.length, active: 0, moderation: 0, archived: 0 };
+    D.tools.forEach(function(t){ c[adSt(t)]++; });
+    if (ADS_FILTER !== 'all' && !STATUSES[ADS_FILTER]) ADS_FILTER = 'all';
+    return '<div class="f-row2">' +
+        fChip('af', 'all', ADS_FILTER, 'Все', c.all) +
+        fChip('af', 'active', ADS_FILTER, 'Активные', c.active) +
+        fChip('af', 'moderation', ADS_FILTER, 'На модерации', c.moderation) +
+        fChip('af', 'archived', ADS_FILTER, 'Снятые', c.archived) +
+      '</div>' +
+      '<div class="ch-search"><label for="adsQ" class="sr-lbl">Поиск по объявлениям</label>' +
+        '<input class="inp" id="adsQ" type="search" autocomplete="off" placeholder="Название, прокат, почта, категория" value="' + esc(ADS_Q) + '"></div>' +
+      '<div id="adsList">' + adsListHTML() + '</div>';
+  }
+  function adsListHTML(){
+    const q = ADS_Q.trim().toLowerCase();
+    const list = D.tools.filter(function(t){
+      if (ADS_FILTER !== 'all' && adSt(t) !== ADS_FILTER) return false;
+      return qHit(q, [t.name, t.owner_email, lordName(t.owner_email), catTitle(t.cat) || t.cat]);
+    });
+    if (!list.length){
+      return '<div class="empty"><b>Ничего не найдено</b><p>Измените фильтр или строку поиска.</p></div>';
+    }
+    return '<div class="tbl-wrap tcw"><table class="tbl tc"><thead><tr>' +
+      '<th>Инструмент</th><th>Прокат</th><th class="num">Цена</th>' +
       '<th>Статус</th><th>Добавлен</th><th></th>' +
       '</tr></thead><tbody>' +
-      D.tools.map(function(t){
-        const st = t.status || 'active';
+      list.map(function(t){
+        const st = adSt(t);
+        const img = (t.imgs && t.imgs[0]) || t.img || '';
         return '<tr data-id="' + esc(t.id) + '">' +
-          '<td><b>' + esc(t.name) + '</b>' +
-            '<div class="small muted">' + esc(catTitle(t.cat) || t.cat) + '</div></td>' +
-          '<td class="small">' + esc(t.owner_email || '—') + '</td>' +
+          '<td><a class="ch-tl" href="tool.html?id=' + encodeURIComponent(t.id) + '" target="_blank" rel="noopener">' +
+            '<span class="ch-th">' + (img ? '<img src="' + esc(img) + '" alt="" loading="lazy">' : '') + '</span>' +
+            '<span class="ch-tn"><b>' + esc(t.name) + '</b>' +
+            '<span class="small muted">' + esc(catTitle(t.cat) || t.cat || '') + '</span></span></a></td>' +
+          '<td>' + esc(lordName(t.owner_email)) + '<div class="small muted">' + esc(t.owner_email || '—') + '</div></td>' +
           '<td class="num">' + m(t.price) + '</td>' +
           '<td><span class="badge ' + statusCls(st) + '">' + statusTitle(st) + '</span></td>' +
           '<td>' + dt(t.created_at) + '</td>' +
@@ -475,7 +676,7 @@
 
     if (pend.length){
       h += '<div class="sect-h"><h2 style="font-size:17px">Ждут подтверждения</h2></div>' +
-        '<div class="tbl-wrap"><table class="tbl"><thead><tr>' +
+        '<div class="tbl-wrap tcw"><table class="tbl tc"><thead><tr>' +
         '<th>Арендодатель</th><th class="num">Сумма</th><th>Примечание</th><th>Дата</th><th></th>' +
         '</tr></thead><tbody>' +
         pend.map(function(f){
@@ -496,7 +697,7 @@
     const done = D.fees.filter(function(f){ return f.status === 'confirmed'; });
     if (done.length){
       h += '<div class="sect-h" style="margin-top:22px"><h2 style="font-size:17px">История выплат</h2></div>' +
-        '<div class="tbl-wrap"><table class="tbl"><thead><tr>' +
+        '<div class="tbl-wrap tcw"><table class="tbl tc"><thead><tr>' +
         '<th>Арендодатель</th><th class="num">Сумма</th><th>Примечание</th><th>Подтверждено</th>' +
         '</tr></thead><tbody>' +
         done.map(function(f){
@@ -513,7 +714,7 @@
   function viewCats(){
     return '<div class="sect-h"><h2 style="font-size:17px">Категории каталога</h2>' +
         '<button class="btn sm sec" id="addCatBtn" style="margin-left:auto">Добавить</button></div>' +
-      '<div class="tbl-wrap"><table class="tbl"><thead><tr>' +
+      '<div class="tbl-wrap tcw"><table class="tbl tc"><thead><tr>' +
         '<th>Название</th><th>Ключ</th><th class="num">Объявлений</th><th>Видна</th>' +
       '</tr></thead><tbody>' +
       D.cats.map(function(c){
@@ -783,14 +984,20 @@
     if (TAB === 'ord')      inner = viewOrders();
     else if (TAB === 'mod') inner = viewMod();
     else if (TAB === 'ads') inner = viewAds();
-    else if (TAB === 'adm') inner = admTable(false);
+    else if (TAB === 'adm') inner = admAddBar() + admTable(false);
     else if (TAB === 'landlords') inner = viewLandlordApplications(D.landlordApps,D.landlordError);
     else if (TAB === 'fee') inner = viewFee();
     else if (TAB === 'cat') inner = viewCats();
+    else if (TAB === 'models') inner = D.props ? ivaPropView(D.props) : '<div class="empty" style="padding:40px 20px"><b>Загрузка…</b></div>';
     else if (TAB === 'outreach') inner = viewOutreach();
     else                    inner = viewDash();
 
     $('root').innerHTML = shell(inner);
+    labelTables($('root'));
+    /* выбранная вкладка видна и на узком экране (строка вкладок прокручивается) */
+    (function(){ const tb = document.querySelector('.tabs'), on = tb && tb.querySelector('button.on');
+      if (on && tb.scrollWidth > tb.clientWidth) tb.scrollLeft = on.offsetLeft - tb.offsetLeft - (tb.clientWidth - on.offsetWidth) / 2; })();
+    if (typeof ivaTabsFade === 'function') ivaTabsFade(document.querySelector('.chief-nav'));
     if (TAB === 'mod') paintFlags();
     if ($('apkCards')) mountAppCards($('apkCards'));
     ivaPaintReleaseLinks($('root'));
@@ -801,6 +1008,25 @@
     });
   }
 
+  /* 10.84: предложенные модели */
+  async function refreshProps(){
+    D.props = await ivaPropLoad(api);
+    render();
+  }
+  async function decideProp(btn, approve){
+    const row = btn.closest('[data-pp-row]');
+    if (!row) return;
+    const f = {};
+    row.querySelectorAll('[data-pp-f]').forEach(function(i){ f[i.getAttribute('data-pp-f')] = i.value.trim(); });
+    if (approve && (!f.brand || !f.model || !f.title)){ toast('Укажите бренд, модель и название'); return; }
+    if (!approve && !confirm('Отклонить предложение «' + (f.brand + ' ' + f.model).trim() + '»?')) return;
+    row.querySelectorAll('button').forEach(function(b){ b.disabled = true; });
+    const err = await ivaPropDecide(api, row.getAttribute('data-pp-row'), approve, f);
+    if (err){ toast(err); row.querySelectorAll('button').forEach(function(b){ b.disabled = false; }); return; }
+    toast(approve ? 'Модель добавлена в справочник' : 'Предложение отклонено');
+    await refreshProps();
+  }
+
   async function refreshLandlords(){
     try { D.landlordApps = await loadLandlordApplications(); D.landlordError=''; D.admins=await loadAdmins(); }
     catch(err){ D.landlordError=err.message; }
@@ -809,6 +1035,13 @@
 
   /* ---------- Обработчики ---------- */
   document.addEventListener('input', function(e){
+    if (e.target.id === 'ordQ' || e.target.id === 'adsQ'){
+      const isOrd = e.target.id === 'ordQ';
+      if (isOrd) ORD_Q = e.target.value; else ADS_Q = e.target.value;
+      const box = $(isOrd ? 'ordList' : 'adsList');
+      if (box){ box.innerHTML = isOrd ? ordListHTML() : adsListHTML(); labelTables(box); }
+      return;
+    }
     if (e.target.id === 'outreachCitySearch'){
       OUTREACH_STATE.citySearch = e.target.value;
       clearTimeout(window._outreachSearchTimer);
@@ -846,6 +1079,11 @@
   });
 
   document.addEventListener('click', async function(e){
+    /* 10.84: вкладка «Модели» */
+    const ppOk = e.target.closest('[data-pp-ok]'), ppNo = e.target.closest('[data-pp-no]');
+    if (ppOk || ppNo){ decideProp(ppOk || ppNo, !!ppOk); return; }
+    if (e.target.closest('[data-pp-refresh]')){ refreshProps(); return; }
+
     const phBtn = e.target.closest('[data-ph]');
     if (phBtn && phBtn.closest('#root')){
       const ta = $('outreachTemplateEdit');
@@ -988,6 +1226,19 @@
     const refresh=e.target.closest('[data-refresh-landlords]');
     if(refresh){refresh.disabled=true;await refreshLandlords();return;}
 
+    /* этап 4: переходы из «Сводки», фильтр объявлений, подробности заявки */
+    const go = e.target.closest('[data-ch-go]');
+    if (go){
+      TAB = go.getAttribute('data-ch-go');
+      if (go.hasAttribute('data-ch-of')) ORD_FILTER = go.getAttribute('data-ch-of');
+      if (go.hasAttribute('data-ch-af')) ADS_FILTER = go.getAttribute('data-ch-af');
+      history.replaceState(null,'','#'+TAB); render(); window.scrollTo(0, 0); return;
+    }
+    const adf = e.target.closest('[data-af]');
+    if (adf){ ADS_FILTER = adf.getAttribute('data-af'); render(); return; }
+    const orow = e.target.closest('tr[data-ord]');
+    if (orow && !e.target.closest('a,button')){ openOrder(orow.getAttribute('data-ord')); return; }
+
     const tb = e.target.closest('[data-tab]');
     if (tb){ TAB = tb.getAttribute('data-tab'); history.replaceState(null,'','#'+TAB); render(); return; }
 
@@ -1038,6 +1289,8 @@
       } catch(err){ tl.disabled = false; toast('Не удалось: ' + err.message); }
       return;
     }
+
+    if (e.target.closest('#admAddGo')){ admAdd(e.target.closest('#admAddGo')); return; }
 
     /* Арендодатели */
     const ad = e.target.closest('[data-adm]');
@@ -1153,6 +1406,12 @@
     });
   }
 
+  document.addEventListener('keydown', function(e){
+    if (e.key !== 'Enter' && e.key !== ' ') return;
+    const orow = e.target.closest && e.target.closest('tr[data-ord]');
+    if (orow && e.target === orow){ e.preventDefault(); openOrder(orow.getAttribute('data-ord')); }
+  });
+
   window.addEventListener('hashchange', function(){
     const h = (location.hash || '').replace('#','');
     if (h && h !== TAB){ TAB = h; render(); }
@@ -1192,6 +1451,7 @@
         D.clicksError = '';
       } catch(e){ D.clicks = []; D.clicksError = e.message; }
       try { D.landlordApps=await loadLandlordApplications(); } catch(err){D.landlordError=err.message;}
+      try { D.props = await ivaPropLoad(api); } catch(err){ D.props = null; }   /* 10.84: нет таблицы — вкладка покажет, что применить */
       render();
     } catch(e){
       $('root').innerHTML = '<div class="sect" style="padding-bottom:0"><div class="sect-h">' +
