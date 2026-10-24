@@ -1614,6 +1614,7 @@
       const ph = (okImg ? '<img src="' + esc(img) + '" alt="" loading="lazy">' : '<span class="ad-noimg">нет фото</span>') +
         '<span class="ad-st"><span class="badge ' + s.cls + '">' + esc(s.title) + '</span></span>';
       let acts = '';
+      if (t.edit_state !== 'delete') acts += '<a class="btn sec sm" href="new.html?edit=' + encodeURIComponent(t.id) + '">Изменить</a>';
       if (inCat) acts += '<a class="btn sec sm" href="tool.html?id=' + encodeURIComponent(t.id) + '">Открыть</a>';
       if (t.can_delete && t.edit_state !== 'delete') acts += '<button type="button" class="btn sec sm st-del" data-st-tdel="' + esc(t.id) + '">Удалить</button>';
       return '<div class="row-ad ad-c st-tool" data-id="' + esc(t.id) + '">' +
@@ -1644,8 +1645,8 @@
         '<input class="inp" id="stTq" type="search" autocomplete="off" placeholder="Название, бренд, модель" value="' + esc(ST_TQ) + '">' +
         '<button class="btn sec sm" data-staff-reload="1">Обновить</button>' +
       '</div>' +
-      '<div class="small muted st-upd">Добавить инструмент или изменить описание — пока в приложении «Ива» для Android; ' +
-        'здесь видно, что опубликовано и что ждёт решения владельца.</div>';
+      '<div class="st-tadd"><span class="small muted">Новый инструмент и правки опубликованного клиенты увидят после одобрения владельцем проката.</span>' +
+        '<a class="btn sm" href="new.html">+ Добавить инструмент</a></div>';
     h += '<div id="stTList" class="st-tlist">' + stToolListHTML() + '</div>';
     return h;
   }
@@ -1850,7 +1851,6 @@
     if (ST_PT !== 'all' && !pts.some(function(p){ return String(p.id) === ST_PT; })) ST_PT = 'all';
     const cur = ST_PT !== 'all' ? pts.find(function(p){ return String(p.id) === ST_PT; }) : (pts.length === 1 ? pts[0] : null);
     const app = [];
-    if (st.can_catalog) app.push('добавление и правка инструмента');
 
     /* шапка смены: прокат, пункты (выбор), часы и телефон выбранного пункта */
     let h = '<div class="st-head"><div class="st-co"><b>«' + esc(st.company || 'Прокат') + '»</b><span class="small muted">смена сотрудника</span></div>';

@@ -120,12 +120,16 @@ textarea.inp{resize:vertical;min-height:110px;font-family:inherit;line-height:1.
   let PH = null;                           /* 10.84: подсказка цены шага 4 */
   let step = 1;
   const TOTAL = 5;
+  /* 24.10.2026: сотрудник проката с правом «Добавляет инструмент» — та же форма, но пункт выдачи вместо адреса;
+     база сама ставит инструмент «на одобрение» владельцу, а правку опубликованного держит до его решения (SQL 10.105–10.121) */
+  let STF = null;
 
   /* Состояние формы */
   let F = {
     cat:'', sub:'', kind:'', imgs:[], name:'', descr:'', cond:'good',
     model_id:null, specs:{}, specsAuto:{}, mbrand:'', mtext:'', kit:[], descrAuto:'',   /* 10.84: текст «Модели», комплектация, наше описание */
-    price:'', deposit:'', terms:'', delivery:false, delivery_price:40, address:'', city:'', pickup_lat:null, pickup_lng:null
+    price:'', deposit:'', terms:'', delivery:false, delivery_price:40, address:'', city:'', pickup_lat:null, pickup_lng:null,
+    point_id:''
   };
 
   /* ---------- Черновик ---------- */
@@ -149,12 +153,12 @@ textarea.inp{resize:vertical;min-height:110px;font-family:inherit;line-height:1.
     const guest = kind === 'guest', paused = kind === 'paused', staff = kind === 'staff';
     const title = guest ? 'Размещение — только для арендодателей'
       : paused ? 'Размещение приостановлено'
-      : staff ? 'Сотрудники добавляют инструмент в приложении'
+      : staff ? 'Добавлять инструмент вам пока нельзя'
       : 'Размещать инструмент могут только арендодатели';
     if (staff){
       /* этап D: у сотрудника с правом «Добавляет инструмент» на сайте пока нет выбора пункта и одобрения владельцем */
       $('root').innerHTML = '<div class="empty" style="padding:70px 20px"><b>' + esc(title) + '</b>' +
-        '<p>Добавление инструмента сотрудником (с выбором пункта и одобрением владельца проката) пока работает в приложении «Ива» для Android. ' +
+        '<p>Владелец проката не дал вам право «Добавляет инструмент». Попросите его включить право — тогда добавлять и менять инструмент своих пунктов можно будет здесь и в приложении «Ива» для Android. ' +
         'Заявки своих пунктов можно вести и здесь — в кабинете, вкладка «Работа».</p>' +
         '<div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap">' +
           '<a class="btn" href="app.html">Скачать приложение</a><a class="btn sec" href="account.html#staff">Открыть «Работа»</a></div></div>';
@@ -491,13 +495,26 @@ textarea.inp{resize:vertical;min-height:110px;font-family:inherit;line-height:1.
           '<input class="inp" id="iDp" type="number" min="0" max="10000" value="' + esc(F.delivery_price) + '">' +
           '<div class="hint">На площадке принято 40 ₽/км по городу.</div>' +
         '</div>' : '') +
+      (STF ? stfPointsHTML() :
       '<div class="fld"><label for="iCity">Город выдачи</label><input class="inp" id="iCity" maxlength="100" placeholder="Начните вводить город…" value="'+esc(F.city||IvaGeo.addressCity(F.address))+'"><div class="hint">Только город — для поиска и фильтра объявлений.</div></div>' +
       '<div class="fld" style="margin-bottom:0">' +
         '<label for="iAddr">Адрес выдачи</label>' +
         '<input class="inp" id="iAddr" maxlength="500" placeholder="Новочеркасск, ул. Маресьева, 36" value="' + esc(F.address) + '">' +
         '<div class="hint">Точный адрес доступен всем посетителям. Выберите подсказку или введите адрес вручную.</div>' +
-      '</div>' +
+      '</div>') +
     '</div>';
+  }
+  function stfPointsHTML(){
+    const pts = (STF && Array.isArray(STF.points)) ? STF.points : [];
+    if (pts.length === 1 && !F.point_id) F.point_id = String(pts[0].id);
+    return '<div class="fld" id="fPt" style="margin-bottom:0"><label>Пункт выдачи</label>' +
+      '<div class="pick">' + pts.map(function(p){
+        const on = String(p.id) === String(F.point_id);
+        return '<button type="button" data-spt="' + esc(p.id) + '"' + (on ? ' class="on"' : '') + '>' +
+          '<b>' + esc(p.name || 'Пункт') + '</b>' + (p.address ? '<small>' + esc([p.city, p.address].filter(Boolean).join(', ')) + '</small>' : '') + '</button>';
+      }).join('') + '</div>' +
+      '<div class="hint">Адрес выдачи в объявлении — адрес пункта. Инструмент увидят клиенты после одобрения владельцем проката' +
+        (EDIT_ID ? ' (правку опубликованного — тоже после одобрения)' : '') + '.</div></div>';
   }
 
   /* ---------- Предпросмотр карточки ---------- */
@@ -597,6 +614,8 @@ textarea.inp{resize:vertical;min-height:110px;font-family:inherit;line-height:1.
       const cd = e.target.closest('[data-cond]');
       if (cd){ F.cond = cd.getAttribute('data-cond'); saveDraft(); render(); return; }
 
+      const spt = e.target.closest('[data-spt]');
+      if (spt){ F.point_id = spt.getAttribute('data-spt'); saveDraft(); render(); return; }
       const dl = e.target.closest('[data-dl]');
       if (dl){ F.delivery = dl.getAttribute('data-dl') === '1'; saveDraft(); render(); return; }
 
@@ -787,6 +806,10 @@ textarea.inp{resize:vertical;min-height:110px;font-family:inherit;line-height:1.
   /* ---------- Публикация ---------- */
   async function publish(){
     if (!validate()) return;
+    if (STF){
+      if (!F.point_id){ toast('Выберите пункт выдачи'); if ($('fPt')) $('fPt').scrollIntoView({block:'center'}); return; }
+      F.address = ''; F.city = '';
+    }
     F.city=IvaGeo.city(F.city)||IvaGeo.addressCity(F.address);
     if(F.address && !F.city){toast('Укажите город выдачи отдельно от улицы и дома');if($('iCity'))$('iCity').focus();return;}
     const addressCity=IvaGeo.addressCity(F.address);
@@ -831,6 +854,10 @@ textarea.inp{resize:vertical;min-height:110px;font-family:inherit;line-height:1.
       pickup_lat: pickupLat,
       pickup_lng: pickupLng
     };
+    if (STF){                                  /* адрес и координаты подставит база из пункта */
+      payload.point_id = F.point_id;
+      if (EDIT_ID){ delete payload.pickup_city; delete payload.pickup_address; delete payload.pickup_lat; delete payload.pickup_lng; }
+    }
     /* 10.81: вид — только когда справочник видов есть в базе (значит, есть и tools.kind) */
     if (KINDS_DB.length){
       kindKeep();
@@ -851,6 +878,15 @@ textarea.inp{resize:vertical;min-height:110px;font-family:inherit;line-height:1.
         const updated = await updateTool(EDIT_ID, payload);
         if (!updated) throw new Error('Объявление не найдено или доступ к нему изменился');
         dropDraft();
+        if (STF){
+          const wait = updated.review === 'pending' || !!updated.edit_pending;
+          $('root').innerHTML = '<div class="empty" style="padding:70px 20px"><b>' + (wait ? 'Правка отправлена владельцу' : 'Изменения сохранены') + '</b>' +
+            '<p>«' + esc(F.name) + '». ' + (wait ? 'Клиенты увидят изменения после одобрения владельцем проката; до этого в каталоге прежний вариант.' : 'Изменения уже в каталоге.') + '</p>' +
+            '<div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap">' +
+            '<a class="btn" href="account.html#staff">Инструмент пунктов</a></div></div>';
+          window.scrollTo(0,0);
+          return;
+        }
         $('root').innerHTML = '<div class="empty" style="padding:70px 20px"><b>Изменения сохранены</b>' +
           '<p>«' + esc(updated.name || F.name) + '». Статус: ' + esc(statusTitle(updated.status)) + '.</p>' +
           '<div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap">' +
@@ -888,6 +924,17 @@ textarea.inp{resize:vertical;min-height:110px;font-family:inherit;line-height:1.
         }
       }
       dropDraft();
+      if (STF && t && t.review === 'pending'){
+        $('root').innerHTML = '<div class="empty" style="padding:70px 20px">' +
+          '<svg viewBox="0 0 24 24" style="stroke:var(--yel)"><circle cx="12" cy="12" r="10"/><path d="M12 7v6l3 2"/></svg>' +
+          '<b>Отправлено владельцу на одобрение</b>' +
+          '<p>«' + esc(F.name) + '» появится в каталоге, когда владелец проката одобрит. Статус — в кабинете, «Работа» → «Инструмент».</p>' +
+          '<div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap">' +
+            '<a class="btn" href="account.html#staff">Инструмент пунктов</a>' +
+            '<a class="btn ghost" href="new.html">Добавить ещё</a></div></div>';
+        window.scrollTo(0, 0);
+        return;
+      }
       const onMod = verdict.status === 'moderation';
       const reasons = verdict.failed.map(function(f){
         return '<li style="margin:4px 0">' + esc(f.label) + (f.note ? ' — ' + esc(f.note) : '') + '</li>';
@@ -909,7 +956,7 @@ textarea.inp{resize:vertical;min-height:110px;font-family:inherit;line-height:1.
             : '<p>«' + esc(F.name) + '» уже в каталоге и доступно арендаторам.</p>') +
           '<div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap">' +
             (t && t.id ? '<a class="btn" href="tool.html?id=' + encodeURIComponent(t.id) + '">Посмотреть</a>' : '') +
-            '<a class="btn sec" href="account.html">Мои объявления</a>' +
+            '<a class="btn sec" href="' + (STF ? 'account.html#staff' : 'account.html') + '">' + (STF ? 'Инструмент пунктов' : 'Мои объявления') + '</a>' +
             '<a class="btn ghost" href="new.html">Разместить ещё</a>' +
           '</div>' +
         '</div>';
@@ -929,10 +976,11 @@ textarea.inp{resize:vertical;min-height:110px;font-family:inherit;line-height:1.
       let staff = false;
       if (!A.admin){
         try { const r = await api('/rest/v1/rpc/iva_staff_me', 'POST', {}); const st = Array.isArray(r) ? r[0] : r;
-              staff = !!(st && st.status === 'active'); } catch(e){}
+              staff = !!(st && st.status === 'active');
+              if (staff && st.can_catalog && Array.isArray(st.points) && st.points.length) STF = st; } catch(e){}
       }
-      screenAuth(A.admin ? 'paused' : staff ? 'staff' : 'client');
-      return;
+      if (!STF){ screenAuth(A.admin ? 'paused' : staff ? 'staff' : 'client'); return; }
+      document.title = (EDIT_ID ? 'Изменить инструмент' : 'Добавить инструмент') + ' — ' + (STF.company || 'прокат') + ' — Ива';
     }
 
     try {
@@ -954,10 +1002,19 @@ textarea.inp{resize:vertical;min-height:110px;font-family:inherit;line-height:1.
 
     if (EDIT_ID){
       try {
+        if (STF){
+          /* сотрудник: инструмент своих пунктов — вместе с правкой, которая ждёт владельца (iva_staff_tools) */
+          const rows = await api('/rest/v1/rpc/iva_staff_tools', 'POST', {});
+          const list = Array.isArray(rows) ? rows.map(function(x){ return x && x.iva_staff_tools ? x.iva_staff_tools : x; }) : [];
+          EDIT_SOURCE = list.find(function(t){ return t && String(t.id) === String(EDIT_ID); }) || null;
+          if (!EDIT_SOURCE) throw new Error('Инструмент не найден в ваших пунктах');
+          if (EDIT_SOURCE.edit_state === 'delete') throw new Error('Инструмент ждёт удаления — владелец проката ещё не решил');
+        } else {
         EDIT_SOURCE = await loadTool(EDIT_ID);
         if (!EDIT_SOURCE) throw new Error('Объявление не найдено или недоступно');
         if (!isChief() && String(EDIT_SOURCE.owner_email || '').toLowerCase() !== A.me.toLowerCase())
           throw new Error('Редактировать можно только свои объявления');
+        }
         const parsed = toolToAd(EDIT_SOURCE);
         const lines = String(EDIT_SOURCE.terms || '').split(/\r?\n/);
         const addressLine = lines.find(line=>/^Адрес выдачи:\s*/i.test(line.trim()));
@@ -972,13 +1029,15 @@ textarea.inp{resize:vertical;min-height:110px;font-family:inherit;line-height:1.
           address:EDIT_SOURCE.pickup_address || (addressLine ? addressLine.trim().replace(/^Адрес выдачи:\s*/i,'') : ''),
           pickup_lat:EDIT_SOURCE.pickup_lat == null ? null : EDIT_SOURCE.pickup_lat,
           pickup_lng:EDIT_SOURCE.pickup_lng == null ? null : EDIT_SOURCE.pickup_lng,
-          delivery:!!EDIT_SOURCE.delivery,delivery_price:EDIT_SOURCE.delivery_price == null ? 40 : EDIT_SOURCE.delivery_price
+          delivery:!!EDIT_SOURCE.delivery,delivery_price:EDIT_SOURCE.delivery_price == null ? 40 : EDIT_SOURCE.delivery_price,
+          point_id:EDIT_SOURCE.point_id ? String(EDIT_SOURCE.point_id) : ''
         };
         // Старую категорию не теряем, даже если её убрали из активного справочника.
         if (F.cat && !CATS_DB.some(c=>c.key===F.cat)) CATS_DB.push({key:F.cat,title:catTitle(F.cat)});
         if (F.sub && !SUBS_DB.some(c=>c.key===F.sub&&c.cat===F.cat)) SUBS_DB.push({key:F.sub,cat:F.cat,title:subTitle(F.sub)});
         /* вид объявления — отдельным запросом: общий список полей объявления вид не читает */
-        if (KINDS_DB.length){
+        if (KINDS_DB.length && STF) F.kind = EDIT_SOURCE.kind || '';
+        else if (KINDS_DB.length){
           try {
             const kr = await api('/rest/v1/tools?select=kind&id=eq.' + encodeURIComponent(EDIT_ID));
             F.kind = (kr && kr[0] && kr[0].kind) || '';
@@ -992,6 +1051,14 @@ textarea.inp{resize:vertical;min-height:110px;font-family:inherit;line-height:1.
       }
     }
     const had = loadDraft();
+    if (STF){                                  /* профиль арендодателя — не сотрудника: адрес берётся из пункта */
+      const pts = STF.points;
+      if (F.point_id && !pts.some(function(p){ return String(p.id) === String(F.point_id); })) F.point_id = '';
+      if (!F.point_id && pts.length === 1) F.point_id = String(pts[0].id);
+      render();
+      if (had && (F.name || F.cat || F.imgs.length)) toast('Восстановлен черновик');
+      return;
+    }
 
     try {
       const pRows = await api('/rest/v1/landlord_profiles?select=details,locations&owner_email=eq.' + encodeURIComponent((A.admin && A.admin.email) || A.me));
