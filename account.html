@@ -161,6 +161,8 @@
   let FEES = [];
   let REVIEWS = [];
   let SENT = [];
+  let ST_PT = 'all', ST_F = 'all', ST_Q = '', ST_UPD = 0, ST_TIMER = null, ST_FRESH = {};   // «Смена» сотрудника (этап 1)
+  let STOOLS = null, ST_VIEW = 'orders', ST_TF = 'all', ST_TQ = '';                          // инструмент пунктов (этап 2)
   let STAFF = null;          // этап D: сотрудник проката (iva_staff_me) — приглашение или работа
   let SPARTS = [];           // заявки пунктов сотрудника (iva_staff_parts)             // этап C: заявки, которые арендодатель сам отправил как арендатор («Я арендую»)
   let SUB_TAB = 'all';       // фильтр по статусу объявлений
@@ -1426,7 +1428,7 @@
        iva_staff_set_status — «Выдал» / «Вернули» (право «Выдача», свой пункт, new → rented → closed).
      Без SQL сотрудников (20261028/1029) функции не найдутся — вкладка просто не появится. */
   async function loadStaff(){
-    STAFF = null; SPARTS = []; SCARDS = null;
+    STAFF = null; SPARTS = []; SCARDS = null; STOOLS = null;
     try {
       const r = await api('/rest/v1/rpc/iva_staff_me', 'POST', {});
       STAFF = (Array.isArray(r) ? r[0] : r) || null;
@@ -1435,6 +1437,13 @@
     if (STAFF && STAFF.status === 'active' && (STAFF.can_issue || STAFF.can_notify)){
       try { SPARTS = await api('/rest/v1/rpc/iva_staff_parts', 'POST', {}) || []; } catch(e){ SPARTS = []; }
       try { SCARDS = lcMap(await api('/rest/v1/rpc/iva_order_cards', 'POST', { p_scope: 'staff' })); } catch(e){ SCARDS = null; }
+    }
+    /* этап 2 «Работы в прокате»: инструмент пунктов сотрудника с правом «Добавляет инструмент» (iva_staff_tools, SQL 10.122) */
+    if (STAFF && STAFF.status === 'active' && STAFF.can_catalog){
+      try {
+        const r = await api('/rest/v1/rpc/iva_staff_tools', 'POST', {});
+        STOOLS = Array.isArray(r) ? r.map(function(x){ return x && x.iva_staff_tools ? x.iva_staff_tools : x; }).filter(Boolean) : null;
+      } catch(e){ STOOLS = null; }
     }
   }
   function staffNewBadge(){
@@ -1463,7 +1472,6 @@
   /* «Смена» сотрудника (24.10.2026, этап 1 «Работы в прокате»): короткая шапка с выбором пункта и часами работы,
      плитки-фильтры, просроченные сверху, поиск, автообновление раз в 30 секунд, подтверждение в нижней панели.
      Данные и действия — прежние функции базы (iva_staff_me / iva_staff_parts / iva_order_cards('staff') / iva_staff_set_status). */
-  let ST_PT = 'all', ST_F = 'all', ST_Q = '', ST_UPD = 0, ST_TIMER = null, ST_FRESH = {};
   function stPts(){ return STAFF && Array.isArray(STAFF.points) ? STAFF.points : []; }
   function stHM(min){ min = ((Number(min) % 1440) + 1440) % 1440; return String(Math.floor(min / 60)).padStart(2, '0') + ':' + String(min % 60).padStart(2, '0'); }
   /* «сегодня 14:05», «вчера 09:30», «22.10 18:00» — время устройства */
@@ -1564,6 +1572,80 @@
   function stUpdTxt(){
     return (ST_UPD ? 'Обновлено ' + stWhen(ST_UPD).replace(/^сегодня /, '') + ' · ' : '') + 'обновляется само каждые 30 секунд';
   }
+  /* «Инструмент пунктов» (24.10.2026, этап 2 «Работы в прокате»): сотрудник с правом «Добавляет инструмент» видит инструмент
+     своих пунктов — что в каталоге, что ждёт одобрения владельца, что отклонено; с правом «Удаляет» — отправляет запрос на удаление.
+     Добавление и правка — пока в приложении. Функции базы: iva_staff_tools, iva_staff_tool_delete (SQL 10.122). */
+  function stToolScope(){
+    return (STOOLS || []).filter(function(t){ return ST_PT === 'all' || String(t.point_id || '') === ST_PT; });
+  }
+  function stToolState(t){
+    if (t.edit_state === 'delete') return { k: 'wait', cls: 'mod', title: 'Удаление ждёт владельца', note: 'Вы или другой сотрудник попросили удалить — ждём решения владельца.' };
+    if (t.review === 'pending') return { k: 'wait', cls: 'mod', title: 'На одобрении', note: 'Новый инструмент появится в каталоге после одобрения владельцем.' };
+    if (t.review === 'rejected') return { k: 'rej', cls: 'off', title: 'Отклонён', note: 'Владелец не одобрил публикацию.' };
+    if (t.edit_state === 'pending') return { k: 'wait', cls: 'mod', title: 'Правка на одобрении', note: 'В каталоге прежнее описание, пока владелец не одобрит правку.' };
+    if (t.edit_state === 'rejected') return { k: 'rej', cls: 'off', title: 'Правка отклонена', note: 'Владелец не одобрил последнюю правку — в каталоге прежнее описание.' };
+    if (t.active === false || (t.status && t.status !== 'active')) return { k: 'off', cls: 'off', title: 'Снят', note: '' };
+    return { k: 'on', cls: 'act', title: 'В каталоге', note: '' };
+  }
+  function stToolListHTML(){
+    if (!STOOLS) return '<div class="empty"><b>Список не загрузился</b><p>Нажмите «Обновить». Если не поможет — откройте инструмент в приложении «Ива».</p></div>';
+    const q = ST_TQ.trim().toLowerCase();
+    const list = stToolScope().filter(function(t){
+      if (ST_TF !== 'all' && stToolState(t).k !== ST_TF) return false;
+      if (!q) return true;
+      return [t.name, t.brand, t.model, t.point_name, catTitle(t.cat) || t.cat].join(' ').toLowerCase().indexOf(q) >= 0;
+    });
+    if (!list.length){
+      if (!STOOLS.length) return '<div class="empty"><b>Инструмента пока нет</b><p>Добавленный в ваших пунктах инструмент появится здесь.</p></div>';
+      return '<div class="empty"><b>Ничего не найдено</b><p>' + (q ? 'Измените строку поиска' : 'В этом разделе пусто') + '.</p>' +
+        '<button type="button" class="btn sec sm" data-st-tf="all" data-st-clear="1">Показать весь инструмент</button></div>';
+    }
+    const ord = { wait: 0, rej: 1, on: 2, off: 3 };
+    list.sort(function(a, b){ return ord[stToolState(a).k] - ord[stToolState(b).k] || String(a.name || '').localeCompare(String(b.name || ''), 'ru'); });
+    return list.map(function(t){
+      const s = stToolState(t);
+      const imgs = Array.isArray(t.imgs) ? t.imgs : [];
+      const img = imgs[0] || t.img || '';
+      const okImg = /^https:\/\//.test(img);
+      const inCat = s.k === 'on' || (s.k === 'wait' && t.edit_state && t.review !== 'pending') || (s.k === 'rej' && t.edit_state === 'rejected');
+      const ph = (okImg ? '<img src="' + esc(img) + '" alt="" loading="lazy">' : '<span class="ad-noimg">нет фото</span>') +
+        '<span class="ad-st"><span class="badge ' + s.cls + '">' + esc(s.title) + '</span></span>';
+      let acts = '';
+      if (inCat) acts += '<a class="btn sec sm" href="tool.html?id=' + encodeURIComponent(t.id) + '">Открыть в каталоге</a>';
+      if (t.can_delete && t.edit_state !== 'delete') acts += '<button type="button" class="btn sec sm st-del" data-st-tdel="' + esc(t.id) + '">Удалить</button>';
+      return '<div class="row-ad ad-c st-tool" data-id="' + esc(t.id) + '">' +
+        (inCat ? '<a class="rph" href="tool.html?id=' + encodeURIComponent(t.id) + '" aria-label="Открыть в каталоге">' + ph + '</a>'
+               : '<div class="rph">' + ph + '</div>') +
+        '<div class="rmid">' +
+          '<div class="rnm">' + esc(t.name || 'Инструмент') + '</div>' +
+          (Number(t.price) ? '<div class="rpr">' + rub(t.price) + ' <span>/ сутки</span></div>' : '') +
+          '<div class="rmeta">' + esc(t.point_name || 'Пункт') + (t.mine ? ' · добавили вы' : '') + '</div>' +
+          (s.note ? '<div class="rmeta st-tnote st-tnote-' + s.k + '">' + esc(s.note) + '</div>' : '') +
+          (acts ? '<div class="ad-acts">' + acts + '</div>' : '') +
+        '</div>' +
+      '</div>';
+    }).join('');
+  }
+  function stToolsView(){
+    const all = stToolScope();
+    const cnt = function(k){ return all.filter(function(t){ return k === 'all' || stToolState(t).k === k; }).length; };
+    let h = '<div class="chips st-tf">' +
+      [['all', 'Весь'], ['on', 'В каталоге'], ['wait', 'Ждут владельца'], ['rej', 'Отклонены'], ['off', 'Сняты']].map(function(c){
+        const n = cnt(c[0]);
+        if (c[0] !== 'all' && c[0] !== 'on' && !n && ST_TF !== c[0]) return '';
+        return '<button class="chip' + (ST_TF === c[0] ? ' on' : '') + '" data-st-tf="' + c[0] + '"' +
+          (ST_TF === c[0] ? ' style="border-color:var(--or);color:var(--or)"' : '') + '>' + c[1] + ' · ' + n + '</button>';
+      }).join('') + '</div>';
+    h += '<div class="st-bar">' +
+        '<label for="stTq" class="sr-lbl">Поиск по инструменту</label>' +
+        '<input class="inp" id="stTq" type="search" autocomplete="off" placeholder="Название, бренд, модель" value="' + esc(ST_TQ) + '">' +
+        '<button class="btn sec sm" data-staff-reload="1">Обновить</button>' +
+      '</div>' +
+      '<div class="small muted st-upd">Добавить инструмент или изменить описание — пока в приложении «Ива» для Android; ' +
+        'здесь видно, что опубликовано и что ждёт решения владельца.</div>';
+    h += '<div id="stTList" class="st-tlist">' + stToolListHTML() + '</div>';
+    return h;
+  }
   function viewStaff(){
     const st = STAFF;
     if (!st) return '';
@@ -1593,7 +1675,9 @@
     /* шапка смены: прокат, пункты (выбор), часы и телефон выбранного пункта */
     let h = '<div class="st-head"><div class="st-co"><b>«' + esc(st.company || 'Прокат') + '»</b><span class="small muted">смена сотрудника</span></div>';
     if (pts.length > 1){
-      const act = function(id){ return SPARTS.filter(function(p){ const s = p.status || 'new'; return (s === 'new' || s === 'rented') && (id === 'all' || String(p.point_id || '') === id); }).length; };
+      const act = ST_VIEW === 'tools'
+        ? function(id){ return (STOOLS || []).filter(function(t){ return id === 'all' || String(t.point_id || '') === id; }).length; }
+        : function(id){ return SPARTS.filter(function(p){ const s = p.status || 'new'; return (s === 'new' || s === 'rented') && (id === 'all' || String(p.point_id || '') === id); }).length; };
       h += '<div class="chips st-pts" role="group" aria-label="Пункт выдачи">' +
         [['all', 'Все пункты']].concat(pts.map(function(p){ return [String(p.id), p.name || 'Пункт']; })).map(function(x){
           const n = act(x[0]);
@@ -1618,7 +1702,19 @@
         ' — пока в приложении «Ива» для Android.</div>' : '') +
       '</details>';
 
-    if (!st.can_issue && !st.can_notify){
+    const canOrd = !!(st.can_issue || st.can_notify), canTools = !!st.can_catalog;
+    if (!canOrd && canTools) ST_VIEW = 'tools';
+    if (!canTools) ST_VIEW = 'orders';
+    if (canOrd && canTools){
+      const nOrd = stScope().filter(function(p){ const s = p.status || 'new'; return s === 'new' || s === 'rented'; }).length;
+      const nT = stToolScope().length;
+      h += '<div class="st-seg" role="tablist" aria-label="Раздел работы">' +
+        '<button type="button" role="tab" data-st-view="orders" aria-selected="' + (ST_VIEW === 'orders') + '"' + (ST_VIEW === 'orders' ? ' class="on"' : '') + '>Заявки' + (nOrd ? ' · ' + nOrd : '') + '</button>' +
+        '<button type="button" role="tab" data-st-view="tools" aria-selected="' + (ST_VIEW === 'tools') + '"' + (ST_VIEW === 'tools' ? ' class="on"' : '') + '>Инструмент' + (STOOLS ? ' · ' + nT : '') + '</button>' +
+        '</div>';
+    }
+    if (ST_VIEW === 'tools') return h + stToolsView();
+    if (!canOrd){
       return h + '<div class="empty" style="margin-top:14px"><b>Заявки вам не показываются</b>' +
         '<p>Владелец проката не дал право «Выдача» или «Уведомления о заявках».</p></div>';
     }
@@ -1644,6 +1740,7 @@
   function stRepaint(){
     if (TAB !== 'staff') { render(); return; }
     if (document.activeElement && document.activeElement.id === 'stQ') { stPaintList(); return; }
+    if (document.activeElement && document.activeElement.id === 'stTq') { const l = $('stTList'); if (l) l.innerHTML = stToolListHTML(); return; }
     const y = window.scrollY; render(); window.scrollTo(0, y);
   }
   /* автообновление раз в 30 секунд, пока открыта «Работа» и вкладка браузера видна */
@@ -1652,7 +1749,8 @@
     ST_TIMER = setInterval(async function(){
       if (TAB !== 'staff' || !STAFF || STAFF.status !== 'active' || document.hidden || $('sheet')) return;
       const seen = {}; SPARTS.forEach(function(p){ seen[p.part_id] = 1; });
-      const sig = function(){ return JSON.stringify(SPARTS.map(function(p){ return [p.part_id, p.status, p.rented_at || '']; })) + '|' + (SCARDS ? Object.keys(SCARDS).length : -1); };
+      const sig = function(){ return JSON.stringify(SPARTS.map(function(p){ return [p.part_id, p.status, p.rented_at || '']; })) + '|' + (SCARDS ? Object.keys(SCARDS).length : -1) +
+        '|' + JSON.stringify((STOOLS || []).map(function(t){ return [t.id, t.review || '', t.edit_state || '', t.status || '', t.active]; })); };
       const s0 = sig();
       try { await loadStaff(); } catch(e){ return; }
       ST_UPD = Date.now();
@@ -1820,6 +1918,13 @@
       if (on && tb.scrollWidth > tb.clientWidth) tb.scrollLeft = on.offsetLeft - tb.offsetLeft - (tb.clientWidth - on.offsetWidth) / 2; })();
 
     if (TAB === 'staff' && STAFF && STAFF.status === 'active') stAuto();
+    if ($('stTq')){
+      let stT2 = null;
+      $('stTq').oninput = function(){
+        const v = this.value; clearTimeout(stT2);
+        stT2 = setTimeout(function(){ ST_TQ = v; const l = $('stTList'); if (l) l.innerHTML = stToolListHTML(); }, 150);
+      };
+    }
     if ($('stQ')){
       let stT = null;
       $('stQ').oninput = function(){
@@ -1959,6 +2064,27 @@
     }
     if (e.target.closest('[data-staff-reload]')){
       loadStaff().then(function(){ ST_UPD = Date.now(); render(); toast('Обновлено'); });
+      return;
+    }
+    /* «Работа»: заявки / инструмент, фильтр инструмента, запрос на удаление */
+    const stV = e.target.closest('[data-st-view]');
+    if (stV){ ST_VIEW = stV.getAttribute('data-st-view'); render(); return; }
+    const stTf = e.target.closest('[data-st-tf]');
+    if (stTf){ ST_TF = stTf.getAttribute('data-st-tf'); if (stTf.hasAttribute('data-st-clear')) ST_TQ = ''; render(); return; }
+    const stDel = e.target.closest('[data-st-tdel]');
+    if (stDel){
+      const tid = stDel.getAttribute('data-st-tdel');
+      const t = (STOOLS || []).find(function(x){ return String(x.id) === tid; }) || {};
+      askSheet('Удалить инструмент?', '<div class="st-ask"><b>' + esc(t.name || 'Инструмент') + '</b>' +
+          (t.point_name ? '<div class="small muted">' + esc(t.point_name) + '</div>' : '') +
+          '<p>Запрос уйдёт владельцу проката. Пока он не одобрит, инструмент остаётся в каталоге.</p></div>', 'Отправить запрос').then(function(yes){
+        if (!yes) return;
+        stDel.disabled = true; stDel.textContent = '…';
+        api('/rest/v1/rpc/iva_staff_tool_delete', 'POST', { p_id: tid }).then(async function(){
+          toast('Запрос на удаление отправлен владельцу');
+          await loadStaff(); ST_UPD = Date.now(); stRepaint();
+        }).catch(async function(err){ toast('Не удалось: ' + err.message); await loadStaff(); stRepaint(); });
+      });
       return;
     }
     /* «Смена»: пункт, плитки-фильтры */
