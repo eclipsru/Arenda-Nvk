@@ -1190,3 +1190,9 @@ select.inp{cursor:pointer;appearance:none;
 .st-by{font-size:11px;font-weight:700;opacity:.8;margin-bottom:2px}
 .st-ch-sheet .sheet-f{align-items:flex-end}
 .st-ch-inp{flex:1;min-width:0;resize:none;min-height:44px;max-height:140px;line-height:1.4}
+.st-ch-head .st-ch-who{order:3;flex-basis:100%}
+.st-ch-head > .small.muted{flex:1;min-width:0}
+textarea.inp.st-ch-inp{height:46px;padding:12px 14px}
+@media (max-width:640px){
+  .st-seg button{font-size:13px;padding:9px 4px;white-space:nowrap}
+}

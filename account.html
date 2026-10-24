@@ -1759,7 +1759,7 @@
         '<span class="small st-ch-who" id="stChWho">…</span>' +
         '<button type="button" class="btn sec sm" id="stChClaim">Отвечу я</button></div>' +
       '<div class="th-body st-ch-body" id="stChBody"><div class="empty" style="padding:30px 10px">Загрузка…</div></div>',
-      '<textarea class="inp st-ch-inp" id="stChTxt" rows="1" maxlength="2000" placeholder="Ответ от имени проката"></textarea>' +
+      '<textarea class="inp st-ch-inp" id="stChTxt" rows="1" maxlength="2000" placeholder="Ваш ответ клиенту"></textarea>' +
       '<button class="btn" id="stChSend">Отправить</button>');
     const sh = $('sheet'); sh.classList.add('st-ch-sheet');
     api('/rest/v1/rpc/iva_chat_mark', 'POST', { p_thread: ch.thread, p_state: 'open' }).catch(function(){});
@@ -1785,7 +1785,7 @@
     let typT = 0;
     const ta = $('stChTxt');
     ta.oninput = function(){
-      ta.style.height = 'auto'; ta.style.height = Math.min(ta.scrollHeight, 140) + 'px';
+      ta.style.height = '46px'; ta.style.height = Math.min(Math.max(ta.scrollHeight, 46), 140) + 'px';
       if (Date.now() - typT > 5000){ typT = Date.now(); api('/rest/v1/rpc/iva_chat_mark', 'POST', { p_thread: ch.thread, p_state: 'typing' }).catch(function(){}); }
     };
     ta.onkeydown = function(e){ if (e.key === 'Enter' && !e.shiftKey && !e.isComposing){ e.preventDefault(); $('stChSend').click(); } };
@@ -1796,7 +1796,7 @@
       const p = ch.kind === 't' ? { p_tool: ch.key, p_peer: ch.peer, p_text: t } : { p_point: ch.key, p_peer: ch.peer, p_text: t };
       try {
         await api('/rest/v1/rpc/' + (ch.kind === 't' ? 'iva_staff_chat_send' : 'iva_staff_point_chat_send'), 'POST', p);
-        ta.value = ''; ta.style.height = 'auto';
+        ta.value = ''; ta.style.height = '46px';
         await stChatPoll(true);
       } catch(e){ toast('Не отправлено: ' + e.message); }
       btn.disabled = false; ta.focus();
