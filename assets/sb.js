@@ -375,6 +375,7 @@ async function createTool(data){
   if (data.model_id) row.model_id = data.model_id;   /* 10.82: модель из справочника — только если выбрана */
   if (data.specs) row.specs = data.specs;            /* 10.82: характеристики — только если заполнены */
   if (data.kit) row.kit = data.kit;                  /* 10.84: комплектация — только если отмечена */
+  if (data.point_id) row.point_id = data.point_id;   /* 24.10.2026: сотрудник — пункт выдачи; адрес и владельца подставит база */
   const r = await api('/rest/v1/tools', 'POST', row, { Prefer: 'return=representation' });
   return (r && r[0]) || null;
 }

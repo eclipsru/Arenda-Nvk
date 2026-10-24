@@ -8,7 +8,7 @@
 <meta name="robots" content="noindex, nofollow">
 <meta name="theme-color" content="#101217">
 <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
-<link rel="stylesheet" href="assets/theme.css?v=20261024-a">
+<link rel="stylesheet" href="assets/theme.css?v=20261024-b">
 <link rel="stylesheet" href="assets/profile.css?v=20260923-rental-profile">
 <style>
 .tabs{display:flex;gap:4px;border-bottom:1px solid var(--line);margin-bottom:18px;
@@ -163,6 +163,7 @@
   let SENT = [];
   let ST_PT = 'all', ST_F = 'all', ST_Q = '', ST_UPD = 0, ST_TIMER = null, ST_FRESH = {};   // «Смена» сотрудника (этап 1)
   let STOOLS = null, ST_VIEW = 'orders', ST_TF = 'all', ST_TQ = '';                          // инструмент пунктов (этап 2)
+  if (TAB === 'staff-tools'){ TAB = 'staff'; ST_VIEW = 'tools'; history.replaceState(null, '', location.pathname + location.search + '#staff'); }   // возврат из формы инструмента
   let STCHATS = null;                                                                        // сообщения пунктов (этап 3)
   let STAFF = null;          // этап D: сотрудник проката (iva_staff_me) — приглашение или работа
   let SPARTS = [];           // заявки пунктов сотрудника (iva_staff_parts)             // этап C: заявки, которые арендодатель сам отправил как арендатор («Я арендую»)

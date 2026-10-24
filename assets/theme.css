@@ -1210,3 +1210,4 @@ textarea.inp.st-ch-inp{height:46px;padding:12px 14px}
 .pick button[data-spt]{text-align:left;align-items:flex-start;gap:3px}
 .pick button[data-spt] small{display:block;font-weight:400;color:var(--g2);font-size:12px;line-height:1.35}
 .st-tadd{display:flex;gap:10px;align-items:center;justify-content:space-between;flex-wrap:wrap;margin:6px 2px 4px}
+@media (max-width:640px){.form-grid .nav-btns{flex-wrap:wrap}.form-grid .nav-btns .btn{min-width:0;flex:1 1 30%}}

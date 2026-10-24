@@ -1092,7 +1092,7 @@ try {
     assert.ok(fnx(kp, 'consumePending').includes('String noKit = IvaModelPatch.mergeBody(body, IvaModelPatch.dropKit(extra));')
       && nw.includes('if (!payload.model_id && !payload.specs && !payload.kit) throw e1;') && nw.includes('delete payload.kit;')
       && cab.includes('if(!body.model_id&&!body.specs&&!body.kit)throw e1;') && sb.includes('if (data.kit) row.kit = data.kit;')
-      && !/TOOL_FIELDS = [^;]*\bkit\b/.test(sb) && nw.includes('<script src="assets/sb.js?v=20261018-stage4"></script>'),
+      && !/TOOL_FIELDS = [^;]*\bkit\b/.test(sb) && nw.includes('<script src="assets/sb.js?v=20261024-b"></script>'),
       'модели 10.84: нет столбца kit — повтор без комплектации; kit отправляется только отмеченный');
     // 5. панель главного: вкладка «Модели», решение через RPC, после одобрения справочник перечитывается
     assert.ok(ch.includes('<script src="assets/model-proposals.js?v=20261018-stage4"></script>') && ch.includes('data-tab="models"')
