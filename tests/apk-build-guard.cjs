@@ -2916,7 +2916,19 @@ try {
       && !/ALTER TABLE/i.test(sq) && rb.includes('DROP FUNCTION IF EXISTS public.iva_parts_journal(bigint[]);'),
       '10.128: SQL — одна функция только для владельца (и создателя), таблицы не меняет; откат — удалить функцию');
     assert.ok((tp.match(/eq\("журнал 10\.128: /g) || []).length >= 12 && tp.includes('j128();'), 'IvaPatchTest: проверки 10.128');
-    assert.ok(/NEW_NAME: '10\.128'/.test(wf) && /NEW_CODE: '202'/.test(wf), 'сборка 10.128 (202)');
+    assert.ok(Number((/NEW_CODE: '(\d+)'/.exec(wf) || [])[1]) >= 202, 'сборка 10.128 (202) или новее');
+  }
+  // 10.129 (просьба владельца 24.10.2026): «Удаляет инструмент» в карточке сотрудника не сохранялся включённым — редактор не
+  // копировал право из списка (открывался выключенным, «Сохранить» стирало). Теперь copyInto копирует всё; понятные подписи.
+  {
+    const strip = (t) => t.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '');
+    const wf = R('.github/workflows/build-apk.yml'), ap = R('android/patches/apply.py'), tp = R('android/patches/test/IvaPatchTest.java');
+    const sp = strip(R('android/patches/IvaStaffPatch.java'));
+    assert.ok(!/copyInto|DEL_TITLE/.test(ap), '10.129: без новых вставок в smali');
+    assert.ok(sp.includes('s.del = old.del;') && sp.includes('copyInto(s, old);') && sp.includes('sw(a, dc, DEL_TITLE, DEL_HINT, s.del && s.r[1]')
+      && sp.includes('fDel.isChecked()'), '10.129: «Удаляет инструмент» копируется в редактор и уходит в «Сохранить»');
+    assert.ok((tp.match(/eq\("сотрудник 10\.129: /g) || []).length >= 5 && tp.includes('st129();'), 'IvaPatchTest: проверки 10.129');
+    assert.ok(/NEW_NAME: '10\.129'/.test(wf) && /NEW_CODE: '203'/.test(wf), 'сборка 10.129 (203)');
   }
   // 10.75 (просьба владельца 14.10.2026): в «Настройках» — кнопка «Уведомления» (с 10.97 — открывает отдельную страницу);
   // внутри сверху «Открыть настройки уведомлений Android», потом какие присылать, потом расписание, потом всё остальное

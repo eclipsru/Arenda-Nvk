@@ -61,7 +61,11 @@ public class IvaStaffPatch {
     // 10.122: отдельное право (решение владельца) — удаление всегда ждёт владельца в «На одобрении»
     static final String DEL = "Удаляет инструмент",
         DEL_SUB = "Удаление всегда ждёт вашего одобрения в «На одобрении», даже при «Публиковать сразу»",
-        DEL_OFF = "Сначала включите «Выкладывает инструмент»";
+        DEL_OFF = "Сначала включите «Выкладывает инструмент» — удалять можно только вместе с ним";
+    // 10.129 (просьба владельца 24.10.2026 «понятно переименовать и переписать описание»): в карточке сотрудника у владельца
+    static final String DEL_TITLE = "Может удалять инструмент — с вашего одобрения",
+        DEL_HINT = "У инструментов его пункта появится кнопка «Удалить». Инструмент уберётся из каталога, только когда вы "
+            + "нажмёте «Одобрить» в «Настройки» → «На одобрении». Пока не одобрили — инструмент на месте.";
     static final long ME_EVERY_MS = 60000L;
     static final int MAX = 50;
 
@@ -711,6 +715,13 @@ public class IvaStaffPatch {
         return s;
     }
 
+    /** 10.129: копия сотрудника для редактора — все права, включая «Удаляет инструмент» (раньше терялось: переключатель
+     *  открывался выключенным, и «Сохранить» стирало право). */
+    static void copyInto(Staff s, Staff old) {
+        s.id = old.id; s.email = old.email; s.name = old.name; s.tel = old.tel; s.status = old.status;
+        s.r = old.r.clone(); s.self = old.self; s.del = old.del; s.points = new ArrayList<String>(old.points);
+    }
+
     static void openStaff(final Ui u, final Staff old) {
         final Activity a = u.a;
         final boolean isNew = old == null;
@@ -721,8 +732,7 @@ public class IvaStaffPatch {
             else if (u.all.size() == 1) s.points.add(u.all.get(0).id.toLowerCase(Locale.ROOT));   // 10.115: пункт один — он и есть
         }
         else {
-            s.id = old.id; s.email = old.email; s.name = old.name; s.tel = old.tel; s.status = old.status;
-            s.r = old.r.clone(); s.self = old.self; s.points = new ArrayList<String>(old.points);
+            copyInto(s, old);                                           // 10.129: вместе с «Удаляет инструмент»
         }
         final IvaChiefPatch.Page pg = IvaChiefPatch.page(a, isNew ? "Новый сотрудник" : old.name,
             isNew ? "Сотрудник увидит приглашение в приложении, когда войдёт под этой почтой: «Профиль» → «Принять»."
@@ -784,7 +794,7 @@ public class IvaStaffPatch {
         final Switch fSelf = sw(a, sc, SELF, SELF_SUB, s.self, u.cText, u.cGray, u.cOrange);
         LinearLayout dc = IvaChiefPatch.card(a);
         box.addView(dc);
-        final Switch fDel = sw(a, dc, DEL, DEL_SUB, s.del && s.r[1], u.cText, u.cGray, u.cOrange);
+        final Switch fDel = sw(a, dc, DEL_TITLE, DEL_HINT, s.del && s.r[1], u.cText, u.cGray, u.cOrange);
         final Runnable delPaint = new Runnable() {
             @Override public void run() {
                 fDel.setEnabled(s.r[1]);

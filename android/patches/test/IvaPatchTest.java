@@ -2615,6 +2615,7 @@ public class IvaPatchTest {
         v124();                                                       // 10.124: подсветка карточек заявок
         v125();                                                       // 10.125: телефон пункта в карточке, другой пункт проката
         j128();                                                       // 10.128: «Выдал / Принял» на карточках владельца
+        st129();                                                      // 10.129: «Удаляет инструмент» не теряется в карточке сотрудника
         if (fail > 0) { System.out.println("ошибок: " + fail); System.exit(1); }
         System.out.println("все проверки IvaPatch пройдены");
     }
@@ -3609,6 +3610,23 @@ public class IvaPatchTest {
     }
 
     /** 10.128: «Выдал / Принял» на карточках заявок владельца (SQL 20261118, iva_parts_journal). */
+    /** 10.129: карточка сотрудника у владельца — право «Удаляет инструмент» не теряется, понятные подписи. */
+    static void st129() {
+        IvaStaffPatch.Staff old = new IvaStaffPatch.Staff();
+        old.id = "11111111-2222-3333-4444-555555555555"; old.name = "Иван"; old.email = "ivan@x.ru";
+        old.r = new boolean[]{true, true, false, false}; old.self = true; old.del = true; old.points.add("p1");
+        IvaStaffPatch.Staff s = new IvaStaffPatch.Staff();
+        IvaStaffPatch.copyInto(s, old);
+        eq("сотрудник 10.129: «Удаляет инструмент» открывается включённым", s.del, true);
+        eq("сотрудник 10.129: права и пункты скопированы", java.util.Arrays.toString(s.r) + s.self + s.points, "[true, true, false, false]true[p1]");
+        s.r[0] = false; s.points.add("p2");
+        eq("сотрудник 10.129: правка в редакторе не меняет список", old.r[0] + "" + old.points.size(), "true1");
+        String b = IvaStaffPatch.saveBody(s.id, s.email, s.name, "", s.points, s.r, s.self, s.del);
+        eq("сотрудник 10.129: «Сохранить» без правок оставляет право", b.endsWith(",\"p_delete\":true}"), true);
+        eq("сотрудник 10.129: подпись переключателя — понятная", IvaStaffPatch.DEL_TITLE.contains("удалять") && IvaStaffPatch.DEL_HINT.contains("«Одобрить»")
+            && IvaStaffPatch.DEL_HINT.contains("«На одобрении»"), true);
+    }
+
     static void j128() {
         java.util.List<String> ids = java.util.Arrays.asList("12", " 7 ", "12", "abc", "1;drop", "");
         eq("журнал 10.128: запрос — только номера, без повторов", IvaStaffJournalPatch.partsBody(ids), "{\"p_parts\":[12,7]}");
