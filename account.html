@@ -1611,7 +1611,7 @@
       const ph = (okImg ? '<img src="' + esc(img) + '" alt="" loading="lazy">' : '<span class="ad-noimg">нет фото</span>') +
         '<span class="ad-st"><span class="badge ' + s.cls + '">' + esc(s.title) + '</span></span>';
       let acts = '';
-      if (inCat) acts += '<a class="btn sec sm" href="tool.html?id=' + encodeURIComponent(t.id) + '">Открыть в каталоге</a>';
+      if (inCat) acts += '<a class="btn sec sm" href="tool.html?id=' + encodeURIComponent(t.id) + '">Открыть</a>';
       if (t.can_delete && t.edit_state !== 'delete') acts += '<button type="button" class="btn sec sm st-del" data-st-tdel="' + esc(t.id) + '">Удалить</button>';
       return '<div class="row-ad ad-c st-tool" data-id="' + esc(t.id) + '">' +
         (inCat ? '<a class="rph" href="tool.html?id=' + encodeURIComponent(t.id) + '" aria-label="Открыть в каталоге">' + ph + '</a>'
