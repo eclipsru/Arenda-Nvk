@@ -171,6 +171,7 @@
   let SPARTS = [];           // заявки пунктов сотрудника (iva_staff_parts)             // этап C: заявки, которые арендодатель сам отправил как арендатор («Я арендую»)
   let SUB_TAB = 'all';       // фильтр по статусу объявлений
   let SUB_TAB_ORD = 'all';   // фильтр по статусу заявок
+  let LJ = null, LJ_OFF = false;   // «Выдал / Принял» на карточках владельца: part_id → журнал (SQL 20261118)
   let OQ = '', O_PT = 'all', O_UPD = 0, O_TIMER = null, O_FRESH = {};   // «Заявки» владельца: поиск, пункт, автообновление (24.10.2026)
 
   function niceDate(d){
@@ -601,6 +602,31 @@
   async function loadLordCards(){
     try { LCARDS = lcMap(await api('/rest/v1/rpc/iva_order_cards', 'POST', { p_scope: 'admin' })); }
     catch(e){ LCARDS = null; }
+    await loadLordJournal();
+  }
+  /* 24.10.2026: кто выдал и кто принял — одним запросом по всем выданным и закрытым частям (iva_parts_journal, SQL 20261118).
+     Пишет только база (триггер 10.107, возврат по срокам 10.124). Нет функции в базе — строк просто нет. */
+  async function loadLordJournal(){
+    if (LJ_OFF || !LCARDS) return;
+    const ids = Object.keys(LCARDS).filter(function(id){
+      const st = LCARDS[id].p.status || 'new';
+      return /^\d+$/.test(id) && (st === 'rented' || st === 'closed');
+    }).slice(0, 500).map(Number);
+    if (!ids.length){ LJ = {}; return; }
+    try {
+      const r = await api('/rest/v1/rpc/iva_parts_journal', 'POST', { p_parts: ids });
+      const m = {};
+      (Array.isArray(r) ? r : []).forEach(function(x){ const j = x && x.iva_parts_journal ? x.iva_parts_journal : x; if (j && j.part_id != null) m[String(j.part_id)] = j; });
+      LJ = m;
+    } catch(e){
+      if (/PGRST202|404|Could not find the function/i.test(String(e && e.message || ''))) LJ_OFF = true;
+    }
+  }
+  /* строка журнала: «Выдал: Иван · 24 окт., 14:05» */
+  function ljLine(lb, who, at, tz){
+    if (!who) return '';
+    const t = Date.parse(at || '');
+    return '<div class="hint lc-who">' + lb + ': <b style="color:var(--tx)">' + esc(who) + '</b>' + (t ? ' · ' + esc(coWhen(t, tz)) : '') + '</div>';
   }
 
   /* сроки выданной части: { дни: конец срока } — только у ещё не возвращённых инструментов */
@@ -652,6 +678,10 @@
     const bcls = st === 'rented' && late ? 'b-cancelled' : 'b-' + st;
     const canAct = staff ? !!row.can_act : !isArc;
     const pid = esc(p.part_id);
+    const jr = !staff && LJ ? LJ[String(p.part_id)] || null : null;      // кто выдал / кто принял — только владельцу
+    const jItems = {}, jWhos = {};
+    if (jr && Array.isArray(jr.items)) jr.items.forEach(function(x){ if (x && x.n != null){ jItems[x.n] = x; if (x.returned_who) jWhos[x.returned_who + '|' + x.returned_at] = 1; } });
+    const jPerItem = Object.keys(jWhos).length > 1;   // принимали по частям — «принял …» у каждого инструмента
 
     /* сроки: таймер у каждого; «Вернули» по сроку, когда сроков несколько */
     let termsHTML = '';
@@ -669,7 +699,7 @@
 
     /* инструменты и «чек»: цена × сутки; после возврата — начатые сутки (считает база). Сотруднику — без денег */
     let sum = 0;
-    const list = items.map(function(it){
+    const list = items.map(function(it, ix){
       const price = staff ? 0 : (Number(it.price) || 0), plan = coDays(it, c.days);
       const used = parseInt(it.used_days, 10) >= 1 ? parseInt(it.used_days, 10) : 0;
       const d = used || plan;
@@ -680,7 +710,8 @@
         (it.id ? '<a href="tool.html?id=' + encodeURIComponent(it.id) + '">' + name + '</a>' : '<b>' + name + '</b>') +
         '<span>' + (price ? rub(price) + ' × ' : '') + lcDaysTxt(d) + (used && used !== plan ? ' (по факту, бронь ' + plan + ')' : '') +
         (price ? ' = <b>' + rub(price * d) + '</b>' : '') + '</span>' +
-        (it.returned_at && st === 'rented' ? '<span class="co-ok">возвращён ' + esc(coWhen(Date.parse(it.returned_at), tz)) + '</span>' : '') +
+        (it.returned_at && (st === 'rented' || (st === 'closed' && jPerItem && jItems[ix])) ? '<span class="co-ok">возвращён ' + esc(coWhen(Date.parse(it.returned_at), tz)) +
+          (jItems[ix] && jItems[ix].returned_who ? ' · принял: ' + esc(jItems[ix].returned_who) : '') + '</span>' : '') +
         '</div></div>';
     }).join('');
     const total = !staff && st === 'closed' && Number(row.rent_sum) > 0 ? Number(row.rent_sum) : sum;
@@ -742,7 +773,10 @@
         (tel ? ' · <a href="tel:' + esc(tel) + '" style="color:var(--or);font-weight:600">' + esc(cTel) + '</a>' : '') + '</div>' : '') +
       (ptLine ? '<div class="hint">Пункт: ' + ptLine + '</div>' : (staff && row.point_name ? '<div class="hint">Пункт: ' + esc(row.point_name) + '</div>' : '')) +
       (c.get_method ? '<div class="hint">Получение: ' + esc(c.get_method) + (c.address ? ' — ' + esc(c.address) : '') + '</div>' : '') +
-      (st === 'rented' && p.rented_at ? '<div class="hint">Выдан ' + esc(coWhen(Date.parse(p.rented_at), tz)) + '</div>' : '') +
+      (jr && jr.issued_who && (st === 'rented' || st === 'closed')
+        ? ljLine('Выдал', jr.issued_who, jr.issued_at || p.rented_at, tz)
+        : (st === 'rented' && p.rented_at ? '<div class="hint">Выдан ' + esc(coWhen(Date.parse(p.rented_at), tz)) + '</div>' : '')) +
+      (jr && st === 'closed' && !jPerItem ? ljLine(p.rented_at ? 'Принял' : 'Закрыл', jr.returned_who, jr.returned_at, tz) : '') +
       termsHTML +
       (list ? '<div class="co-items">' + list + '</div>' : (p.tools_text || row.tools_text ? '<div class="title" style="margin-top:8px">' + esc(p.tools_text || row.tools_text) + '</div>' : '')) +
       (!staff && total && st !== 'cancelled' ? '<div class="co-sum"><span>' + (st === 'closed' ? 'Итого за аренду' : 'Аренда по заявке') + '</span><b>' + rub(total) + '</b></div>' : '') +
@@ -839,7 +873,8 @@
     const k = oCard(p), o = p.orders || {}, c = k ? k.c : {}, pp = k ? k.p : {};
     const items = Array.isArray(pp.items) ? pp.items.map(function(it){ return it.name || ''; }).join(' ') : '';
     const tel = [o.phone, c.client_tel].join(' ');
-    return [p.order_id, o.name, c.client_name, tel, tel.replace(/\D/g, ''), p.tools_text, items, pp.point && pp.point.name, o.address, c.address]
+    const j = LJ && LJ[String(p.id)], jw = j ? [j.issued_who, j.returned_who].concat((j.items || []).map(function(x){ return x.returned_who; })).join(' ') : '';
+    return [p.order_id, o.name, c.client_name, tel, tel.replace(/\D/g, ''), p.tools_text, items, pp.point && pp.point.name, o.address, c.address, jw]
       .join(' ').toLowerCase();
   }
   function oListHTML(){
@@ -906,7 +941,7 @@
     h += '<div class="kpis st-kpis" id="ordKpis">' + oKpisHTML() + '</div>';
     h += '<div class="st-bar">' +
         '<label for="ordQ" class="sr-lbl">Поиск по заявкам</label>' +
-        '<input class="inp" id="ordQ" type="search" autocomplete="off" placeholder="№, клиент, телефон, инструмент" value="' + esc(OQ) + '">' +
+        '<input class="inp" id="ordQ" type="search" autocomplete="off" placeholder="№, клиент, телефон, инструмент, сотрудник" value="' + esc(OQ) + '">' +
         '<button class="btn sec sm" data-ord-reload="1">Обновить</button>' +
       '</div>' +
       '<div class="small muted st-upd" id="ordUpdLine">' + oUpdLine() + '</div>' +
