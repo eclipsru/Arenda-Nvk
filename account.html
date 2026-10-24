@@ -169,6 +169,7 @@
   let SPARTS = [];           // заявки пунктов сотрудника (iva_staff_parts)             // этап C: заявки, которые арендодатель сам отправил как арендатор («Я арендую»)
   let SUB_TAB = 'all';       // фильтр по статусу объявлений
   let SUB_TAB_ORD = 'all';   // фильтр по статусу заявок
+  let OQ = '', O_PT = 'all', O_UPD = 0, O_TIMER = null, O_FRESH = {};   // «Заявки» владельца: поиск, пункт, автообновление (24.10.2026)
 
   function niceDate(d){
     if (!d) return '—';
@@ -410,7 +411,7 @@
     const fs = computeFeeStats();
     const out = [];
     if (nLate)   out.push({ c: 'red', n: nLate, t: plural(nLate, 'Просрочен возврат', 'Просрочены возвраты', 'Просрочены возвраты'), s: 'Свяжитесь с клиентом или отметьте «Вернули»', go: 'orders', sub: 'late', b: 'Открыть' });
-    if (nChange) out.push({ c: 'or', n: nChange, t: 'Клиент просит изменить заявку', s: 'Примите или отклоните — пока действует прежний вариант', go: 'orders', sub: 'new', b: 'Решить' });
+    if (nChange) out.push({ c: 'or', n: nChange, t: 'Клиент просит изменить заявку', s: 'Примите или отклоните — пока действует прежний вариант', go: 'orders', sub: 'change', b: 'Решить' });
     if (nNew)    out.push({ c: 'grn', n: nNew, t: plural(nNew, 'Новая заявка', 'Новые заявки', 'Новых заявок'), s: 'Когда отдадите инструмент — нажмите «Выдал инструмент»', go: 'orders', sub: 'new', b: 'Открыть' });
     if (fs.debt > 0) out.push({ c: fs.isBlocked ? 'red' : 'or', n: rub(fs.debt), t: 'Комиссия к оплате', s: fs.isBlocked ? 'Превышен лимит задолженности — оплатите комиссию' : 'Оплатите удобным способом во вкладке «Комиссия и оплата»', go: 'fee', b: 'Оплатить' });
     if (nMod)    out.push({ c: 'gr', n: nMod, t: plural(nMod, 'Объявление на модерации', 'Объявления на модерации', 'Объявлений на модерации'), s: 'Обычно проверка занимает немного времени', go: 'ads', st: 'moderation', b: 'Смотреть' });
@@ -761,45 +762,213 @@
     render();
   }
 
-  function viewAdminOrders(){
-    const ordFilter = SUB_TAB_ORD || 'all';
-
-    const isLate = function(p){ const k = LCARDS && LCARDS[String(p.id)]; return !p.archived && !!k && lcLate(k); };
-    const filtered = ordFilter === 'all' ? ORDERS : ORDERS.filter(function(p){
-      if (ordFilter === 'archived') return !!p.archived;
-      if (p.archived) return false;
-      if (ordFilter === 'late') return isLate(p);
-      return (p.status || 'new') === ordFilter;
+  /* ---------- «Всё по порядку», пункт 4 (24.10.2026): «Заявки» владельца — как «Смена» сотрудника ----------
+     Плитки-фильтры (Новые / Просрочены / Вернуть сегодня / В аренде), группы: «Клиент просит изменить» → «Просрочены» → «Новые» →
+     «В аренде» (ближайший возврат сверху) → «Завершены» → «Отменены»; поиск по №, клиенту, телефону, инструменту, пункту;
+     выбор пункта (когда пунктов больше одного); автообновление раз в 30 секунд, новая заявка подсвечивается и всплывает сообщение.
+     Данные — те же order_parts + iva_order_cards('admin'); новых запросов к базе нет. Без iva_order_cards — прежние простые карточки. */
+  const O_GROUPS = [
+    ['change', 'Клиент просит изменить'], ['late', 'Просрочены'], ['new', 'Новые'], ['rented', 'В аренде'],
+    ['closed', 'Завершены'], ['cancelled', 'Отменены клиентом'], ['archived', 'Архив']
+  ];
+  const O_FN = { new: 'Новые', late: 'Просрочены', today: 'Вернуть сегодня', rented: 'В аренде', change: 'Ждут решения',
+                 closed: 'Завершены', cancelled: 'Отменены', archived: 'Архив' };
+  function oCard(p){ return LCARDS ? LCARDS[String(p.id)] || null : null; }
+  function oInfo(p){
+    const st = p.status || 'new', k = oCard(p), arc = !!p.archived;
+    let end = 0;
+    if (!arc && st === 'rented' && k){ const t = lcTerms(k); Object.keys(t).forEach(function(d){ if (t[d] && (!end || t[d] < end)) end = t[d]; }); }
+    const now = Date.now(), t1 = new Date(); t1.setHours(23, 59, 59, 999);
+    const late = !!end && end < now;
+    const change = !arc && !!(k && k.p.change && k.p.change.state === 'pending');
+    return { st: st, arc: arc, end: end, late: late, today: !!end && !late && end <= t1.getTime(), change: change,
+             g: arc ? 'archived' : change ? 'change' : late ? 'late' : st };
+  }
+  function oPts(){
+    const m = {}, out = [];
+    ORDERS.forEach(function(p){
+      const k = oCard(p), pt = k && k.p.point;
+      if (pt && pt.id != null && !m[pt.id]){ m[pt.id] = 1; out.push({ id: String(pt.id), name: pt.name || 'Пункт' }); }
     });
-
-    const cnt = function(st){
-      if (st === 'all') return ORDERS.length;
-      if (st === 'archived') return ORDERS.filter(function(p){ return !!p.archived; }).length;
-      if (st === 'late') return ORDERS.filter(isLate).length;
-      return ORDERS.filter(function(p){ return !p.archived && (p.status || 'new') === st; }).length;
+    return out;
+  }
+  function oScope(){
+    if (O_PT === 'all') return ORDERS;
+    return ORDERS.filter(function(p){ const k = oCard(p); return !!(k && k.p.point && String(k.p.point.id) === O_PT); });
+  }
+  function oCounts(list){
+    const c = { new: 0, late: 0, today: 0, rented: 0, change: 0, closed: 0, cancelled: 0, archived: 0, all: 0 };
+    list.forEach(function(p){
+      const i = oInfo(p);
+      if (i.arc){ c.archived++; return; }
+      c.all++;
+      if (i.st === 'new') c.new++;
+      if (i.st === 'rented') c.rented++;
+      if (i.st === 'closed') c.closed++;
+      if (i.st === 'cancelled') c.cancelled++;
+      if (i.late) c.late++;
+      if (i.today) c.today++;
+      if (i.change) c.change++;
+    });
+    return c;
+  }
+  function oKpisHTML(){
+    const c = oCounts(oScope()), F = SUB_TAB_ORD || 'all';
+    const k = function(f, cls, lb, n, sub){
+      return '<button type="button" class="kpi home-kpi st-k ' + cls + (n ? ' has' : '') + (F === f ? ' on' : '') + '" data-ord-f="' + f + '" aria-pressed="' + (F === f) + '">' +
+        '<div class="lb">' + lb + '</div><div class="vl">' + n + '</div><div class="sub">' + sub + '</div></button>';
     };
-
-    let h = '<div class="chips" style="margin-bottom:16px">' +
-      [['all','Все'],['new','Новые'],['rented','В аренде'],['late','Просрочены'],['closed','Завершены'],['cancelled','Отменены'],['archived','Архив']]
-        .filter(function(p){ return p[0] !== 'late' || cnt('late') > 0 || ordFilter === 'late'; })
-        .map(function(p){
-          return '<button class="chip" data-ost="' + p[0] + '"' +
-                 (ordFilter === p[0] ? ' style="border-color:var(--or);color:var(--or)"' : '') +
-                 '>' + p[1] + ' · ' + cnt(p[0]) + '</button>';
-        }).join('') +
-      '</div>';
-
-    if (!filtered.length){
-      return h + '<div class="empty">' +
+    return k('new', 'k-new', 'Новые', c.new, 'ждут выдачи') +
+      k('late', 'k-late', 'Просрочены', c.late, c.late ? 'свяжитесь с клиентом' : 'всё в срок') +
+      k('today', 'k-today', 'Вернуть сегодня', c.today, 'срок до конца дня') +
+      k('rented', 'k-rented', 'В аренде', c.rented, 'выдано сейчас');
+  }
+  function oChipsHTML(){
+    const c = oCounts(oScope()), F = SUB_TAB_ORD || 'all';
+    return [['all', 'Все'], ['change', 'Ждут решения'], ['closed', 'Завершены'], ['cancelled', 'Отменены'], ['archived', 'Архив']]
+      .filter(function(x){ return x[0] !== 'change' || c.change || F === 'change'; })
+      .map(function(x){
+        const on = F === x[0];
+        return '<button class="chip' + (on ? ' on' : '') + '" data-ost="' + x[0] + '" aria-pressed="' + on + '"' +
+          (on ? ' style="border-color:var(--or);color:var(--or)"' : '') + '>' + x[1] + ' · ' + c[x[0]] + '</button>';
+      }).join('');
+  }
+  function oText(p){
+    const k = oCard(p), o = p.orders || {}, c = k ? k.c : {}, pp = k ? k.p : {};
+    const items = Array.isArray(pp.items) ? pp.items.map(function(it){ return it.name || ''; }).join(' ') : '';
+    const tel = [o.phone, c.client_tel].join(' ');
+    return [p.order_id, o.name, c.client_name, tel, tel.replace(/\D/g, ''), p.tools_text, items, pp.point && pp.point.name, o.address, c.address]
+      .join(' ').toLowerCase();
+  }
+  function oListHTML(){
+    const F = SUB_TAB_ORD || 'all';
+    const q = OQ.trim().toLowerCase().replace(/^№\s*/, '');
+    const pass = function(i){
+      if (F === 'archived') return i.arc;
+      if (i.arc) return false;
+      if (F === 'all') return true;
+      if (F === 'late') return i.late;
+      if (F === 'today') return i.today;
+      if (F === 'change') return i.change;
+      return i.st === F;
+    };
+    const list = oScope().filter(function(p){ return pass(oInfo(p)) && (!q || oText(p).indexOf(q) >= 0); });
+    let h = '';
+    O_GROUPS.forEach(function(g){
+      const rows = list.filter(function(p){ return oInfo(p).g === g[0]; });
+      if (!rows.length) return;
+      rows.sort(function(a, b){
+        const ea = oInfo(a).end, eb = oInfo(b).end;
+        return (ea && eb ? ea - eb : 0) || (Date.parse(b.created_at) || 0) - (Date.parse(a.created_at) || 0);
+      });
+      h += '<div class="st-g st-g-' + g[0] + '">' + g[1] + ' · ' + rows.length + '</div>' +
+        rows.map(function(p){
+          const fr = O_FRESH[p.id] && Date.now() - O_FRESH[p.id] < 120000;
+          const k = oCard(p);
+          return '<div class="st-wrap' + (fr ? ' st-fresh' : '') + '">' + (k ? lcCardHTML(p, k, false) : oPlainCardHTML(p)) + '</div>';
+        }).join('');
+    });
+    if (h) return h;
+    if (!ORDERS.length){
+      return '<div class="empty">' +
         '<svg viewBox="0 0 24 24"><path d="M7 4h-2l-1 2H2v13a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V6h-2l-1-2h-2l1 2H6zM5 8h14v11H5zm4 2h6v2H9z"/></svg>' +
-        '<b>' + (ORDERS.length ? 'В этой вкладке пусто' : 'Заявок пока нет') + '</b>' +
-        '<p>' + (ORDERS.length ? 'Переключитесь на другой статус.' : 'Когда клиенты оформят заявку на ваш инструмент, она появится здесь.') + '</p>' +
-      '</div>';
+        '<b>Заявок пока нет</b><p>Когда клиенты оформят заявку на ваш инструмент, она появится здесь — страница обновляется сама.</p></div>';
     }
+    return '<div class="empty"><b>Ничего не найдено</b><p>' + (q ? 'Измените строку поиска' : 'По этому фильтру заявок нет') + '.</p>' +
+      '<button type="button" class="btn sec sm" data-ord-f="all" data-ord-clear="1">Показать все заявки</button></div>';
+  }
+  function oUpdTxt(){
+    return (O_UPD ? 'Обновлено ' + stWhen(O_UPD).replace(/^сегодня /, '') + ' · ' : '') + 'обновляется само каждые 30 секунд';
+  }
+  function oUpdLine(){
+    const F = SUB_TAB_ORD || 'all';
+    return '<span id="ordUpd">' + oUpdTxt() + '</span>' +
+      (F !== 'all' ? ' · фильтр «' + (O_FN[F] || F) + '» — <button type="button" class="st-link" data-ord-f="all">показать все</button>' : '');
+  }
 
-    h += filtered.map(function(p){
-      const lk = LCARDS && LCARDS[String(p.id)];
-      if (lk) return lcCardHTML(p, lk, false);
+  function oPtsHTML(pts){
+    return [{ id: 'all', name: 'Все пункты' }].concat(pts).map(function(x){
+      const on = O_PT === x.id;
+      const n = ORDERS.filter(function(p){ const i = oInfo(p), k = oCard(p);
+        return !i.arc && (i.st === 'new' || i.st === 'rented') && (x.id === 'all' || (k && k.p.point && String(k.p.point.id) === x.id)); }).length;
+      return '<button class="chip' + (on ? ' on' : '') + '" data-ord-pt="' + esc(x.id) + '"' +
+        (on ? ' style="border-color:var(--or);color:var(--or)"' : '') + '>' + esc(x.name) + (n ? ' · ' + n : '') + '</button>';
+    }).join('');
+  }
+  function viewAdminOrders(){
+    if (!O_UPD) O_UPD = Date.now();
+    const pts = oPts();
+    if (O_PT !== 'all' && !pts.some(function(x){ return x.id === O_PT; })) O_PT = 'all';
+    let h = '';
+    if (pts.length > 1) h += '<div class="chips st-pts" id="ordPts" role="group" aria-label="Пункт выдачи">' + oPtsHTML(pts) + '</div>';
+    h += '<div class="kpis st-kpis" id="ordKpis">' + oKpisHTML() + '</div>';
+    h += '<div class="st-bar">' +
+        '<label for="ordQ" class="sr-lbl">Поиск по заявкам</label>' +
+        '<input class="inp" id="ordQ" type="search" autocomplete="off" placeholder="№, клиент, телефон, инструмент" value="' + esc(OQ) + '">' +
+        '<button class="btn sec sm" data-ord-reload="1">Обновить</button>' +
+      '</div>' +
+      '<div class="small muted st-upd" id="ordUpdLine">' + oUpdLine() + '</div>' +
+      '<div class="chips ord-chips" id="ordChips" style="margin:10px 0 0">' + oChipsHTML() + '</div>';
+    h += '<div id="ordList">' + oListHTML() + '</div>';
+    return h;
+  }
+  /* обновить плитки, фильтры и список, не трогая поле поиска */
+  function oPaintList(){
+    const k = $('ordKpis'), c = $('ordChips'), l = $('ordList'), u = $('ordUpdLine');
+    if (k) k.innerHTML = oKpisHTML();
+    if (c) c.innerHTML = oChipsHTML();
+    if (l) l.innerHTML = oListHTML();
+    if (u) u.innerHTML = oUpdLine();
+    const pe = $('ordPts');
+    if (pe) pe.innerHTML = oPtsHTML(oPts());
+    /* число у вкладки «Заявки» — новые и выданные */
+    const tb = document.querySelector('.tabs button[data-tab="orders"]');
+    if (tb){
+      const n = ORDERS.filter(function(o){ const st = o.status || 'new'; return !o.archived && (st === 'new' || st === 'rented'); }).length;
+      let b = tb.querySelector('.n');
+      if (!n){ if (b) b.remove(); }
+      else { if (!b){ b = document.createElement('span'); b.className = 'n'; tb.appendChild(b); } b.textContent = n; }
+    }
+  }
+  function oRepaint(){
+    if (TAB !== 'orders' || !isAdmin()) return;
+    if (document.activeElement && document.activeElement.id === 'ordQ') { oPaintList(); return; }
+    const y = window.scrollY; render(); window.scrollTo(0, y);
+  }
+  async function oReload(){
+    const r = await Promise.allSettled([loadMyOrderParts(), loadLordCards()]);
+    if (r[0].status !== 'fulfilled') throw r[0].reason;
+    const seen = {}; ORDERS.forEach(function(p){ seen[p.id] = 1; });
+    const had = ORDERS.length > 0 || O_UPD > 0;
+    ORDERS = r[0].value || [];
+    O_UPD = Date.now();
+    const fresh = had ? ORDERS.filter(function(p){ return !seen[p.id] && (p.status || 'new') === 'new' && !p.archived; }) : [];
+    fresh.forEach(function(p){ O_FRESH[p.id] = Date.now(); });
+    return fresh;
+  }
+  function oSig(){
+    return JSON.stringify(ORDERS.map(function(p){
+      const k = oCard(p);
+      return [p.id, p.status, !!p.archived, k ? [k.p.rented_at || '', k.p.change ? k.p.change.state : '', k.p.cancel ? 1 : 0,
+        (k.p.items || []).map(function(it){ return it.returned_at ? 1 : 0; }).join('')] : 0];
+    })) + '|' + (LCARDS ? 1 : 0);
+  }
+  /* автообновление раз в 30 секунд, пока открыты «Заявки» и вкладка браузера видна; таймеры «осталось» тикают отдельно */
+  function oAuto(){
+    if (O_TIMER) return;
+    O_TIMER = setInterval(async function(){
+      if (TAB !== 'orders' || !isAdmin() || document.hidden || $('sheet') || document.querySelector('#ordList button:disabled')) return;
+      const s0 = oSig();
+      let fresh;
+      try { fresh = await oReload(); } catch(e){ return; }
+      if (TAB !== 'orders') return;
+      if (fresh.length) toast(fresh.length === 1 ? 'Новая заявка: ' + (fresh[0].tools_text || '') : 'Новых заявок: ' + fresh.length);
+      if (oSig() !== s0) oRepaint(); else { const u = $('ordUpd'); if (u) u.textContent = oUpdTxt(); }
+    }, 30000);
+  }
+
+  /* простая карточка — когда в базе ещё нет iva_order_cards */
+  function oPlainCardHTML(p){
       const o = p.orders || {};
       const st = p.status || 'new';
       const isArc = !!p.archived;
@@ -840,9 +1009,6 @@
         '</div>' +
         (btns ? '<div class="acts">' + btns + '</div>' : '') +
       '</div>';
-    }).join('');
-
-    return h;
   }
 
   /* ---------- Этап F сайта (20.10.2026): заявки клиента — как в приложении ----------
@@ -2106,6 +2272,16 @@
       if (on && tb.scrollWidth > tb.clientWidth) tb.scrollLeft = on.offsetLeft - tb.offsetLeft - (tb.clientWidth - on.offsetWidth) / 2; })();
 
     if (TAB === 'staff' && STAFF && STAFF.status === 'active') stAuto();
+    if (TAB === 'orders' && isAdmin()){
+      oAuto();
+      if ($('ordQ')){
+        let oT = null;
+        $('ordQ').oninput = function(){
+          const v = this.value; clearTimeout(oT);
+          oT = setTimeout(function(){ OQ = v; const l = $('ordList'); if (l) l.innerHTML = oListHTML(); }, 150);
+        };
+      }
+    }
     if ($('stTq')){
       let stT2 = null;
       $('stTq').oninput = function(){
@@ -2290,6 +2466,21 @@
 
     const ost = e.target.closest('[data-ost]');
     if (ost){ SUB_TAB_ORD = ost.getAttribute('data-ost'); render(); return; }
+    /* «Заявки» владельца: плитки-фильтры, пункт, «Обновить» */
+    const oF = e.target.closest('[data-ord-f]');
+    if (oF){
+      const f = oF.getAttribute('data-ord-f');
+      SUB_TAB_ORD = SUB_TAB_ORD === f ? 'all' : f;
+      if (oF.hasAttribute('data-ord-clear')){ SUB_TAB_ORD = 'all'; OQ = ''; }
+      render(); return;
+    }
+    const oPt = e.target.closest('[data-ord-pt]');
+    if (oPt){ O_PT = oPt.getAttribute('data-ord-pt'); render(); return; }
+    if (e.target.closest('[data-ord-reload]')){
+      oReload().then(function(f){ oRepaint(); toast(f.length ? 'Новых заявок: ' + f.length : 'Обновлено'); })
+        .catch(function(err){ toast('Не удалось обновить: ' + err.message); });
+      return;
+    }
 
     const ordDo = e.target.closest('[data-ord-do]');
     if (ordDo){
