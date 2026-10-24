@@ -1759,6 +1759,10 @@
         '<span class="small st-ch-who" id="stChWho">…</span>' +
         '<button type="button" class="btn sec sm" id="stChClaim">Отвечу я</button></div>' +
       '<div class="th-body st-ch-body" id="stChBody"><div class="empty" style="padding:30px 10px">Загрузка…</div></div>',
+      '<div class="st-ch-draft" id="stChDraft" hidden></div>' +
+      '<label class="btn sec st-ch-ph" title="Приложить фото" aria-label="Приложить фото">' +
+        '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h3l2-3h6l2 3h3v13H4z"/><circle cx="12" cy="13" r="4"/></svg>' +
+        '<input type="file" id="stChFile" accept="image/*" hidden></label>' +
       '<textarea class="inp st-ch-inp" id="stChTxt" rows="1" maxlength="2000" placeholder="Ваш ответ клиенту"></textarea>' +
       '<button class="btn" id="stChSend">Отправить</button>');
     const sh = $('sheet'); sh.classList.add('st-ch-sheet');
@@ -1789,16 +1793,37 @@
       if (Date.now() - typT > 5000){ typT = Date.now(); api('/rest/v1/rpc/iva_chat_mark', 'POST', { p_thread: ch.thread, p_state: 'typing' }).catch(function(){}); }
     };
     ta.onkeydown = function(e){ if (e.key === 'Enter' && !e.shiftKey && !e.isComposing){ e.preventDefault(); $('stChSend').click(); } };
+    /* фото к ответу: сжимается до 1280 px и загружается в хранилище (как у клиента), отправляется вместе с текстом */
+    let img = '';
+    const draft = function(){
+      const d = $('stChDraft'); if (!d) return;
+      d.hidden = !img;
+      d.innerHTML = img ? '<img src="' + esc(img) + '" alt="Фото к отправке"><button type="button" class="x" id="stChDraftX" aria-label="Убрать фото">×</button>' : '';
+      if (img) $('stChDraftX').onclick = function(){ img = ''; draft(); };
+    };
+    $('stChFile').onchange = async function(){
+      const f = this.files && this.files[0]; this.value = '';
+      if (!f) return;
+      const lb = this.parentNode; lb.classList.add('busy');
+      try { img = await uploadPhoto(f); draft(); ta.focus(); }
+      catch(e){ toast('Фото не загрузилось: ' + e.message); }
+      lb.classList.remove('busy');
+    };
     $('stChSend').onclick = async function(){
       const t = ta.value.trim();
-      if (!t) { ta.focus(); return; }
+      if (!t && !img) { ta.focus(); return; }
       const btn = this; btn.disabled = true;
       const p = ch.kind === 't' ? { p_tool: ch.key, p_peer: ch.peer, p_text: t } : { p_point: ch.key, p_peer: ch.peer, p_text: t };
+      if (img) p.p_img = img;
       try {
         await api('/rest/v1/rpc/' + (ch.kind === 't' ? 'iva_staff_chat_send' : 'iva_staff_point_chat_send'), 'POST', p);
-        ta.value = ''; ta.style.height = '46px';
+        ta.value = ''; ta.style.height = '46px'; img = ''; draft();
         await stChatPoll(true);
-      } catch(e){ toast('Не отправлено: ' + e.message); }
+      } catch(e){
+        toast(img && /PGRST202|could not find|not find the function|404/i.test(e.message)
+          ? 'Фото с сайта заработает после обновления базы (SQL 20261117) — пока отправьте текстом'
+          : 'Не отправлено: ' + e.message);
+      }
       btn.disabled = false; ta.focus();
     };
   }
