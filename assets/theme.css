@@ -1162,3 +1162,31 @@ select.inp{cursor:pointer;appearance:none;
 .st-tnote-wait{color:var(--yel)}
 .st-tnote-rej{color:var(--red)}
 .st-tool .st-del:hover{border-color:var(--red);color:var(--red)}
+/* Работа сотрудника, этап 3 «Сообщения пунктов» (24.10.2026): список переписок и переписка в нижней панели */
+.st-seg-n{display:inline-flex;min-width:19px;height:19px;padding:0 5px;border-radius:10px;background:var(--red);color:#101217;font-size:11.5px;font-weight:800;align-items:center;justify-content:center;vertical-align:1px}
+.st-seg button.on .st-seg-n{background:#101217;color:var(--or)}
+.st-chats{display:flex;flex-direction:column;gap:8px}
+.st-chat{display:flex;align-items:center;gap:12px;width:100%;text-align:left;background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:11px 12px;font:inherit;color:var(--tx);cursor:pointer}
+.st-chat:hover{border-color:var(--line-2)}
+.st-chat.unread{border-color:rgba(255,143,31,.45)}
+.st-chat-ava{flex:0 0 44px;width:44px;height:44px;border-radius:12px;overflow:hidden;background:var(--field);display:flex;align-items:center;justify-content:center;font-weight:800;color:var(--or)}
+.st-chat-ava img{width:100%;height:100%;object-fit:cover}
+.st-chat-mid{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+.st-chat-top{display:flex;align-items:baseline;gap:8px}
+.st-chat-top b{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:14.5px}
+.st-chat-top small{color:var(--g2);font-size:11.5px;white-space:nowrap}
+.st-chat-sub{font-size:12px;color:var(--g2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.st-chat-last{font-size:13px;color:var(--gr);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.st-chat.unread .st-chat-last{color:var(--tx);font-weight:600}
+.st-chat-last i{font-style:normal;color:var(--g2)}
+.st-chat-n{flex:0 0 auto;min-width:22px;height:22px;padding:0 6px;border-radius:11px;background:var(--or);color:#101217;font-size:12px;font-weight:800;display:flex;align-items:center;justify-content:center}
+.sheet.st-ch-sheet{height:88vh;height:88dvh}
+@media (min-width:760px){.sheet.st-ch-sheet{left:50%;right:auto;width:720px;margin-left:-360px}}
+.st-ch-sheet .sheet-b{display:flex;flex-direction:column;padding:0;overflow:hidden}
+.st-ch-head{display:flex;align-items:center;gap:6px 12px;flex-wrap:wrap;padding:10px 16px;border-bottom:1px solid var(--line);flex-shrink:0}
+.st-ch-who{flex:1;min-width:0;color:var(--gr);line-height:1.4}
+.st-ch-who b{color:var(--yel)}
+.st-ch-body{flex:1}
+.st-by{font-size:11px;font-weight:700;opacity:.8;margin-bottom:2px}
+.st-ch-sheet .sheet-f{align-items:flex-end}
+.st-ch-inp{flex:1;min-width:0;resize:none;min-height:44px;max-height:140px;line-height:1.4}

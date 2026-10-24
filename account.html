@@ -163,6 +163,7 @@
   let SENT = [];
   let ST_PT = 'all', ST_F = 'all', ST_Q = '', ST_UPD = 0, ST_TIMER = null, ST_FRESH = {};   // «Смена» сотрудника (этап 1)
   let STOOLS = null, ST_VIEW = 'orders', ST_TF = 'all', ST_TQ = '';                          // инструмент пунктов (этап 2)
+  let STCHATS = null;                                                                        // сообщения пунктов (этап 3)
   let STAFF = null;          // этап D: сотрудник проката (iva_staff_me) — приглашение или работа
   let SPARTS = [];           // заявки пунктов сотрудника (iva_staff_parts)             // этап C: заявки, которые арендодатель сам отправил как арендатор («Я арендую»)
   let SUB_TAB = 'all';       // фильтр по статусу объявлений
@@ -1428,7 +1429,7 @@
        iva_staff_set_status — «Выдал» / «Вернули» (право «Выдача», свой пункт, new → rented → closed).
      Без SQL сотрудников (20261028/1029) функции не найдутся — вкладка просто не появится. */
   async function loadStaff(){
-    STAFF = null; SPARTS = []; SCARDS = null; STOOLS = null;
+    STAFF = null; SPARTS = []; SCARDS = null; STOOLS = null; STCHATS = null;
     try {
       const r = await api('/rest/v1/rpc/iva_staff_me', 'POST', {});
       STAFF = (Array.isArray(r) ? r[0] : r) || null;
@@ -1445,11 +1446,13 @@
         STOOLS = Array.isArray(r) ? r.map(function(x){ return x && x.iva_staff_tools ? x.iva_staff_tools : x; }).filter(Boolean) : null;
       } catch(e){ STOOLS = null; }
     }
+    /* этап 3: переписки пунктов сотрудника с правом «Отвечает в чате» */
+    if (STAFF && STAFF.status === 'active' && STAFF.can_chat) await stLoadChats();
   }
   function staffNewBadge(){
     if (!STAFF) return '';
     if (STAFF.status === 'invited') return '<span class="n warn">!</span>';
-    const n = SPARTS.filter(function(p){ return p.status === 'new'; }).length;
+    const n = SPARTS.filter(function(p){ return p.status === 'new'; }).length + stUnread(STCHATS);   // новые заявки + непрочитанные сообщения
     return n ? '<span class="n">' + n + '</span>' : '';
   }
   function staffRights(st){
@@ -1646,6 +1649,159 @@
     h += '<div id="stTList" class="st-tlist">' + stToolListHTML() + '</div>';
     return h;
   }
+  /* «Сообщения пункта» (24.10.2026, этап 3 «Работы в прокате»): сотрудник с правом «Отвечает в чате» видит переписки клиентов
+     по инструменту своих пунктов и чаты пунктов, читает и отвечает от имени проката; «кто отвечает» и «Отвечу я» — как в приложении.
+     Функции базы: iva_staff_chats / iva_staff_chat / _read / _send (SQL 10.112), iva_staff_point_chats / iva_staff_point_chat /
+     _read / _send (SQL 10.120), iva_chat_mark / iva_chat_who (SQL 10.122). */
+  async function stLoadChats(){
+    const r = await Promise.allSettled([
+      api('/rest/v1/rpc/iva_staff_chats', 'POST', {}),
+      api('/rest/v1/rpc/iva_staff_point_chats', 'POST', {})
+    ]);
+    if (r[0].status === 'rejected' && r[1].status === 'rejected'){ STCHATS = null; return; }
+    const a = r[0].status === 'fulfilled' && Array.isArray(r[0].value) ? r[0].value.map(function(c){ return Object.assign({ kind: 't', key: c.tool_id }, c); }) : [];
+    const b = r[1].status === 'fulfilled' && Array.isArray(r[1].value) ? r[1].value.map(function(c){ return Object.assign({ kind: 'p', key: c.point_id }, c); }) : [];
+    STCHATS = a.concat(b).filter(function(c){ return c.key && c.peer; })
+      .sort(function(x, y){ return (Date.parse(y.last_at) || 0) - (Date.parse(x.last_at) || 0); });
+  }
+  function stChatScope(){
+    if (!STCHATS) return [];
+    if (ST_PT === 'all') return STCHATS;
+    const pt = stPts().find(function(p){ return String(p.id) === ST_PT; });
+    return STCHATS.filter(function(c){ return c.kind === 'p' ? String(c.point_id) === ST_PT : !!pt && c.point_name === pt.name; });
+  }
+  function stUnread(list){ return (list || []).reduce(function(s, c){ return s + (Number(c.unread) || 0); }, 0); }
+  function stChatsView(){
+    if (!STCHATS) return '<div class="empty"><b>Переписки не загрузились</b><p>Нажмите «Обновить». Если не поможет — ответьте в приложении «Ива».</p>' +
+      '<button class="btn sec sm" data-staff-reload="1">Обновить</button></div>';
+    const list = stChatScope();
+    let h = '<div class="small muted st-upd" style="margin:0 2px 10px">Переписки клиентов с вашими пунктами за 90 дней — где клиент писал сам. ' +
+      'Отвечаете от имени проката; владелец видит переписку.</div>';
+    if (!list.length) return h + '<div class="empty"><b>Сообщений нет</b><p>Когда клиент напишет про инструмент вашего пункта или в чат пункта, переписка появится здесь.</p></div>';
+    return h + '<div class="st-chats">' + list.map(function(c){
+      const n = Number(c.unread) || 0;
+      const nm = String(c.client_name || 'Клиент');
+      const img = /^https:\/\//.test(c.tool_img || '') ? '<img src="' + esc(c.tool_img) + '" alt="" loading="lazy">' : '<span>' + esc(nm.charAt(0).toUpperCase()) + '</span>';
+      return '<button type="button" class="st-chat' + (n ? ' unread' : '') + '" data-st-chat="' + esc(c.kind + ':' + c.key + ':' + c.peer) + '">' +
+        '<span class="st-chat-ava">' + img + '</span>' +
+        '<span class="st-chat-mid">' +
+          '<span class="st-chat-top"><b>' + esc(nm) + '</b><small>' + esc(stWhen(Date.parse(c.last_at))) + '</small></span>' +
+          '<span class="st-chat-sub">' + esc(c.kind === 't' ? (c.tool_name || 'Инструмент') : 'Чат пункта') + ' · ' + esc(c.point_name || 'Пункт') + '</span>' +
+          '<span class="st-chat-last">' + (c.last_mine ? '<i>Прокат:</i> ' : '') + esc(String(c.last_text || '').slice(0, 140)) + '</span>' +
+        '</span>' +
+        (n ? '<span class="st-chat-n">' + n + '</span>' : '') +
+      '</button>';
+    }).join('') + '</div>';
+  }
+  /* открытая переписка — в нижней панели; обновляется каждые 5 секунд, пока панель открыта */
+  let ST_CH = null;
+  function stChatMsgsHTML(ms){
+    if (!ms.length) return '<div class="empty" style="padding:30px 10px"><b style="font-size:15px">Сообщений нет</b></div>';
+    let h = '', day = '';
+    ms.forEach(function(m){
+      const d = new Date(m.created_at);
+      const dl = stWhen(d.getTime()).replace(/ \d\d:\d\d$/, '');
+      if (dl !== day){ h += '<div class="th-day">' + esc(dl) + '</div>'; day = dl; }
+      let inner = '';
+      if (/^https:\/\//.test(m.img || '')) inner += '<a href="' + esc(m.img) + '" target="_blank" rel="noopener"><img class="bimg" src="' + esc(m.img) + '" alt="фото"></a>';
+      if (/^https:\/\//.test(m.audio || '')) inner += '<audio controls preload="none" src="' + esc(m.audio) + '"></audio>';
+      if (m.text) inner += esc(m.text);
+      const hm = String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
+      h += '<div class="bub ' + (m.mine ? 'me' : 'they') + '">' +
+        (m.mine ? '<div class="st-by">' + (m.by_me ? 'Вы' : 'Прокат') + '</div>' : '') + inner +
+        '<div class="btime">' + hm + (m.mine ? '<span>' + (m.is_read ? '✓✓' : '✓') + '</span>' : '') + '</div></div>';
+    });
+    return h;
+  }
+  function stWhoHTML(w){
+    if (!w) return '';
+    const parts = [];
+    (w.others || []).forEach(function(o){
+      const nm = esc(o.name || (o.role === 'owner' ? 'Владелец' : 'Сотрудник'));
+      if (o.claim) parts.push('<b>' + nm + '</b> отвечает');
+      else if (o.typing) parts.push('<b>' + nm + '</b> печатает…');
+      else if (o.open) parts.push(nm + ' сейчас в переписке');
+    });
+    if (w.last && w.last.name) parts.push('последним ответил' + (w.last.me ? 'и вы' : ' ' + esc(w.last.name)) + ' ' + esc(stWhen(Date.parse(w.last.at))));
+    return parts.join(' · ');
+  }
+  async function stChatPoll(first){
+    const ch = ST_CH;
+    if (!ch || !$('sheet') || !$('stChBody')) return;
+    const p = ch.kind === 't' ? { p_tool: ch.key, p_peer: ch.peer } : { p_point: ch.key, p_peer: ch.peer };
+    const fn = ch.kind === 't' ? 'iva_staff_chat' : 'iva_staff_point_chat';
+    try {
+      const ms = await api('/rest/v1/rpc/' + fn, 'POST', p) || [];
+      if (ST_CH !== ch || !$('stChBody')) return;
+      const sig = JSON.stringify(ms.map(function(m){ return [m.id, m.is_read]; }));
+      if (sig !== ch.sig){
+        const b = $('stChBody'), atEnd = first || b.scrollHeight - b.scrollTop - b.clientHeight < 60;
+        ch.sig = sig; b.innerHTML = stChatMsgsHTML(ms);
+        if (atEnd) b.scrollTop = b.scrollHeight;
+        if (ms.some(function(m){ return !m.mine && !m.is_read; })) api('/rest/v1/rpc/' + fn + '_read', 'POST', p).catch(function(){});
+      }
+    } catch(e){ if (first && $('stChBody')) $('stChBody').innerHTML = '<div class="empty" style="padding:30px 10px"><b>Не удалось открыть</b><p>' + esc(e.message) + '</p></div>'; }
+    try {
+      const w = await api('/rest/v1/rpc/iva_chat_who', 'POST', { p_thread: ch.thread });
+      if (ST_CH === ch && $('stChWho')){
+        $('stChWho').innerHTML = stWhoHTML(w) || 'Пока никто из проката не отвечает';
+      }
+    } catch(e){ if ($('stChWho')) $('stChWho').textContent = ''; }
+  }
+  function stOpenChat(id){
+    const m = String(id).split(':');
+    const c = (STCHATS || []).find(function(x){ return x.kind === m[0] && String(x.key) === m[1] && x.peer === m[2]; });
+    if (!c) return;
+    const ch = { kind: c.kind, key: c.key, peer: c.peer, thread: c.kind + ':' + c.key + ':' + c.peer, sig: '', claim: false };
+    ST_CH = ch;
+    openSheet(String(c.client_name || 'Клиент') + ' · ' + (c.kind === 't' ? (c.tool_name || 'Инструмент') : 'чат пункта'),
+      '<div class="st-ch-head"><span class="small muted">' + esc(c.point_name || 'Пункт') + '</span>' +
+        '<span class="small st-ch-who" id="stChWho">…</span>' +
+        '<button type="button" class="btn sec sm" id="stChClaim">Отвечу я</button></div>' +
+      '<div class="th-body st-ch-body" id="stChBody"><div class="empty" style="padding:30px 10px">Загрузка…</div></div>',
+      '<textarea class="inp st-ch-inp" id="stChTxt" rows="1" maxlength="2000" placeholder="Ответ от имени проката"></textarea>' +
+      '<button class="btn" id="stChSend">Отправить</button>');
+    const sh = $('sheet'); sh.classList.add('st-ch-sheet');
+    api('/rest/v1/rpc/iva_chat_mark', 'POST', { p_thread: ch.thread, p_state: 'open' }).catch(function(){});
+    stChatPoll(true);
+    const tm = setInterval(function(){
+      if (ST_CH !== ch || !document.body.contains(sh)){ clearInterval(tm); return; }
+      if (!document.hidden) stChatPoll(false);
+    }, 5000);
+    const mo = new MutationObserver(function(){
+      if (document.body.contains(sh)) return;
+      mo.disconnect(); clearInterval(tm);
+      api('/rest/v1/rpc/iva_chat_mark', 'POST', { p_thread: ch.thread, p_state: 'close' }).catch(function(){});
+      if (ST_CH === ch) ST_CH = null;
+      stLoadChats().then(function(){ if (TAB === 'staff' && ST_VIEW === 'chats') stRepaint(); else render(); });
+    });
+    mo.observe(document.body, { childList: true });
+    $('stChClaim').onclick = function(){
+      ch.claim = !ch.claim;
+      this.textContent = ch.claim ? 'Не буду отвечать' : 'Отвечу я';
+      api('/rest/v1/rpc/iva_chat_mark', 'POST', { p_thread: ch.thread, p_state: ch.claim ? 'claim' : 'unclaim' })
+        .then(function(){ stChatPoll(false); }).catch(function(){});
+    };
+    let typT = 0;
+    const ta = $('stChTxt');
+    ta.oninput = function(){
+      ta.style.height = 'auto'; ta.style.height = Math.min(ta.scrollHeight, 140) + 'px';
+      if (Date.now() - typT > 5000){ typT = Date.now(); api('/rest/v1/rpc/iva_chat_mark', 'POST', { p_thread: ch.thread, p_state: 'typing' }).catch(function(){}); }
+    };
+    ta.onkeydown = function(e){ if (e.key === 'Enter' && !e.shiftKey && !e.isComposing){ e.preventDefault(); $('stChSend').click(); } };
+    $('stChSend').onclick = async function(){
+      const t = ta.value.trim();
+      if (!t) { ta.focus(); return; }
+      const btn = this; btn.disabled = true;
+      const p = ch.kind === 't' ? { p_tool: ch.key, p_peer: ch.peer, p_text: t } : { p_point: ch.key, p_peer: ch.peer, p_text: t };
+      try {
+        await api('/rest/v1/rpc/' + (ch.kind === 't' ? 'iva_staff_chat_send' : 'iva_staff_point_chat_send'), 'POST', p);
+        ta.value = ''; ta.style.height = 'auto';
+        await stChatPoll(true);
+      } catch(e){ toast('Не отправлено: ' + e.message); }
+      btn.disabled = false; ta.focus();
+    };
+  }
   function viewStaff(){
     const st = STAFF;
     if (!st) return '';
@@ -1669,13 +1825,14 @@
     if (ST_PT !== 'all' && !pts.some(function(p){ return String(p.id) === ST_PT; })) ST_PT = 'all';
     const cur = ST_PT !== 'all' ? pts.find(function(p){ return String(p.id) === ST_PT; }) : (pts.length === 1 ? pts[0] : null);
     const app = [];
-    if (st.can_catalog) app.push('добавление инструмента');
-    if (st.can_chat) app.push('чат пункта');
+    if (st.can_catalog) app.push('добавление и правка инструмента');
 
     /* шапка смены: прокат, пункты (выбор), часы и телефон выбранного пункта */
     let h = '<div class="st-head"><div class="st-co"><b>«' + esc(st.company || 'Прокат') + '»</b><span class="small muted">смена сотрудника</span></div>';
     if (pts.length > 1){
-      const act = ST_VIEW === 'tools'
+      const act = ST_VIEW === 'chats'
+        ? function(id){ const keep = ST_PT; ST_PT = id; const n = stUnread(stChatScope()); ST_PT = keep; return n; }
+        : ST_VIEW === 'tools'
         ? function(id){ return (STOOLS || []).filter(function(t){ return id === 'all' || String(t.point_id || '') === id; }).length; }
         : function(id){ return SPARTS.filter(function(p){ const s = p.status || 'new'; return (s === 'new' || s === 'rented') && (id === 'all' || String(p.point_id || '') === id); }).length; };
       h += '<div class="chips st-pts" role="group" aria-label="Пункт выдачи">' +
@@ -1702,18 +1859,21 @@
         ' — пока в приложении «Ива» для Android.</div>' : '') +
       '</details>';
 
-    const canOrd = !!(st.can_issue || st.can_notify), canTools = !!st.can_catalog;
-    if (!canOrd && canTools) ST_VIEW = 'tools';
-    if (!canTools) ST_VIEW = 'orders';
-    if (canOrd && canTools){
-      const nOrd = stScope().filter(function(p){ const s = p.status || 'new'; return s === 'new' || s === 'rented'; }).length;
-      const nT = stToolScope().length;
-      h += '<div class="st-seg" role="tablist" aria-label="Раздел работы">' +
-        '<button type="button" role="tab" data-st-view="orders" aria-selected="' + (ST_VIEW === 'orders') + '"' + (ST_VIEW === 'orders' ? ' class="on"' : '') + '>Заявки' + (nOrd ? ' · ' + nOrd : '') + '</button>' +
-        '<button type="button" role="tab" data-st-view="tools" aria-selected="' + (ST_VIEW === 'tools') + '"' + (ST_VIEW === 'tools' ? ' class="on"' : '') + '>Инструмент' + (STOOLS ? ' · ' + nT : '') + '</button>' +
-        '</div>';
+    const canOrd = !!(st.can_issue || st.can_notify), canTools = !!st.can_catalog, canChat = !!st.can_chat;
+    const views = [];
+    if (canOrd) views.push(['orders', 'Заявки', stScope().filter(function(p){ const s = p.status || 'new'; return s === 'new' || s === 'rented'; }).length]);
+    if (canTools) views.push(['tools', 'Инструмент', STOOLS ? stToolScope().length : 0]);
+    if (canChat) views.push(['chats', 'Сообщения', stUnread(stChatScope())]);
+    if (views.length && !views.some(function(v){ return v[0] === ST_VIEW; })) ST_VIEW = views[0][0];
+    if (views.length > 1){
+      h += '<div class="st-seg" role="tablist" aria-label="Раздел работы">' + views.map(function(v){
+        const on = ST_VIEW === v[0];
+        return '<button type="button" role="tab" data-st-view="' + v[0] + '" aria-selected="' + on + '"' + (on ? ' class="on"' : '') + '>' + v[1] +
+          (v[2] ? (v[0] === 'chats' ? ' <span class="st-seg-n">' + v[2] + '</span>' : ' · ' + v[2]) : '') + '</button>';
+      }).join('') + '</div>';
     }
-    if (ST_VIEW === 'tools') return h + stToolsView();
+    if (ST_VIEW === 'tools' && canTools) return h + stToolsView();
+    if (ST_VIEW === 'chats' && canChat) return h + stChatsView();
     if (!canOrd){
       return h + '<div class="empty" style="margin-top:14px"><b>Заявки вам не показываются</b>' +
         '<p>Владелец проката не дал право «Выдача» или «Уведомления о заявках».</p></div>';
@@ -1750,14 +1910,16 @@
       if (TAB !== 'staff' || !STAFF || STAFF.status !== 'active' || document.hidden || $('sheet')) return;
       const seen = {}; SPARTS.forEach(function(p){ seen[p.part_id] = 1; });
       const sig = function(){ return JSON.stringify(SPARTS.map(function(p){ return [p.part_id, p.status, p.rented_at || '']; })) + '|' + (SCARDS ? Object.keys(SCARDS).length : -1) +
-        '|' + JSON.stringify((STOOLS || []).map(function(t){ return [t.id, t.review || '', t.edit_state || '', t.status || '', t.active]; })); };
-      const s0 = sig();
+        '|' + JSON.stringify((STOOLS || []).map(function(t){ return [t.id, t.review || '', t.edit_state || '', t.status || '', t.active]; })) +
+        '|' + JSON.stringify((STCHATS || []).map(function(c){ return [c.kind, c.key, c.peer, c.unread, c.last_at]; })); };
+      const s0 = sig(), u0 = stUnread(STCHATS);
       try { await loadStaff(); } catch(e){ return; }
       ST_UPD = Date.now();
       if (!STAFF || STAFF.status !== 'active'){ render(); return; }
       const fresh = SPARTS.filter(function(p){ return !seen[p.part_id] && (p.status || 'new') === 'new'; });
       fresh.forEach(function(p){ ST_FRESH[p.part_id] = Date.now(); });
       if (fresh.length) toast(fresh.length === 1 ? 'Новая заявка: ' + (fresh[0].tools_text || '') : 'Новых заявок: ' + fresh.length);
+      else if (stUnread(STCHATS) > u0) toast('Новое сообщение от клиента');
       if (sig() !== s0) stRepaint(); else { const u = $('stUpd'); if (u) u.textContent = stUpdTxt(); }
     }, 30000);
   }
@@ -2067,6 +2229,8 @@
       return;
     }
     /* «Работа»: заявки / инструмент, фильтр инструмента, запрос на удаление */
+    const stCh = e.target.closest('[data-st-chat]');
+    if (stCh){ stOpenChat(stCh.getAttribute('data-st-chat')); return; }
     const stV = e.target.closest('[data-st-view]');
     if (stV){ ST_VIEW = stV.getAttribute('data-st-view'); render(); return; }
     const stTf = e.target.closest('[data-st-tf]');
