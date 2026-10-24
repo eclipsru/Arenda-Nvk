@@ -835,4 +835,100 @@ public final class IvaCensorPatch {
             list.addView(row);
         }
     }
+
+    // ════════════════════════════════ 3. Этап 2 (24.10.2026): остальные поля ввода ════════════════════════════════
+    //  Та же проверка (мат — нельзя отправить) теперь и там, где раньше её не было: форма «Изменить инструмент»
+    //  (название, описание, условия, «Модель», характеристики), «Модель» и характеристики в «Добавить», заявка
+    //  (ФИО, адрес, комментарий), причина отмены заявки, «Профиль» клиента, «Мои данные» админа, имя при регистрации,
+    //  ФИО сотрудника; «Предложить модель» с матом не предлагается. Поиск и фильтры не проверяются: их никто не видит.
+    //  Новых вставок в smali нет: штатные кнопки «Сохранить» / «Зарегистрироваться» — свой OnTouchListener (как 10.87),
+    //  остальное — в своём коде. Решает всё равно база (триггеры 20261021_censor.sql на объявлениях, отзывах, чате).
+
+    /** ФИО и имена людей: проверять ли (решение владельца). Настоящая фамилия может совпасть со словом из списка —
+     *  создатель снимает такое слово кнопкой «Это не мат» в «Цензуре». */
+    static boolean NAMES = true;
+    static final String NAME_TAIL = " Если это ваша настоящая фамилия — напишите в «Чат поддержки».";
+
+    /** Ошибка для поля с именем человека: как fieldError, с подсказкой про настоящую фамилию; NAMES = false — "". */
+    static String nameError(String text) {
+        if (!NAMES) return "";
+        String e = fieldError(text);
+        return e.isEmpty() ? "" : e + NAME_TAIL;
+    }
+
+    /** Мат в поле — ошибка у поля, фокус, прокрутка к нему, всплывающее сообщение. true — отправку не пускаем. */
+    static boolean stopField(Activity a, Object o) {
+        if (!(o instanceof TextView)) return false;
+        TextView f = (TextView) o;
+        if (f.getVisibility() != View.VISIBLE) return false;
+        String e = names.containsKey(f) ? nameError(String.valueOf(f.getText())) : fieldError(String.valueOf(f.getText()));
+        if (e.isEmpty()) return false;
+        try { f.setError(e); f.requestFocus(); } catch (Throwable ignore) {}
+        try { IvaFormPatch.scrollTo(a, f); } catch (Throwable ignore) {}
+        try { IvaNotifyPatch.flash(f); } catch (Throwable ignore) {}
+        toast(a, e);
+        return true;
+    }
+
+    /** Поля с именем человека (ФИО, имя при регистрации) — для nameError. */
+    static final java.util.Map<View, Boolean> names = new java.util.WeakHashMap<View, Boolean>();
+    static <T extends View> T asName(T v) { if (v != null) names.put(v, Boolean.TRUE); return v; }
+
+    static boolean stopFields(Activity a, Object... fs) {
+        for (Object f : fs) if (stopField(a, f)) return true;
+        return false;
+    }
+
+    /** Все видимые поля ввода внутри root (форма целиком: «Модель», характеристики и т. п.). */
+    static boolean stopTree(Activity a, View root) {
+        List<EditText> es = new ArrayList<EditText>();
+        edits(root, es);
+        for (EditText e : es) if (e.isShown() && stopField(a, e)) return true;
+        return false;
+    }
+
+    static void edits(View v, List<EditText> out) {
+        if (v == null || v.getVisibility() != View.VISIBLE) return;
+        if (v instanceof EditText) { out.add((EditText) v); return; }
+        if (v instanceof ViewGroup) {
+            ViewGroup g = (ViewGroup) v;
+            for (int i = 0; i < g.getChildCount(); i++) edits(g.getChildAt(i), out);
+        }
+    }
+
+    static final java.util.Map<View, Boolean> guarded = new java.util.WeakHashMap<View, Boolean>();
+
+    /** Штатная кнопка: касание при мате в полях не пропускаем (как «Опубликовать» в 10.87). check — true: остановить. */
+    interface Check { boolean stop(); }
+
+    static void guardButton(View b, final Check c) {
+        if (b == null || guarded.containsKey(b)) return;
+        guarded.put(b, Boolean.TRUE);
+        b.setOnTouchListener(new View.OnTouchListener() {
+            boolean blocked = false;
+            @Override public boolean onTouch(View v, android.view.MotionEvent e) {
+                if (e.getActionMasked() == android.view.MotionEvent.ACTION_DOWN) {
+                    blocked = false;
+                    if (v.isEnabled()) try { blocked = c.stop(); } catch (Throwable ignore) { blocked = false; }
+                }
+                return blocked;
+            }
+        });
+    }
+
+    /** Из IvaPatch.onCreated / onTab: регистрация (имя) и «Мои данные» админа (ФИО). */
+    static void guardStock(final Activity a) {
+        View submit = IvaPatch.view(a, "btnSubmit");
+        Object rn = IvaClientPatch.get(a, "rName");
+        if (rn instanceof View) asName((View) rn);
+        guardButton(submit, new Check() {
+            @Override public boolean stop() {
+                View box = IvaPatch.view(a, "fieldName");                  // поле имени видно только на «Регистрации»
+                return box != null && box.isShown() && stopField(a, IvaClientPatch.get(a, "rName"));
+            }
+        });
+        guardButton(IvaPatch.view(a, "adSave"), new Check() {
+            @Override public boolean stop() { return stopTree(a, IvaPatch.view(a, "pageAdmData")); }
+        });
+    }
 }

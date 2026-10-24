@@ -2067,6 +2067,42 @@ public class IvaPatchTest {
                 "нецензурное слово, написанное латиницей (транслитом)|звёздочки вместо букв — похоже на замаскированный мат");
             eq("цензура 10.92: текст из файла случаев — \\n и \\u", IvaCensorPatch.unescape("а\\nб\\u200bв"), "а\nб\u200bв");
         }
+        try {   // 24.10.2026: «Цензура», этапы 2–3 — остальные поля ввода; стрелки у «Названия» и «Модели»
+            eq("цензура этап 2: ФИО — мат с подсказкой про настоящую фамилию; чистое имя и пустое — без ошибки",
+                IvaCensorPatch.nameError("xyйло").endsWith(IvaCensorPatch.NAME_TAIL) + "|" + IvaCensorPatch.nameError("Иванов Иван") + "|"
+                    + IvaCensorPatch.nameError("") + "|" + IvaCensorPatch.nameError(null), "true|||");
+            eq("цензура этап 2: адрес и комментарий заявки — латиница и по буквам тоже мат",
+                !IvaCensorPatch.fieldError("ул. Ленина, 5, pizdec").isEmpty() + "," + !IvaCensorPatch.fieldError("х у й").isEmpty()
+                    + "," + IvaCensorPatch.fieldError("ул. Хуторская, 3").isEmpty() + "," + IvaCensorPatch.fieldError("Makita HR2470").isEmpty(),
+                "true,true,true,true");
+            String cz2Order = new String(java.nio.file.Files.readAllBytes(java.nio.file.Paths.get("android/patches/IvaOrderPatch.java")), "UTF-8");
+            String cz2Pat = new String(java.nio.file.Files.readAllBytes(java.nio.file.Paths.get("android/patches/IvaPatch.java")), "UTF-8");
+            String cz2Form = new String(java.nio.file.Files.readAllBytes(java.nio.file.Paths.get("android/patches/IvaFormPatch.java")), "UTF-8");
+            String cz2Cl = new String(java.nio.file.Files.readAllBytes(java.nio.file.Paths.get("android/patches/IvaClientPatch.java")), "UTF-8");
+            String cz2Ed = new String(java.nio.file.Files.readAllBytes(java.nio.file.Paths.get("android/patches/IvaOrderEditPatch.java")), "UTF-8");
+            String cz2St = new String(java.nio.file.Files.readAllBytes(java.nio.file.Paths.get("android/patches/IvaStaffPatch.java")), "UTF-8");
+            String cz2Sh = new String(java.nio.file.Files.readAllBytes(java.nio.file.Paths.get("android/patches/IvaShopPatch.java")), "UTF-8");
+            String cz2Md = new String(java.nio.file.Files.readAllBytes(java.nio.file.Paths.get("android/patches/IvaModelPatch.java")), "UTF-8");
+            eq("цензура этап 2: проверка стоит у заявки, «Изменить инструмент», «Добавить» (модель, характеристики), профиля, отмены, сотрудника, «Мои данные», регистрации, «Предложить модель»",
+                cz2Order.contains("IvaCensorPatch.stopFields(a, IvaCensorPatch.asName((View) get(a, \"oLast\"))")
+                    + "," + cz2Pat.contains("editBlocked = IvaCensorPatch.stopTree(a, (View) terms.getParent());")
+                    + "," + cz2Pat.contains("IvaCensorPatch.guardStock(a);")
+                    + "," + cz2Form.contains("saveBlocked = IvaCensorPatch.stopTree(a, form);")
+                    + "," + cz2Cl.contains("IvaCensorPatch.stopFields(a, IvaCensorPatch.asName(edits[SURNAME])")
+                    + "," + cz2Ed.contains("if (IvaCensorPatch.stopFields(a, why)) return;")
+                    + "," + cz2St.contains("e = IvaCensorPatch.nameError(fName.getText().toString());")
+                    + "," + cz2Sh.contains("IvaCensorPatch.asName(copyField(a, fio, labels[i]))")
+                    + "," + cz2Md.contains("IvaCensorPatch.level(q) == 2"),
+                "true,true,true,true,true,true,true,true,true");
+            eq("стрелки этап 3: касание у правого края (стрелка + отступ + запас) — стрелка; текст, нет картинки, нет размера — нет",
+                IvaFormPatch.onArrow(290f, 300, 14, 24, 10) + "," + IvaFormPatch.onArrow(253f, 300, 14, 24, 10) + "," + IvaFormPatch.onArrow(251f, 300, 14, 24, 10)
+                    + "," + IvaFormPatch.onArrow(120f, 300, 14, 24, 10) + "," + IvaFormPatch.onArrow(299f, 300, 14, 0, 10) + "," + IvaFormPatch.onArrow(5f, 0, 0, 24, 10),
+                "true,true,false,false,false,false");
+            eq("стрелки этап 3: «Название» и «Модель» — стрелка ставится в syncArrows, пустые подсказки — понятное сообщение",
+                cz2Form.contains("sugArrow(a, (EditText) nv, false);") + "," + cz2Form.contains("sugArrow(a, (EditText) mf, true);")
+                    + "," + IvaFormPatch.NAME_EMPTY.startsWith("Подсказок пока нет") + "," + IvaFormPatch.MODEL_EMPTY.startsWith("Подсказок пока нет"),
+                "true,true,true,true");
+        } catch (Throwable cz2E) { eq("цензура этапы 2–3: проверки без исключений", String.valueOf(cz2E), ""); }
         try {   // 10.93: кабинет создателя — «Управление», «Мои отзывы», без «Ваш доход с админов»
             StringBuilder ch93 = new StringBuilder();
             for (String[] ch93m : IvaChiefPatch.MENU) ch93.append(ch93m[0]).append('|');

@@ -1008,6 +1008,9 @@ public final class IvaOrderPatch {
             boolean deliv = deliveryChecked(a) && deliveryAllowed(ls);
             String addr = text(get(a, "oAddr"));
             if (deliv && addr.isEmpty()) { toast(a, "Укажите адрес доставки"); return; }
+            // 24.10.2026 (цензура, этап 2): мат в ФИО, адресе или комментарии — заявка не уходит
+            if (IvaCensorPatch.stopFields(a, IvaCensorPatch.asName((View) get(a, "oLast")), IvaCensorPatch.asName((View) get(a, "oName")),
+                    IvaCensorPatch.asName((View) get(a, "oPatr")), get(a, "oAddr"), get(a, "oCmt"))) return;
             String fullName = (text(get(a, "oLast")) + " " + name + " " + text(get(a, "oPatr"))).trim().replaceAll(" +", " ");
             Object dt = get(a, "delivTxt");
             String delivTxt = dt instanceof String ? (String) dt : null;

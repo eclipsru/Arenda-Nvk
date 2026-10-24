@@ -403,6 +403,7 @@ public class IvaOrderEditPatch {
             @Override public void onClick(View v) {
                 final String body = cancelBody(orderId, why.getText().toString());
                 if (body == null) { IvaStaffPatch.toast(a, "Укажите причину отмены"); return; }
+                if (IvaCensorPatch.stopFields(a, why)) return;                       // 24.10.2026: прокат увидит причину — без мата
                 go.setEnabled(false);
                 go.setAlpha(0.6f);
                 new Thread(new Runnable() {

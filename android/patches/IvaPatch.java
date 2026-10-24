@@ -400,6 +400,7 @@ public final class IvaPatch {
         }
         try { IvaClientPatch.authStart(a); } catch (Throwable ignore) {}   // 10.69: ключ обновляется заранее
         try { IvaClientPatch.authEmailFix(a); } catch (Throwable ignore) {}   // 10.119: почта — из ключа
+        try { IvaCensorPatch.guardStock(a); } catch (Throwable ignore) {}   // 24.10.2026: мат — имя при регистрации, «Мои данные»
         reloadProfile(a);
     }
 
@@ -435,6 +436,7 @@ public final class IvaPatch {
         try { delSwitches(a); } catch (Throwable ignore) {}   // 10.65: «Доставка» в форме инструмента — выключатель
         try { condRows(a); } catch (Throwable ignore) {}      // 10.66: «Состояние» в форме инструмента
         try { pickColors(a); } catch (Throwable ignore) {}    // 10.67: выбранная (под)категория — белым, не серым
+        try { IvaCensorPatch.guardStock(a); } catch (Throwable ignore) {}   // 24.10.2026: мат — регистрация, «Мои данные»
         try { IvaKindPatch.onTab(a, tab); } catch (Throwable ignore) {}     // 10.79: «Вид инструмента» — справочник, форма, запись
         try { IvaClientPatch.authBackup(a); } catch (Throwable ignore) {}   // 10.69: копия входа (пишется, лишь когда ключ сменился)
         try { IvaReviewPatch.onTab(a, tab); } catch (Throwable ignore) {}   // 10.70: отзывы — страница инструмента и проката
@@ -1014,6 +1016,8 @@ public final class IvaPatch {
         try { IvaKindPatch.arrange(a); } catch (Throwable ignore) {}   // 10.86: «Условия аренды» — подпись над полем, под «Состоянием»
     }
 
+    static boolean editBlocked = false;
+
     static void condRow(final Activity a, String termsField, String saveField, final int k) {
         Object to = get(a, termsField);
         if (!(to instanceof android.widget.EditText) || !(((View) to).getParent() instanceof LinearLayout)) return;
@@ -1034,6 +1038,14 @@ public final class IvaPatch {
                         boolean stop = false;
                         try { stop = IvaFormPatch.onSaveTouch(a, e.getActionMasked()); } catch (Throwable ignore) {}
                         if (stop) return true;
+                    }
+                    // 24.10.2026 (цензура, этап 2): «Сохранить» в «Изменить инструмент» — мат в любом поле формы не сохраняется
+                    if (k == 1 && v.isEnabled()) {
+                        if (e.getActionMasked() == android.view.MotionEvent.ACTION_DOWN) {
+                            editBlocked = false;
+                            try { editBlocked = IvaCensorPatch.stopTree(a, (View) terms.getParent()); } catch (Throwable ignore) {}
+                        }
+                        if (editBlocked) return true;
                     }
                     // до штатного нажатия: строка состояния — в поле условий (штатный код его прочтёт); нажатие не трогаем
                     if (e.getActionMasked() == android.view.MotionEvent.ACTION_DOWN && v.isEnabled()) {

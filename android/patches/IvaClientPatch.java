@@ -1301,6 +1301,9 @@ public final class IvaClientPatch {
                 try { scroll.smoothScrollTo(0, Math.max(0, ((View) edits[GIVEN].getParent()).getTop() + edits[GIVEN].getTop() - dp(60))); } catch (Throwable ignore) {}
                 return;
             }
+            // 24.10.2026 (цензура, этап 2): мат в ФИО или адресе — профиль не сохраняется
+            if (IvaCensorPatch.stopFields(a, IvaCensorPatch.asName(edits[SURNAME]), IvaCensorPatch.asName(edits[GIVEN]),
+                    IvaCensorPatch.asName(edits[PATRONYMIC]), edits[ADDRESS])) return;
             final JSONObject body = new JSONObject();
             try {
                 JSONObject pp = new JSONObject();

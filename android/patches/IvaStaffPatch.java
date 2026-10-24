@@ -843,6 +843,7 @@ public class IvaStaffPatch {
                 IvaPickupPatch.hideKb(a, v);
                 String em = fEmail == null ? s.email : fEmail.getText().toString();
                 String e = formErr(isNew, em, IvaPickupPatch.me(a), fName.getText().toString(), fTel.getText().toString(), s.points.size(), s.r);
+                if (e.isEmpty()) try { e = IvaCensorPatch.nameError(fName.getText().toString()); } catch (Throwable ignore) {}   // 24.10.2026: мат в ФИО
                 IvaPickupPatch.setErr(err, e);
                 if (!e.isEmpty()) return;
                 final String body = saveBody(isNew ? null : s.id, em, fName.getText().toString(), fTel.getText().toString(), s.points, s.r, fSelf.isChecked(), fDel.isChecked());

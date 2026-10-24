@@ -2880,7 +2880,25 @@ try {
       '10.126: SQL — «Вернули» по сроку и закрытие считают начатые сутки, статусы как в 10.122, инструменты не трогает');
     assert.ok(rb.includes('DROP FUNCTION IF EXISTS public.iva_used_days(') && !rb.includes('iva_bill_days(e'), '10.126: откат — чек по брони');
     assert.ok((tp.match(/eq\("10\.125: /g) || []).length >= 7 && tp.includes('v125();'), 'IvaPatchTest: проверки 10.126');
-    assert.ok(/NEW_NAME: '10\.126'/.test(wf) && /NEW_CODE: '200'/.test(wf), 'сборка 10.126 (200)');
+    assert.ok(Number((/NEW_CODE: '(\d+)'/.exec(wf) || [])[1]) >= 200, 'сборка 10.126 (200) или новее');
+  }
+  // 10.127 (просьба владельца 15.10 и 24.10.2026 «всё по порядку»): «Цензура», этап 2 — мат нельзя отправить и в остальных
+  // полях (изменить инструмент, «Модель», характеристики, заявка, отмена, профиль, «Мои данные», регистрация, сотрудник);
+  // этап 3 — стрелки у «Названия» и «Модели». Без новых вставок в smali: штатные кнопки — свой OnTouchListener.
+  {
+    const strip = (t) => t.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '');
+    const wf = R('.github/workflows/build-apk.yml'), ap = R('android/patches/apply.py'), tp = R('android/patches/test/IvaPatchTest.java');
+    const cz = strip(R('android/patches/IvaCensorPatch.java')), fp = strip(R('android/patches/IvaFormPatch.java')), ip = strip(R('android/patches/IvaPatch.java'));
+    assert.ok(!/IvaCensorPatch|sugArrow|guardStock/.test(ap), '10.127: без новых вставок в smali');
+    assert.ok(cz.includes('static boolean stopTree(Activity a, View root)') && cz.includes('static void guardStock(final Activity a)')
+      && cz.includes('guardButton(IvaPatch.view(a, "adSave")') && cz.includes('IvaPatch.view(a, "fieldName")')
+      && ip.includes('editBlocked = IvaCensorPatch.stopTree(a, (View) terms.getParent());'),
+      '10.127: мат — регистрация, «Мои данные», «Изменить инструмент»');
+    assert.ok(fp.includes('static boolean onArrow(float x, int width, int padRight, int drawW, int slop)')
+      && fp.includes('sugArrow(a, (EditText) nv, false);') && fp.includes('sugArrow(a, (EditText) mf, true);'),
+      '10.127: стрелки у «Названия» и «Модели»');
+    assert.ok((tp.match(/eq\("(цензура этап 2|стрелки этап 3): /g) || []).length >= 5, 'IvaPatchTest: проверки 10.127');
+    assert.ok(/NEW_NAME: '10\.127'/.test(wf) && /NEW_CODE: '201'/.test(wf), 'сборка 10.127 (201)');
   }
   // 10.75 (просьба владельца 14.10.2026): в «Настройках» — кнопка «Уведомления» (с 10.97 — открывает отдельную страницу);
   // внутри сверху «Открыть настройки уведомлений Android», потом какие присылать, потом расписание, потом всё остальное

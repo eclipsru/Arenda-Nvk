@@ -987,7 +987,7 @@ public class IvaShopPatch {
                 TextView l = IvaChiefPatch.text(a, labels[i], 13f, cGray, true);
                 l.setPadding(dp(a, 2), dp(a, 14), 0, dp(a, 6));
                 box.addView(l);
-                f[i] = copyField(a, fio, labels[i]);
+                f[i] = IvaCensorPatch.asName(copyField(a, fio, labels[i]));   // 24.10.2026: мат в ФИО — «Сохранить» не пропустит
                 box.addView(f[i], new LinearLayout.LayoutParams(-1, -2));
             }
             parent.addView(box, parent.indexOfChild(fio), new LinearLayout.LayoutParams(-1, -2));

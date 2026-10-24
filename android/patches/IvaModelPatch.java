@@ -1899,7 +1899,8 @@ final class IvaModelPatch {
         if (!(pv instanceof TextView) || !(fv instanceof TextView)) return;
         TextView p = (TextView) pv;
         String q = String.valueOf(((TextView) fv).getText());
-        final String[] parts = kind.isEmpty() || chosen != null || exact(idx, kind, q) != null ? null : proposalParts(q, brandSel, brandMap);
+        final String[] parts = kind.isEmpty() || chosen != null || exact(idx, kind, q) != null || IvaCensorPatch.level(q) == 2   // 24.10.2026: мат не предлагаем
+            ? null : proposalParts(q, brandSel, brandMap);
         if (parts == null) { p.setVisibility(View.GONE); p.setOnClickListener(null); return; }
         final String key = kind + "|" + low(parts[0]) + "|" + low(parts[1]), nm = parts[0] + " " + parts[1];
         String st = propState.get(key);

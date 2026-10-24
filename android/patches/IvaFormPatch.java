@@ -442,6 +442,77 @@ final class IvaFormPatch {
         if (s instanceof TextView) arrow((TextView) s, open(IvaClientPatch.get(a, "atSubSug")));
         View kf = kindView(form, ":field");
         if (kf instanceof TextView) arrow((TextView) kf, open(kindView(form, ":drop")));
+        if (IvaModelPatch.ready()) {                                                // 24.10.2026: «Название» и «Модель» — тоже со стрелкой
+            Object nv = IvaClientPatch.get(a, "atName");
+            if (nv instanceof EditText) sugArrow(a, (EditText) nv, false);
+            View mf = form.findViewWithTag(IvaModelPatch.BLOCK + ":field");
+            if (mf instanceof EditText) sugArrow(a, (EditText) mf, true);
+        }
+    }
+
+    // ───── 24.10.2026 (цензура, этап 3 — просьба владельца 15.10 «стрелки 10.91 у всех полей с подсказками»):
+    //  «Название» и «Модель» — поля ввода, под которыми появляются подсказки из справочника моделей.
+    //  * справа та же стрелка: подсказки закрыты — вправо, открыты — вниз;
+    //  * нажатие на стрелку: подсказки открыты — закрыть; закрыты — показать подсказки к тому, что уже введено
+    //    (нет ни одной — короткое сообщение, что ввести); нажатие на сам текст — как раньше (курсор, клавиатура);
+    //  * «Далее» на клавиатуре закрывает подсказки (closeDrops, 10.91).
+    static final String NAME_EMPTY = "Подсказок пока нет — начните вводить название, например «перфоратор»";
+    static final String MODEL_EMPTY = "Подсказок пока нет — выберите вид инструмента или начните вводить модель";
+    static final java.util.Map<View, Boolean> sugArrows = new java.util.WeakHashMap<View, Boolean>();
+
+    /** Касание пришлось на стрелку у правого края поля: картинка, отступ поля справа и запас slop для пальца. */
+    static boolean onArrow(float x, int width, int padRight, int drawW, int slop) {
+        return drawW > 0 && width > 0 && x >= width - padRight - drawW - slop;
+    }
+
+    static View sugList(EditText f, boolean model) {
+        return model ? IvaModelPatch.dropOf(f) : IvaModelPatch.sugBox(f, false);
+    }
+
+    static void sugArrow(final Activity a, final EditText f, final boolean model) {
+        if (!sugArrows.containsKey(f)) {
+            android.graphics.drawable.Drawable ch = IvaSearchPatch.drawable(a, "ic_chevron");
+            if (ch == null) return;
+            sugArrows.put(f, Boolean.TRUE);
+            android.graphics.drawable.Drawable[] ds = f.getCompoundDrawables();
+            f.setCompoundDrawablePadding(IvaPatch.dp(a, 8));
+            f.setCompoundDrawablesWithIntrinsicBounds(ds[0], ds[1], ch, ds[3]);
+            f.setOnTouchListener(new View.OnTouchListener() {
+                boolean mine = false, wasOpen = false;
+                @Override public boolean onTouch(View v, android.view.MotionEvent e) {
+                    try {
+                        int ac = e.getActionMasked();
+                        if (ac == android.view.MotionEvent.ACTION_DOWN) {
+                            android.graphics.drawable.Drawable[] d = f.getCompoundDrawables();
+                            int w = d[2] == null ? 0 : d[2].getBounds().width();
+                            mine = onArrow(e.getX(), f.getWidth(), f.getPaddingRight(), w, IvaPatch.dp(a, 10));
+                            wasOpen = open(sugList(f, model));
+                        }
+                        if (!mine) return false;                                   // касание текста — штатно
+                        if (ac == android.view.MotionEvent.ACTION_UP) { mine = false; toggleSug(a, f, model, wasOpen); }
+                        else if (ac == android.view.MotionEvent.ACTION_CANCEL) mine = false;
+                        return true;
+                    } catch (Throwable t) { return false; }
+                }
+            });
+        }
+        arrow(f, open(sugList(f, model)));
+    }
+
+    static void toggleSug(Activity a, EditText f, boolean model, boolean wasOpen) {
+        View l = sugList(f, model);
+        if (wasOpen) {
+            if (l != null) l.setVisibility(View.GONE);
+            arrow(f, false);
+            return;
+        }
+        f.requestFocus();
+        f.setSelection(f.getText().length());
+        if (model) IvaModelPatch.fillModelDrop(a, f);
+        else IvaModelPatch.nameChanged(a, f);
+        boolean op = open(sugList(f, model));
+        arrow(f, op);
+        if (!op) IvaCensorPatch.toast(a, model ? MODEL_EMPTY : NAME_EMPTY);
     }
 
     /** Закрыть все списки формы: штатные «Категория» / «Подкатегория», «Вид», «Частые условия», подсказки названия и модели. */
@@ -650,6 +721,7 @@ final class IvaFormPatch {
             LinearLayout form = (LinearLayout) ((View) no).getParent();
             saveBlocked = paintErrors(a, form, true);
             if (!saveBlocked) try { saveBlocked = IvaToolPointPatch.blockPublish(a, form); } catch (Throwable ignore) {}   // 10.114: пункт выдачи
+            if (!saveBlocked) try { saveBlocked = IvaCensorPatch.stopTree(a, form); } catch (Throwable ignore) {}   // 24.10.2026: «Модель», характеристики
             if (!saveBlocked) publishAt = System.currentTimeMillis();
             heldWord = saveBlocked ? "" : heldWord(text(a, "atName") + "\n" + text(a, "atDescr") + "\n" + text(a, "atTerms"));
         }
