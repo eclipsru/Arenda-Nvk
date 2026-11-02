@@ -4,10 +4,14 @@
 Квадратики кода перерисованы векторами (резкие при любом размере печати), логотип в центре — картинка из того же
 файла. Рисунок кода не меняется: модули считываются с исходного PNG (41 × 41 модуль по 28 px, поле 4 модуля).
 
-Запуск: python3 promo/make_qr_pdf.py  →  promo/qr-app-ramka.pdf (104 × 104 мм) и promo/qr-app-ramka-preview.png
+Запуск: python3 promo/make_qr_pdf.py        →  promo/qr-app-ramka.pdf     (104 × 104 мм)
+        python3 promo/make_qr_pdf.py 370    →  promo/qr-app-ramka-370.pdf (370 × 370 мм, плакат; 02.11.2026)
+Рамка, скругления и модули масштабируются пропорционально — вид одинаковый при любом размере.
+Логотип для больших размеров — assets/logo.png 512 px (тот же, что вставлен в QR), а не 276 px из PNG кода.
 Нужны: pip install reportlab pillow
 """
 import os
+import sys
 from PIL import Image
 from reportlab.pdfgen import canvas
 from reportlab.lib.units import mm
@@ -15,7 +19,9 @@ from reportlab.lib.utils import ImageReader
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SRC = os.path.join(ROOT, 'assets', 'qr-app-logo.png')
-OUT = os.path.join(ROOT, 'promo', 'qr-app-ramka.pdf')
+LOGO_HI = os.path.join(ROOT, 'assets', 'logo.png')   # исходник логотипа, 512 px (make-qr.py вставляет его в код)
+SIZE_MM = float(sys.argv[1]) if len(sys.argv) > 1 else 104.0
+OUT = os.path.join(ROOT, 'promo', 'qr-app-ramka.pdf' if SIZE_MM == 104 else 'qr-app-ramka-%d.pdf' % round(SIZE_MM))
 
 PX = 28                      # модуль в исходном PNG, px
 QUIET = 4                    # белое поле вокруг кода, модулей
@@ -23,9 +29,11 @@ N = 41                       # размер кода, модулей (верси
 PLATE = (520, 852, 80)       # белая подложка логотипа в PNG: от, до, радиус углов (px)
 LOGO = (548, 824, 55)        # логотип в PNG: от, до, радиус углов (px)
 
-MOD = 2 * mm                 # модуль в PDF: 2 мм → код с полем 98 мм
-FRAME = 3 * mm               # толщина чёрной рамки
-R_OUT, R_IN = 8 * mm, 5 * mm # скругление рамки снаружи и внутри
+# Всё в модулях: страница = код с полем (49) + рамка 1,5 модуля с двух сторон = 52 модуля.
+# 104 мм → модуль 2 мм, рамка 3 мм, скругления 8 и 5 мм; 370 мм → модуль 7,12 мм, рамка 10,7 мм, скругления 28,5 и 17,8 мм.
+MOD = SIZE_MM / 52 * mm      # модуль в PDF
+FRAME = 1.5 * MOD            # толщина чёрной рамки
+R_OUT, R_IN = 4 * MOD, 2.5 * MOD   # скругление рамки снаружи и внутри
 INK = (0x11 / 255, 0x12 / 255, 0x17 / 255)   # цвет модулей как в исходнике (#111217)
 
 
@@ -87,12 +95,14 @@ def main():
     # логотип — картинка из исходника, со скруглёнными углами
     l0, l1, lr = LOGO
     logo = im.crop((l0, l0, l1, l1))
+    if SIZE_MM > 104 and os.path.exists(LOGO_HI):
+        logo = Image.open(LOGO_HI).convert('RGBA')      # плакат: исходный логотип 512 px, а не 276 px из PNG кода
     lx, ly, lw = x0 + to_pdf(l0), y0 + side - to_pdf(l1), to_pdf(l1 - l0)
     c.saveState()
     path = c.beginPath()
     path.roundRect(lx, ly, lw, lw, to_pdf(lr))
     c.clipPath(path, stroke=0, fill=0)
-    c.drawImage(ImageReader(logo), lx, ly, lw, lw)
+    c.drawImage(ImageReader(logo), lx, ly, lw, lw, mask='auto')
     c.restoreState()
 
     c.showPage()
