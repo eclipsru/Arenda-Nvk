@@ -1,0 +1,266 @@
+# Характеристики по видам инструмента (этап 2 справочника моделей, 10.82).
+# Из этого файла tools/models-gen.py собирает таблицу iva_spec_fields в supabase/migrations/20261017_models.sql.
+#
+# 1) Библиотека полей:  @ключ | Название | единица | тип (num — число, choice — выбор, text — строка)
+# 2) Виды:              ключ вида | слово для названия модели | поля через запятую
+#    поле:  ключ                      — как в библиотеке
+#           ключ[Название]            — своё название
+#           ключ[Название|единица]    — своё название и единица
+#           ключ(вариант; вариант)    — варианты выбора (для choice обязательно)
+# Слово для названия: «Перфоратор» → «Перфоратор Makita HR2470» (единый вид названия).
+
+@src      | Питание                    |        | choice
+@volt     | Напряжение аккумулятора    | В      | num
+@power    | Мощность                   | Вт     | num
+@kw       | Мощность                   | кВт    | num
+@kwmax    | Максимальная мощность      | кВт    | num
+@hp       | Мощность двигателя         | л.с.   | num
+@energy   | Энергия удара              | Дж     | num
+@chuck    | Патрон                     |        | choice
+@disc     | Диаметр диска              | мм     | num
+@depth    | Глубина пропила            | мм     | num
+@torque   | Крутящий момент            | Н·м    | num
+@weight   | Вес                        | кг     | num
+@bar      | Длина шины                 | см     | num
+@cc       | Объём двигателя            | см³    | num
+@drum     | Объём барабана             | л      | num
+@mix      | Готовый замес              | л      | num
+@tank     | Объём бака                 | л      | num
+@pressure | Давление                   | бар    | num
+@lpm      | Производительность         | л/мин  | num
+@lph      | Производительность         | л/ч    | num
+@m3h      | Производительность         | м³/ч   | num
+@m3min    | Производительность         | м³/мин | num
+@lday     | Производительность         | л/сутки| num
+@amp      | Сварочный ток              | А      | num
+@range    | Дальность                  | м      | num
+@lines    | Лучи                       |        | choice
+@beam     | Цвет луча                  |        | choice
+@zoom     | Увеличение                 | ×      | num
+@force    | Центробежная сила          | кН     | num
+@width    | Ширина                     | см     | num
+@height   | Рабочая высота             | м      | num
+@hlift    | Высота подъёма             | мм     | num
+@load     | Грузоподъёмность           | т      | num
+@kgload   | Грузоподъёмность           | кг     | num
+@length   | Длина                      | м      | num
+@phase    | Сеть                       |        | choice
+@start    | Запуск                     |        | choice
+@dia      | Диаметр                    | мм     | num
+@dust     | Класс пыли                 |        | choice
+@fuel     | Нагрев                     |        | choice
+@heat     | Тип нагрева                |        | choice
+@temp     | Температура                | °C     | num
+@slide    | Протяжка                   |        | choice
+@rev      | Реверс                     |        | choice
+@self     | Самоходная                 |        | choice
+@grass    | Травосборник               | л      | num
+@pack     | Тип                        |        | choice
+@outlet   | Розетка для инструмента    |        | choice
+@cut      | Толщина реза               | мм     | num
+@nail     | Длина крепежа              | мм     | num
+@lift     | Напор                      | м      | num
+@dirt     | Частицы до                 | мм     | num
+@chop     | Измельчитель               |        | choice
+@water    | Вода                       |        | choice
+@intake   | Забор воды                 |        | choice
+@elec     | Электрод до                | мм     | num
+@mode     | Режимы                     |        | choice
+@ac       | Ток                        |        | choice
+@comp     | Компрессор                 |        | choice
+@gas      | Газ                        |        | choice
+@pipe     | Диаметр труб               | мм     | text
+@thread   | Резьба                     |        | text
+@res      | Разрешение                 |        | text
+@tmax     | Максимальная температура   | °C     | num
+@mtype    | Тип                        |        | choice
+@scaf     | Тип                        |        | choice
+@plat     | Площадка                   | м      | text
+@sect     | Секций                     |        | num
+@steps    | Ступеней                   |        | num
+@lad      | Тип                        |        | choice
+@forks    | Длина вил                  | мм     | num
+@sockets  | Розеток                    |        | num
+@section  | Сечение кабеля             | мм²    | num
+@stype    | Тип                        |        | choice
+@material | Материал                   |        | choice
+@ptype    | Тип                        |        | choice
+@vt       | Напряжение                 |        | choice
+@peak     | Пусковой ток               | А      | num
+@area     | Площадь                    | м²     | num
+@paws     | Захватов                   |        | num
+
+# ─── Электроинструмент ───
+drill             | Дрель                     | src(Сеть 220 В; Аккумулятор; Бензин; Дизель), volt, power, chuck(Быстрозажимной; Ключевой), weight
+screwdriver       | Шуруповёрт                | src(Сеть 220 В; Аккумулятор; Бензин; Дизель), volt, torque, chuck(Быстрозажимной; HEX 1/4"), weight
+impact-wrench     | Гайковёрт                 | src(Сеть 220 В; Аккумулятор; Бензин; Дизель; Сжатый воздух), volt, torque, chuck[Посадка](1/2"; 3/4"; 1"; HEX 1/4"), weight
+magnetic-drill    | Магнитная дрель           | power, dia[Сверление до], weight
+rotary-sds-plus   | Перфоратор                | src(Сеть 220 В; Аккумулятор; Бензин; Дизель), volt, power, energy, weight
+rotary-sds-max    | Перфоратор                | src(Сеть 220 В; Аккумулятор; Бензин; Дизель), volt, power, energy, weight
+breaker           | Отбойный молоток          | src(Сеть 220 В; Аккумулятор; Бензин; Дизель), power, energy, chuck(SDS-max; HEX 28; HEX 30), weight
+demolition-hammer | Бетонолом                 | src(Сеть 220 В; Аккумулятор; Бензин; Дизель), power, energy, chuck(HEX 28; HEX 30; SDS-max), weight
+pneumatic-hammer  | Пневмомолоток             | energy, lpm[Расход воздуха], weight
+grinder-125       | Болгарка                  | src(Сеть 220 В; Аккумулятор; Бензин; Дизель), volt, power, disc, weight
+grinder-180       | Болгарка                  | src(Сеть 220 В; Аккумулятор; Бензин; Дизель), volt, power, disc, weight
+grinder-230       | Болгарка                  | src(Сеть 220 В; Аккумулятор; Бензин; Дизель), volt, power, disc, weight
+circular-saw      | Циркулярная пила          | src(Сеть 220 В; Аккумулятор; Бензин; Дизель), volt, power, disc, depth, weight
+jigsaw            | Лобзик                    | src(Сеть 220 В; Аккумулятор; Бензин; Дизель), volt, power, depth[Пропил по дереву], weight
+reciprocating-saw | Сабельная пила            | src(Сеть 220 В; Аккумулятор; Бензин; Дизель), volt, power, weight
+miter-saw         | Торцовочная пила          | src(Сеть 220 В; Аккумулятор; Бензин; Дизель), volt, power, disc, slide(Есть; Нет), weight
+table-saw         | Настольная пила           | power, disc, depth, weight
+plunge-saw        | Погружная пила            | src(Сеть 220 В; Аккумулятор; Бензин; Дизель), volt, power, disc, depth, weight
+metal-cutoff-saw  | Монтажная пила            | power, disc, weight
+orbital-sander    | Эксцентриковая шлифмашина | src(Сеть 220 В; Аккумулятор; Бензин; Дизель), volt, power, disc[Диаметр подошвы], weight
+belt-sander       | Ленточная шлифмашина      | power, width[Ширина ленты|мм], weight
+finishing-sander  | Вибрационная шлифмашина   | power, weight
+electric-planer   | Рубанок                   | src(Сеть 220 В; Аккумулятор; Бензин; Дизель), volt, power, width[Ширина строгания|мм], weight
+router            | Фрезер                    | src(Сеть 220 В; Аккумулятор; Бензин; Дизель), volt, power, chuck[Цанга](6 мм; 8 мм; 12 мм; 6 и 8 мм; 8 и 12 мм; 6, 8 и 12 мм), weight
+heat-gun          | Строительный фен          | power, temp, weight
+mixer-drill       | Строительный миксер       | power, chuck[Посадка насадки](M14; HEX; M14 и HEX), weight
+multitool         | Реноватор                 | src(Сеть 220 В; Аккумулятор; Бензин; Дизель), volt, power, weight
+metal-shears      | Ножницы по металлу        | src(Сеть 220 В; Аккумулятор; Бензин; Дизель), volt, power, cut[Толщина стали], weight
+powder-nailer     | Пороховой пистолет        | nail[Крепёж до], weight
+gas-nailer        | Газовый монтажный пистолет| nail[Крепёж до], weight
+nailer            | Гвоздезабивной пистолет   | src(Сеть 220 В; Аккумулятор; Бензин; Дизель; Сжатый воздух), volt, nail[Гвозди до], weight
+stapler           | Степлер                   | src(Сеть 220 В; Аккумулятор; Бензин; Дизель; Сжатый воздух; Ручной), nail[Скобы до], weight
+riveter           | Заклёпочник               | src(Сеть 220 В; Аккумулятор; Бензин; Дизель; Сжатый воздух; Ручной), dia[Заклёпки до], weight
+# ─── Резка и бурение ───
+core-drill-hand   | Установка алмазного бурения | power, dia[Коронки до], weight
+core-drill-stand  | Установка алмазного бурения | power, dia[Коронки до], weight
+wall-chaser       | Штроборез                 | power, disc, depth[Глубина штробы], weight
+tile-cutter-manual| Плиткорез                 | length[Длина реза|см], cut[Толщина плитки], weight
+tile-cutter-electric | Плиткорез              | power, disc, length[Длина реза|см], weight
+stone-saw         | Камнерезный станок        | power, disc, length[Длина реза|см], weight
+power-cutter      | Бензорез                  | src(Сеть 220 В; Аккумулятор; Бензин; Дизель), volt, cc, disc, depth, weight
+floor-saw         | Швонарезчик               | src(Сеть 220 В; Аккумулятор; Бензин; Дизель; Сеть 380 В), disc, depth, weight
+wall-saw          | Стенорез                  | power, disc, depth, weight
+wire-saw          | Канатная пила             | power, weight
+# ─── Строительное оборудование ───
+concrete-mixer    | Бетономешалка             | drum, mix, power, src(Сеть 220 В; Аккумулятор; Бензин; Дизель; Сеть 380 В), weight
+mortar-mixer      | Растворосмеситель         | drum, power, src(Сеть 220 В; Аккумулятор; Бензин; Дизель; Сеть 380 В), weight
+poker-vibrator    | Глубинный вибратор        | power, dia[Диаметр булавы], length[Длина вала], weight
+screed-vibrator   | Виброрейка                | src(Сеть 220 В; Аккумулятор; Бензин; Дизель), length[Длина рейки], weight
+surface-vibrator  | Площадочный вибратор      | power, force, weight
+plate-compactor   | Виброплита                | src(Сеть 220 В; Аккумулятор; Бензин; Дизель), force, width[Ширина плиты], rev(Есть; Нет), weight
+rammer            | Вибротрамбовка            | src(Сеть 220 В; Аккумулятор; Бензин; Дизель), force[Ударная сила], weight
+roller            | Виброкаток                | src(Сеть 220 В; Аккумулятор; Бензин; Дизель), width[Ширина вальца], weight
+power-trowel      | Затирочная машина         | src(Сеть 220 В; Аккумулятор; Бензин; Дизель; Сеть 380 В), dia[Диаметр затирки], weight
+rebar-cutter      | Станок для резки арматуры | power, dia[Арматура до], weight
+rebar-bender      | Станок для гибки арматуры | power, dia[Арматура до], weight
+rebar-tier        | Пистолет для вязки арматуры | volt, dia[Вязка до], weight
+wall-formwork     | Стеновая опалубка         | material(Сталь; Алюминий; Пластик), weight
+slab-formwork     | Опалубка перекрытий       | material(Сталь; Алюминий; Фанера; Пластик), weight
+props             | Телескопическая стойка    | height[Высота до], kgload, weight
+earth-auger       | Мотобур                   | src(Сеть 220 В; Аккумулятор; Бензин; Дизель), volt, cc, dia[Шнек до], weight
+trencher          | Траншеекопатель           | src(Сеть 220 В; Аккумулятор; Бензин; Дизель), depth[Глубина траншеи|см], width[Ширина траншеи], weight
+# ─── Шлифовка поверхностей ───
+drum-floor-sander | Паркетошлифовальная машина | power, width[Ширина барабана|мм], weight
+flat-floor-sander | Плоскошлифовальная машина | power, dia[Диаметр диска], weight
+edge-sander       | Шлифмашина для паркета    | power, disc, weight
+concrete-grinder  | Мозаично-шлифовальная машина | power, phase(220 В; 380 В), width[Ширина шлифования|мм], weight
+scarifier         | Фрезеровальная машина     | src(Сеть 220 В; Аккумулятор; Бензин; Дизель; Сеть 380 В), power, width[Ширина обработки|мм], weight
+drywall-sander-long | Шлифмашина «жираф»      | power, disc, weight
+wall-sander       | Шлифмашина для стен       | power, disc, weight
+# ─── Сад ───
+trimmer           | Триммер                   | src(Сеть 220 В; Аккумулятор; Бензин; Дизель), volt, cc, power, width[Ширина скашивания], weight
+lawn-mower        | Газонокосилка             | src(Сеть 220 В; Аккумулятор; Бензин; Дизель), volt, width[Ширина скашивания], self(Да; Нет), grass, weight
+lawn-scarifier    | Скарификатор              | src(Сеть 220 В; Аккумулятор; Бензин; Дизель), power, width[Ширина обработки], weight
+chainsaw          | Бензопила                 | src(Сеть 220 В; Аккумулятор; Бензин; Дизель), volt, cc, power, bar, weight
+hedge-trimmer     | Кусторез                  | src(Сеть 220 В; Аккумулятор; Бензин; Дизель), volt, length[Длина ножа|см], weight
+pole-saw          | Высоторез                 | src(Сеть 220 В; Аккумулятор; Бензин; Дизель), volt, cc, bar, weight
+wood-chipper      | Измельчитель веток        | src(Сеть 220 В; Аккумулятор; Бензин; Дизель), power, dia[Ветки до], weight
+tiller            | Мотоблок                  | src(Сеть 220 В; Аккумулятор; Бензин; Дизель), hp, width[Ширина обработки], weight
+cultivator        | Культиватор               | src(Сеть 220 В; Аккумулятор; Бензин; Дизель), hp, width[Ширина обработки], weight
+snow-blower       | Снегоуборщик              | src(Сеть 220 В; Аккумулятор; Бензин; Дизель), hp, width[Ширина захвата], self(Да; Нет), weight
+leaf-blower       | Воздуходувка              | src(Сеть 220 В; Аккумулятор; Бензин; Дизель), volt, cc, power, pack(Ручная; Ранцевая), weight
+garden-vacuum     | Садовый пылесос           | src(Сеть 220 В; Аккумулятор; Бензин; Дизель), power, tank[Мешок], weight
+# ─── Уборка ───
+construction-vacuum | Строительный пылесос    | src(Сеть 220 В; Аккумулятор; Бензин; Дизель), volt, power, tank, dust(L; M; H), outlet(Есть; Нет), weight
+industrial-vacuum | Промышленный пылесос      | power, tank, dust(L; M; H), phase(220 В; 380 В), weight
+washing-vacuum    | Моющий пылесос            | power, tank, weight
+extractor         | Экстрактор                | power, tank, weight
+steam-cleaner     | Пароочиститель            | power, pressure, tank, weight
+pressure-washer   | Мойка высокого давления   | src(Сеть 220 В; Аккумулятор; Бензин; Дизель; Сеть 380 В), power, pressure, lph, weight
+hot-pressure-washer | Мойка с подогревом      | phase(220 В; 380 В), power, pressure, lph, heat(Дизель; Электрический), weight
+scrubber-dryer    | Поломоечная машина        | src(Сеть 220 В; Аккумулятор; Бензин; Дизель), width[Ширина уборки], tank[Бак чистой воды], weight
+sweeper           | Подметальная машина       | src(Сеть 220 В; Аккумулятор; Бензин; Дизель; Ручной), width[Ширина уборки], tank[Бункер], weight
+floor-polisher    | Роторная машина           | power, disc[Диаметр щётки], weight
+# ─── Климат ───
+heat-gun-big      | Тепловая пушка            | fuel(Электричество; Дизель; Газ), kw, phase(220 В; 380 В), heat(Прямой; Непрямой), weight
+infrared-heater   | Инфракрасный обогреватель | fuel(Электричество; Газ; Дизель), kw, weight
+convector         | Конвектор                 | kw, weight
+dehumidifier      | Осушитель воздуха         | lday, power, weight
+adsorption-dryer  | Адсорбционный осушитель   | m3h[Расход воздуха], power, weight
+fan               | Вентилятор                | power, dia, weight
+mobile-ac         | Мобильный кондиционер     | kw[Мощность охлаждения], area, weight
+air-cooler        | Охладитель воздуха        | power, tank, area, weight
+# ─── Генераторы и электричество ───
+generator         | Генератор                 | src(Сеть 220 В; Аккумулятор; Бензин; Дизель), kw[Номинальная мощность], kwmax, phase(220 В; 380 В; 220 и 380 В), start(Ручной; Электростартер; Ручной и электростартер), weight
+inverter-generator | Инверторный генератор    | src(Сеть 220 В; Аккумулятор; Бензин; Дизель), kw[Номинальная мощность], kwmax, start(Ручной; Электростартер; Ручной и электростартер), weight
+welding-generator | Сварочный генератор       | src(Сеть 220 В; Аккумулятор; Бензин; Дизель), amp, kw[Мощность генератора], weight
+extension-reel    | Удлинитель                | length[Длина кабеля], sockets, section, weight
+site-board        | Электрощит                | phase(220 В; 380 В; 220 и 380 В), sockets, weight
+stabilizer        | Стабилизатор              | kw[Мощность|кВА], phase(220 В; 380 В), stype(Релейный; Электронный; Электромеханический; Инверторный), weight
+floodlight        | Прожектор                 | src(Сеть 220 В; Аккумулятор; Бензин; Дизель), power, weight
+light-tower       | Осветительная мачта       | src(Сеть 220 В; Аккумулятор; Бензин; Дизель), height[Высота мачты], power[Мощность освещения], weight
+# ─── Компрессоры и насосы ───
+piston-compressor | Компрессор                | src(Сеть 220 В; Аккумулятор; Бензин; Дизель; Сеть 380 В), lpm[Производительность на входе], pressure, tank[Ресивер], power, weight
+screw-compressor  | Винтовой компрессор       | lpm, pressure, kw, tank[Ресивер], weight
+mobile-compressor | Компрессор                | src(Сеть 220 В; Аккумулятор; Бензин; Дизель; Сеть 380 В), m3min, pressure, weight
+drainage-pump     | Дренажный насос           | power, m3h, lift, dirt, weight
+sewage-pump       | Фекальный насос           | power, m3h, lift, chop(Есть; Нет), weight
+motor-pump        | Мотопомпа                 | src(Сеть 220 В; Аккумулятор; Бензин; Дизель), m3h, lift, water(Чистая; Слабозагрязнённая; Грязная), weight
+vibration-pump    | Вибрационный насос        | power, lift, intake(Верхний; Нижний), weight
+# ─── Сварка ───
+mma-welder        | Сварочный инвертор        | amp, phase(220 В; 380 В), elec, weight
+mig-welder        | Сварочный полуавтомат     | amp, phase(220 В; 380 В), mode(MIG/MAG; MIG/MAG и MMA; MIG/MAG, MMA и TIG), weight
+tig-welder        | Аргонодуговой аппарат     | amp, ac(DC; AC/DC), phase(220 В; 380 В), weight
+plasma-cutter     | Плазморез                 | amp, cut, phase(220 В; 380 В), comp(Встроенный; Внешний), weight
+gas-cutter        | Газовый резак             | gas(Пропан; Ацетилен; Пропан или ацетилен), cut, weight
+# ─── Сантехника ───
+pp-welder         | Паяльник для труб         | power, pipe, weight
+press-tool        | Пресс-инструмент          | src(Сеть 220 В; Аккумулятор; Бензин; Дизель; Ручной), volt, pipe, weight
+butt-welder       | Аппарат стыковой сварки   | power, pipe, weight
+pipe-threader     | Клупп                     | power, thread, weight
+pipe-bender       | Трубогиб                  | src(Сеть 220 В; Аккумулятор; Бензин; Дизель; Ручной), pipe, weight
+pipe-cutter       | Труборез                  | src(Сеть 220 В; Аккумулятор; Бензин; Дизель; Ручной), pipe, weight
+drain-cleaner     | Прочистная машина         | power, pipe, length[Длина спирали], weight
+pipe-camera       | Камера для труб           | length[Длина кабеля], dia[Диаметр головки], weight
+pressure-tester   | Опрессовщик               | src(Сеть 220 В; Аккумулятор; Бензин; Дизель; Ручной), pressure, weight
+# ─── Измерения ───
+laser-level       | Лазерный уровень          | lines(Крест (2 линии); 3 линии; 2×360°; 3D (3×360°); 4D (4×360°)), beam(Красный; Зелёный), range, weight
+rotary-laser      | Ротационный нивелир       | range, beam(Красный; Зелёный), weight
+optical-level     | Оптический нивелир        | zoom, weight
+laser-meter       | Лазерный дальномер        | range, weight
+measuring-wheel   | Измерительное колесо      | dia[Диаметр колеса], weight
+wall-scanner      | Детектор                  | depth[Глубина обнаружения], weight
+thermal-camera    | Тепловизор                | res, tmax, weight
+moisture-meter    | Влагомер                  | mtype(Игольчатый; Бесконтактный; Игольчатый и бесконтактный), weight
+# ─── Леса, подъём, перемещение ───
+scaffold          | Строительные леса         | scaf(Рамные; Клиновые; Хомутовые; Штыревые), height, weight
+mobile-tower      | Вышка-тура                | height, plat, weight
+ladder            | Лестница                  | lad(Трёхсекционная; Двухсекционная; Трансформер; Телескопическая; Приставная), sect, steps[Ступеней в секции], height[Высота до], weight
+stepladder        | Стремянка                 | steps, height[Высота площадки], weight
+scissor-lift      | Ножничный подъёмник       | src(Сеть 220 В; Аккумулятор; Бензин; Дизель), height, kgload, weight
+facade-cradle     | Фасадная люлька           | length[Длина люльки], kgload, weight
+drywall-lift      | Подъёмник для гипсокартона | height[Высота подъёма], weight
+winch             | Лебёдка                   | src(Сеть 220 В; Аккумулятор; Бензин; Дизель; Ручной), load, length[Длина троса], weight
+hoist             | Таль                      | src(Сеть 220 В; Аккумулятор; Бензин; Дизель; Сеть 380 В; Ручной), load, height[Высота подъёма], weight
+bottle-jack       | Домкрат                   | load, hlift, weight
+rack-jack         | Реечный домкрат           | load, hlift, weight
+pallet-truck      | Гидравлическая тележка    | load, forks, weight
+hand-truck        | Тележка                   | kgload, weight
+# ─── Покраска и штукатурка ───
+airless-sprayer   | Окрасочный аппарат        | src(Сеть 220 В; Аккумулятор; Бензин; Дизель), power, lpm, pressure, weight
+paint-sprayer     | Краскопульт               | src(Сеть 220 В; Аккумулятор; Бензин; Дизель; Сжатый воздух), volt, power, weight
+plaster-machine   | Штукатурная станция       | phase(220 В; 380 В), lpm, length[Длина шланга], weight
+putty-sprayer     | Аппарат для шпатлёвки     | power, lpm, pressure, weight
+# ─── Автоинструмент ───
+bearing-puller    | Съёмник                   | load[Усилие], paws, weight
+spring-compressor | Стяжка пружин             | ptype(Ручная; Гидравлическая), weight
+car-polisher      | Полировальная машина      | src(Сеть 220 В; Аккумулятор; Бензин; Дизель), volt, power, ptype(Роторная; Эксцентриковая), disc, weight
+paint-gauge       | Толщиномер                | mtype(Fe; Fe/NFe), weight
+jump-starter      | Пусковое устройство       | vt(12 В; 12/24 В), peak, weight
+battery-charger   | Зарядное устройство       | vt(6/12 В; 12 В; 12/24 В), amp[Ток заряда], weight
+trolley-jack      | Подкатной домкрат         | load, hlift, weight
+jack-stands       | Подставки под авто        | load, weight

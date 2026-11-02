@@ -2,8 +2,10 @@
 """Ива — смена версии прямо в двоичном AndroidManifest.xml (без пересборки ресурсов).
 
 Запуск: python3 axml_version.py <AndroidManifest.xml> <старая versionName> <новая versionName> <новый versionCode>
-Строго: versionName меняется только при той же длине (10.14 → 10.15), строка должна встречаться
-в таблице строк ровно один раз; versionCode — атрибут android:versionCode (0x0101021b) тега <manifest>.
+Строго: строка versionName должна встречаться в таблице строк ровно один раз; versionCode — атрибут
+android:versionCode (0x0101021b) тега <manifest>. Та же длина (10.14 → 10.99) — замена на месте, как раньше.
+10.100: другая длина (10.14 → 10.100) — таблица строк пересобирается целиком (encode_pool из axml_permissions,
+как в axml_service/axml_push): номера строк не меняются, поэтому все ссылки на них остаются верными.
 """
 import os
 import struct
@@ -24,8 +26,8 @@ def main():
     if len(sys.argv) != 5:
         die('нужно: axml_version.py <файл> <старая> <новая> <versionCode>')
     path, old, new, code = sys.argv[1], sys.argv[2], sys.argv[3], int(sys.argv[4])
-    if len(old) != len(new):
-        die('новая versionName должна быть той же длины')
+    if not new or len(new) > 32 or any(ch.isspace() for ch in new):
+        die('новая versionName пустая, длинная или с пробелами')
     b = bytearray(open(path, 'rb').read())
     if struct.unpack_from('<HHI', b, 0)[0] != 0x0003:
         die('не двоичный манифест')
@@ -78,9 +80,21 @@ def main():
         die(f'строка «{old}» в таблице строк встречается {len(hits)} раз, нужно 1')
     q, ln = str_off[hits[0]]
     enc = new.encode('utf-8' if utf8 else 'utf-16-le')
-    if len(enc) != ln:
-        die('длина строки не совпала')
-    b[q:q + ln] = enc
+    if len(enc) == ln:
+        b[q:q + ln] = enc
+    else:
+        # другая длина — пересобрать таблицу строк (только UTF-16 без стилей; иначе read_pool сам остановит сборку)
+        sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+        from axml_permissions import read_pool, encode_pool
+        if pool_start != 8:
+            die('таблица строк не первая в манифесте')
+        pool_size = struct.unpack_from('<I', b, pool_start + 4)[0]
+        pool, styles, flags, _ = read_pool(bytes(b[pool_start:pool_start + pool_size]))
+        if styles or pool != strings:
+            die('таблица строк прочитана по-разному — менять длину небезопасно')
+        pool[hits[0]] = new
+        b = bytearray(b[:pool_start]) + encode_pool(pool, 0, flags) + b[pool_start + pool_size:]
+        struct.pack_into('<I', b, 4, len(b))
     print(f'versionName: {old} → {new}')
     open(path, 'wb').write(bytes(b))
 

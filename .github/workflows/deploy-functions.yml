@@ -4,6 +4,9 @@
 # Секреты (кладёт владелец: Settings → Secrets and variables → Actions; агент их не видит):
 #   SUPABASE_ACCESS_TOKEN — обязателен (токен доступа Supabase);
 #   SMTP_USER, SMTP_PASS  — необязательны: если заданы, переносятся в секреты функций Supabase.
+#   FCM_SERVICE_ACCOUNT, FCM_GOOGLE_SERVICES — необязательны (10.74, мгновенные уведомления админам):
+#     содержимое JSON-ключа сервисного аккаунта Firebase и файла google-services.json; переносятся
+#     в секреты функций Supabase как FCM_*_B64 (base64 в одну строку), значения не выводятся.
 # Когда запускается: при изменении supabase/functions/** или этого файла в ветке агента или в main,
 # а также вручную (Actions → «Выкладка функций Supabase» → Run workflow).
 # Проверка: после выкладки функция должна отвечать (а не NOT_FOUND) — итог одной строкой в заметке к запуску.
@@ -73,6 +76,35 @@ jobs:
             echo "SMTP_SET=нет (не трогал)" >> "$GITHUB_ENV"
           fi
 
+      - name: Секреты Firebase для мгновенных уведомлений (если заданы в GitHub)
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          FCM_SERVICE_ACCOUNT: ${{ secrets.FCM_SERVICE_ACCOUNT }}
+          FCM_GOOGLE_SERVICES: ${{ secrets.FCM_GOOGLE_SERVICES }}
+        run: |
+          if [ -n "$FCM_SERVICE_ACCOUNT" ] && [ -n "$FCM_GOOGLE_SERVICES" ]; then
+            if ! printf '%s' "$FCM_SERVICE_ACCOUNT" | jq -e '.private_key and .client_email and .project_id' >/dev/null 2>&1; then
+              echo "::error title=Firebase::FCM_SERVICE_ACCOUNT — не JSON ключа сервисного аккаунта (нужны private_key, client_email, project_id)"
+              exit 1
+            fi
+            if ! printf '%s' "$FCM_GOOGLE_SERVICES" | jq -e '.client[] | select(.client_info.android_client_info.package_name == "ru.prokatnvsk.app")' >/dev/null 2>&1; then
+              echo "::error title=Firebase::в FCM_GOOGLE_SERVICES нет приложения ru.prokatnvsk.app — добавьте Android-приложение с этим пакетом в Firebase"
+              exit 1
+            fi
+            f="$(mktemp)"; chmod 600 "$f"
+            {
+              printf 'FCM_SERVICE_ACCOUNT_B64=%s\n' "$(printf '%s' "$FCM_SERVICE_ACCOUNT" | jq -c . | base64 -w0)"
+              printf 'FCM_GOOGLE_SERVICES_B64=%s\n' "$(printf '%s' "$FCM_GOOGLE_SERVICES" | jq -c . | base64 -w0)"
+            } > "$f"
+            supabase secrets set --env-file "$f" --project-ref "$PROJECT_REF" >/dev/null
+            rm -f "$f"
+            echo "секреты Firebase перенесены в Supabase (значения не показываются)"
+            echo "FCM_SET=да" >> "$GITHUB_ENV"
+          else
+            echo "FCM_SERVICE_ACCOUNT/FCM_GOOGLE_SERVICES в GitHub не заданы — секреты Firebase не трогаю"
+            echo "FCM_SET=нет (не трогал)" >> "$GITHUB_ENV"
+          fi
+
       - name: Проверка — функции отвечают
         run: |
           res=""
@@ -84,5 +116,5 @@ jobs:
             echo "$fn → HTTP $code: $body"
             if [ "$code" = "200" ]; then res="$res ✔ $fn"; else res="$res ✘ $fn (HTTP $code)"; fail=1; fi
           done
-          echo "::notice title=Выкладка функций::$res · секреты почты: $SMTP_SET"
+          echo "::notice title=Выкладка функций::$res · секреты почты: $SMTP_SET · секреты Firebase: $FCM_SET"
           exit $fail

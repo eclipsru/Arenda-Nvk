@@ -65,8 +65,8 @@ const BASE = process.env.SITE_BASE_URL || 'http://127.0.0.1:8000';
     assert.equal(resp.status(), 200, `${url}: ссылка на пункты проката (${href}) не открывается`);
 
     // Предложение арендодателю
-    assert.ok(await grid.locator('a[href="landlord-register.html"]').count() > 0,
-      `${url}: нет предложения владельцу инструмента разместить объявление`);
+    assert.ok(await grid.locator('a[href="chat.html?who=eclips.ru%40mail.ru&lend=1"]').count() > 0,
+      `${url}: нет предложения владельцу инструмента написать владельцу площадки`);
 
     // Обращение считается именно как обращение, а показов с этих страниц нет
     const before = sent.length;

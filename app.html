@@ -1,145 +1,363 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="ru">
 <head>
 <script src="assets/recovery.js?v=20261004-reset"></script>
-<script src="assets/app-release.js?v=20261009-rel"></script>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Ива — аренда инструмента: приложение для Android</title>
+<meta name="description" content="Приложение «Ива — аренда инструмента» для Android: каталог инструмента в аренду рядом с домом, заявки прокату, чат и уведомления. Оценки и отзывы пользователей. Скачать бесплатно.">
 <meta name="theme-color" content="#101217">
-<title>Ива — Инструмент в аренду, Новочеркасск</title>
-<meta name="description" content="Прокат инструмента «Ива» в Новочеркасске: дрели, перфораторы, сварочное оборудование и другой инструмент в аренду. Цены за сутки, доставка, залог возвратный.">
 <link rel="canonical" href="https://eclipsru.github.io/Arenda-Nvk/app.html">
 <meta property="og:type" content="website">
-<meta property="og:title" content="Ива — Инструмент в аренду, Новочеркасск">
-<meta property="og:description" content="Прокат инструмента: дрели, перфораторы, сварочное оборудование. Цены за сутки, доставка, возвратный залог.">
+<meta property="og:title" content="Ива — аренда инструмента · приложение для Android">
+<meta property="og:description" content="Каталог инструмента в аренду, заявки, чат с прокатом и уведомления — в телефоне.">
+<meta property="og:image" content="https://eclipsru.github.io/Arenda-Nvk/assets/logo.png">
 <meta property="og:url" content="https://eclipsru.github.io/Arenda-Nvk/app.html">
-<meta property="og:image" content="https://eclipsru.github.io/Arenda-Nvk/iva_logo.png">
-<link rel="icon" href="favicon.svg" type="image/svg+xml">
-<link rel="apple-touch-icon" href="iva_logo.png">
+<link rel="icon" href="assets/favicon-32.png" type="image/png" sizes="32x32">
+<link rel="icon" href="assets/icon-192.png" type="image/png" sizes="192x192">
+<link rel="apple-touch-icon" href="assets/apple-touch-icon.png">
 <link rel="manifest" href="manifest.webmanifest">
+<link rel="stylesheet" href="assets/theme.css?v=20261024-live">
+<link rel="stylesheet" href="assets/geo.css?v=20260923-photon">
+<script type="application/ld+json">
+{"@context":"https://schema.org","@type":"SoftwareApplication","name":"Ива — аренда инструмента","operatingSystem":"Android 5.0+","applicationCategory":"LifestyleApplication","url":"https://eclipsru.github.io/Arenda-Nvk/app.html","image":"https://eclipsru.github.io/Arenda-Nvk/assets/logo.png","offers":{"@type":"Offer","price":"0","priceCurrency":"RUB"},"publisher":{"@type":"Organization","name":"Ива","url":"https://eclipsru.github.io/Arenda-Nvk/"}}
+</script>
 <style>
-:root{--bg:#101217;--card:#1A1D24;--line:#262B35;--or:#FF8F1F;--tx:#F2F4F8;--gr:#9AA1B0;--g2:#6B7080}
-*{margin:0;padding:0;box-sizing:border-box}
-body{background:var(--bg);color:var(--tx);font-family:-apple-system,'Segoe UI',Roboto,Arial,sans-serif}
-a{color:var(--or);text-decoration:none}
-.hd{display:flex;align-items:center;gap:12px;padding:14px 22px;max-width:1180px;margin:0 auto}
-.hd img{width:44px;height:44px;border-radius:11px;border:1px solid var(--line)}
-.hd b{font-size:18px;display:block;line-height:1.15}
-.hd span{color:var(--g2);font-size:11.5px}
-.hd nav{margin-left:auto;display:flex;gap:8px;flex-wrap:wrap}
-.hd nav a{background:var(--card);border:1px solid var(--line);color:var(--tx);font-size:13.5px;font-weight:600;padding:9px 14px;border-radius:10px}
-.hd nav a.hot{background:var(--or);border-color:var(--or);color:#fff}
-.hero{max-width:1180px;margin:0 auto;padding:34px 22px 10px}
-.hero h1{font-size:30px;line-height:1.2}
-.hero h1 em{color:var(--or);font-style:normal}
-.hero p{color:var(--gr);margin-top:10px;font-size:15.5px;max-width:720px;line-height:1.5}
-.hero .btns{display:flex;gap:10px;margin-top:18px;flex-wrap:wrap}
-.hero .btns a{padding:13px 20px;border-radius:12px;font-weight:700;font-size:15px}
-.hero .btns a.main{background:var(--or);color:#fff}
-.hero .btns a.sec{background:var(--card);border:1px solid var(--line);color:var(--tx)}
-.sect{max-width:1180px;margin:0 auto;padding:30px 22px 6px;font-size:21px}
-.grid{max-width:1180px;margin:12px auto 0;padding:0 22px;display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:12px}
-.tile{background:var(--card);border:1px solid var(--line);border-radius:14px;overflow:hidden}
-.tile .ph{width:100%;aspect-ratio:1;object-fit:cover;display:block;background:#12151B}
-.tile .ph.empty{display:flex;align-items:center;justify-content:center}
-.tile .ph.empty svg{width:44px;height:44px;fill:#3A4050}
-.tile .nm{font-size:13.5px;font-weight:600;padding:9px 11px 3px;line-height:1.3}
-.tile .pr{padding:3px 11px 11px;color:var(--or);font-weight:700;font-size:14.5px}
-.tile .pr small{display:block;color:var(--g2);font-weight:500;font-size:11px}
-.feat{max-width:1180px;margin:8px auto 0;padding:0 22px;display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:12px}
-.f{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px}
-.f b{display:block;font-size:14.5px;margin-bottom:5px}
-.f span{color:var(--gr);font-size:13.5px;line-height:1.45}
-.steps{max-width:1180px;margin:8px auto;padding:0 22px;display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:12px}
-.st{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px}
-.st i{display:inline-block;width:30px;height:30px;border-radius:50%;background:var(--or);color:#fff;font-style:normal;font-weight:700;text-align:center;line-height:30px;margin-bottom:9px}
-.st b{display:block;font-size:14.5px;margin-bottom:5px}
-.st span{color:var(--gr);font-size:13.5px;line-height:1.45}
-.ft{border-top:1px solid var(--line);margin-top:36px;padding:22px;color:var(--g2);font-size:13px;line-height:1.7;text-align:center}
-.ft b{color:var(--tx)}
-@media(max-width:640px){
-  .hd{flex-wrap:wrap;padding:12px 14px;gap:10px}
-  .hd nav{order:3;width:100%;margin-left:0;flex-wrap:nowrap;overflow-x:auto;gap:7px;padding-top:2px;scrollbar-width:none}
-  .hd nav::-webkit-scrollbar{display:none}
-  .hd nav a{flex:0 0 auto;border-radius:18px;padding:8px 13px;font-size:12.5px}
-  .hero{padding:22px 14px 6px}
-  .hero h1{font-size:22px}
-  .hero p{font-size:14.5px}
-  .hero .btns{gap:8px}
-  .hero .btns a{flex:1 1 100%;text-align:center;padding:14px 16px}
-  .sect{padding:22px 14px 4px;font-size:18px}
-  .grid{padding:10px 14px 0;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px}
-  .tile{border-radius:16px}
-  .feat,.steps{padding:0 14px;gap:10px}
-  .f,.st{border-radius:14px;padding:14px}
-  .ft{padding:18px 14px;font-size:12px}
+/* ====== Страница приложения (как карточка в Google Play), цвета — только из theme.css ====== */
+.ap{max-width:1080px;margin:0 auto;padding:18px 16px 40px}
+.ap-grid{display:block}
+.ap-side{margin-top:8px}
+@media(min-width:1000px){
+  .ap{padding-top:32px}
+  .ap-grid{display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:48px;align-items:start}
+  .ap-side{margin-top:0;position:sticky;top:90px}
 }
+.ap-hero{display:flex;gap:16px;align-items:center}
+.ap-ico{width:76px;height:76px;border-radius:20px;flex:0 0 auto;box-shadow:0 6px 22px rgba(255,143,31,.18);background:var(--card)}
+.ap-name{font-size:22px;line-height:1.2;font-weight:800;margin:0;color:var(--tx)}
+.ap-dev{display:inline-block;margin-top:4px;color:var(--or);font-weight:600;font-size:14px;text-decoration:none}
+.ap-sub{font-size:12.5px;color:var(--gr);margin-top:2px}
+@media(min-width:760px){.ap-ico{width:108px;height:108px;border-radius:26px}.ap-name{font-size:32px}.ap-dev{font-size:16px}}
+
+.ap-stats{display:flex;overflow-x:auto;margin:20px -16px 0;padding:0 16px;scrollbar-width:none}
+.ap-stats::-webkit-scrollbar{display:none}
+.ap-st{flex:0 0 auto;min-width:88px;padding:0 14px;text-align:center;border-left:1px solid var(--line);color:var(--tx);text-decoration:none;background:none;border-top:0;border-right:0;border-bottom:0;font:inherit;cursor:default}
+.ap-st:first-child{border-left:0;padding-left:0}
+.ap-st b{display:flex;align-items:center;justify-content:center;gap:3px;font-size:14.5px;height:22px;white-space:nowrap}
+.ap-st span{display:block;font-size:12px;color:var(--gr);margin-top:2px;white-space:nowrap}
+.ap-st.click{cursor:pointer}
+.ap-st svg{width:13px;height:13px;fill:currentColor}
+
+.ap-cta{display:flex;gap:10px;margin-top:20px;flex-wrap:wrap;align-items:center}
+.ap-install{flex:1 1 100%;font-size:16px;padding:13px 18px;border-radius:12px;text-align:center}
+@media(min-width:760px){.ap-install{flex:0 0 auto;min-width:240px}}
+.ap-cta .btn.sec{flex:1 1 0;justify-content:center}
+@media(min-width:760px){.ap-cta .btn.sec{flex:0 0 auto}}
+.ap-hint{font-size:12.5px;color:var(--gr);margin-top:10px;line-height:1.45}
+.ap-hint a{color:var(--or)}
+.ap-ios{display:none;margin-top:18px;background:var(--or-soft);border:1px solid rgba(255,143,31,.35);border-radius:var(--r);padding:14px 16px;font-size:14px;line-height:1.5}
+.is-ios .ap-ios{display:block}
+.is-ios .ap-install{display:none}
+
+.ap-sec{margin-top:30px}
+.ap-h{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:0 0 12px;font-size:18px;font-weight:700;color:var(--tx)}
+.ap-h button,.ap-h a{background:none;border:0;color:var(--tx);font:inherit;cursor:pointer;display:flex;align-items:center;gap:8px;padding:0;text-decoration:none}
+.ap-h .arr{width:30px;height:30px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;color:var(--gr);font-size:20px}
+.ap-h button:hover .arr{background:var(--card);color:var(--or)}
+.ap-p{color:var(--gr);font-size:14.5px;line-height:1.6;margin:0}
+.ap-clamp{display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
+.ap-chips{display:flex;flex-wrap:wrap;gap:8px;margin-top:14px}
+.ap-chip{border:1px solid var(--line);border-radius:999px;padding:6px 12px;font-size:13px;color:var(--gr);background:transparent;font:inherit;font-size:13px;cursor:pointer;text-decoration:none}
+.ap-chip.on{border-color:var(--or);background:var(--or-soft);color:var(--or);font-weight:600}
+
+/* Экраны (иллюстрации; настоящие снимки — массив IVA_APP_SHOTS) */
+.ap-shots{display:flex;gap:12px;overflow-x:auto;scroll-snap-type:x mandatory;margin:0 -16px;padding:2px 16px 8px;scrollbar-width:thin}
+.shot{flex:0 0 172px;height:340px;border-radius:18px;scroll-snap-align:start;overflow:hidden;position:relative;background:linear-gradient(165deg,#2A2013 0%,#1A1D24 55%,#101217 100%);border:1px solid var(--line);display:flex;flex-direction:column}
+.shot img.real{width:100%;height:100%;object-fit:cover}
+.shot-t{padding:14px 14px 0;font-weight:800;font-size:15px;line-height:1.25;color:var(--tx)}
+.shot-t em{font-style:normal;color:var(--or)}
+.phone{margin:12px auto 0;width:138px;flex:1 1 auto;border-radius:18px 18px 0 0;border:3px solid #2c313c;border-bottom:0;background:var(--bg,#101217);padding:8px 7px 0;overflow:hidden;display:flex;flex-direction:column;gap:6px}
+.phone .pb{height:6px;width:40px;border-radius:3px;background:#2c313c;margin:0 auto 2px}
+.m-grid{display:grid;grid-template-columns:1fr 1fr;gap:5px}
+.m-tile{background:var(--card);border-radius:8px;height:62px;position:relative;overflow:hidden}
+.m-tile img{position:absolute;right:2px;bottom:2px;height:46px;width:auto}
+.m-tile i{position:absolute;left:5px;top:4px;font-style:normal;font-size:7.5px;font-weight:700;color:var(--tx);max-width:52px;line-height:1.15}
+.m-bar{height:16px;border-radius:8px;background:var(--field);border:1px solid var(--line);font-size:7px;color:var(--g2);display:flex;align-items:center;padding:0 6px}
+.m-card{background:var(--card);border-radius:8px;padding:6px;font-size:7.5px;color:var(--gr);line-height:1.35}
+.m-card b{display:block;color:var(--tx);font-size:8.5px}
+.m-btn{background:var(--or);color:#111;border-radius:6px;text-align:center;font-size:8px;font-weight:800;padding:5px}
+.m-row{display:flex;gap:4px;align-items:center}
+.m-dot{width:6px;height:6px;border-radius:50%;flex:0 0 auto}
+.m-msg{max-width:80%;border-radius:9px;padding:5px 7px;font-size:7.5px;line-height:1.3}
+.m-msg.in{background:var(--card);color:var(--tx);align-self:flex-start}
+.m-msg.out{background:var(--or);color:#111;align-self:flex-end}
+.m-note{background:#20242e;border-radius:9px;padding:6px;display:flex;gap:5px;font-size:7.5px;color:var(--gr)}
+.m-note img{width:16px;height:16px;border-radius:4px}
+.m-note b{color:var(--tx);display:block;font-size:8px}
+.m-tint{border-left:3px solid var(--grn)}
+.m-tint.y{border-left-color:var(--yel)}
+.ap-cap{font-size:12px;color:var(--g2);margin-top:6px}
+
+.ap-steps{margin:0;padding:0;list-style:none;counter-reset:s}
+.ap-steps li{counter-increment:s;position:relative;padding:0 0 14px 40px;color:var(--gr);font-size:14.5px;line-height:1.5}
+.ap-steps li::before{content:counter(s);position:absolute;left:0;top:-1px;width:26px;height:26px;border-radius:50%;background:var(--or-soft);color:var(--or);font-weight:800;font-size:13px;display:flex;align-items:center;justify-content:center}
+.ap-steps b{color:var(--tx)}
+.ap-box{background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:16px}
+.ap-safe li{display:flex;gap:12px;align-items:flex-start;margin:0 0 12px;color:var(--gr);font-size:14px;line-height:1.5}
+.ap-safe ul{list-style:none;margin:0;padding:0}
+.ap-safe .i{flex:0 0 auto;width:22px;text-align:center;font-size:17px}
+.ap-safe b{color:var(--tx);display:block;font-weight:600}
+.ap-link{color:var(--or);text-decoration:none;font-weight:600;font-size:14px}
+
+/* Оценки и отзывы */
+.rt-sum{display:grid;grid-template-columns:auto minmax(0,1fr);gap:22px;align-items:center}
+.rt-big{text-align:center;min-width:92px}
+.rt-big b{display:block;font-size:56px;line-height:1;font-weight:800;color:var(--tx)}
+.rt-big .st{margin:6px 0 4px;justify-content:center}
+.rt-big span{font-size:12.5px;color:var(--gr)}
+.rt-bars{display:flex;flex-direction:column;gap:6px}
+.rt-bar{display:flex;align-items:center;gap:10px;font-size:12.5px;color:var(--gr)}
+.rt-bar i{flex:1 1 auto;height:9px;border-radius:5px;background:var(--line);overflow:hidden;position:relative}
+.rt-bar i s{position:absolute;left:0;top:0;bottom:0;background:var(--or);border-radius:5px}
+.st{display:inline-flex;gap:1px;color:var(--or);vertical-align:middle}
+.st svg{width:13px;height:13px;fill:currentColor}
+.st .off{color:#3A4050}
+.rt-rate{margin-top:22px;text-align:center;padding:16px;border:1px solid var(--line);border-radius:var(--r)}
+.rt-rate p{margin:0 0 6px;font-weight:700;color:var(--tx)}
+.rt-rate small{display:block;color:var(--gr);font-size:12.5px;margin-bottom:10px}
+.tap-st{display:inline-flex;gap:6px}
+.tap-st button{background:none;border:0;padding:4px;cursor:pointer;color:#3A4050;line-height:0}
+.tap-st button svg{width:34px;height:34px;fill:currentColor;stroke:var(--g2);stroke-width:1.2}
+.tap-st button.on{color:var(--or)}
+.tap-st button.on svg{stroke:var(--or)}
+.tap-st button:hover svg{stroke:var(--or)}
+.rt-tools{display:flex;flex-wrap:wrap;gap:8px;margin:20px 0 4px;align-items:center}
+.rt-tools .sp{flex:1 1 auto}
+.rv{padding:18px 0;border-top:1px solid var(--line)}
+.rv:first-child{border-top:0}
+.rv-h{display:flex;align-items:center;gap:12px}
+.rv-ava{width:36px;height:36px;border-radius:50%;flex:0 0 auto;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:15px;color:#111}
+.rv-n{font-weight:600;color:var(--tx);font-size:14.5px;flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.rv-badge{font-size:11.5px;border-radius:999px;padding:3px 9px;background:#2a2b1a;color:var(--yel);white-space:nowrap}
+.rv-badge.hid{background:#2a1a1a;color:var(--red)}
+.rv-badge.me{background:var(--or-soft);color:var(--or)}
+.rv-m{display:flex;align-items:center;gap:8px;margin:10px 0 6px;font-size:12.5px;color:var(--gr);flex-wrap:wrap}
+.rv-b{color:var(--tx);font-size:14.5px;line-height:1.55;white-space:pre-wrap;word-wrap:break-word;margin:0}
+.rv-b.cl{display:-webkit-box;-webkit-line-clamp:5;-webkit-box-orient:vertical;overflow:hidden}
+.rv-more{background:none;border:0;color:var(--or);padding:4px 0 0;font:inherit;font-size:13.5px;cursor:pointer}
+.rv-help{font-size:12.5px;color:var(--gr);margin-top:10px}
+.rv-vote{display:flex;align-items:center;gap:8px;margin-top:8px;font-size:12.5px;color:var(--gr);flex-wrap:wrap}
+.rv-vote button,.rv-act button{border:1px solid var(--line);background:transparent;color:var(--tx);border-radius:999px;padding:5px 14px;font:inherit;font-size:13px;cursor:pointer}
+.rv-vote button.on{border-color:var(--or);background:var(--or-soft);color:var(--or);font-weight:600}
+.rv-act{display:flex;gap:8px;margin-top:10px;flex-wrap:wrap}
+.rv-act button.warn{color:var(--red)}
+.rv-reply{margin-top:12px;background:var(--card);border-radius:12px;padding:12px 14px}
+.rv-reply .t{display:flex;justify-content:space-between;gap:10px;font-size:13px;color:var(--tx);font-weight:600;margin-bottom:6px}
+.rv-reply .t span{color:var(--g2);font-weight:400}
+.rv-reply p{margin:0;color:var(--gr);font-size:14px;line-height:1.5;white-space:pre-wrap}
+.rv-empty{text-align:center;color:var(--gr);font-size:14px;padding:22px 10px}
+
+.ap-info{display:grid;grid-template-columns:1fr 1fr;gap:16px 20px}
+.ap-info div span{display:block;font-size:12.5px;color:var(--gr)}
+.ap-info div b{display:block;font-size:14.5px;color:var(--tx);font-weight:600;margin-top:2px;word-break:break-word}
+.ap-dev-l{list-style:none;margin:0;padding:0}
+.ap-dev-l a{display:flex;gap:14px;align-items:center;padding:11px 0;color:var(--tx);text-decoration:none;border-top:1px solid var(--line)}
+.ap-dev-l li:first-child a{border-top:0}
+.ap-dev-l .i{width:22px;text-align:center;font-size:17px;color:var(--gr)}
+.ap-dev-l b{display:block;font-weight:600;font-size:14px}
+.ap-dev-l span{display:block;font-size:12.5px;color:var(--gr)}
+.ap-qr{text-align:center;display:none}
+.ap-qr img{width:180px;height:180px;border-radius:12px;background:#fff;padding:8px;margin:6px auto 10px;display:block}
+.ap-qr p{margin:0;font-size:13.5px;color:var(--gr);line-height:1.5}
+@media(min-width:1000px){.ap-qr{display:block}}
+
+.ap [hidden]{display:none!important}
+.ap-safe .i svg,.ap-dev-l .i svg{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
+.ap-safe .i{color:var(--or)}
+.rt-big .st{display:flex}
+@media(min-width:1000px){.ap-shots,.ap-stats{margin-left:0;margin-right:0;padding-left:0;padding-right:0}}
+/* Липкая кнопка внизу на телефоне */
+.ap-sticky{position:fixed;left:0;right:0;bottom:0;z-index:40;display:flex;align-items:center;gap:12px;padding:10px 16px calc(10px + env(safe-area-inset-bottom));background:rgba(26,29,36,.97);border-top:1px solid var(--line);transform:translateY(110%);transition:transform .25s ease;backdrop-filter:blur(8px)}
+.ap-sticky.show{transform:none}
+.ap-sticky img{width:40px;height:40px;border-radius:11px}
+.ap-sticky div{flex:1 1 auto;min-width:0;font-size:12.5px;color:var(--gr)}
+.ap-sticky div b{display:block;color:var(--tx);font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ap-sticky .btn{flex:0 0 auto;padding:10px 20px}
+@media(min-width:1000px){.ap-sticky{display:none}}
+.is-ios .ap-sticky{display:none}
+body.ap-body{padding-bottom:0}
+@media(max-width:999px){body.ap-body{padding-bottom:72px}}
+.sh-txt{width:100%;min-height:130px;resize:vertical;background:var(--field);border:1px solid var(--line);border-radius:var(--r-s);color:var(--tx);padding:12px;font:inherit;font-size:15px;line-height:1.5;box-sizing:border-box}
+.sh-cnt{text-align:right;font-size:12px;color:var(--g2);margin-top:4px}
+.sh-note{font-size:12.5px;color:var(--gr);line-height:1.5;margin:10px 0 0}
+.sh-sel{width:100%;margin-top:12px}
 </style>
 </head>
-<body>
-<header class="hd">
-  <img src="iva_logo.png" alt="Ива">
-  <div><b>Ива</b><span>Инструмент в аренду · Новочеркасск</span></div>
-  <nav>
-    <a href="#katalog">Каталог и цены</a>
-    <a href="offer.html">Оферта</a>
-    <a href="cabinet.html">Кабинет</a>
-    <a class="hot" href="ProkatInstrumenta-10.14.apk" data-app-dl="Скачать Android {v}" download>Скачать Android 10.14</a>
-  </nav>
-</header>
+<body class="ap-body" data-no-app-banner>
 
-<section class="hero">
-  <h1>Аренда инструмента <em>в Новочеркасске</em></h1>
-  <p>Дрели, перфораторы, болгарки, сварочное оборудование, бетономешалки и десятки других позиций — от 150 ₽ в сутки. Выдача: ул. Маресьева, 36 (8:00–20:00). Доставка по городу. Залог возвратный.</p>
-  <div class="btns">
-    <a class="main" href="#katalog">Смотреть каталог и цены</a>
-    <a class="sec" href="cabinet.html">Заказать онлайн</a>
+<header id="hdr"></header>
+
+<main class="ap" id="apMain">
+  <div class="ap-grid">
+    <div>
+      <!-- Шапка приложения -->
+      <div class="ap-hero">
+        <img class="ap-ico" src="assets/icon-192.png" width="108" height="108" alt="Значок приложения Ива">
+        <div>
+          <h1 class="ap-name">Ива — аренда инструмента</h1>
+          <a class="ap-dev" href="index.html">Ива</a>
+          <div class="ap-sub">Аренда инструмента · Новочеркасск и другие города</div>
+        </div>
+      </div>
+
+      <!-- Цифры: оценка, версия, размер, Android -->
+      <div class="ap-stats" id="apStats">
+        <button type="button" class="ap-st click" id="stRate" data-go="reviews"><b id="stRateV">—</b><span id="stRateN">нет оценок</span></button>
+        <div class="ap-st"><b id="stSize">APK</b><span id="stSizeL">файл с сайта</span></div>
+        <div class="ap-st"><b data-app-ver>10.14</b><span>версия</span></div>
+        <div class="ap-st"><b>5.0+</b><span>Android</span></div>
+        <div class="ap-st"><b>0 ₽</b><span>бесплатно</span></div>
+      </div>
+
+      <!-- Установить -->
+      <div class="ap-cta">
+        <a class="btn ap-install" id="apInstall" href="ProkatInstrumenta-10.14.apk" data-app-dl="Установить · версия {v}" download>Установить · версия 10.14</a>
+        <button type="button" class="btn sec" id="apShare">Поделиться</button>
+        <a class="btn sec" href="index.html">Открыть сайт</a>
+      </div>
+      <p class="ap-hint" id="apHint">Файл APK скачивается прямо с сайта «Ивы», без Google Play. Обновления потом приходят в самом приложении. <a href="#install" data-go="install">Как установить</a></p>
+      <div class="ap-ios">
+        <b>Приложение пока только для Android.</b><br>
+        На iPhone и iPad пользуйтесь сайтом — каталог, заявки, чат и кабинет там те же.
+        <div style="margin-top:12px"><a class="btn sm" href="index.html">Открыть сайт</a></div>
+      </div>
+
+      <!-- Экраны -->
+      <section class="ap-sec" aria-label="Экраны приложения">
+        <div class="ap-shots" id="apShots"></div>
+        <div class="ap-cap" id="apShotsCap">Иллюстрации разделов приложения</div>
+      </section>
+
+      <!-- Об этом приложении -->
+      <section class="ap-sec">
+        <h2 class="ap-h"><button type="button" id="aboutBtn">Об этом приложении <span class="arr">→</span></button></h2>
+        <p class="ap-p ap-clamp" id="aboutShort">Ива — площадка аренды инструмента. Найдите электроинструмент, стройоборудование, садовую технику или генератор в своём городе, отправьте заявку прокату и договоритесь в чате. Для прокатов — объявления, заявки по пунктам выдачи, сотрудники, срок аренды с таймером и «чек» по каждому инструменту.</p>
+        <div class="ap-chips">
+          <a class="ap-chip" href="catalog.html">Аренда инструмента</a>
+          <a class="ap-chip" href="catalog.html?cat=power">Электроинструмент</a>
+          <a class="ap-chip" href="catalog.html?cat=construction">Стройоборудование</a>
+          <a class="ap-chip" href="catalog.html?cat=garden">Садовый инструмент</a>
+        </div>
+      </section>
+
+      <!-- Что нового -->
+      <section class="ap-sec">
+        <h2 class="ap-h">Что нового</h2>
+        <p class="ap-p" id="whatsNew">Исправления и улучшения.</p>
+        <div class="ap-sub" style="margin-top:8px">Версия <span data-app-ver>10.14</span><span id="wnDate"></span></div>
+      </section>
+
+      <!-- Как установить -->
+      <section class="ap-sec" id="install">
+        <h2 class="ap-h">Как установить</h2>
+        <ol class="ap-steps">
+          <li>Нажмите <b>«Установить»</b> — скачается файл <b id="apkName">ProkatInstrumenta-10.14.apk</b><span id="apkSize"></span>.</li>
+          <li>Откройте его из уведомления о загрузке или из папки <b>«Загрузки»</b>.</li>
+          <li>Если телефон спросит — разрешите <b>установку из этого источника</b> (вашего браузера) и вернитесь назад.</li>
+          <li>Play Защита может предупредить о неизвестном приложении: нажмите <b>«Подробнее» → «Установить без проверки»</b> (или «Отправить на проверку», затем «Установить»).</li>
+          <li>Войдите тем же e-mail, что на сайте, — избранное, заявки и чаты те же. Новые версии приложение предложит само: <b>«Обновить до версии …»</b>.</li>
+        </ol>
+      </section>
+
+      <!-- Безопасность данных -->
+      <section class="ap-sec">
+        <h2 class="ap-h">Безопасность данных</h2>
+        <div class="ap-box ap-safe">
+          <ul>
+            <li><span class="i"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg></span><div><b>Данные передаются по защищённому соединению</b>Приложение и сайт обмениваются данными только по HTTPS.</div></li>
+            <li><span class="i"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg></span><div><b>Один аккаунт с сайтом</b>Вход по e-mail и паролю, личный кабинет общий.</div></li>
+            <li><span class="i"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h8l4 4v14H6z"/><path d="M14 3v4h4M9 12h6M9 16h6"/></svg></span><div><b>Какие данные нужны и зачем</b>Подробно — в политике конфиденциальности.</div></li>
+          </ul>
+          <a class="ap-link" href="privacy.html">Политика конфиденциальности →</a>
+        </div>
+      </section>
+
+      <!-- Оценки и отзывы -->
+      <section class="ap-sec" id="reviews">
+        <h2 class="ap-h">Оценки и отзывы</h2>
+        <div class="rt-sum">
+          <div class="rt-big"><b id="rtAvg">—</b><div class="st" id="rtStars"></div><span id="rtTotal">нет оценок</span></div>
+          <div class="rt-bars" id="rtBars"></div>
+        </div>
+        <div class="rt-rate" id="rtRate">
+          <p id="rtRateT">Оцените приложение</p>
+          <small id="rtRateS">Расскажите другим, что вы думаете</small>
+          <div class="tap-st" id="tapStars"></div>
+        </div>
+        <div class="rt-tools" id="rtTools">
+          <button type="button" class="ap-chip on" data-stars="0">Все</button>
+          <button type="button" class="ap-chip" data-stars="5">5 ★</button>
+          <button type="button" class="ap-chip" data-stars="4">4 ★</button>
+          <button type="button" class="ap-chip" data-stars="3">3 ★</button>
+          <button type="button" class="ap-chip" data-stars="2">2 ★</button>
+          <button type="button" class="ap-chip" data-stars="1">1 ★</button>
+          <span class="sp"></span>
+          <button type="button" class="ap-chip on" data-sort="helpful">Самые полезные</button>
+          <button type="button" class="ap-chip" data-sort="new">Новые</button>
+        </div>
+        <div id="rvList"><div class="rv-empty">Загружаем отзывы…</div></div>
+        <div style="text-align:center;margin-top:6px"><button type="button" class="btn sec" id="rvMore" hidden>Показать ещё</button></div>
+      </section>
+
+      <!-- Информация -->
+      <section class="ap-sec">
+        <h2 class="ap-h">Информация о приложении</h2>
+        <div class="ap-info">
+          <div><span>Версия</span><b data-app-ver>10.14</b></div>
+          <div><span>Обновлено</span><b id="infDate">—</b></div>
+          <div><span>Размер</span><b id="infSize">—</b></div>
+          <div><span>Требуется</span><b>Android 5.0 и выше</b></div>
+          <div><span>Распространение</span><b>файл APK с сайта</b></div>
+          <div><span>Цена</span><b>Бесплатно</b></div>
+        </div>
+      </section>
+    </div>
+
+    <!-- Справа на компьютере / ниже на телефоне -->
+    <aside class="ap-side">
+      <div class="ap-box ap-qr ap-sec" style="margin-top:0">
+        <b style="color:var(--tx)">Установите на телефон</b>
+        <img src="assets/qr-app-logo.png" width="180" height="180" alt="QR-код страницы приложения">
+        <p>Наведите камеру Android-телефона на код — откроется эта страница, там нажмите «Установить».</p>
+      </div>
+      <section class="ap-sec">
+        <h2 class="ap-h">Связь с разработчиком</h2>
+        <ul class="ap-dev-l">
+          <li><a href="index.html"><span class="i"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/></svg></span><div><b>Сайт</b><span>eclipsru.github.io/Arenda-Nvk</span></div></a></li>
+          <li><a href="mailto:eclips.ru@mail.ru"><span class="i"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/></svg></span><div><b>Электронная почта</b><span>eclips.ru@mail.ru</span></div></a></li>
+          <li><a href="tel:+79081732475"><span class="i"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4h4l2 5-2.5 1.5a11 11 0 0 0 5 5L15 13l5 2v4a2 2 0 0 1-2 2A16 16 0 0 1 3 6a2 2 0 0 1 2-2"/></svg></span><div><b>Телефон</b><span>8 (908) 173-24-75</span></div></a></li>
+          <li><a href="privacy.html"><span class="i"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z"/></svg></span><div><b>Политика конфиденциальности</b><span>как мы обращаемся с данными</span></div></a></li>
+          <li><a href="offer.html"><span class="i"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h8l4 4v14H6z"/><path d="M14 3v4h4M9 12h6M9 16h6"/></svg></span><div><b>Публичная оферта</b><span>условия площадки</span></div></a></li>
+        </ul>
+      </section>
+    </aside>
   </div>
-  <p style="font-size:13px;color:var(--gr)">Для Android есть приложение, версия <span data-app-ver>10.14</span>: каталог, заявки и чат. Если Android не даёт установить поверх прежней версии — удалите прежнее приложение и установите заново: данные учётной записи хранятся на сервере.</p>
-</section>
+</main>
 
-<h2 class="sect" id="katalog">Каталог и цены <span style="font-size:13px;color:#6B7080;font-weight:500">цена указана за сутки аренды</span></h2>
-<div class="grid" id="vit"><div style="color:#6B7080;padding:8px">Загружаем каталог…</div></div>
-
-<h2 class="sect">Условия аренды</h2>
-<div class="feat">
-  <div class="f"><b>Залог — возвратный</b><span>Залог равен 5×цены аренды в сутки. Возвращаем полностью при возврате и проверке инструмента.</span></div>
-  <div class="f"><b>Доставка</b><span>40 ₽ за километр за каждый инструмент. Самовывоз: ул. Маресьева, 36.</span></div>
-  <div class="f"><b>Оплата</b><span>Наличными или картой при получении. Онлайн-оплата — СБП и картой.</span></div>
-  <div class="f"><b>Выдача</b><span>Ежедневно 8:00–20:00, ул. Маресьева, 36, Новочеркасск. Тел: 8 (908) 173-24-75.</span></div>
+<div class="ap-sticky" id="apSticky">
+  <img src="assets/icon-192.png" alt="">
+  <div><b>Ива — аренда инструмента</b><span id="skLine">Android · версия <span data-app-ver>10.14</span></span></div>
+  <a class="btn" href="ProkatInstrumenta-10.14.apk" data-app-dl="Установить" download>Установить</a>
 </div>
 
-<h2 class="sect">Как арендовать</h2>
-<div class="steps">
-  <div class="st"><i>1</i><b>Выберите инструмент</b><span>В каталоге на сайте или в приложении — цены указаны за сутки.</span></div>
-  <div class="st"><i>2</i><b>Оставьте заявку</b><span>Онлайн в кабинете или по телефону 8 (908) 173-24-75 — подтвердим наличие и время.</span></div>
-  <div class="st"><i>3</i><b>Получите инструмент</b><span>Самовывоз или доставка. Оформляем выдачу, залог и аренду.</span></div>
-</div>
+<div id="ftr"></div>
 
-<footer class="ft">
-  <b>Ива — Инструмент в аренду</b><br>
-  Индивидуальный предприниматель без образования юр. лица (самозанятый): Галиновский Илья Игоревич · ИНН 615015092863<br>
-  Новочеркасск, ул. Маресьева, 36 · 8 (908) 173-24-75 · ежедневно 8:00–20:00<br>
-  <a href="offer.html">Публичная оферта</a> · <a href="cabinet.html">Личный кабинет</a> · <a href="ProkatInstrumenta-10.14.apk" data-app-dl="Android APK {v}" download>Android APK 10.14</a>
-</footer>
-
-<script>
-var SB='https://wdxdeatphizclskfmfxi.supabase.co',KEY='sb_publishable_dtRaEHNNPBFbHFvg8hw9iA_FqJSz9BE';
-function rub(x){x=Math.round(x||0);return String(x).replace(/\B(?=(\d{3})+(?!\d))/g,'\u00A0')+' \u20BD'}
-function esc(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;')}
-fetch(SB+'/rest/v1/tools?select=name,price,deposit,img,descr&active=eq.true&order=sort.asc.nullslast,created_at.desc&limit=60',{headers:{apikey:KEY}})
-.then(function(r){return r.json()})
-.then(function(t){
-  var el=document.getElementById('vit');
-  if(!t||!t.length){el.innerHTML='';return}
-  var h='';
-  for(var i=0;i<t.length;i++){var x=t[i];
-    h+='<div class="tile">'+(x.img?'<img class="ph" loading="lazy" src="'+esc(x.img)+'" alt="">':'<div class="ph empty"><svg viewBox="0 0 24 24"><path d="M21.7 18.3 14 10.6V8a6 6 0 0 0-8-5.7l3.6 3.6-2.8 2.8L3.2 5.1A6 6 0 0 0 8.9 13h2.5l7.7 7.7z"/></svg></div>')
-    +'<div class="nm">'+esc(x.name)+'</div><div class="pr">'+rub(x.price)+'<small>в сутки'+(x.deposit?' · залог '+rub(x.deposit):'')+'</small></div></div>';
-  }
-  el.innerHTML=h;
-})
-.catch(function(){var el=document.getElementById('vit');if(el)el.innerHTML=''})
-</script>
+<script src="assets/data.js"></script>
+<script src="assets/geo.js?v=20260923-photon"></script>
+<script src="assets/email-guard.js?v=20260926-email"></script>
+<script src="assets/sb.js?v=20261024-live"></script>
+<script src="assets/app-release.js?v=20261009-rel"></script>
+<script src="assets/app.js?v=20261102-play"></script>
+<script src="assets/app-page.js?v=20261102-play"></script>
 </body>
 </html>

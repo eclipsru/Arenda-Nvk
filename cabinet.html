@@ -12,8 +12,9 @@ if(location.hash==='#cab')location.replace('account.html#prof');
 <title>Ива — Инструмент в аренду · Личный кабинет</title>
 <meta name="description" content="Личный кабинет проката инструмента «Ива» в Новочеркасске: каталог, заявки, избранное, чат с владельцем.">
 <meta name="robots" content="noindex, nofollow">
-<link rel="icon" href="favicon.svg" type="image/svg+xml">
-<link rel="apple-touch-icon" href="iva_logo.png">
+<link rel="icon" href="assets/favicon-32.png" type="image/png" sizes="32x32">
+<link rel="icon" href="assets/icon-192.png" type="image/png" sizes="192x192">
+<link rel="apple-touch-icon" href="assets/apple-touch-icon.png">
 <link rel="manifest" href="manifest.webmanifest">
 <style>
 :root{--bg:#101217;--card:#1A1D24;--field:#171A21;--line:#262B35;--fl:#3A4050;--or:#FF8F1F;--ord:#F57C00;--tx:#F2F4F8;--gr:#9AA1B0;--g2:#6B7080;--red:#FF8A80;--grn:#4CAF50;--grnB:#00E676}
@@ -99,6 +100,13 @@ input,textarea,select{font-family:inherit;outline:none}
 .inp::placeholder{color:var(--g2)}
 textarea.inp{resize:vertical;min-height:70px}
 .lbl{color:var(--g2);font-size:12px;margin-top:14px;display:block}
+/* 10.82: подсказки моделей (справочник моделей) */
+.msug{display:none;margin-top:6px;background:var(--card);border:1px solid var(--line);border-radius:10px;overflow:hidden}
+.msug.on{display:block}
+.msug button{display:block;width:100%;text-align:left;background:none;border-bottom:1px solid var(--line);color:var(--tx);font-size:14px;padding:11px 12px}
+.msug button:last-child{border-bottom:0}
+.msug button:hover{color:var(--or)}
+.mspec .lbl{margin-top:10px}
 /* ---- cart bar ---- */
 .cbar{position:fixed;bottom:16px;left:50%;transform:translateX(-50%);width:calc(100% - 28px);max-width:532px;background:var(--ord);color:#fff;border-radius:14px;padding:13px 16px;font-weight:700;font-size:15px;display:flex;justify-content:space-between;box-shadow:0 6px 18px #000a;z-index:15}
 /* ---- modal ---- */
@@ -135,8 +143,21 @@ textarea.inp{resize:vertical;min-height:70px}
 .thr .nm{font-weight:600;font-size:14.5px}
 .thr .ms{color:var(--g2);font-size:13px;margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:200px}
 .thr .un{min-width:20px;height:20px;border-radius:10px;background:var(--or);color:#fff;font-size:11.5px;font-weight:700;display:flex;align-items:center;justify-content:center;padding:0 6px;margin-left:auto}
-.msgs{padding:6px 14px 100px}.chdr{display:flex;align-items:center;gap:11px;padding:10px 14px;border-bottom:1px solid var(--line)}.chdr .tt{flex:1;font-weight:700;font-size:15px}
-.msg{max-width:78%;margin-top:8px;padding:9px 12px;border-radius:14px;font-size:14.5px;line-height:1.4;white-space:pre-wrap;word-break:break-word}
+.chdr{display:flex;align-items:center;gap:11px;padding:10px 14px;border-bottom:1px solid var(--line)}.chdr .tt{flex:1;font-weight:700;font-size:15px}
+.chat-tool-ref{display:flex;align-items:center;gap:9px;padding:8px 14px;border-bottom:1px solid var(--line);background:var(--bg-2);color:var(--tx);text-decoration:none}
+.chat-tool-ref:hover{background:var(--field)}
+.chat-tool-ref img,.chat-tool-ref .noimg{width:40px;height:40px;border-radius:8px;object-fit:cover;flex:0 0 40px}
+.chat-tool-ref .noimg{display:flex;align-items:center;justify-content:center;background:var(--field);font-size:20px}
+.chat-tool-ref .tc-copy{display:flex;flex-direction:column;gap:2px;min-width:0}
+.chat-tool-ref small{font-size:11px;color:var(--g2)}
+.chat-tool-ref b{font-size:13.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.chat-tool-ref .tc-arrow{margin-left:auto;color:var(--or);font-size:19px}
+.chat-draft{display:none;align-items:center;gap:8px;padding:6px 10px;border-top:1px solid var(--line);background:var(--field);font-size:12px;color:var(--g2)}
+.chat-draft img{width:40px;height:40px;border-radius:7px;object-fit:cover}
+.chat-draft span{flex:1;min-width:0}
+.chat-draft button{width:26px;height:26px;border-radius:50%;font-size:18px;color:var(--gr)}
+.chat-draft button:hover{background:var(--card);color:var(--tx)}
+.msgs{padding:6px 14px 100px}.msg{max-width:78%;margin-top:8px;padding:9px 12px;border-radius:14px;font-size:14.5px;line-height:1.4;white-space:pre-wrap;word-break:break-word}
 .msg.me{background:var(--ord);color:#fff;margin-left:auto;border-bottom-right-radius:4px}
 .msg.ot{background:var(--card);border:1px solid var(--line);border-bottom-left-radius:4px}
 .msg .tm{display:block;font-size:10.5px;opacity:.75;margin-top:3px}
@@ -307,6 +328,9 @@ textarea.inp{resize:vertical;min-height:70px}
 <link rel="stylesheet" href="assets/geo.css?v=20260923-photon">
 <script src="assets/geo.js?v=20260923-photon"></script>
 <script src="assets/email-guard.js?v=20260926-email"></script>
+<script src="assets/kind-guess.js?v=20261016-kind"></script>
+<script src="assets/models.js?v=20261020-power"></script>
+<script src="assets/model-form.js?v=20261020-power"></script>
 </head>
 <body>
 <div class="app" id="app">
@@ -363,6 +387,7 @@ textarea.inp{resize:vertical;min-height:70px}
       <div class="fld"><input id="aEmail" type="email" placeholder="Email" autocomplete="email"></div>
       <div class="fld"><input id="aPass" type="password" placeholder="Пароль (не менее 6 символов)" autocomplete="current-password"></div>
       <span class="fgt hide" id="fgt">Забыли пароль?</span>
+      <span class="fgt hide" id="resendLink"></span>
       <button class="big" id="authBtn">Войти</button>
       <div class="link" id="authSwitch">Создать аккаунт</div>
     </div></div>
@@ -407,7 +432,7 @@ var KEY='sb_publishable_dtRaEHNNPBFbHFvg8hw9iA_FqJSz9BE';
 var SKLAD={lat:47.4526182,lon:40.1008652};
 var OWNER_EMAIL='eclips.ru@mail.ru';
 var DELIV_PER_KM=40;
-var S={city:'',tok:null,ref:null,exp:0,me:'',uname:'',uphone:'',admin:null,tools:[],cats:[],subs:[],limited:[],likes:{},cart:{},screen:'home',cat:'',sub:'',q:'',chatWith:null,pollT:null,days:1,delivery:false,daddr:'',dkm:0,dsum:0,cabTab:'tools',ordTab:'act'};
+var S={city:'',tok:null,ref:null,exp:0,me:'',uname:'',uphone:'',admin:null,tools:[],cats:[],subs:[],limited:[],likes:{},cart:{},screen:'home',cat:'',sub:'',q:'',chatWith:null,chatTool:null,chatDraftImg:'',chatSub:null,pollT:null,days:1,delivery:false,daddr:'',dkm:0,dsum:0,cabTab:'tools',ordTab:'act'};
 function $(id){return document.getElementById(id)}
 function esc(s){return (s==null?'':''+s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;')}
 function m(x){x=Math.round(x||0);return String(x).replace(/\B(?=(\d{3})+(?!\d))/g,'\u00A0')+' \u20BD'}
@@ -655,7 +680,9 @@ function plusBtn(){
 }
 function navOn(n){var b=document.querySelectorAll('#nav button,#tophead .tlinks button');for(var i=0;i<b.length;i++){var d=b[i].getAttribute('data-n');b[i].classList.toggle('on',d===n||(n==='home'&&S.favOnly&&d==='fav'))}}
 function go(n){
-  S.screen=n;if(S.pollT){clearInterval(S.pollT);S.pollT=null}
+  S.screen=n;
+  if(n!=='chat'&&S.chatSub){S.chatSub.close();S.chatSub=null}
+  if(S.pollT){clearInterval(S.pollT);S.pollT=null}
   if(n==='home')vHome();
   else if(n==='chat')vChat();
   else if(n==='orders')vOrders();
@@ -676,9 +703,10 @@ function myTools(){var lm=S.limited||[];var city=(S.city||'').trim().toLowerCase
   if(city&&city!=='новочеркасск'){var al=cget('admins',300000)||[];
     if(al.length)return S.tools.filter(function(t){var a=adminByMail(t.owner_email);var ad=((a&&a.address)||'').toLowerCase();return lm.indexOf((t.owner_email||'').toLowerCase())<0&&ad.indexOf(city)>=0})}
   return S.tools.filter(function(t){return lm.indexOf((t.owner_email||'').toLowerCase())<0})}
-function updPlace(){var ab=document.querySelector('#tophead .place');if(!ab)return;
-  var lim=S.limited.indexOf(S.me)>=0;
-  ab.style.display=(isAdmin()&&!lim)?'':'none'}
+function updPlace(){
+  /* 20.10.2026 (решение владельца): «Разместить» — только активному арендодателю; клиенту кнопки нет нигде */
+  var lim=S.limited.indexOf(S.me)>=0,can=isAdmin()&&S.admin.active!==false&&!lim;
+  var pl=document.querySelectorAll('[data-n="plus"]');for(var i=0;i<pl.length;i++)pl[i].style.display=can?'':'none'}
 function renderCatMenu(){var mm=$('catMenu');if(!mm)return;
   var h='<button class="cm-item'+((!S.cat&&!S.favOnly)?' on':'')+'" data-c="">Весь каталог</button>';
   for(var i=0;i<S.cats.length;i++){var c=S.cats[i];var on=S.cat===c.key;
@@ -782,7 +810,7 @@ function toolCard(id){
   btns[0].onclick=function(){if(qty>1)qty--;qv.textContent=qty};
   btns[1].onclick=function(){if(qty<20)qty++;qv.textContent=qty};
   $('toCart').onclick=function(){S.cart[id]=(S.cart[id]||0)+qty;closeLayer();cartBar();toast('Добавлено в корзину')};
-  $('toChat').onclick=function(){closeLayer();openChatWith(t.owner_email||OWNER_EMAIL,'Вопрос по инструменту: «'+t.name+'»')};
+  $('toChat').onclick=function(){closeLayer();openChatWith(t.owner_email||OWNER_EMAIL,'',t)};
 }
 function adminByMail(em){var lst=cget('admins',300000)||[];em=(em||'').toLowerCase();for(var i=0;i<lst.length;i++)if((lst[i].email||'').toLowerCase()===em)return lst[i];return null}
 
@@ -966,7 +994,15 @@ function whoName(em){
   return em.split('@')[0];
 }
 function isWide(){return window.matchMedia('(min-width:800px)').matches}
+function onCabinetMessage(m){
+  var f=(m&&m.from_email||'').toLowerCase(),t=(m&&m.to_email||'').toLowerCase();
+  if(!S.me|| (f!==S.me&&t!==S.me))return;
+  loadUnread();
+  if(S.chatWith && (f===S.chatWith||t===S.chatWith)) drawMsgs();
+  else if(S.screen==='chat'&&!S.chatWith) vChat();
+}
 async function vChat(){
+  if(S.chatSub){S.chatSub.close();S.chatSub=null}
   navOn('chat');
   if(isWide()){
     $('view').innerHTML='<div class="chatwrap"><div class="clist" id="thr"><div class="empt">Загрузка…</div></div><div class="cpane" id="cpane"><div class="empt" style="margin:auto">Выберите чат слева</div></div></div>';
@@ -997,6 +1033,7 @@ async function vChat(){
     $('thr').innerHTML=h||'<div class="empt">Сообщений пока нет</div>';
     $('thr').onclick=function(ev){var d=ev.target.closest('[data-e]');if(d)openChatWith(d.getAttribute('data-e'),'')};
     loadUnread();
+    S.chatSub=subscribeMessages(onCabinetMessage);
   }catch(e){$('thr').innerHTML='<div class="empt">Ошибка: '+esc(e.message)+'</div>'}
 }
 async function loadUnread(){
@@ -1008,15 +1045,38 @@ async function loadUnread(){
     var bd=$('mBellDot');if(bd)bd.classList.toggle('show',!!(u&&u.length));
   }catch(e){}
 }
-async function openChatWith(who,prefill){
+function chatToolHtml(t){
+  if(!t)return '';
+  var im=(t.imgs&&t.imgs[0])||t.img||'';
+  return '<a class="chat-tool-ref" href="tool.html?id='+encodeURIComponent(t.id)+'" title="Открыть объявление инструмента">'
+    +(im?'<img src="'+esc(im)+'" alt="">':'<span class="noimg">🔧</span>')
+    +'<span class="tc-copy"><small>Обсуждение инструмента</small><b>'+esc(t.name||'Инструмент')+'</b></span>'
+    +'<span class="tc-arrow">↗</span></a>';
+}
+function renderChatTool(){
+  var el=$('chatToolContext');if(!el)return;
+  el.innerHTML=chatToolHtml(S.chatTool);el.style.display=S.chatTool?'block':'none';
+}
+function renderChatDraft(){
+  var el=$('chatDraft');if(!el)return;
+  if(!S.chatDraftImg){el.innerHTML='';el.style.display='none';return}
+  el.style.display='flex';
+  el.innerHTML='<img src="'+esc(S.chatDraftImg)+'" alt="Фото к отправке">'
+    +'<span>Фото добавлено. Нажмите «Отправить»</span><button type="button" id="chatDraftRemove" title="Убрать фото">×</button>';
+  $('chatDraftRemove').onclick=function(){S.chatDraftImg='';renderChatDraft()};
+}
+async function openChatWith(who,prefill,tool){
   who=(who||OWNER_EMAIL).toLowerCase();
-  S.chatWith=who;if(S.pollT){clearInterval(S.pollT);S.pollT=null}
+  S.chatWith=who;S.chatTool=tool||null;S.chatDraftImg='';
+  if(S.pollT){clearInterval(S.pollT);S.pollT=null}
   var wide=isWide();
   var hh='<div class="chdr">'+(wide?'':'<span class="out" id="bk" style="padding:6px 10px 6px 0">←</span>')
   +'<div class="ava" style="width:36px;height:36px;flex:0 0 36px;font-size:15px">'+esc((whoName(who)[0]||'?').toUpperCase())+'</div>'
   +'<div class="tt">'+esc(whoName(who))+'</div></div>'
+  +'<div id="chatToolContext" style="display:none"></div>'
   +'<div class="msgs" id="msgs"><div class="empt">Загрузка…</div></div>'
-  +'<div class="ibar"><button class="clip" id="mClip" title="Фото"><svg viewBox="0 0 24 24"><path d="M16.5 6v9.5a4.5 4.5 0 0 1-9 0V5a3 3 0 0 1 6 0v9.5a1.5 1.5 0 0 1-3 0V6H9v8.5a3 3 0 0 0 6 0V5a4.5 4.5 0 0 0-9 0v10.5a6 6 0 0 0 12 0V6z"/></svg></button><input type="file" id="mFile" accept="image/*" class="hide"><input id="mIn" placeholder="Сообщение…" autocomplete="off"><button class="send" id="mSend"><svg viewBox="0 0 24 24"><path d="M2 21 23 12 2 3l4 8 10 1-10 1z"/></svg></button></div>';
+  +'<div class="chat-draft" id="chatDraft"></div>'
+  +'<div class="ibar"><button class="clip" id="mClip" title="Добавить фото"><svg viewBox="0 0 24 24"><path d="M16.5 6v9.5a4.5 4.5 0 0 1-9 0V5a3 3 0 0 1 6 0v9.5a1.5 1.5 0 0 1-3 0V6H9v8.5a3 3 0 0 0 6 0V5a4.5 4.5 0 0 0-9 0v10.5a6 6 0 0 0 12 0V6z"/></svg></button><input type="file" id="mFile" accept="image/*" class="hide"><input id="mIn" placeholder="Сообщение…" autocomplete="off"><button class="send" id="mSend"><svg viewBox="0 0 24 24"><path d="M2 21 23 12 2 3l4 8 10 1-10 1z"/></svg></button></div>';
   if(wide){
     $('cpane').innerHTML=hh;
     var ths=document.querySelectorAll('#thr .thr');
@@ -1028,9 +1088,13 @@ async function openChatWith(who,prefill){
   var bk=$('bk');if(bk)bk.onclick=function(){closeChat()};
   $('mSend').onclick=sendMsg;
   $('mClip').onclick=function(){$('mFile').click()};
-  $('mFile').onchange=function(){var fs=Array.prototype.slice.call(this.files);this.value='';if(!fs.length)return;upPhoto(fs[0],function(u){api('/rest/v1/app_messages','POST',{from_email:S.me,to_email:S.chatWith,text:'',img:u}).then(function(){drawMsgs();loadUnread()}).catch(function(e){toast('Не отправлено: '+e.message)})})};
+  $('mFile').onchange=function(){
+    var fs=Array.prototype.slice.call(this.files);this.value='';if(!fs.length)return;
+    upPhoto(fs[0],function(u){S.chatDraftImg=u;renderChatDraft();toast('Фото добавлено. Нажмите «Отправить»')});
+  };
   $('mIn').addEventListener('keydown',function(e){if(e.key==='Enter')sendMsg()});
-  if(prefill)$('mIn').value=prefill;
+  renderChatTool();
+  renderChatDraft();
   await drawMsgs();
   api('/rest/v1/app_messages?to_email=eq.'+encodeURIComponent(S.me)+'&from_email=eq.'+encodeURIComponent(who)+'&is_read=eq.false','PATCH',{is_read:true}).catch(function(){});
   S.pollT=setInterval(drawMsgs,5000);
@@ -1038,14 +1102,22 @@ async function openChatWith(who,prefill){
 }
 function closeChat(){
   if(S.pollT){clearInterval(S.pollT);S.pollT=null}
-  S.chatWith=null;$('nav').style.display='';vChat();
+  S.chatWith=null;S.chatTool=null;S.chatDraftImg='';$('nav').style.display='';vChat();
 }
 async function drawMsgs(){
   if(!S.chatWith)return;
   try{
     var w=S.chatWith;
-    var ms=await api('/rest/v1/app_messages?select=id,from_email,to_email,text,img,is_read,created_at&order=created_at.desc&limit=200&or=(and(from_email.eq.'+encodeURIComponent(S.me)+',to_email.eq.'+encodeURIComponent(w)+'),and(from_email.eq.'+encodeURIComponent(w)+',to_email.eq.'+encodeURIComponent(S.me)+'))');
+    var ms=await api('/rest/v1/app_messages?select=id,from_email,to_email,text,img,tool_id,is_read,created_at&order=created_at.desc&limit=200&or=(and(from_email.eq.'+encodeURIComponent(S.me)+',to_email.eq.'+encodeURIComponent(w)+'),and(from_email.eq.'+encodeURIComponent(w)+',to_email.eq.'+encodeURIComponent(S.me)+'))');
     ms=(ms||[]).slice().reverse();
+    if(!S.chatTool){
+      for(var ri=ms.length-1;ri>=0;ri--){
+        if(!ms[ri].tool_id)continue;
+        try{S.chatTool=await loadTool(ms[ri].tool_id)}catch(e){S.chatTool=null}
+        break;
+      }
+      renderChatTool();
+    }
     var el=$('msgs');if(!el)return;
     var lastDay='',h='';
     for(var i=0;i<ms.length;i++){var x=ms[i];var dk=dayKey(x.created_at);
@@ -1059,12 +1131,15 @@ async function drawMsgs(){
   }catch(e){}
 }
 async function sendMsg(){
-  var i=$('mIn'),t=i.value.trim();if(!t)return;
-  i.value='';
+  var i=$('mIn'),t=i.value.trim(),img=S.chatDraftImg||'';
+  if(!t&&!img)return;
+  i.value='';S.chatDraftImg='';renderChatDraft();
+  var row={from_email:S.me,to_email:S.chatWith,text:t,img:img};
+  if(S.chatTool&&S.chatTool.id)row.tool_id=S.chatTool.id;
   try{
-    await api('/rest/v1/app_messages','POST',{from_email:S.me,to_email:S.chatWith,text:t});
+    await api('/rest/v1/app_messages','POST',row);
     drawMsgs();loadUnread();
-  }catch(e){toast('Не отправлено: '+e.message);i.value=t}
+  }catch(e){toast('Не отправлено: '+e.message);i.value=t;S.chatDraftImg=img;renderChatDraft()}
 }
 
 async function upPhoto(file,cb){
@@ -1123,17 +1198,35 @@ async function cabTools(t){
     b.onclick=function(e){var c=e.target.closest('[data-id]');if(c&&c.id!=='addT')toolForm(c.getAttribute('data-id'))};
   }catch(e){b.innerHTML='<div class="empt">Ошибка: '+esc(e.message)+'</div>'}
 }
+/* 10.81: «Вид инструмента» (iva_kinds) со словами автоподбора; нет таблицы — пусто, форма как раньше */
+var kindsP=null;
+function loadKinds(){
+  if(S.kinds)return Promise.resolve(S.kinds);
+  if(kindsP)return kindsP;
+  var base='/rest/v1/iva_kinds?active=eq.true&order=sort.asc,title.asc&select=key,cat,sub,title,sort';
+  kindsP=api(base+',words').catch(function(){return api(base)}).catch(function(){return []}).then(function(r){
+    S.kinds=(Array.isArray(r)?r:[]).filter(function(k){return k&&k.key&&k.cat&&k.sub}).map(function(k){return {key:k.key,cat:k.cat,sub:k.sub,title:k.title||k.key,words:Array.isArray(k.words)?k.words:[]}});
+    kindsP=null;return S.kinds;
+  });
+  return kindsP;
+}
 function toolForm(id){
   if(!id&&S.limited.indexOf(S.me)>=0){toast('Доступ ограничен: погасите задолженность по комиссии');return}
   var t=id?tById(id):null;
   if(t&&!t.owner_email)t=null;
   var h='<div class="sheet"><div class="grab"></div><h3>'+(t?'Инструмент':'Новый инструмент')+'</h3>'
-  +'<span class="lbl">Название *</span><input class="inp" id="fName" value="'+esc(t?t.name:'')+'">'
+  +'<span class="lbl">Название *</span><input class="inp" id="fName" autocomplete="off" value="'+esc(t?t.name:'')+'"><div class="msug" id="fNSug"></div>'
   +'<span class="lbl">Категория</span><select class="inp" id="fCat"><option value="">—</option>'+S.cats.map(function(c){return '<option value="'+esc(c.key)+'"'+(t&&t.cat===c.key?' selected':'')+'>'+esc(c.title)+'</option>'}).join('')+'</select>'
   +'<span class="lbl">Подкатегория</span><select class="inp" id="fSub"></select>'
-  +'<span class="lbl">Цена в сутки, ₽ *</span><input class="inp" id="fPrice" type="number" inputmode="numeric" value="'+(t&&t.price!=null?t.price:'')+'">'
+  +'<span class="lbl hide" id="fKindL">Вид инструмента</span><select class="inp hide" id="fKind"></select>'
+  +'<div id="fModelBox" class="hide"><span class="lbl">Модель (необязательно)</span><div class="chips" id="fBrands" style="padding:8px 0 2px"></div>'
+  +'<input class="inp" id="fModel" autocomplete="off" maxlength="90" placeholder="Модель"><div class="msug" id="fMSug"></div><div id="fProp"></div></div>'
+  +'<div id="fSpecs" class="hide"></div>'
+  +'<div id="fKitBox" class="hide"><span class="lbl">Комплектация — отметьте, что отдаёте</span><div class="chips" id="fKit" style="padding:8px 0 2px"></div></div>'
+  +'<span class="lbl">Цена в сутки, ₽ *</span><input class="inp" id="fPrice" type="number" inputmode="numeric" value="'+(t&&t.price!=null?t.price:'')+'"><div class="hint hide" id="fPHint"></div>'
   +'<span class="lbl">Залог, ₽ (по умолчанию 5 × цена)</span><input class="inp" id="fDep" type="number" inputmode="numeric" value="'+(t&&t.deposit!=null?t.deposit:'')+'">'
   +'<span class="lbl">Описание</span><textarea class="inp" id="fDescr">'+esc(t?t.descr||'':'')+'</textarea>'
+  +(t?'':'<div class="hint hide" id="fGenBox"><button type="button" id="fGen" style="color:var(--or);font-weight:600;background:none;border:0;padding:0;font:inherit;cursor:pointer">Сгенерировать описание</button><span id="fGenNote"></span></div>')
   +'<span class="lbl">Условия аренды</span><textarea class="inp" id="fTerms">'+esc(t?t.terms||'':'')+'</textarea>'
   +'<div class="kv"><span>Доставка этим инструментом</span><span class="sw'+(t&&t.delivery?' on':'')+'" id="fDel"><i></i></span></div>'
   +'<span class="lbl">Стоимость доставки, ₽ (0 — считать 40 ₽/км)</span><input class="inp" id="fDP" type="number" inputmode="numeric" value="'+(t&&t.delivery_price!=null?t.delivery_price:0)+'">'
@@ -1147,7 +1240,142 @@ function toolForm(id){
   var depTouched=!!(t&&t.deposit!=null);
   $('fPrice').oninput=function(){if(!depTouched)$('fDep').value=(+this.value||0)*5||''};
   $('fDep').oninput=function(){depTouched=true};
-  $('fCat').onchange=fillSubs;
+  $('fCat').onchange=function(){fillSubs();fillKinds()};
+  $('fSub').onchange=fillKinds;
+  /* 10.81: «Вид инструмента» и автоподбор по названию (assets/kind-guess.js — как в приложении) */
+  var kindSel='',auto={cat:'',sub:'',kind:''},autoT=0;
+  function fillKinds(){
+    var c=$('fCat').value,s=$('fSub').value,cur=$('fKind').value||kindSel;
+    var ks=(S.kinds||[]).filter(function(k){return c&&s&&k.cat===c&&k.sub===s});
+    if(!ks.some(function(k){return k.key===cur}))cur='';
+    $('fKind').innerHTML='<option value="">—</option>'+ks.map(function(k){return '<option value="'+esc(k.key)+'"'+(k.key===cur?' selected':'')+'>'+esc(k.title)+'</option>'}).join('');
+    $('fKind').value=cur;kindSel=cur;
+    $('fKind').classList.toggle('hide',!ks.length);$('fKindL').classList.toggle('hide',!ks.length);
+    paintModel();
+  }
+  $('fKind').onchange=function(){kindSel=this.value;paintModel()};
+  /* 10.82: справочник моделей (assets/models.js) — только новый инструмент; не загрузился — формы как раньше */
+  var MD=null,mdl={id:null,specs:{},auto:{},brand:''},specsKind=null;
+  var kitSel=[],kitKind=null,descrAuto='',PROP={},PH=null;   /* 10.84: комплектация, наше описание, «Предложить модель», подсказка цены */
+  function kindNow(){return $('fKind').classList.contains('hide')?'':$('fKind').value}
+  function mText(m){return m?m.brand+' '+m.model:''}
+  function mById(id){return MD&&id?MD.byId[id]||null:null}
+  function modelKeep(){var m=mById(mdl.id);if(mdl.id&&(!m||m.kind!==kindNow()||!ivaModelStillFits($('fName').value,m)))mdl.id=null}
+  /* 10.86 (решение владельца 15.10): «Питание» — только у выбранной модели, напряжение — при «Аккумуляторе»; сохраняются только показанные поля */
+  function cfFields(){var k=kindNow(),m=mById(mdl.id);if(!MD||!k)return [];return ivaFormFields(ivaFieldsFor(MD,k),m&&m.kind===k?m.specs:null,mdl.specs)}
+  function cfSig(){return kindNow()+'|'+cfFields().map(function(f){return f.key+':'+(f.options||[]).join(';')}).join('|')}
+  function paintModel(force){
+    if(!MD||t){$('fModelBox').classList.add('hide');$('fSpecs').classList.add('hide');return}
+    var k=kindNow(),bs=k?ivaModelBrands(MD.index,k):[];
+    var hadModel=mdl.id;modelKeep();
+    var fl=cfFields(),sig=cfSig();
+    if(mdl.brand&&bs.indexOf(mdl.brand)<0)mdl.brand='';
+    $('fModelBox').classList.toggle('hide',!k);   /* 10.84: и без брендов — чтобы предложить модель */
+    $('fBrands').innerHTML=bs.map(function(b){return '<button type="button" class="chip'+(b===mdl.brand?' on':'')+'" data-mbrand="'+esc(b)+'">'+esc(b)+'</button>'}).join('');
+    var m=mById(mdl.id);
+    if(m)$('fModel').value=mText(m);else if(hadModel)$('fModel').value='';
+    var ex=bs.length?ivaModelSearch('',MD.index,{kind:k,limit:1})[0]:null;
+    $('fModel').placeholder=ex?'Например: '+mText(ex):'Модель';
+    if(force||sig!==specsKind){
+      specsKind=sig;   /* mdl.specs уже содержит правки — поля пишут в него при вводе */
+      $('fSpecs').innerHTML=fl.length?'<span class="lbl">Характеристики (необязательно)</span>'+ivaSpecsHTML(fl,mdl.specs,function(x){return '<span class="lbl">'+esc(x)+'</span>'}):'';
+    }
+    $('fSpecs').classList.toggle('hide',!fl.length);
+    paintKit();paintProp();paintPHint();
+    $('fGenBox')&&$('fGenBox').classList.remove('hide');
+  }
+  /* 10.84: комплектация вида кнопками; выбор хранится, пока вид тот же */
+  function paintKit(){
+    var k=kindNow(),items=(MD&&MD.kit&&MD.kit[k])||[];
+    if(k!==kitKind){kitKind=k;kitSel=ivaKitClean(kitSel,items)||[]}
+    $('fKitBox').classList.toggle('hide',!items.length);
+    $('fKit').innerHTML=ivaKitHTML(items,kitSel,'chip');
+  }
+  $('fKit').onclick=function(e){var b=e.target.closest('[data-kit]');if(!b)return;var v=b.getAttribute('data-kit'),i=kitSel.indexOf(v);if(i>=0)kitSel.splice(i,1);else kitSel.push(v);paintKit()};
+  /* 10.84: «Предложить модель» — текст «Модели» не из подсказок и такой модели у вида нет */
+  function propParts(){var k=kindNow(),q=$('fModel').value;if(!MD||t||!k||mById(mdl.id)||ivaModelExact(MD.index,k,q))return null;return ivaProposalParts(q,mdl.brand,MD.brands)}
+  function propKey(p){return kindNow()+'|'+p.brand.toLowerCase()+'|'+p.model.toLowerCase()}
+  function paintProp(){var p=propParts();$('fProp').innerHTML=p?ivaPropHTML(p,PROP[propKey(p)]||''):''}
+  $('fProp').onclick=function(e){
+    if(!e.target.closest('[data-mprop]'))return;
+    var p=propParts();if(!p)return;var key=propKey(p);if(PROP[key]==='sending'||PROP[key]==='ok')return;
+    var k=kindNow(),kd=(S.kinds||[]).filter(function(x){return x.key===k})[0];
+    var row={kind:k,brand:p.brand,model:p.model,title:ivaProposalTitle($('fName').value,p,kd?kd.title:''),specs:ivaSpecsClean(Object.assign({},mdl.specs,ivaSpecsRead($('fSpecs'))),cfFields())||{}};
+    PROP[key]='sending';paintProp();
+    ivaProposalSend(api,row).then(function(err){PROP[key]=err||'ok';if($('fProp'))paintProp()});
+  };
+  /* 10.84: подсказка цены и залога по активным объявлениям той же модели или вида; «Подставить» — только в пустые поля */
+  function paintPHint(){
+    var k=kindNow(),el=$('fPHint');
+    if(!k||t||!el){if(el)el.classList.add('hide');return}
+    ivaPriceRows(api,k).then(function(rows){
+      if(!$('fPHint')||kindNow()!==k)return;
+      PH=ivaPriceHint(rows,mdl.id,k);
+      if(!PH){el.classList.add('hide');return}
+      var canP=!$('fPrice').value.trim();
+      el.innerHTML=esc(ivaPriceHintText(PH))+(canP?' · <button type="button" id="fPAuto" style="color:var(--or);font-weight:600;background:none;border:0;padding:0;font:inherit;cursor:pointer">Подставить</button>':'');
+      el.classList.remove('hide');
+    });
+  }
+  $('fPHint').onclick=function(e){
+    if(e.target.id!=='fPAuto'||!PH)return;
+    if(!$('fPrice').value.trim()){$('fPrice').value=PH.price[2];$('fPrice').oninput&&$('fPrice').oninput.call($('fPrice'))}
+    if(PH.deposit&&!depTouched){$('fDep').value=PH.deposit[2];depTouched=true}
+    paintPHint();
+  };
+  /* 10.84: «Сгенерировать описание» — в пустое описание или вместо нашего прошлого; написанное руками не трогаем */
+  if($('fGen'))$('fGen').onclick=function(){
+    var k=kindNow(),fl=k?cfFields():[];
+    var rows=fl.length?ivaSpecRows(ivaSpecsClean(Object.assign({},mdl.specs,ivaSpecsRead($('fSpecs'))),fl)||{},fl):[];
+    var txt=ivaDescribe($('fName').value,rows,k&&MD.kit?ivaKitClean(kitSel,MD.kit[k]):null),d=$('fDescr'),note='';
+    if(!txt)note='Сначала напишите название.';
+    else if(!d.value.trim()||d.value===descrAuto){d.value=txt;descrAuto=txt}
+    else note='Описание уже написано — сотрите его, чтобы сгенерировать заново.';
+    $('fGenNote').textContent=note?' '+note:'';
+  };
+  function chooseModel(m){
+    clearTimeout(autoT);   /* 10.86: отложенный автоподбор от набора — не после выбора модели */
+    var kd=(S.kinds||[]).filter(function(x){return x.key===m.kind})[0];
+    $('fName').value=m.title;
+    if(kd&&S.cats.some(function(c){return c.key===kd.cat})){
+      if($('fCat').value!==kd.cat){$('fCat').value=kd.cat;fillSubs()}
+      var subOk=S.subs.some(function(x){return x.cat===kd.cat&&x.key===kd.sub});
+      $('fSub').value=subOk?kd.sub:'';kindSel=subOk?kd.key:'';$('fKind').value='';
+      auto={cat:kd.cat,sub:subOk?kd.sub:'',kind:kindSel};   /* как автоподбор: новое название может сменить, ручной выбор — нет */
+    }
+    var r=ivaSpecsFill(mdl.specs,mdl.auto,m.specs);mdl.specs=r.values;mdl.auto=r.auto;
+    mdl.id=m.id;
+    fillKinds();
+    if(kindNow()!==m.kind)mdl.id=null;
+    paintModel(true);
+  }
+  $('fBrands').onclick=function(e){var b=e.target.closest('[data-mbrand]');if(!b)return;var v=b.getAttribute('data-mbrand');mdl.brand=mdl.brand===v?'':v;paintModel();$('fModel').focus()};
+  $('fSpecs').oninput=function(e){var el=e.target.closest('[data-spec]');if(!el)return;var was=cfSig();mdl.specs[el.getAttribute('data-spec')]=el.value;if(cfSig()!==was)paintModel()};   /* 10.86: сменили питание — напряжение появляется / пропадает */
+  $('fSpecs').onchange=$('fSpecs').oninput;
+  $('fModel').addEventListener('input',function(){var m=mById(mdl.id);if(m&&this.value.trim()!==mText(m))mdl.id=null;if(MD)paintProp()});
+  if(!t&&typeof ivaModelsLoad==='function')loadKinds().then(function(ks){return ivaModelsLoad(api,ks)}).then(function(md){
+    if(!md||!$('fName'))return;
+    MD=md;
+    ivaSugAttach($('fName'),$('fNSug'),function(q){return ivaModelSearch(q,MD.index,{limit:6})},function(m){return m.title},chooseModel);
+    ivaSugAttach($('fModel'),$('fMSug'),function(q){var m=mById(mdl.id);if(m&&q.trim()===mText(m))return [];return ivaModelSearch(q,MD.index,{kind:kindNow(),brand:mdl.brand,limit:20})},mText,chooseModel);
+    paintModel(true);
+  }).catch(function(){});
+  function autoKind(){
+    if(typeof ivaGuessKind!=='function'||!(S.kinds||[]).some(function(k){return k.words&&k.words.length}))return;
+    var g=ivaGuessKind($('fName').value,S.kinds);
+    if(!g.cat||!S.cats.some(function(c){return c.key===g.cat}))return;
+    if(g.sub&&!S.subs.some(function(x){return x.cat===g.cat&&x.key===g.sub}))g={cat:g.cat,sub:'',kind:''};
+    var p=ivaKindPlan({cat:$('fCat').value,sub:$('fSub').value,kind:$('fKind').value},auto,g);
+    if(!p)return;
+    if($('fCat').value!==p.cat){$('fCat').value=p.cat;fillSubs()}
+    $('fSub').value=p.sub;kindSel=p.kind;$('fKind').value='';fillKinds();
+    auto={cat:p.cat,sub:p.sub,kind:p.kind};
+  }
+  if(!t)$('fName').oninput=function(){clearTimeout(autoT);autoT=setTimeout(function(){try{autoKind()}catch(e){}if(mdl.id){modelKeep();if(!mdl.id)paintModel()}},300)};
+  loadKinds().then(function(){
+    if(t&&S.kinds.length)api('/rest/v1/tools?select=kind&id=eq.'+t.id).then(function(r){kindSel=(r&&r[0]&&r[0].kind)||'';fillKinds()}).catch(function(){});
+    else fillKinds();
+  });
   function fillSubs(){
     var c=$('fCat').value;
     $('fSub').innerHTML='<option value="">—</option>'+S.subs.filter(function(s){return s.cat===c}).map(function(s){return '<option value="'+esc(s.key)+'"'+(t&&t.sub===s.key?' selected':'')+'>'+esc(s.title)+'</option>'}).join('');
@@ -1168,10 +1396,23 @@ function toolForm(id){
     if(!nm||pr<=0){toast('Укажите название и цену');return}
     var imgsA=$('fImgs').value.split('\n').map(function(x){return x.trim()}).filter(Boolean);
     var body={name:nm,price:pr,deposit:(+$('fDep').value||Math.round(pr*5)),descr:$('fDescr').value.trim(),terms:$('fTerms').value.trim(),cat:$('fCat').value,sub:$('fSub').value,delivery:$('fDel').classList.contains('on'),delivery_price:+$('fDP').value||0,active:$('fAct').classList.contains('on'),img:imgsA[0]||'',imgs:imgsA};
+    if(S.kinds&&S.kinds.length){var kv=$('fKind').classList.contains('hide')?'':$('fKind').value;if(kv||t)body.kind=kv||null}   /* 10.81: вид — только когда справочник видов есть в базе */
+    if(MD&&!t&&body.kind){   /* 10.82: модель и характеристики — справочник загружен, вид выбран */
+      modelKeep();if(mdl.id)body.model_id=mdl.id;
+      var sp=ivaSpecsClean(Object.assign(mdl.specs,ivaSpecsRead($('fSpecs'))),cfFields());   /* 10.86: только показанные поля */if(sp)body.specs=sp;
+      var kt=MD.kit?ivaKitClean(kitSel,MD.kit[body.kind]):null;if(kt)body.kit=kt;   /* 10.84 */
+    }
     var btn=$('fSave');btn.textContent='Сохраняем…';btn.disabled=true;
     try{
       if(t)await api('/rest/v1/tools?id=eq.'+t.id,'PATCH',body);
-      else{body.owner_email=S.me;await api('/rest/v1/tools','POST',body)}
+      else{body.owner_email=S.me;
+        try{await api('/rest/v1/tools','POST',body)}
+        catch(e1){   /* 10.84: нет столбца kit — без комплектации; 10.82: модель не приняли — инструмент важнее */
+          if(!body.model_id&&!body.specs&&!body.kit)throw e1;
+          var e2=e1;if(body.kit){delete body.kit;try{await api('/rest/v1/tools','POST',body);e2=null}catch(x){e2=x}}
+          if(e2){if(!body.model_id&&!body.specs)throw e2;delete body.model_id;delete body.specs;await api('/rest/v1/tools','POST',body)}
+        }
+      }
       closeLayer();toast('Сохранено');cdel('base');loadBase();
       if(S.screen==='cab')cabTools();
     }catch(e){btn.textContent=t?'Сохранить':'Добавить';btn.disabled=false;toast('Ошибка: '+e.message)}
@@ -1361,10 +1602,6 @@ function vCompany(){
    Настройки профиля клиента — отдельная страница profile.html
    (раньше клиента уводило на вкладку «Профиль» в account.html). */
 function vCabUser(){ location.href='profile.html'; }
-</script>
-</body>
-</html>
-rof'; }
 </script>
 </body>
 </html>

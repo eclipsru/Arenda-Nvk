@@ -130,6 +130,9 @@ const assert = require('assert');
   // --- ТЕСТ 2: Страница инструмента без авторизации ---
   await page.goto('http://127.0.0.1:8000/tool.html?id=' + toolId);
   await page.waitForSelector('#reviewsBlock');
+  // Блок формы заполняется асинхронно после загрузки отзывов — ждём текст, а не только контейнер
+  // (без ожидания тест иногда падал в CI, 12.10.2026).
+  await page.waitForFunction(() => { const el = document.querySelector('#reviewFormArea'); return !!el && el.textContent.includes('Войдите в аккаунт'); }, null, { timeout: 15000 }).catch(() => {});
   assert((await page.locator('#reviewFormArea').textContent()).includes('Войдите в аккаунт'), 'Unauthenticated should see login hint');
 
   // Проверка рейтинга проката в боковой колонке

@@ -1,0 +1,135 @@
+# Автоподбор вида по названию: название|категория|подкатегория|вид (пусто — не подставляется).
+# Проверяют один и тот же файл: tests/kind-guess.cjs (сайт), IvaPatchTest (приложение), tools/kind-words-stand.py (SQL).
+Перфоратор Makita HR2470|power|hammers|
+Перфоратор Bosch GBH 2-26 SDS-plus|power|hammers|rotary-sds-plus
+Перфоратор SDS-max Hilti TE 70|power|hammers|rotary-sds-max
+Болгарка Makita 125|power|grinders|grinder-125
+УШМ 230 мм Bosch|power|grinders|grinder-230
+Болгарка DeWalt|power|grinders|
+Шуруповёрт аккумуляторный Makita|power|drills|screwdriver
+Дрель-шуруповерт Bosch|power|drills|screwdriver
+Дрель ударная Интерскол|power|drills|drill
+Гайковёрт аккумуляторный|power|drills|impact-wrench
+Магнитная дрель|power|drills|magnetic-drill
+Отбойный молоток Makita HM1307|power|power-breakers|breaker
+Бетонолом|power|power-breakers|demolition-hammer
+Циркулярная пила Makita|power|power-saws|circular-saw
+Настольная циркулярная пила|power|power-saws|table-saw
+Погружная пила Festool|power|power-saws|plunge-saw
+Электролобзик Bosch|power|power-saws|jigsaw
+Сабельная пила|power|power-saws|reciprocating-saw
+Торцовочная пила Metabo|power|power-saws|miter-saw
+Монтажная пила по металлу|power|power-saws|metal-cutoff-saw
+Эксцентриковая шлифмашина|power|power-sanders|orbital-sander
+Ленточная шлифмашина|power|power-sanders|belt-sander
+Вибрационная шлифмашина|power|power-sanders|finishing-sander
+Рубанок электрический|power|power-sanders|electric-planer
+Фрезер Makita|power|power-sanders|router
+Строительный фен|power|power-misc|heat-gun
+Строительный миксер|power|power-misc|mixer-drill
+Реноватор Fein|power|power-misc|multitool
+Ножницы по металлу|power|power-misc|metal-shears
+Пороховой монтажный пистолет|power|power-fasteners|powder-nailer
+Газовый монтажный пистолет Toua|power|power-fasteners|gas-nailer
+Нейлер аккумуляторный|power|power-fasteners|nailer
+Степлер строительный|power|power-fasteners|stapler
+Заклёпочник|power|power-fasteners|riveter
+Установка алмазного бурения|cutting|cut-diamond|
+Алмазное бурение на станине|cutting|cut-diamond|core-drill-stand
+Штроборез|cutting|cut-chasers|wall-chaser
+Плиткорез|cutting|cut-tile|
+Плиткорез электрический|cutting|cut-tile|tile-cutter-electric
+Ручной плиткорез|cutting|cut-tile|tile-cutter-manual
+Бензорез Stihl TS 420|cutting|cut-concrete|power-cutter
+Швонарезчик|cutting|cut-concrete|floor-saw
+Бетономешалка 180 л|construction|concrete|concrete-mixer
+Глубинный вибратор|construction|con-vibro|poker-vibrator
+Виброрейка|construction|con-vibro|screed-vibrator
+Виброплита|construction|con-compact|plate-compactor
+Вибротрамбовка|construction|con-compact|rammer
+Затирочная машина (вертолёт)|construction|con-trowel|power-trowel
+Опалубка|construction|con-formwork|
+Телескопические стойки|construction|con-formwork|props
+Мотобур|construction|con-earth|earth-auger
+Паркетошлифовальная машина|surface|sur-wood|drum-floor-sander
+Угловая шлифмашина для паркета|surface|sur-wood|edge-sander
+Фрезеровальная машина по бетону|surface|sur-concrete|scarifier
+Мозаично-шлифовальная машина|surface|sur-concrete|concrete-grinder
+Шлифмашина жираф|surface|sur-walls|drywall-sander-long
+Триммер бензиновый|garden|lawnmowers|trimmer
+Газонокосилка|garden|lawnmowers|lawn-mower
+Бензопила Stihl MS 180|garden|trimmers|chainsaw
+Электропила цепная|garden|trimmers|chainsaw
+Кусторез|garden|trimmers|hedge-trimmer
+Мотоблок|garden|gar-soil|tiller
+Культиватор|garden|gar-soil|cultivator
+Снегоуборщик|garden|gar-cleanup|snow-blower
+Воздуходувка|garden|gar-cleanup|leaf-blower
+Строительный пылесос Karcher|cleaning|cln-vacuum|construction-vacuum
+Пылесос|cleaning|cln-vacuum|
+Моющий пылесос|cleaning|cln-wash|washing-vacuum
+Мойка высокого давления Karcher K5|cleaning|cln-pressure|pressure-washer
+Мойка высокого давления с подогревом|cleaning|cln-pressure|hot-pressure-washer
+Поломоечная машина|cleaning|cln-floor|scrubber-dryer
+Тепловая пушка дизельная|climate|clm-heat|heat-gun-big
+Осушитель воздуха|climate|clm-dry|dehumidifier
+Адсорбционный осушитель|climate|clm-dry|adsorption-dryer
+Генератор бензиновый 5 кВт|generators|gen-gen|generator
+Инверторный генератор|generators|gen-gen|inverter-generator
+Сварочный генератор|generators|gen-gen|welding-generator
+Удлинитель на катушке 50 м|generators|gen-power|extension-reel
+Стабилизатор напряжения|generators|gen-power|stabilizer
+Прожектор|generators|gen-light|floodlight
+Компрессор|compressors|cmp-air|
+Компрессор поршневой 50 л|compressors|cmp-air|piston-compressor
+Винтовой компрессор|compressors|cmp-air|screw-compressor
+Насос|compressors|cmp-pumps|
+Дренажный насос|compressors|cmp-pumps|drainage-pump
+Фекальный насос|compressors|cmp-pumps|sewage-pump
+Мотопомпа|compressors|cmp-pumps|motor-pump
+Вибрационный насос Малыш|compressors|cmp-pumps|vibration-pump
+Сварочный аппарат|welding|wld-weld|
+Сварочный инвертор Ресанта|welding|wld-weld|mma-welder
+Сварочный полуавтомат|welding|wld-weld|mig-welder
+Сварочный аппарат TIG|welding|wld-weld|tig-welder
+Плазморез|welding|wld-cut|plasma-cutter
+Газовый резак|welding|wld-cut|gas-cutter
+Паяльник для полипропилена|plumbing|plb-solder|pp-welder
+Клупп электрический|plumbing|plb-thread|pipe-threader
+Трубогиб|plumbing|plb-thread|pipe-bender
+Прочистная машина|plumbing|plb-clean|drain-cleaner
+Опрессовщик|plumbing|plb-clean|pressure-tester
+Лазерный уровень ADA|measuring|msr-level|laser-level
+Нивелир|measuring|msr-level|
+Ротационный лазерный нивелир|measuring|msr-level|rotary-laser
+Оптический нивелир|measuring|msr-level|optical-level
+Лазерный дальномер|measuring|msr-range|laser-meter
+Тепловизор|measuring|msr-detect|thermal-camera
+Строительные леса|moving|scaffolding|scaffold
+Вышка-тура|moving|scaffolding|mobile-tower
+Лестница трёхсекционная|moving|scaffolding|ladder
+Стремянка|moving|scaffolding|stepladder
+Подъёмник|moving|mov-lift|
+Ножничный подъёмник|moving|mov-lift|scissor-lift
+Подъёмник для гипсокартона|moving|mov-lift|drywall-lift
+Лебёдка|moving|hand-trucks|winch
+Таль цепная|moving|hand-trucks|hoist
+Домкрат|moving|hand-trucks|
+Реечный домкрат Hi-Jack|moving|hand-trucks|rack-jack
+Рохля|moving|hand-trucks|pallet-truck
+Гидравлическая тележка|moving|hand-trucks|pallet-truck
+Тележка|moving|hand-trucks|hand-truck
+Безвоздушный окрасочный аппарат|painting|pnt-spray|airless-sprayer
+Краскопульт|painting|pnt-spray|paint-sprayer
+Штукатурная станция|painting|pnt-plaster|plaster-machine
+Съёмник подшипников|auto|semniki|bearing-puller
+Стяжка пружин|auto|semniki|spring-compressor
+Полировальная машина|auto|dlya-lkp|car-polisher
+Толщиномер|auto|dlya-lkp|paint-gauge
+Пусковое устройство|auto|aut-start|jump-starter
+Пуско-зарядное устройство|auto|aut-start|
+Зарядное устройство|auto|aut-start|battery-charger
+Подкатной домкрат|auto|aut-lift|trolley-jack
+Makita HR2470|||
+Аренда инструмента|||
+Турбинка|power|grinders|

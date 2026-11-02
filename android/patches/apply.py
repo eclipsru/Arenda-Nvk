@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
-"""Ива — патч 10.14 → новая версия в разобранном apktool-проекте (сейчас 10.17; номер передаётся аргументом).
+"""Ива — патч 10.14 → новая версия в разобранном apktool-проекте (сейчас 10.21; номер передаётся аргументом).
 
 Запуск: python3 android/patches/apply.py <папка apktool d> <versionCode> <versionName>
 Строго: каждое место вставки должно найтись ровно столько раз, сколько ожидается,
 иначе — ошибка и сборка останавливается (молча кривой APK не получится).
 
 Вставки в smali/ru/prokatnvsk/app/MainActivity.smali (класс IvaPatch — android/patches/IvaPatch.java):
-  1. lambda$calcDelivery$… : перед каждой записью delivTxt → IvaPatch.onPrice(текст) (×2, неразрывный пробел)
+  1. lambda$calcDelivery$… : перед каждой записью delivTxt → IvaPatch.onPrice(текст) (×4, неразрывный пробел)
   2. updateSummary()        : в начале → IvaPatch.onSummary(this) (галочка «Туда и обратно», «от N ₽/км»)
   3. paintDelToggle(Z)      : тексты кнопки «Доставка: есть / нет» с подсказкой (форма админа)
   4. showAdmHub(I)          : после скрытия вкладки «Добавить» → IvaPatch.onHub(this) (объяснение про долг)
@@ -16,7 +16,14 @@
   8. saveSession(JSONObject)                 : в конце → IvaPatch.onSession(this) (вход: подгрузить профиль с аватаркой)
   9. lambda$loadAdminProfile$201(String)     : после чтения поля avatar → IvaPatch.onAvatar(this, адрес) (аватарка в «Кабинете»)
  10. logoutLocal()                           : в конце → IvaPatch.onLogout(this) (выход: иконка «Кабинета» снова на месте)
-Плюс versionCode/versionName в apktool.yml.
+ 11. showTab(String)                         : после штатного выбора вкладки → IvaPatch.onTab(this, имя) (оранжевая окантовка без заливки)
+ 12. renderProfile()                          : только на шаге 10.30 → IvaClientPatch.onProfile(this) (профиль обычного клиента)
+ 13. onNewIntent(Intent) — НОВЫЙ метод (10.59, решение владельца 14.10.2026): штатных методов не трогает;
+     super.onNewIntent → setIntent → IvaPatch.onNewIntent(this, intent) (нажатие на уведомление при открытом приложении)
+ 14. (10.96, решение владельца 16.10.2026: кнопки «рамкой») — БЕЗ новых вызовов: в 12 штатных методах, где белый текст
+     ставится на оранжевую кнопку / выбранный переключатель / кружок «×» / букву аватарки, константа цвета
+     @color/white (0x7f01000f) → @color/orange (0x7f01000a). Сами фоны переделывает axml_outline.py.
+ Плюс versionCode/versionName в apktool.yml.
 """
 import os
 import re
@@ -25,6 +32,23 @@ from pathlib import Path
 
 P = 'Lru/prokatnvsk/app/IvaPatch;'
 DELIV = 'Lru/prokatnvsk/app/MainActivity;->delivTxt:Ljava/lang/String;'
+
+
+# 10.96: где штатный код ставит белый текст на оранжевую кнопку / выбранное / кружок / аватарку (метод → сколько раз)
+OUTLINE_TEXT = (
+    (r' buildChiefPanel\(\)V$', 1),                       # «Добавить админа»
+    (r'lambda\$buildAdminPage\$181\$', 1),                 # «Сохранить тариф»
+    (r'lambda\$editHoursDialog\$211\$', 1),                # выбранные дни в часах работы
+    (r'lambda\$editToolDialog\$240\$', 1),                 # выбранное в правке инструмента
+    (r' openDetail\(Lorg/json/JSONObject;Z\)V$', 1),       # буква аватарки продавца
+    (r' paintDelToggle\(Z\)V$', 1),                        # «Доставка: есть»
+    (r' renderAdmOrders\(\)V$', 2),                        # кнопки заявок админа
+    (r' renderAtPhotos\(\)V$', 1),                         # «×» на фото (добавление)
+    (r' renderTePhotos\(\)V$', 1),                         # «×» на фото (правка)
+    (r' sectionButton\(', 1),                              # кнопки разделов кабинета
+    (r' showCrashOverlay\(\)V$', 1),                       # «Скопировать»
+    (r' teActiveStyle\(\)V$', 1),                          # выбранное в правке инструмента
+)
 
 
 def esc(s):
@@ -160,7 +184,64 @@ def patch(lines):
     s, e = one_method(lines, r' logoutLocal\(\)V$')
     before_return(lines, s, e, f'invoke-static {{p0}}, {P}->onLogout(Landroid/app/Activity;)V', 'logoutLocal')
     done.append('10 onLogout')
+
+    # 11. конец showTab: штатный setCircle сначала рисует старую оранжевую заливку,
+    #     а IvaPatch поверх неё оставляет только оранжевую окантовку выбранного раздела.
+    #     Имя вкладки передаём явно: вызов стоит после всех четырёх setCircle.
+    s, e = one_method(lines, r' showTab\(Ljava/lang/String;\)V$')
+    rets = [i for i in range(s, e) if lines[i].strip() == 'return-void']
+    if len(rets) != 1:
+        die(f'showTab: return-void найдено {len(rets)}, нужно 1')
+    # showTab has enough local registers that p1 may alias v16+; the compact
+    # invoke form only encodes v0..v15, so use the range form deliberately.
+    lines[rets[0]:rets[0]] = ['', f'    invoke-static/range {{p0 .. p1}}, {P}->onTab(Landroid/app/Activity;Ljava/lang/String;)V']
+    done.append('11 onTab')
+
+    # 12. Первый клиентский hook подключается отдельно: только экран
+    #     профиля. Остальные клиентские hooks возвращаются последующими
+    #     диагностическими сборками.
+    s, e = one_method(lines, r' renderProfile\(\)V$')
+    before_return(lines, s, e, f'invoke-static/range {{p0 .. p0}}, Lru/prokatnvsk/app/IvaClientPatch;->onProfile(Landroid/app/Activity;)V', 'client onProfile')
+    done.append('12 client onProfile')
+
+    # 13. Новый метод onNewIntent (в 10.14 его нет: launchMode standard, нажатие на уведомление при открытом
+    #     приложении приходит сюда и терялось). Вставка в конец класса — существующие методы не меняются.
+    if methods(lines, r' onNewIntent\('):
+        die('onNewIntent уже есть в MainActivity — нужна другая вставка')
+    sup = [l for l in lines if l.startswith('.super ')]
+    if sup != ['.super Landroid/app/Activity;']:
+        die(f'MainActivity: ожидался .super Landroid/app/Activity;, а не {sup}')
+    lines.extend(NEW_INTENT)
+    done.append('13 onNewIntent (новый метод)')
+
+    # 14. 10.96: белый текст на (бывших) оранжевых фонах → оранжевый; только значение константы, вызовов не добавляем
+    for name_re, want in OUTLINE_TEXT:
+        s, e = one_method(lines, name_re)
+        hits = [i for i in range(s, e) if re.match(r'\s*const (\w+), 0x7f01000f$', lines[i])]
+        if len(hits) != want:
+            die(f'стиль рамкой: в {name_re} белый цвет найден {len(hits)} раз, нужно {want}')
+        for i in hits:
+            lines[i] = lines[i].replace('0x7f01000f', '0x7f01000a')
+    done.append('14 текст на кнопках оранжевый (%d мест)' % sum(w for _, w in OUTLINE_TEXT))
+
     return done
+
+
+NEW_INTENT = [
+    '',
+    '.method protected onNewIntent(Landroid/content/Intent;)V',
+    '    .registers 2',
+    '',
+    '    invoke-super {p0, p1}, Landroid/app/Activity;->onNewIntent(Landroid/content/Intent;)V',
+    '',
+    '    invoke-virtual {p0, p1}, Lru/prokatnvsk/app/MainActivity;->setIntent(Landroid/content/Intent;)V',
+    '',
+    f'    invoke-static {{p0, p1}}, {P}->onNewIntent(Landroid/app/Activity;Landroid/content/Intent;)V',
+    '',
+    '    return-void',
+    '.end method',
+    '',
+]
 
 
 def before_return(lines, s, e, call, what):

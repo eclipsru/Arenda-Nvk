@@ -1,0 +1,201 @@
+# Бренды справочника моделей: Название | другие написания через «;» (как пишут в названии объявления).
+# Из этого файла tools/models-gen.py собирает iva_brands. Приоритетов нет — в подсказках по алфавиту.
+ADA | ада
+AEG | аег
+Airman | эйрман
+Altrad | альтрад
+Atlas Copco | атлас копко; атлас
+Aurora | аврора
+Ballu | баллу; балу
+Belle | белле
+Bomag | бомаг
+Bona | бона
+Bosch | бош; бошь
+Candan | кандан
+Champion | чемпион
+Collomix | колломикс
+Condtrol | кондтрол
+DeWalt | деволт; девольт; dewalt; де волт
+Elitech | элитех
+Festool | фестул; фестол
+Flex | флекс
+Flir | флир
+Fubag | фубаг
+Genie | джини; дженни
+Graco | граско; грако
+Grundfos | грундфос
+Haulotte | haulotte; оулот; хаулот
+Hikoki | хикоки; hitachi; хитачи
+Hilti | хилти
+Hi-Lift | хайлифт; хай лифт; hi jack; хайджек
+Honda | хонда
+Husqvarna | хускварна; хусварна; хускварна
+Huter | хутер; хьютер; хутер
+Hyundai | хендай; хундай; хюндай
+JLG | джейэлджи
+Karcher | керхер; кархер; kärcher
+Kemppi | кемппи; кемпи
+Krause | краузе
+Lägler | леглер; laegler; lagler
+Leica | лейка; лейка
+Lescha | леша
+Makita | макита
+Masalta | масальта; масалта
+Master | мастер
+Max | макс
+Metabo | метабо
+Milwaukee | милуоки; милвоки; милуоки
+Mirka | мирка
+Montolit | монтолит
+Nilfisk | нилфиск
+Noblelift | ноблелифт
+Norton | нортон
+PFT | пфт
+Patriot | патриот
+Rems | ремс
+Remeza | ремеза
+Ridgid | риджид
+Rothenberger | ротенбергер
+Rubi | руби
+Rupes | рупес
+Ryobi | риоби
+Steinel | штайнель
+Stihl | штиль; штил
+Testo | тесто
+Titan | титан
+Topcon | топкон
+Trotec | тротек
+Viega | виега
+Wacker Neuson | вакер; ваккер; wacker
+Wagner | вагнер
+Yamaha | ямаха
+ZLP | злп
+Джилекс | dzhileks; jeelex; джилекс
+Интерскол | interskol; интерскол
+Калибр | kalibr
+Красный Маяк | krasny mayak
+Ливгидромаш | livgidromash; малыш
+Нева | neva
+Ресанта | resanta
+Салют | salut
+Техноприбор | ручеек; ручеёк
+Угра | ugra
+Алюмет | alumet
+Вихрь | vihr; vikhr
+Зубр | zubr
+Ammann | амман; амман
+Barreto | баррето
+Battipav | баттипав
+Camon | камон
+Cedima | цедима; седима
+Ditch Witch | дитч витч; дич вич
+Doka | дока
+Dynapac | динапак
+Echo | эхо; эхо
+Eibenstock | айбеншток; эйбеншток
+Einhell | айнхель; эйнхель
+Enar | энар
+Fein | фейн; файн
+Geotub | геотуб
+Gesipa | гесипа
+Imer | имер
+Meva | мева
+Mikasa | микаса
+Novus | новус
+Partner | партнер; партнёр
+Paslode | паслоуд; пасло
+Peri | пери
+Rapid | рапид
+Sigma | сигма
+Spit | спит
+Stanley | стенли; стэнли
+Toro | торо
+Toua | тоуа
+Trumpf | трумпф
+Tyrolit | тиролит
+Ulma | ульма
+Vermeer | вермеер
+Weber MT | вебер; вебер мт; weber
+Weka | века
+Black+Decker | black decker; black and decker; black&decker; блэк декер; блэк энд декер; блэк энд деккер; блек декер
+Greenworks | гринворкс; гринворк
+Starmix | стармикс
+Worx | воркс; ворх
+RGK | ргк
+Hikmicro | хикмикро; хайкмикро; хикмайкро
+Fluke | флюк; флюке
+TOR | тор
+Tractel | трактел; трактель
+ESAB | эсаб; esab
+Telwin | телвин; телвинн
+Thomas | томас
+Stabila | стабила
+Spectra Precision | спектра; спектра пресижн; spectra
+Ritmo | ритмо
+Laserliner | лазерлайнер
+Koshin | кошин
+Hypertherm | гипертерм; хайпертерм
+Electrolux | электролюкс
+Al-ko | алко; ал-ко; alko
+Von Arx | фон аркс; вон аркс
+UNI-T | юни-т; юнит; uni t
+Spartan | спартан
+Sokkia | соккия; сокия
+Sata | сата
+Rehau | рехау
+Nikon | никон
+Layher | лайер; лайхер
+Jungheinrich | юнгхайнрих; юнгхейнрих
+Huepar | хьюпар; хупар
+Hailo | хайло
+Daishin | дайшин; дайсин
+Carku | карку
+Berkut | беркут
+Энергия | energy; энергия
+Новая высота | новая высота; nv
+ИЭК | iek; иек
+Zircon | зиркон
+Zarges | заргес
+Zanussi | занусси
+Warn | варн
+Uponor | упонор
+Unipump | унипамп; юнипамп
+Seek Thermal | сик термал; seek
+Proceq | прокек
+Noirot | нуаро; нуарот
+Noco | ноко
+Lavor | лавор
+Instrumax | инструмакс
+Guide | гайд
+Geomax | геомакс
+Geobox | геобокс
+Etari | етари; этари
+Elcometer | элкометр; элкометер
+Defelsko | дефелско
+Wöhler | вёлер; велер; wohler
+Timberk | тимберк
+Generac | дженерак; генерак
+Edma | эдма
+Edco | эдко
+Devilbiss | девилбисс; девилбис
+Comeup | комеап; камап
+CEM | цем; сем
+Мобил К | mobil k; мобил к; мобил-к; мобилк
+Сплитстоун | splitstone; сплит стоун
+Ctek | цтек; ситек; стек
+Орион | orion; орион вымпел
+Deca | дека
+Kaeser | кайзер; каезер
+Doosan | дусан; доосан
+ЗИФ | zif; зиф
+Compair | компейр; компэйр; компаир
+Abac | абак
+Munters | мунтерс
+Europower | европауэр; евро пауэр
+Lincoln Electric | линкольн; линкольн электрик; lincoln
+Mosa | моза; моса
+Donmet | донмет
+Redius | редиус
+Krass | красс
+Harris | харрис
+Victor | виктор

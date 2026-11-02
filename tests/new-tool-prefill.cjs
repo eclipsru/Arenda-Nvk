@@ -89,8 +89,8 @@ const assert = require('assert');
     localStorage.removeItem('iva_draft_ad');
   }, email);
 
-  // 1. Check rental profile editor in account.html#prof
-  await page.goto('http://127.0.0.1:8000/account.html#prof');
+  // 1. Check rental profile editor in account.html#prof-org (с 22.10.2026 «Прокат» — свой раздел профиля)
+  await page.goto('http://127.0.0.1:8000/account.html#prof-org');
   await page.waitForSelector('#editRental');
   await page.locator('#editRental').click();
 

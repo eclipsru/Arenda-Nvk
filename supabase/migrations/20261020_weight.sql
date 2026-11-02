@@ -1,0 +1,135 @@
+-- Ива · справочник: поле «Вес» у всех видов + вес 14 моделей (по данным производителя, EPTA).
+-- Короткая замена полного набора 20261017_models*.sql: меняет только это. Повторный запуск безопасен.
+begin;
+
+-- 1. Поле «Вес» (кг) — видам, у которых его ещё нет (96 видов). Только существующим видам.
+insert into public.iva_spec_fields (kind, key, title, unit, type, options, sort)
+select v.kind, v.key, v.title, v.unit, v.type, v.options, v.sort
+from (values
+('adsorption-dryer', 'weight', 'Вес', 'кг', 'num', '{}'::text[], 3),
+('air-cooler', 'weight', 'Вес', 'кг', 'num', '{}'::text[], 4),
+('airless-sprayer', 'weight', 'Вес', 'кг', 'num', '{}'::text[], 5),
+('battery-charger', 'weight', 'Вес', 'кг', 'num', '{}'::text[], 3),
+('bearing-puller', 'weight', 'Вес', 'кг', 'num', '{}'::text[], 3),
+('bottle-jack', 'weight', 'Вес', 'кг', 'num', '{}'::text[], 3),
+('butt-welder', 'weight', 'Вес', 'кг', 'num', '{}'::text[], 3),
+('car-polisher', 'weight', 'Вес', 'кг', 'num', '{}'::text[], 6),
+('concrete-mixer', 'weight', 'Вес', 'кг', 'num', '{}'::text[], 5),
+('construction-vacuum', 'weight', 'Вес', 'кг', 'num', '{}'::text[], 7),
+('convector', 'weight', 'Вес', 'кг', 'num', '{}'::text[], 2),
+('dehumidifier', 'weight', 'Вес', 'кг', 'num', '{}'::text[], 3),
+('drain-cleaner', 'weight', 'Вес', 'кг', 'num', '{}'::text[], 4),
+('drainage-pump', 'weight', 'Вес', 'кг', 'num', '{}'::text[], 5),
+('drywall-lift', 'weight', 'Вес', 'кг', 'num', '{}'::text[], 2),
+('extension-reel', 'weight', 'Вес', 'кг', 'num', '{}'::text[], 4),
+('extractor', 'weight', 'Вес', 'кг', 'num', '{}'::text[], 3),
+('facade-cradle', 'weight', 'Вес', 'кг', 'num', '{}'::text[], 3),
+('fan', 'weight', 'Вес', 'кг', 'num', '{}'::text[], 3),
+('floodlight', 'weight', 'Вес', 'кг', 'num', '{}'::text[], 3),
+('floor-polisher', 'weight', 'Вес', 'кг', 'num', '{}'::text[], 3),
+('garden-vacuum', 'weight', 'Вес', 'кг', 'num', '{}'::text[], 4),
+('gas-cutter', 'weight', 'Вес', 'кг', 'num', '{}'::text[], 3),
+('hand-truck', 'weight', 'Вес', 'кг', 'num', '{}'::text[], 2),
+('heat-gun-big', 'weight', 'Вес', 'кг', 'num', '{}'::text[], 5),
+('hoist', 'weight', 'Вес', 'кг', 'num', '{}'::text[], 4),
+('hot-pressure-washer', 'weight', 'Вес', 'кг', 'num', '{}'::text[], 6),
+('industrial-vacuum', 'weight', 'Вес', 'кг', 'num', '{}'::text[], 5),
+('infrared-heater', 'weight', 'Вес', 'кг', 'num', '{}'::text[], 3),
+('jack-stands', 'weight', 'Вес', 'кг', 'num', '{}'::text[], 2),
+('jump-starter', 'weight', 'Вес', 'кг', 'num', '{}'::text[], 3),
+('ladder', 'weight', 'Вес', 'кг', 'num', '{}'::text[], 5),
+('laser-level', 'weight', 'Вес', 'кг', 'num', '{}'::text[], 4),
+('laser-meter', 'weight', 'Вес', 'кг', 'num', '{}'::text[], 2),
+('lawn-mower', 'weight', 'Вес', 'кг', 'num', '{}'::text[], 6),
+('lawn-scarifier', 'weight', 'Вес', 'кг', 'num', '{}'::text[], 4),
+('leaf-blower', 'weight', 'Вес', 'кг', 'num', '{}'::text[], 6),
+('light-tower', 'weight', 'Вес', 'кг', 'num', '{}'::text[], 4),
+('measuring-wheel', 'weight', 'Вес', 'кг', 'num', '{}'::text[], 2),
+('mobile-ac', 'weight', 'Вес', 'кг', 'num', '{}'::text[], 3),
+('mobile-compressor', 'weight', 'Вес', 'кг', 'num', '{}'::text[], 4),
+('mobile-tower', 'weight', 'Вес', 'кг', 'num', '{}'::text[], 3),
+('moisture-meter', 'weight', 'Вес', 'кг', 'num', '{}'::text[], 2),
+('mortar-mixer', 'weight', 'Вес', 'кг', 'num', '{}'::text[], 4),
+('motor-pump', 'weight', 'Вес', 'кг', 'num', '{}'::text[], 5),
+('optical-level', 'weight', 'Вес', 'кг', 'num', '{}'::text[], 2),
+('paint-gauge', 'weight', 'Вес', 'кг', 'num', '{}'::text[], 2),
+('paint-sprayer', 'weight', 'Вес', 'кг', 'num', '{}'::text[], 4),
+('pallet-truck', 'weight', 'Вес', 'кг', 'num', '{}'::text[], 3),
+('pipe-bender', 'weight', 'Вес', 'кг', 'num', '{}'::text[], 3),
+('pipe-camera', 'weight', 'Вес', 'кг', 'num', '{}'::text[], 3),
+('pipe-cutter', 'weight', 'Вес', 'кг', 'num', '{}'::text[], 3),
+('pipe-threader', 'weight', 'Вес', 'кг', 'num', '{}'::text[], 3),
+('piston-compressor', 'weight', 'Вес', 'кг', 'num', '{}'::text[], 6),
+('plasma-cutter', 'weight', 'Вес', 'кг', 'num', '{}'::text[], 5),
+('plaster-machine', 'weight', 'Вес', 'кг', 'num', '{}'::text[], 4),
+('poker-vibrator', 'weight', 'Вес', 'кг', 'num', '{}'::text[], 4),
+('pp-welder', 'weight', 'Вес', 'кг', 'num', '{}'::text[], 3),
+('press-tool', 'weight', 'Вес', 'кг', 'num', '{}'::text[], 4),
+('pressure-tester', 'weight', 'Вес', 'кг', 'num', '{}'::text[], 3),
+('pressure-washer', 'weight', 'Вес', 'кг', 'num', '{}'::text[], 5),
+('props', 'weight', 'Вес', 'кг', 'num', '{}'::text[], 3),
+('putty-sprayer', 'weight', 'Вес', 'кг', 'num', '{}'::text[], 4),
+('rack-jack', 'weight', 'Вес', 'кг', 'num', '{}'::text[], 3),
+('rebar-bender', 'weight', 'Вес', 'кг', 'num', '{}'::text[], 3),
+('rebar-cutter', 'weight', 'Вес', 'кг', 'num', '{}'::text[], 3),
+('rotary-laser', 'weight', 'Вес', 'кг', 'num', '{}'::text[], 3),
+('scaffold', 'weight', 'Вес', 'кг', 'num', '{}'::text[], 3),
+('scarifier', 'weight', 'Вес', 'кг', 'num', '{}'::text[], 4),
+('scissor-lift', 'weight', 'Вес', 'кг', 'num', '{}'::text[], 4),
+('screed-vibrator', 'weight', 'Вес', 'кг', 'num', '{}'::text[], 3),
+('screw-compressor', 'weight', 'Вес', 'кг', 'num', '{}'::text[], 5),
+('scrubber-dryer', 'weight', 'Вес', 'кг', 'num', '{}'::text[], 4),
+('sewage-pump', 'weight', 'Вес', 'кг', 'num', '{}'::text[], 5),
+('site-board', 'weight', 'Вес', 'кг', 'num', '{}'::text[], 3),
+('slab-formwork', 'weight', 'Вес', 'кг', 'num', '{}'::text[], 2),
+('snow-blower', 'weight', 'Вес', 'кг', 'num', '{}'::text[], 5),
+('spring-compressor', 'weight', 'Вес', 'кг', 'num', '{}'::text[], 2),
+('stabilizer', 'weight', 'Вес', 'кг', 'num', '{}'::text[], 4),
+('steam-cleaner', 'weight', 'Вес', 'кг', 'num', '{}'::text[], 4),
+('stepladder', 'weight', 'Вес', 'кг', 'num', '{}'::text[], 3),
+('stone-saw', 'weight', 'Вес', 'кг', 'num', '{}'::text[], 4),
+('surface-vibrator', 'weight', 'Вес', 'кг', 'num', '{}'::text[], 3),
+('sweeper', 'weight', 'Вес', 'кг', 'num', '{}'::text[], 4),
+('thermal-camera', 'weight', 'Вес', 'кг', 'num', '{}'::text[], 3),
+('tile-cutter-electric', 'weight', 'Вес', 'кг', 'num', '{}'::text[], 4),
+('tile-cutter-manual', 'weight', 'Вес', 'кг', 'num', '{}'::text[], 3),
+('trencher', 'weight', 'Вес', 'кг', 'num', '{}'::text[], 4),
+('trolley-jack', 'weight', 'Вес', 'кг', 'num', '{}'::text[], 3),
+('vibration-pump', 'weight', 'Вес', 'кг', 'num', '{}'::text[], 4),
+('wall-formwork', 'weight', 'Вес', 'кг', 'num', '{}'::text[], 2),
+('wall-saw', 'weight', 'Вес', 'кг', 'num', '{}'::text[], 4),
+('wall-scanner', 'weight', 'Вес', 'кг', 'num', '{}'::text[], 2),
+('washing-vacuum', 'weight', 'Вес', 'кг', 'num', '{}'::text[], 3),
+('winch', 'weight', 'Вес', 'кг', 'num', '{}'::text[], 4),
+('wire-saw', 'weight', 'Вес', 'кг', 'num', '{}'::text[], 2)
+) as v(kind, key, title, unit, type, options, sort)
+join public.iva_kinds k on k.key = v.kind
+on conflict (kind, key) do nothing;
+
+-- 2. Вес моделей (только однозначно известный; остальным — пусто, впишет администратор)
+update public.iva_models m
+set specs = m.specs || jsonb_build_object('weight', w.weight)
+from (values
+  ('rotary-sds-plus', 'Makita', 'HR2470', 2.9),
+  ('rotary-sds-plus', 'Bosch', 'GBH 2-28 F', 3.1),
+  ('rotary-sds-max', 'Makita', 'HR4013C', 6.8),
+  ('rotary-sds-max', 'Bosch', 'GBH 8-45 D', 8.2),
+  ('breaker', 'Makita', 'HM0870C', 5.1),
+  ('breaker', 'Makita', 'HM1203C', 9.7),
+  ('breaker', 'Bosch', 'GSH 5 CE', 6.2),
+  ('breaker', 'Bosch', 'GSH 11 E', 10.1),
+  ('demolition-hammer', 'Makita', 'HM1317C', 17),
+  ('demolition-hammer', 'Bosch', 'GSH 16-28', 18.3),
+  ('grinder-230', 'Makita', 'GA9020', 5.8),
+  ('grinder-230', 'Bosch', 'GWS 22-230 H', 5.2),
+  ('wall-chaser', 'Bosch', 'GNF 35 CA', 4.7),
+  ('wall-chaser', 'Makita', 'SG1251J', 4.3)
+) as w(kind, brand, model, weight)
+where m.kind = w.kind and m.brand = w.brand and m.model = w.model
+  and m.specs->'weight' is distinct from to_jsonb(w.weight);
+
+commit;
+
+-- Проверка: видов без «Веса» — 0; моделей с весом — 14
+select (select count(distinct f.kind) from public.iva_spec_fields f where not exists (select 1 from public.iva_spec_fields w where w.kind = f.kind and w.key = 'weight')) as kinds_without_weight,
+       (select count(*) from public.iva_models where specs ? 'weight') as models_with_weight;

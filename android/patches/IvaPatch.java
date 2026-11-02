@@ -1,6 +1,10 @@
 // Ива — доработки приложения поверх 10.14 (исходников 10.14 нет, только APK). Сборки: 10.15 (п. 1–5), 10.16 (+ п. 6),
-// 10.17 (+ п. 7–10: нижнее меню). Этот класс компилируется в GitHub Actions (build-apk.yml) и добавляется в APK отдельным classes3.dex.
-// Точки вызова вставляет android/patches/apply.py в smali-код MainActivity (10 мест, см. там).
+// 10.17 (+ п. 7–10: нижнее меню), 10.18 (+ п. 11: выбранный раздел нижнего меню),
+// 10.19 (+ п. 12: окантовка аватарки в открытом «Кабинете»), 10.20 (+ п. 13: виньетка фоновой картинки главной),
+// 10.21 (+ п. 14: скруглённые углы фоновой картинки главной).
+// Этот класс компилируется в GitHub Actions
+// (build-apk.yml) и добавляется в APK отдельным classes3.dex. Точки вызова вставляет android/patches/apply.py
+// в smali-код MainActivity (11 мест, 13 вызовов IvaPatch, потому что onPrice вызывается 4 раза).
 // Поля MainActivity читаются через reflection: класс не зависит от исходников приложения.
 //
 // Что делает (баг 1 от владельца, 04.10.2026):
@@ -16,6 +20,13 @@
 //  8) (10.17) вход и запуск: профиль админа подгружается сразу, чтобы аватарка появилась в меню без захода в «Кабинет».
 //  9) (10.17) «Кабинет» в нижнем меню: загруженная аватарка кружком 40dp вместо иконки.
 // 10) (10.17) выход: аватарка убирается, иконка «Кабинета» снова на месте.
+// 11) (10.18) выбранный раздел нижнего меню получает оранжевую окантовку, значок и подпись —
+//     оранжевые; заливки оранжевого круга больше нет. Логотип и аватарка не перекрашиваются.
+// 12) (10.19) когда открыт «Кабинет», на самой аватарке появляется такая же оранжевая окантовка,
+//     как на логотипе и остальных вкладках; при переходе в другой раздел окантовка исчезает.
+// 13) (10.20) на изображении pageBg главной страницы появляется настоящая виньетка:
+//     центр остаётся светлее, края темнее; слой стоит под поиском и категориями и не перехватывает их касания.
+// 14) (10.21) у этой фоновой картинки скруглены все четыре угла, не затрагивая поиск и категории.
 package ru.prokatnvsk.app;
 
 import android.app.Activity;
@@ -25,18 +36,25 @@ import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.graphics.BitmapShader;
 import android.graphics.Canvas;
+import android.graphics.Color;
+import android.graphics.Outline;
 import android.graphics.Matrix;
 import android.graphics.Paint;
+import android.graphics.RadialGradient;
 import android.graphics.Shader;
+import android.graphics.drawable.GradientDrawable;
 import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.ViewOutlineProvider;
 import android.view.ViewParent;
 import android.widget.CheckBox;
 import android.widget.CompoundButton;
 import android.widget.FrameLayout;
 import android.widget.ImageView;
+import android.widget.LinearLayout;
 import android.widget.RadioButton;
+import android.widget.TextView;
 
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
@@ -53,6 +71,7 @@ public final class IvaPatch {
     static volatile boolean round = false;   // выбрано «туда и обратно»
     static volatile String base = null;      // последний расчёт доставки «в одну сторону»
     static volatile String shown = null;     // что мы вернули приложению (с учётом ×2)
+    static volatile String baseRound = null; // 10.123: тот же расчёт «туда и обратно»
     static boolean limitedShown = false;
 
     private IvaPatch() {}
@@ -60,9 +79,12 @@ public final class IvaPatch {
     // ── 1. Расчёт доставки готов (вызывается из lambda$calcDelivery перед записью delivTxt) ──
     public static String onPrice(String s) {
         if (s == null) return null;
-        String one = normalize(s);
+        // 10.55: доставка — средняя по ценам за км инструментов заявки (штатно — сумма)
+        String one = normalize(IvaOrderPatch.onPrice(s));
         base = one;
-        String out = round ? doubled(one) : one;
+        String rt = IvaOrderPatch.lastRound;                        // 10.123: «обратно» — за каждым сроком
+        baseRound = rt != null ? normalize(rt) : doubled(one);
+        String out = round ? baseRound : one;
         shown = out;
         return out;
     }
@@ -106,14 +128,16 @@ public final class IvaPatch {
 
     // ── 2. Перерисовка итога заявки (начало updateSummary) ──
     public static void onSummary(final Activity a) {
+        // 10.55: свои строки заявки (срок у каждого инструмента) и итог — сразу после штатного updateSummary
+        try { IvaOrderPatch.onSummary(a); } catch (Throwable ignore) {}
         try {
             RadioButton rb = (RadioButton) get(a, "rbDelivery");
             View rg = (View) get(a, "rgMethod");
             if (rb == null || rg == null) return;
 
-            double rate = minRate(a);
+            double rate = maxRate(a);                                 // 10.123: считаем по наибольшей цене за км
             String label = rate > 0
-                ? "\u0414\u043e\u0441\u0442\u0430\u0432\u043a\u0430 \u00b7 \u043e\u0442 " + money(Math.round(rate)) + RUB + "/\u043a\u043c"  // Доставка · от N ₽/км
+                ? "Доставка · " + money(Math.round(rate)) + RUB + " за 1 км в одну сторону"
                 : "\u0414\u043e\u0441\u0442\u0430\u0432\u043a\u0430";
             if (!label.contentEquals(rb.getText())) rb.setText(label);
 
@@ -147,7 +171,8 @@ public final class IvaPatch {
             Object cur = get(a, "delivTxt");
             String b = base;
             if (b != null && cur != null && cur.equals(shown)) {
-                String out = on ? doubled(b) : b;
+                String br = baseRound;
+                String out = on ? (br != null ? br : doubled(b)) : b;
                 shown = out;
                 set(a, "delivTxt", out);
             }
@@ -155,6 +180,11 @@ public final class IvaPatch {
             m.setAccessible(true);
             m.invoke(a);
         } catch (Throwable ignore) {}
+    }
+
+    /** 10.123: наибольшая цена за км среди выбранных инструментов с доставкой (по ней считается «туда»). */
+    static double maxRate(Activity a) {
+        try { return IvaOrderPatch.maxRate(IvaOrderPatch.lines(a)); } catch (Throwable e) { return 0; }
     }
 
     /** Минимальная цена за км среди выбранных инструментов с доставкой. */
@@ -176,6 +206,11 @@ public final class IvaPatch {
 
     // ── 4. Кабинет админа (showAdmHub): объяснить, почему нет вкладки «Добавить» ──
     public static void onHub(Activity a) {
+        try { delSwitches(a); } catch (Throwable ignore) {}   // 10.65: «Доставка» — выключатель
+        try { condRows(a); } catch (Throwable ignore) {}      // 10.66: «Состояние» — Новый / Хорошее / Рабочее
+        try { pickColors(a); } catch (Throwable ignore) {}    // 10.67: выбранная (под)категория — белым, не серым
+        try { IvaKindPatch.onHub(a); } catch (Throwable ignore) {}        // 10.79: поле «Вид инструмента» в форме
+        try { IvaMyToolsPatch.later(a); } catch (Throwable ignore) {}     // 10.122: «Мой инструмент» — пункты и их инструменты
         try {
             Object lim = get(a, "meLimited");
             if (!(lim instanceof Boolean) || !((Boolean) lim) || limitedShown) return;
@@ -190,10 +225,22 @@ public final class IvaPatch {
     }
 
     // ── 5. Публикация не прошла (lambda$setupAddTool$255, после humanError) ──
+    static final String STAFF_REFUSED = "нет прав на публикацию — причина в окне";   // 10.116: сотруднику
+
     public static String publishError(String msg) {
         if (msg == null) return null;
+        try { String ph = IvaStaffToolsPatch.dbPhrase(msg); if (ph != null) return ph; } catch (Throwable ignore) {}   // 10.121: тот же инструмент второй раз
         String m = msg.toLowerCase(Locale.ROOT);
         if (m.contains("row-level security") || m.contains("42501") || m.contains("permission denied")) {
+            // 10.116: сотрудник — коротко здесь, причина словами окном (база говорит, чего не хватает); про арендодателя — не ему
+            try {
+                java.lang.ref.WeakReference<Activity> w = IvaNotifyPatch.act;
+                Activity a = w == null ? null : w.get();
+                if (a != null && IvaStaffToolsPatch.staff(a)) {
+                    IvaStaffToolsPatch.explainRefusal(a, msg);
+                    return STAFF_REFUSED;
+                }
+            } catch (Throwable ignore) {}
             // нет прав: учётная запись арендодателя не активна / не подтверждена / почта входа другая
             return "\u043d\u0435\u0442 \u043f\u0440\u0430\u0432 \u043d\u0430 \u043f\u0443\u0431\u043b\u0438\u043a\u0430\u0446\u0438\u044e. \u0423\u0447\u0451\u0442\u043d\u0430\u044f \u0437\u0430\u043f\u0438\u0441\u044c \u0430\u0440\u0435\u043d\u0434\u043e\u0434\u0430\u0442\u0435\u043b\u044f \u043d\u0435 \u0430\u043a\u0442\u0438\u0432\u043d\u0430 \u0438\u043b\u0438 \u0432\u044b \u0432\u043e\u0448\u043b\u0438 \u0441 \u0434\u0440\u0443\u0433\u043e\u0439 \u043f\u043e\u0447\u0442\u043e\u0439. \u041d\u0430\u043f\u0438\u0448\u0438\u0442\u0435 \u0432\u043b\u0430\u0434\u0435\u043b\u044c\u0446\u0443 \u043f\u043b\u043e\u0449\u0430\u0434\u043a\u0438 (\u043a\u043e\u0434 42501)";
         }
@@ -232,19 +279,135 @@ public final class IvaPatch {
     // loadPhoto приложения (кэш, фоновый поток; при ошибке остаётся иконка). Иконку navProfIc не трогаем:
     // поверх неё кладём круглый вид CircleImageView 40dp, при выходе он убирается и иконка видна снова.
     static final String AV_TAG = "iva_nav_avatar";
+    static final String AV_RING_TAG = "iva_nav_avatar_ring";
+    static final String HOME_VIGNETTE_TAG = "iva_home_vignette";
+
+    /**
+     * 13–14) Фоновая картинка главной страницы уже лежит в вертикальном контейнере pageHome:
+     * searchBox и динамические catGrid/feedGrid идут следующими детьми. Оборачиваем только
+     * pageBg и виньетку в FrameLayout: картинка получает скруглённые углы, а поиск и плитки
+     * остаются соседями снаружи и не затемняются, не сдвигаются и не теряют касания.
+     */
+    static void installHomeVignette(Activity a) {
+        LinearLayout parent = null;
+        ImageView bg = null;
+        int index = -1;
+        ViewGroup.LayoutParams source = null;
+        FrameLayout frame = null;
+        try {
+            Object raw = get(a, "pageBg");
+            if (!(raw instanceof ImageView)) return;
+            bg = (ImageView) raw;
+            ViewParent rawParent = bg.getParent();
+            if (!(rawParent instanceof LinearLayout)) return;
+            parent = (LinearLayout) rawParent;
+            if (parent.findViewWithTag(HOME_VIGNETTE_TAG) != null) return;
+            index = parent.indexOfChild(bg);
+            if (index < 0) return;
+
+            float density = a.getResources().getDisplayMetrics().density;
+            source = bg.getLayoutParams();
+            if (source == null) source = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, px(141, density));
+
+            frame = new FrameLayout(a);
+            frame.setTag(HOME_VIGNETTE_TAG);
+            frame.setClipChildren(true);
+            if (android.os.Build.VERSION.SDK_INT >= 16) {
+                frame.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
+            }
+            if (android.os.Build.VERSION.SDK_INT >= 21) {
+                final float radius = px(16, density);
+                frame.setClipToOutline(true);
+                frame.setOutlineProvider(new ViewOutlineProvider() {
+                    @Override public void getOutline(View view, Outline outline) {
+                        outline.setRoundRect(0, 0, view.getWidth(), view.getHeight(), radius);
+                    }
+                });
+            }
+
+            // The wrapper replaces pageBg in the same slot, so the vertical layout and
+            // the intentionally negative margin before the search box stay unchanged.
+            parent.removeViewAt(index);
+            frame.addView(bg, new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+
+            HomeVignette overlay = new HomeVignette(a);
+            overlay.setClickable(false);
+            overlay.setFocusable(false);
+            if (android.os.Build.VERSION.SDK_INT >= 16) {
+                overlay.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
+            }
+            frame.addView(overlay, new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+            parent.addView(frame, index, source);
+        } catch (Throwable ignore) {
+            // Restore the original image if a device rejects an unusual layout parameter.
+            try {
+                if (parent != null && bg != null && bg.getParent() != parent) {
+                    if (frame != null && frame.getParent() == parent) parent.removeView(frame);
+                    if (bg.getParent() instanceof ViewGroup) {
+                        ((ViewGroup) bg.getParent()).removeView(bg);
+                    }
+                    parent.addView(bg, Math.max(0, Math.min(index, parent.getChildCount())), source);
+                }
+            } catch (Throwable ignored) {}
+        }
+    }
+
+    /** Transparent in the centre, progressively black towards the image edges. */
+    static final class HomeVignette extends View {
+        private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
+        private RadialGradient gradient;
+
+        HomeVignette(Context context) {
+            super(context);
+            setWillNotDraw(false);
+            paint.setDither(true);
+        }
+
+        @Override protected void onSizeChanged(int w, int h, int oldW, int oldH) {
+            super.onSizeChanged(w, h, oldW, oldH);
+            if (w <= 0 || h <= 0) {
+                gradient = null;
+                return;
+            }
+            float radius = (float) Math.hypot(w / 2f, h / 2f) * 0.82f;
+            gradient = new RadialGradient(
+                w / 2f, h / 2f, radius,
+                new int[] { 0x00000000, 0x16000000, 0x58000000, 0xb8000000 },
+                new float[] { 0f, 0.38f, 0.72f, 1f },
+                Shader.TileMode.CLAMP);
+        }
+
+        @Override protected void onDraw(Canvas canvas) {
+            if (gradient == null) return;
+            paint.setShader(gradient);
+            canvas.drawRect(0, 0, getWidth(), getHeight(), paint);
+            paint.setShader(null);
+        }
+    }
 
     /** 7) Конец onCreate: «+» → логотип. Затем профиль (аватарка), если уже вошли. */
     public static void onCreated(Activity a) {
         try {
             logoOnPlus(a, a.getResources().getDisplayMetrics().density);
+            // restoreSession() мог выбрать вкладку до этого вызова; повторяем её стиль после замены «+».
+            onTab(a, (String) get(a, "curTab"));
+            installHomeVignette(a);
         } catch (Throwable ignore) {
-            // логотип — только внешний вид: без него меню работает как раньше
+            // логотип и подсветка — только внешний вид: без них меню работает как раньше
         }
+        try { IvaClientPatch.authStart(a); } catch (Throwable ignore) {}   // 10.69: ключ обновляется заранее
+        try { IvaClientPatch.authEmailFix(a); } catch (Throwable ignore) {}   // 10.119: почта — из ключа
+        try { IvaCensorPatch.guardStock(a); } catch (Throwable ignore) {}   // 24.10.2026: мат — имя при регистрации, «Мои данные»
         reloadProfile(a);
     }
 
     /** 8) Конец saveSession (вход и восстановление сессии): профиль админа → аватарка в меню. */
     public static void onSession(Activity a) {
+        try { IvaClientPatch.authEmailFix(a); } catch (Throwable ignore) {}   // 10.119: почта — из ключа нового входа
+        try { IvaClientPatch.authBackup(a); } catch (Throwable ignore) {}   // 10.69: копия входа (вход, восстановление)
         reloadProfile(a);
     }
 
@@ -255,14 +418,175 @@ public final class IvaPatch {
         });
     }
 
+    // ── 11–12. Выбранный раздел нижнего меню и окантовка аватарки (10.18–10.19) ──
+    // Штатный setCircle() вызывается в showTab() и рисует оранжевую заливку с белым значком.
+    // Этот вызов стоит после всех четырёх setCircle: заливка убирается, а выбранный пункт получает
+    // прозрачный круг с оранжевой окантовкой и оранжевые текст/значок.
+    /**
+     * 13. Новый метод MainActivity.onNewIntent (10.59): нажали на уведомление, когда приложение уже открыто
+     * или свёрнуто. Штатных методов не меняет; переход — в IvaNotifyPatch. Любая ошибка — приложение просто
+     * показывается как было.
+     */
+    public static void onNewIntent(Activity a, android.content.Intent it) {
+        try { IvaNotifyPatch.onNewIntent(a, it); } catch (Throwable ignore) {}
+    }
+
+    public static void onTab(Activity a, String tab) {
+        try { installBack(a); } catch (Throwable ignore) {}   // 10.63: системная «Назад» — внутри приложения
+        try { delSwitches(a); } catch (Throwable ignore) {}   // 10.65: «Доставка» в форме инструмента — выключатель
+        try { condRows(a); } catch (Throwable ignore) {}      // 10.66: «Состояние» в форме инструмента
+        try { pickColors(a); } catch (Throwable ignore) {}    // 10.67: выбранная (под)категория — белым, не серым
+        try { IvaCensorPatch.guardStock(a); } catch (Throwable ignore) {}   // 24.10.2026: мат — регистрация, «Мои данные»
+        try { IvaKindPatch.onTab(a, tab); } catch (Throwable ignore) {}     // 10.79: «Вид инструмента» — справочник, форма, запись
+        try { IvaClientPatch.authBackup(a); } catch (Throwable ignore) {}   // 10.69: копия входа (пишется, лишь когда ключ сменился)
+        try { IvaReviewPatch.onTab(a, tab); } catch (Throwable ignore) {}   // 10.70: отзывы — страница инструмента и проката
+        try { IvaProkatPatch.onTab(a, tab); } catch (Throwable ignore) {}   // 10.120: «Прокат» в карточке — страница проката и чат пункта
+        try { IvaAvatarPatch.onTab(a, tab); } catch (Throwable ignore) {}   // 10.98: «Мои данные» — фото кругом, крупнее, выбор области
+        try { IvaPhotoPatch.onTab(a); } catch (Throwable ignore) {}         // 10.109: «+» в правке инструмента — галерея, а не проводник
+        try { IvaShopPatch.onTab(a, tab); } catch (Throwable ignore) {}     // 10.98: «Мои данные» — только ФИО, телефон, мессенджеры
+        try { IvaStaffToolsPatch.onTab(a, tab); } catch (Throwable ignore) {}   // 10.105: сотрудник «Каталог» — форма без вкладок, возврат
+        try { IvaToolEditPatch.onTab(a, tab); } catch (Throwable ignore) {}     // 10.122: правка целиком, подписи полей, удаление сотрудником
+        try { IvaMyToolsPatch.onTab(a, tab); } catch (Throwable ignore) {}      // 10.122: вернулись в кабинет — список заново
+        try { IvaOrderEditPatch.onTab(a, tab); } catch (Throwable ignore) {}    // 10.122: «Вы в итоге взяли инструмент?» после отмены
+        try {
+            String t = tab == null ? "" : tab;
+            int orange = navColor(a, "orange", 0xffff9800);
+            int gray = navColor(a, "gray", 0xff9aa0a6);
+            styleNavItem(a, get(a, "circHome"), get(a, "navHomeIc"), get(a, "navHomeTxt"),
+                navSelected(t, "home"), orange, gray);
+            styleNavItem(a, get(a, "circChat"), get(a, "navChatIc"), get(a, "navChatTxt"),
+                navSelected(t, "chat"), orange, gray);
+            styleNavItem(a, get(a, "circOrders"), get(a, "navOrdersIc"), get(a, "navOrdersTxt"),
+                navSelected(t, "orders"), orange, gray);
+            boolean profile = navSelected(t, "profile");
+            styleNavItem(a, get(a, "circProfile"), get(a, "navProfIc"), get(a, "navProfTxt"),
+                profile, orange, gray);
+            styleAvatarOutline(a, profile, orange);
+            styleLogoNav(a, isLogoTab(t), orange);
+            // Аватарка — фотография, а не иконка нижнего меню. Никогда не накладываем на неё tint.
+            clearAvatarFilter(a);
+        } catch (Throwable ignore) {
+            // подсветка — только внешний вид: переход между разделами не должен ломаться
+        }
+        // 10.43: штатный переход прячет раздел клиента «Избранное / Мои инструменты» (логотип в меню).
+        try { IvaClientPatch.onShowTab(a, tab); } catch (Throwable ignore) {}
+        // 10.45: строка «Ваш город», ручка и панель фильтров на главной (ставятся и прячутся здесь же).
+        try { IvaSearchPatch.onShowTab(a, tab); } catch (Throwable ignore) {}
+        // 10.54: чат — список переписок по инструментам, закреплённая карточка, аватарки, без автосообщения.
+        try { IvaChatPatch.onShowTab(a, tab); } catch (Throwable ignore) {}
+        // 10.55: заявка — ФИО по полям, без количества, свой срок у инструмента, «+ Добавить инструмент», один прокат.
+        try { IvaOrderPatch.onShowTab(a, tab); } catch (Throwable ignore) {}
+        // 10.56: «Настройки» в кабинете (уведомления с переключателями) и свой опрос вместо штатного.
+        try { IvaNotifyPatch.onShowTab(a, tab); } catch (Throwable ignore) {}
+    }
+
+    /** Чистая проверка выбора пункта — вынесена отдельно, чтобы её можно было проверить без Activity. */
+    static boolean navSelected(String current, String item) {
+        return current != null && item != null && item.equals(current);
+    }
+
+    /** Центральный логотип ведёт в заявку, в раздел добавления инструментов или (у клиента, 10.43)
+     * в раздел «Избранное / Мои инструменты». */
+    static boolean isLogoTab(String tab) {
+        return "order".equals(tab) || "admhub".equals(tab) || "addtool".equals(tab) || "clienthub".equals(tab);
+    }
+
+    static int navColor(Activity a, String name, int fallback) {
+        try {
+            int rid = a.getResources().getIdentifier(name, "color", a.getPackageName());
+            return rid == 0 ? fallback : a.getResources().getColor(rid);
+        } catch (Throwable ignore) {
+            return fallback;
+        }
+    }
+
+    static void styleNavItem(Activity a, Object circle, Object icon, Object label,
+                             boolean selected, int orange, int gray) {
+        if (circle instanceof View) {
+            outline((View) circle, selected, a.getResources().getDisplayMetrics().density, orange);
+        }
+        if (icon instanceof ImageView) {
+            ((ImageView) icon).setColorFilter(selected ? orange : gray);
+        }
+        if (label instanceof TextView) {
+            ((TextView) label).setTextColor(selected ? orange : gray);
+        }
+    }
+
+    /** Прозрачный круг без заливки; окантовка появляется только у выбранного раздела. */
+    static void outline(View view, boolean selected, float density, int orange) {
+        if (view == null) return;
+        if (!selected) {
+            view.setBackgroundColor(Color.TRANSPARENT);
+            return;
+        }
+        GradientDrawable bg = new GradientDrawable();
+        bg.setShape(GradientDrawable.OVAL);
+        bg.setColor(Color.TRANSPARENT);
+        bg.setStroke(px(2, density), orange);
+        view.setBackground(bg);
+    }
+
+    /** Центральный логотип не перекрашиваем; меняем только его внешний круг. */
+    static void styleLogoNav(Activity a, boolean selected, int orange) {
+        View plus = a.findViewById(id(a, "navPlus"));
+        View col = plus instanceof ViewGroup ? ((ViewGroup) plus).getChildAt(0) : null;
+        View circle = col instanceof ViewGroup ? ((ViewGroup) col).getChildAt(0) : null;
+        View icon = circle instanceof ViewGroup ? ((ViewGroup) circle).getChildAt(0) : null;
+        if (circle != null) outline(circle, selected, a.getResources().getDisplayMetrics().density, orange);
+        if (icon instanceof ImageView) ((ImageView) icon).clearColorFilter();
+    }
+
+    static void clearAvatarFilter(Activity a) {
+        ViewGroup box = navBox(a);
+        View avatar = box == null ? null : box.findViewWithTag(AV_TAG);
+        if (avatar instanceof ImageView) ((ImageView) avatar).clearColorFilter();
+    }
+
+    /** Окантовка поверх фотографии: родительский круг убираем, чтобы не получить двойной ободок. */
+    static void styleAvatarOutline(Activity a, boolean selected, int orange) {
+        ViewGroup box = navBox(a);
+        View avatar = box == null ? null : box.findViewWithTag(AV_TAG);
+        View ring = box == null ? null : box.findViewWithTag(AV_RING_TAG);
+        float density = a.getResources().getDisplayMetrics().density;
+        View profileCircle = get(a, "circProfile") instanceof View ? (View) get(a, "circProfile") : null;
+
+        if (!(avatar instanceof ImageView)) {
+            if (ring != null && box != null) box.removeView(ring);
+            if (profileCircle != null) outline(profileCircle, selected, density, orange);
+            return;
+        }
+
+        // Фотография закрывает фон circProfile, поэтому рисуем прозрачный слой-кольцо
+        // поверх самой аватарки. Логотип и остальные пункты по-прежнему используют свой круг.
+        if (profileCircle != null) outline(profileCircle, false, density, orange);
+        int size = px(40, density);
+        if (selected) {
+            if (ring == null) {
+                ring = new View(a);
+                ring.setTag(AV_RING_TAG);
+                ring.setClickable(false);
+                box.addView(ring, new FrameLayout.LayoutParams(size, size, Gravity.CENTER));
+            }
+            outline(ring, true, density, orange);
+        } else if (ring != null) {
+            box.removeView(ring);
+        }
+    }
+
     /** 10) Конец logoutLocal: аватарку убираем, иконка «Кабинета» снова видна. */
     public static void onLogout(final Activity a) {
+        // 10.69: штатная проверка при запуске не прошла (истёк ключ / нет связи) — это не выход: вход возвращается
+        try { if (IvaClientPatch.authRecover(a)) return; } catch (Throwable ignore) {}
         a.runOnUiThread(new Runnable() {
             @Override public void run() {
                 try {
                     ViewGroup box = navBox(a);
                     View av = box == null ? null : box.findViewWithTag(AV_TAG);
+                    View ring = box == null ? null : box.findViewWithTag(AV_RING_TAG);
                     if (av != null) box.removeView(av);
+                    if (ring != null) box.removeView(ring);
+                    onTab(a, (String) get(a, "curTab"));
                 } catch (Throwable ignore) {
                     // иконка остаётся на месте
                 }
@@ -270,7 +594,8 @@ public final class IvaPatch {
         });
     }
 
-    /** «+» (navPlus) → круглый логотип: тот же ic_logo, что на заставке, в оранжевом ободке 50dp. */
+    /** «+» (navPlus) → круглый логотип: тот же ic_logo, что на заставке, размером 50dp.
+     * Оранжевая окантовка рисуется только styleLogoNav() для активного раздела. */
     static void logoOnPlus(Activity a, float d) {
         View plus = a.findViewById(id(a, "navPlus"));
         View col = plus instanceof ViewGroup ? ((ViewGroup) plus).getChildAt(0) : null;      // столбик кнопки
@@ -285,7 +610,8 @@ public final class IvaPatch {
         ((ImageView) ic).clearColorFilter();
     }
 
-    /** Логотип из ресурсов приложения (ic_logo) → круг size×size; inset — отступ от края (виден ободок). */
+    /** Логотип из ресурсов приложения (ic_logo) → круг size×size; inset — прозрачный отступ,
+     * в который при активном разделе попадает оранжевая окантовка родительского круга. */
     static Bitmap roundLogo(Activity a, int size, int inset) {
         int rid = a.getResources().getIdentifier("ic_logo", "drawable", a.getPackageName());
         if (rid == 0) return null;
@@ -320,6 +646,8 @@ public final class IvaPatch {
             // ответ сервера может прийти уже после выхода — тогда аватарку не возвращаем
             if (!wantsAvatar(url) || get(a, "accessToken") == null) {
                 if (av != null) box.removeView(av);
+                int orange = navColor(a, "orange", 0xffff9800);
+                styleAvatarOutline(a, navSelected((String) get(a, "curTab"), "profile"), orange);
                 return;
             }
             if (av == null) {
@@ -329,6 +657,8 @@ public final class IvaPatch {
                 box.addView(av, new FrameLayout.LayoutParams(s, s, Gravity.CENTER));
             }
             loadPhoto(a, (ImageView) av, url.trim());
+            int orange = navColor(a, "orange", 0xffff9800);
+            styleAvatarOutline(a, navSelected((String) get(a, "curTab"), "profile"), orange);
         } catch (Throwable ignore) {
             // аватарка не должна ломать меню: останется иконка
         }
@@ -391,7 +721,477 @@ public final class IvaPatch {
     static Object get(Object o, String name) {
         try { return field(o.getClass(), name).get(o); } catch (Throwable e) { return null; }
     }
+    /** 10.88: штатный элемент — полем MainActivity, а нет такого поля — по id разметки. Кнопки «Опубликовать
+     *  инструмент» (atSave) и «Сохранить» (teSave) в 10.14 — только id: get() их не находил, и всё, что висело на
+     *  касании кнопки (строка «Состояние», вид и модель после публикации, проверка формы), не срабатывало. */
+    static View view(Activity a, String name) {
+        Object o = get(a, name);
+        if (o instanceof View) return (View) o;
+        try {
+            int id = a.getResources().getIdentifier(name, "id", a.getPackageName());
+            return id == 0 ? null : a.findViewById(id);
+        } catch (Throwable e) { return null; }
+    }
     static void set(Object o, String name, Object v) {
         try { field(o.getClass(), name).set(o, v); } catch (Throwable ignore) {}
+    }
+
+    // ───────────── 10.63: кнопка «Назад» на телефоне работает внутри приложения (просьба владельца 14.10.2026) ─────────────
+    // В 10.14 своего onBackPressed нет — «Назад» закрывала приложение с любого экрана. Новых вставок в smali нет:
+    // обёртка окна (Window.Callback) ловит только клавишу «Назад», всё остальное отдаёт приложению как было.
+    // Порядок: открытый фильтр → кнопка «‹ …» на экране (штатные «‹ Назад», «‹ Кабинет», «‹ Все клиенты», наша
+    // «‹ Назад к чатам») → экран «Заявка отправлена» → «На главную» → со вкладок и раздела логотипа — на главную →
+    // на главной (и на экране входа) — свернуть приложение, как кнопка «Домой» (решение владельца 14.10.2026).
+    // Окна поверх (шторка заявки, архив, выбор города, вопросы) закрываются «Назад» сами — это отдельные окна.
+    static final String BACK_PANEL = "panel", BACK_BUTTON = "button", BACK_SUCCESS = "success", BACK_HOME = "home", BACK_HIDE = "background";
+    static final String BACK_MARK = "\u2039";   // «‹»
+
+    /** Что делает «Назад» — чистая функция (проверяется тестом). */
+    static String backAction(boolean panelOpen, boolean successShown, boolean mainShown, boolean backButton, String tab, boolean hubOpen) {
+        if (panelOpen) return BACK_PANEL;
+        if (successShown) return BACK_SUCCESS;
+        if (!mainShown) return BACK_HIDE;                      // вход / заставка — свернуть
+        if (backButton) return BACK_BUTTON;
+        if (hubOpen) return BACK_HOME;
+        return "home".equals(tab == null ? "" : tab) ? BACK_HIDE : BACK_HOME;
+    }
+
+    static void installBack(final Activity a) {
+        final android.view.Window w = a.getWindow();
+        if (w == null) return;
+        final android.view.Window.Callback orig = w.getCallback();
+        if (orig == null || java.lang.reflect.Proxy.isProxyClass(orig.getClass())) return;   // уже стоит
+        Object px = java.lang.reflect.Proxy.newProxyInstance(IvaPatch.class.getClassLoader(),
+            new Class<?>[]{android.view.Window.Callback.class}, new java.lang.reflect.InvocationHandler() {
+                @Override public Object invoke(Object proxy, Method m, Object[] args) throws Throwable {
+                    if (args != null && args.length == 1 && args[0] instanceof android.view.KeyEvent && "dispatchKeyEvent".equals(m.getName())) {
+                        android.view.KeyEvent e = (android.view.KeyEvent) args[0];
+                        if (e.getKeyCode() == android.view.KeyEvent.KEYCODE_BACK) {
+                            if (e.getAction() == android.view.KeyEvent.ACTION_UP && !e.isCanceled()) {
+                                try { onBack(a); } catch (Throwable t) { try { a.moveTaskToBack(true); } catch (Throwable ignore) {} }
+                            }
+                            return Boolean.TRUE;
+                        }
+                    }
+                    try { return m.invoke(orig, args); }
+                    catch (java.lang.reflect.InvocationTargetException ex) { throw ex.getCause() != null ? ex.getCause() : ex; }
+                }
+            });
+        w.setCallback((android.view.Window.Callback) px);
+    }
+
+    static boolean shown(Activity a, String idName) {
+        int id = a.getResources().getIdentifier(idName, "id", a.getPackageName());
+        View v = id == 0 ? null : a.findViewById(id);
+        return v != null && v.isShown();
+    }
+
+    /** Видимая кнопка «‹ …» на экране (кроме нижнего меню): первая по порядку. */
+    static View backButton(View v) {
+        if (v == null || v.getVisibility() != View.VISIBLE) return null;
+        if (v instanceof TextView && !(v instanceof android.widget.EditText) && v.isShown()) {
+            CharSequence t = ((TextView) v).getText();
+            if (t != null && t.toString().trim().startsWith(BACK_MARK) && v.hasOnClickListeners()) return v;
+        }
+        if (v instanceof ViewGroup) {
+            ViewGroup g = (ViewGroup) v;
+            for (int i = 0; i < g.getChildCount(); i++) {
+                View r = backButton(g.getChildAt(i));
+                if (r != null) return r;
+            }
+        }
+        return null;
+    }
+
+    static void onBack(Activity a) {
+        ViewGroup pages = IvaClientPatch.hubPages(a);
+        View btn = pages == null ? null : backButton(pages);
+        Object ct = get(a, "curTab");
+        // 10.105: сотрудник на штатной форме / правке — «Назад» в «Инструменты пункта», не на главную
+        try { if (IvaStaffToolsPatch.onBack(a, ct instanceof String ? (String) ct : "")) return; } catch (Throwable ignore) {}
+        String act = backAction(IvaSearchPatch.panelOpen(), shown(a, "scrSuccess"), shown(a, "scrMain"), btn != null,
+            ct instanceof String ? (String) ct : "", IvaClientPatch.hubVisible);
+        if (BACK_PANEL.equals(act)) IvaSearchPatch.closePanel(a, true);
+        else if (BACK_SUCCESS.equals(act)) {
+            int id = a.getResources().getIdentifier("btnHome", "id", a.getPackageName());
+            View h = id == 0 ? null : a.findViewById(id);
+            if (h != null) h.performClick(); else a.moveTaskToBack(true);
+        }
+        else if (BACK_BUTTON.equals(act)) btn.performClick();
+        else if (BACK_HOME.equals(act)) IvaNotifyPatch.tab(a, "home");
+        else a.moveTaskToBack(true);
+    }
+
+    // ───────────── 10.65: «Доставка» в форме инструмента — выключатель вместо серой полосы (просьба владельца 14.10.2026) ─────────────
+    // В 10.14 кнопка atDelToggle (и teDelToggle в правке инструмента) раскрашивается штатным paintDelToggle только после
+    // нажатия — до этого это голая серая кнопка без текста, а после — оранжевая с обрезанной подписью. Теперь штатная кнопка
+    // скрыта (не удалена): на её месте строка в виде полей формы (bg_field) — «Доставка» с подписью и выключатель.
+    // Нажатие на строку нажимает штатную кнопку (performClick): штатный код сам меняет atDeliv/teDeliv и показывает
+    // или прячет поле «Доставка, ₽ за 1 км» — логика публикации и правки не меняется.
+    // ───────────── 10.96: единый стиль «рамкой» (решение владельца 16.10.2026) ─────────────
+    // Все кнопки и выбранные элементы — как «Добавить» в «Пункт выдачи»: тёмный фон (card), рамка 1,5dp и жирный текст
+    // фирменного цвета (оранжевый; у пробной версии — жёлтый). Заливки оранжевым/жёлтым больше нет — и в новых кнопках тоже.
+    // Штатные фоны (bg_btn_orange, bg_chip_on, кружки, пузыри, аватарки) переделаны прямо в ресурсах (axml_outline.py).
+    static final int OUTLINE_FILL = 0xFF1A1D24, OUTLINE_ACCENT = 0xFFFF8F1F;
+    static final float OUTLINE_DP = 1.5f;
+    static final int OUTLINE_PRESSED_A = 0x33, OUTLINE_PROGRESS_A = 0x40;
+
+    /** Тот же цвет с другой прозрачностью (0…255). */
+    static int withAlpha(int color, int alpha) { return (color & 0x00FFFFFF) | ((alpha & 0xFF) << 24); }
+
+    /** Форма «рамкой»: заливка fill (0 — прозрачная), рамка accent 1,5dp; radiusDp &lt; 0 — круг. */
+    static GradientDrawable outlineShape(float density, int fill, int accent, float radiusDp) {
+        GradientDrawable g = new GradientDrawable();
+        if (radiusDp < 0) g.setShape(GradientDrawable.OVAL); else g.setCornerRadius(radiusDp * density);
+        g.setColor(fill);
+        g.setStroke(Math.max(1, Math.round(OUTLINE_DP * density)), accent);
+        return g;
+    }
+
+    /** Фон кнопки «рамкой»; при нажатии — лёгкая подсветка цветом рамки. radiusDp &lt; 0 — круг. */
+    static android.graphics.drawable.Drawable accentBg(Context c, int accent, float radiusDp) {
+        float d = c.getResources().getDisplayMetrics().density;
+        android.graphics.drawable.StateListDrawable s = new android.graphics.drawable.StateListDrawable();
+        s.addState(new int[]{android.R.attr.state_pressed}, outlineShape(d, withAlpha(accent, OUTLINE_PRESSED_A), accent, radiusDp));
+        s.addState(new int[0], outlineShape(d, OUTLINE_FILL, accent, radiusDp));
+        return s;
+    }
+
+    /** Кнопка «рамкой»: штатный bg_btn_orange (в APK он уже рамкой), без него — свой такой же; текст — оранжевый жирный. */
+    static void accentButton(Activity a, TextView b) {
+        int o = color(a, "orange", OUTLINE_ACCENT);
+        android.graphics.drawable.Drawable d = drawable(a, "bg_btn_orange");
+        b.setBackground(d != null ? d : accentBg(a, o, 14));
+        b.setTextColor(o);
+        b.setTypeface(null, android.graphics.Typeface.BOLD);
+    }
+
+    /** Кнопка с прогрессом (обновление): рамка, а во время загрузки — полупрозрачная полоса по уровню 0…10000. */
+    static android.graphics.drawable.LayerDrawable accentProgressBg(Context c, int accent, float radiusDp) {
+        float d = c.getResources().getDisplayMetrics().density;
+        GradientDrawable base = new GradientDrawable();
+        base.setColor(OUTLINE_FILL);
+        base.setCornerRadius(radiusDp * d);
+        GradientDrawable bar = new GradientDrawable();
+        bar.setColor(withAlpha(accent, OUTLINE_PROGRESS_A));
+        bar.setCornerRadius(radiusDp * d);
+        android.graphics.drawable.LayerDrawable l = new android.graphics.drawable.LayerDrawable(new android.graphics.drawable.Drawable[]{
+            base, new android.graphics.drawable.ClipDrawable(bar, Gravity.LEFT, android.graphics.drawable.ClipDrawable.HORIZONTAL),
+            outlineShape(d, Color.TRANSPARENT, accent, radiusDp)});
+        l.setLevel(0);
+        return l;
+    }
+
+    static int color(Activity a, String n, int f) { return IvaClientPatch.navColor(a, n, f); }
+    static int dp(Activity a, float v) { return IvaSearchPatch.dp(a, v); }
+    static android.graphics.drawable.Drawable drawable(Activity a, String n) { return IvaSearchPatch.drawable(a, n); }
+    static final String DEL_ROW_TAG = "iva_del_row", DEL_TITLE = "Доставка";
+    static final String DEL_SUB_ON = "Есть — укажите цену ниже, ₽ за 1 км (в одну сторону)";
+    static final String DEL_SUB_OFF = "Нет — только самовывоз. Включите, чтобы указать цену";
+
+    static String delSub(boolean on) { return on ? DEL_SUB_ON : DEL_SUB_OFF; }
+
+    static void delSwitches(Activity a) {
+        delSwitch(a, "atDelToggle", "atDeliv");
+        delSwitch(a, "teDelToggle", "teDeliv");
+    }
+
+    static void delSwitch(final Activity a, String btnField, final String flagField) {
+        Object bo = get(a, btnField);
+        if (!(bo instanceof View) || !(((View) bo).getParent() instanceof LinearLayout)) return;
+        final View btn = (View) bo;
+        LinearLayout form = (LinearLayout) btn.getParent();
+        final String tag = DEL_ROW_TAG + ":" + btnField;
+        View row = form.findViewWithTag(tag);
+        if (row == null) {
+            row = delRow(a, tag);
+            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2);
+            lp.topMargin = dp(a, 10);
+            form.addView(row, form.indexOfChild(btn) + 1, lp);
+            final View fr = row;
+            row.setOnClickListener(new View.OnClickListener() {
+                @Override public void onClick(View v) {
+                    try { btn.performClick(); } catch (Throwable ignore) {}   // штатный переключатель доставки
+                    delSync(a, fr, flagField);
+                }
+            });
+        }
+        btn.setVisibility(View.GONE);
+        delSync(a, row, flagField);
+    }
+
+    static View delRow(Activity a, String tag) {
+        LinearLayout row = new LinearLayout(a);
+        row.setTag(tag);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setGravity(Gravity.CENTER_VERTICAL);
+        android.graphics.drawable.Drawable bg = drawable(a, "bg_field");
+        if (bg != null) row.setBackground(bg);
+        row.setPadding(dp(a, 14), dp(a, 12), dp(a, 10), dp(a, 12));
+        row.setClickable(true);
+        LinearLayout col = new LinearLayout(a);
+        col.setOrientation(LinearLayout.VERTICAL);
+        TextView t = new TextView(a);
+        t.setText(DEL_TITLE);
+        t.setTextColor(color(a, "text", 0xfff2f4f8));
+        t.setTextSize(15f);
+        col.addView(t, new LinearLayout.LayoutParams(-2, -2));
+        TextView sub = new TextView(a);
+        sub.setTag(tag + ":sub");
+        sub.setTextColor(color(a, "gray", 0xff9aa1b0));
+        sub.setTextSize(12f);
+        LinearLayout.LayoutParams sl = new LinearLayout.LayoutParams(-1, -2);
+        sl.topMargin = dp(a, 2);
+        col.addView(sub, sl);
+        row.addView(col, new LinearLayout.LayoutParams(0, -2, 1f));
+        android.widget.Switch sw = new android.widget.Switch(a);
+        sw.setTag(tag + ":sw");
+        sw.setClickable(false);          // нажатие — на всю строку (иначе выключатель и штатное значение разойдутся)
+        sw.setFocusable(false);
+        LinearLayout.LayoutParams wl = new LinearLayout.LayoutParams(-2, -2);
+        wl.leftMargin = dp(a, 10);
+        row.addView(sw, wl);
+        return row;
+    }
+
+    /** Выключатель и подпись — по штатному значению atDeliv / teDeliv. */
+    static void delSync(Activity a, View row, String flagField) {
+        Object f = get(a, flagField);
+        boolean on = f instanceof Boolean && (Boolean) f;
+        Object tg = row.getTag();
+        View sub = row.findViewWithTag(tg + ":sub");
+        if (sub instanceof TextView) ((TextView) sub).setText(delSub(on));
+        View sw = row.findViewWithTag(tg + ":sw");
+        if (sw instanceof android.widget.Switch) {
+            android.widget.Switch s = (android.widget.Switch) sw;
+            s.setChecked(on);
+            try {
+                int orange = color(a, "orange", 0xffff8f1f), gray = color(a, "gray", 0xff9aa1b0);
+                s.setThumbTintList(android.content.res.ColorStateList.valueOf(on ? orange : gray));
+                s.setTrackTintList(android.content.res.ColorStateList.valueOf(on ? (orange & 0x00ffffff) | 0x80000000 : color(a, "line", 0xff262b35)));
+            } catch (Throwable ignore) {}   // Android 5: без раскраски — системный вид
+        }
+    }
+
+    // ───────────── 10.66: «Состояние» в форме инструмента — Новый / Хорошее / Рабочее (просьба владельца 14.10.2026) ─────────────
+    // Отдельного столбца в базе нет: сайт (new.html) пишет состояние последней строкой условий аренды — «Состояние: Хорошее»,
+    // каталог сайта (sb.js) и наш фильтр (IvaSearchPatch.condFromTerms) читают его оттуда. Делаем так же — база не меняется.
+    // В поле «Условие аренды» строки не видно: при открытии правки она убирается из поля и выбирает кнопку, а при нажатии
+    // «Опубликовать» / «Сохранить» дописывается в поле (штатный код читает поле позже, в своём потоке после загрузки фото).
+    // Не опубликовалось (ошибка в форме) — строка снова убирается, как только поле получит фокус или откроется вкладка.
+    static final String COND_ROW_TAG = "iva_cond_row", COND_LABEL = "Состояние", COND_PREFIX = "Состояние: ";
+    static final String[] COND_TITLES = IvaSearchPatch.COND_TITLES;    // Новый, Хорошее, Рабочее — как на сайте
+    static final int COND_DEFAULT = 1;                                  // «Хорошее» — как по умолчанию на сайте
+    static final int[] condSel = {COND_DEFAULT, COND_DEFAULT};           // 0 — «Добавить инструмент», 1 — правка
+    static final String[] condSeen = {null, null};
+
+    /** Номер состояния в условиях (0 Новый, 1 Хорошее, 2 Рабочее) или -1 — не указано. Разбор — как у фильтра. */
+    static int condIndex(String terms) {
+        int bit = IvaSearchPatch.condFromTerms(terms);
+        for (int i = 0; i < IvaSearchPatch.COND_BITS.length; i++) if (IvaSearchPatch.COND_BITS[i] == bit) return i;
+        return -1;
+    }
+
+    /** Условия без строк «Состояние: …» (остальные строки, в т.ч. «Адрес выдачи: …», — как были). */
+    static String condStrip(String terms) {
+        StringBuilder b = new StringBuilder();
+        for (String line : (terms == null ? "" : terms).split("\n", -1)) {
+            if (line.trim().toLowerCase(Locale.ROOT).startsWith("состояние:")) continue;
+            if (b.length() > 0) b.append('\n');
+            b.append(line);
+        }
+        return b.toString().replaceAll("\\s+$", "");
+    }
+
+    /** Условия + последней строкой «Состояние: …» — как сайт при публикации. */
+    static String condApply(String terms, int idx) {
+        String t = condStrip(terms);
+        int i = idx < 0 || idx >= COND_TITLES.length ? COND_DEFAULT : idx;
+        return (t.isEmpty() ? "" : t + "\n") + COND_PREFIX + COND_TITLES[i];
+    }
+
+    static void condRows(Activity a) {
+        condRow(a, "atTerms", "atSave", 0);
+        condRow(a, "teTerms", "teSave", 1);
+        try { IvaKindPatch.arrange(a); } catch (Throwable ignore) {}   // 10.86: «Условия аренды» — подпись над полем, под «Состоянием»
+    }
+
+    static boolean editBlocked = false;
+
+    static void condRow(final Activity a, String termsField, String saveField, final int k) {
+        Object to = get(a, termsField);
+        if (!(to instanceof android.widget.EditText) || !(((View) to).getParent() instanceof LinearLayout)) return;
+        final android.widget.EditText terms = (android.widget.EditText) to;
+        final View save = view(a, saveField);                         // 10.88: кнопки — id разметки, не поля
+        LinearLayout form = (LinearLayout) terms.getParent();
+        final String tag = COND_ROW_TAG + ":" + termsField;
+        View row = form.findViewWithTag(tag);
+        if (row == null) {
+            row = condBuild(a, tag, k);
+            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2);
+            lp.topMargin = dp(a, 12);
+            form.addView(row, form.indexOfChild(terms), lp);          // перед «Условием аренды»
+            if (save != null) save.setOnTouchListener(new View.OnTouchListener() {
+                @Override public boolean onTouch(View v, android.view.MotionEvent e) {
+                    // 10.87: «Добавить» без названия, категории или цены — нажатие не пропускаем, ошибки под полями
+                    if (k == 0 && v.isEnabled()) {
+                        boolean stop = false;
+                        try { stop = IvaFormPatch.onSaveTouch(a, e.getActionMasked()); } catch (Throwable ignore) {}
+                        if (stop) return true;
+                    }
+                    // 24.10.2026 (цензура, этап 2): «Сохранить» в «Изменить инструмент» — мат в любом поле формы не сохраняется
+                    if (k == 1 && v.isEnabled()) {
+                        if (e.getActionMasked() == android.view.MotionEvent.ACTION_DOWN) {
+                            editBlocked = false;
+                            try { editBlocked = IvaCensorPatch.stopTree(a, (View) terms.getParent()); } catch (Throwable ignore) {}
+                        }
+                        if (editBlocked) return true;
+                    }
+                    // до штатного нажатия: строка состояния — в поле условий (штатный код его прочтёт); нажатие не трогаем
+                    if (e.getActionMasked() == android.view.MotionEvent.ACTION_DOWN && v.isEnabled()) {
+                        condPut(terms, k);
+                        try { IvaKindPatch.onSaveTouch(a, k); } catch (Throwable ignore) {}   // 10.79: вид — после штатного успеха
+                    }
+                    return false;
+                }
+            });
+            terms.setOnFocusChangeListener(new View.OnFocusChangeListener() {
+                @Override public void onFocusChange(View v, boolean has) {
+                    if (has && (save == null || save.isEnabled())) { condTake(terms, k); condPaint(a, terms, k); }
+                }
+            });
+        }
+        condTake(terms, k);
+        condPaint(a, terms, k);
+    }
+
+    static void condPut(android.widget.EditText terms, int k) {
+        try {
+            String t = condApply(String.valueOf(terms.getText()), condSel[k]);
+            terms.setText(t);
+            condSeen[k] = t;
+        } catch (Throwable ignore) {}
+    }
+
+    /** Строка состояния в поле (открыли правку / не опубликовалось) → выбрать кнопку и убрать строку из поля. */
+    static void condTake(android.widget.EditText terms, int k) {
+        String t = String.valueOf(terms.getText());
+        int i = condIndex(t);
+        if (i >= 0) {
+            condSel[k] = i;
+            String s = condStrip(t);
+            if (!s.equals(t)) { terms.setText(s); try { terms.setSelection(s.length()); } catch (Throwable ignore) {} }
+            t = s;
+        } else if (k == 1 && !t.equals(condSeen[k])) {
+            condSel[k] = COND_DEFAULT;                                // открыли другой инструмент без состояния
+        }
+        condSeen[k] = t;
+    }
+
+    static View condBuild(final Activity a, final String tag, final int k) {
+        LinearLayout box = new LinearLayout(a);
+        box.setTag(tag);
+        box.setOrientation(LinearLayout.VERTICAL);
+        TextView l = new TextView(a);
+        l.setText(COND_LABEL);
+        l.setTextColor(color(a, "gray", 0xff9aa1b0));
+        l.setTextSize(13f);
+        box.addView(l, new LinearLayout.LayoutParams(-2, -2));
+        LinearLayout pills = new LinearLayout(a);
+        pills.setOrientation(LinearLayout.HORIZONTAL);
+        for (int i = 0; i < COND_TITLES.length; i++) {
+            final int idx = i;
+            TextView b = new TextView(a);
+            b.setTag(tag + ":" + i);
+            b.setText(COND_TITLES[i]);
+            b.setTextSize(14f);
+            b.setGravity(Gravity.CENTER);
+            b.setSingleLine(true);
+            b.setClickable(true);
+            b.setOnClickListener(new View.OnClickListener() {
+                @Override public void onClick(View v) {
+                    condSel[k] = idx;
+                    View root = v.getRootView();
+                    View r = root == null ? null : root.findViewWithTag(tag);
+                    if (r != null) condPaintRow(a, r, tag, k);
+                }
+            });
+            LinearLayout.LayoutParams bl = new LinearLayout.LayoutParams(0, dp(a, 44), 1f);
+            bl.leftMargin = i == 0 ? 0 : dp(a, 4);
+            bl.rightMargin = i == COND_TITLES.length - 1 ? 0 : dp(a, 4);
+            pills.addView(b, bl);
+        }
+        LinearLayout.LayoutParams pl = new LinearLayout.LayoutParams(-1, -2);
+        pl.topMargin = dp(a, 6);
+        box.addView(pills, pl);
+        return box;
+    }
+
+    static void condPaint(Activity a, View terms, int k) {
+        View form = (View) terms.getParent();
+        String tag = COND_ROW_TAG + ":" + (k == 0 ? "atTerms" : "teTerms");
+        View r = form == null ? null : form.findViewWithTag(tag);
+        if (r != null) condPaintRow(a, r, tag, k);
+    }
+
+    /** Выбранное — «рамкой» (bg_btn_orange, оранжевый жирный; 10.96), остальные — как поля формы (bg_field). */
+    static void condPaintRow(Activity a, View row, String tag, int k) {
+        for (int i = 0; i < COND_TITLES.length; i++) {
+            View v = row.findViewWithTag(tag + ":" + i);
+            if (!(v instanceof TextView)) continue;
+            TextView b = (TextView) v;
+            boolean on = i == condSel[k];
+            android.graphics.drawable.Drawable bg = drawable(a, on ? "bg_btn_orange" : "bg_field");
+            if (bg != null) b.setBackground(bg);
+            else if (on) b.setBackground(accentBg(a, color(a, "orange", OUTLINE_ACCENT), 14));
+            else b.setBackgroundColor(color(a, "card", 0xff1a1d24));
+            b.setTextColor(on ? color(a, "orange", OUTLINE_ACCENT) : color(a, "text", 0xfff2f4f8));
+            b.setTypeface(null, on ? android.graphics.Typeface.BOLD : android.graphics.Typeface.NORMAL);
+        }
+    }
+
+    // ───────────── 10.67: выбранная подкатегория — белым (просьба владельца 14.10.2026) ─────────────
+    // Поля «Категория» / «Подкатегория» — TextView с серым (gray2) текстом-подсказкой. Штатно после выбора белым
+    // становится не всё: в правке инструмента подкатегория остаётся серой (pickTeSub цвет не меняет), а в «Добавить
+    // инструмент» после смены категории подсказка «Подкатегория (необязательно)» остаётся белой, будто выбрана.
+    // Правило одно: выбрано значение (штатное поле-ключ не пустое) — цвет text, нет — gray2. Ключ штатный код пишет
+    // до setText, поэтому цвет считаем при каждой смене текста (и ещё раз следующим кадром — на случай другого порядка).
+    static final String[][] PICK_FIELDS = {
+        {"atCat", "atCatKey"}, {"atSub", "atSubKey"},            // «Добавить инструмент»
+        {"teCat", "editToolCat"}, {"teSub", "editToolSub"},      // правка инструмента
+    };
+    static final java.util.Map<View, Boolean> pickHooked = new java.util.WeakHashMap<View, Boolean>();
+
+    /** Выбрано ли значение: штатный ключ (категории / подкатегории) не пустой. */
+    static boolean pickChosen(Object key) {
+        if (!(key instanceof String)) return false;
+        String k = ((String) key).trim();
+        return !k.isEmpty() && !"null".equals(k);
+    }
+
+    static void pickColors(final Activity a) {
+        for (final String[] f : PICK_FIELDS) {
+            try {
+                Object o = get(a, f[0]);
+                if (!(o instanceof TextView)) continue;
+                final TextView tv = (TextView) o;
+                final Runnable paint = new Runnable() {
+                    @Override public void run() {
+                        try {
+                            boolean on = pickChosen(get(a, f[1]));
+                            tv.setTextColor(on ? navColor(a, "text", 0xfff2f4f8) : navColor(a, "gray2", 0xff6b7080));
+                        } catch (Throwable ignore) {}
+                    }
+                };
+                paint.run();
+                if (pickHooked.containsKey(tv)) continue;
+                pickHooked.put(tv, Boolean.TRUE);
+                tv.addTextChangedListener(new android.text.TextWatcher() {
+                    @Override public void beforeTextChanged(CharSequence s, int st, int c, int n) {}
+                    @Override public void onTextChanged(CharSequence s, int st, int b, int c) {}
+                    @Override public void afterTextChanged(android.text.Editable s) { paint.run(); tv.post(paint); }
+                });
+            } catch (Throwable ignore) {}
+        }
     }
 }

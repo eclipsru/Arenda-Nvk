@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex, nofollow">
+<title>Ива — проба стиля плиток категорий</title>
+<meta name="theme-color" content="#101217">
+<link rel="icon" href="assets/favicon-32.png" type="image/png" sizes="32x32">
+<link rel="icon" href="assets/icon-192.png" type="image/png" sizes="192x192">
+<link rel="apple-touch-icon" href="assets/apple-touch-icon.png">
+<link rel="stylesheet" href="assets/theme.css?v=20261024-live">
+<style>
+  /* Только для этой страницы-превью: рамки «компьютер» и «телефон» */
+  .pv{max-width:1100px;margin:0 auto;padding:24px 16px 60px}
+  .pv h1{font-size:22px;font-weight:800;margin-bottom:6px}
+  .pv p.note{color:var(--gr);font-size:14px;margin-bottom:22px;line-height:1.45}
+  .pv h3{font-size:15px;color:var(--gr);font-weight:600;margin:26px 0 12px}
+  @media (min-width:700px){ .pv .desk .cats{grid-template-columns:repeat(4,minmax(0,1fr))} }
+  .pv .phone{width:390px;max-width:100%;border:1px solid var(--line);border-radius:22px;padding:14px;background:var(--bg)}
+  .pv .phone .cats{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+  .pv .phone .cat.photo .tag{top:8px;right:8px;max-width:calc(100% - 16px);padding:5px 10px;font-size:12px}
+  .pv .phone .cat:not(.photo):not(.pop){min-height:92px;padding:13px 12px}
+  .pv .phone .cats.pop{padding-top:30px;row-gap:36px}
+  .pv .phone .cat.pop{min-height:108px}
+  .pv .phone .cat.pop img{left:4px;height:128%}
+  .pv .phone .cat.pop b{right:12px;bottom:11px;max-width:50%}
+  .pv h2{font-size:18px;font-weight:800;margin:34px 0 4px;color:var(--or)}
+  .pv .phone .cat .ico{width:28px;height:28px}
+  .pv .phone .cat b{font-size:13px}
+</style>
+</head>
+<body>
+<main class="pv">
+  <h1>Проба стиля плиток категорий</h1>
+  <p class="note">На сайт пока ничего не подключено. Ниже два варианта плитки «Уборка и мойка», рядом — нынешние плитки сайта.</p>
+
+  <h2>Вариант 2 — предмет без фона на обычной плитке</h2>
+  <p class="note">Мойка вырезана, стоит слева и чуть выходит вверх за плитку; название белое, как на обычной плитке, — справа внизу.</p>
+  <h3>Компьютер</h3>
+  <div class="desk"><div class="cats pop">
+    <button type="button" class="cat pop" data-cat="cleaning">
+      <img src="assets/cat/cleaning-cut.webp" alt="" width="442" height="624">
+      <b>Уборка и мойка</b>
+    </button>
+    <button type="button" class="cat"><span class="ico"><svg viewBox="0 0 24 24"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg></span><b>Электроинструмент</b><span>12 объявлений</span></button>
+    <button type="button" class="cat"><span class="ico"><svg viewBox="0 0 24 24"><path d="M3 21h18"/><path d="M5 21V7l8-4v18"/><path d="M19 21V11l-6-4"/><path d="M9 9v.01M9 12v.01M9 15v.01M9 18v.01"/></svg></span><b>Стройоборудование</b><span>5 объявлений</span></button>
+    <button type="button" class="cat"><span class="ico"><svg viewBox="0 0 24 24"><path d="M12 22v-7"/><path d="M9 15a5 5 0 0 1-5-5c0-2 1-4 3-5 1 3 3 4 5 4s4-1 5-4c2 1 3 3 3 5a5 5 0 0 1-5 5z"/></svg></span><b>Садовый инструмент</b><span>3 объявления</span></button>
+  </div></div>
+  <h3>Телефон (2 плитки в ряд)</h3>
+  <div class="phone"><div class="cats pop">
+    <button type="button" class="cat pop" data-cat="cleaning">
+      <img src="assets/cat/cleaning-cut.webp" alt="" width="442" height="624">
+      <b>Уборка и мойка</b>
+    </button>
+    <button type="button" class="cat"><span class="ico"><svg viewBox="0 0 24 24"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg></span><b>Электроинструмент</b><span>12 объявлений</span></button>
+  </div></div>
+
+  <h2>Вариант 1 — фото во всю плитку</h2>
+  <p class="note">Плитка «Уборка и мойка» — фото во всю плитку, название в правом верхнем углу в тёмном однотонном пузыре
+    с оранжевой рамкой и оранжевым текстом.</p>
+
+  <h3>Компьютер</h3>
+  <div class="desk"><div class="cats">
+    <button type="button" class="cat photo" data-cat="cleaning">
+      <img src="assets/cat/cleaning.jpg" alt="Мойка высокого давления в гараже" loading="lazy" width="640" height="477">
+      <b class="tag">Уборка и мойка</b>
+    </button>
+    <button type="button" class="cat"><span class="ico"><svg viewBox="0 0 24 24"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg></span><b>Электроинструмент</b><span>12 объявлений</span></button>
+    <button type="button" class="cat"><span class="ico"><svg viewBox="0 0 24 24"><path d="M3 21h18"/><path d="M5 21V7l8-4v18"/><path d="M19 21V11l-6-4"/><path d="M9 9v.01M9 12v.01M9 15v.01M9 18v.01"/></svg></span><b>Стройоборудование</b><span>5 объявлений</span></button>
+    <button type="button" class="cat"><span class="ico"><svg viewBox="0 0 24 24"><path d="M12 22v-7"/><path d="M9 15a5 5 0 0 1-5-5c0-2 1-4 3-5 1 3 3 4 5 4s4-1 5-4c2 1 3 3 3 5a5 5 0 0 1-5 5z"/></svg></span><b>Садовый инструмент</b><span>3 объявления</span></button>
+  </div></div>
+
+  <h3>Телефон (2 плитки в ряд)</h3>
+  <div class="phone"><div class="cats">
+    <button type="button" class="cat photo" data-cat="cleaning">
+      <img src="assets/cat/cleaning.jpg" alt="Мойка высокого давления в гараже" loading="lazy" width="640" height="477">
+      <b class="tag">Уборка и мойка</b>
+    </button>
+    <button type="button" class="cat"><span class="ico"><svg viewBox="0 0 24 24"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg></span><b>Электроинструмент</b><span>12 объявлений</span></button>
+  </div></div>
+</main>
+</body>
+</html>
