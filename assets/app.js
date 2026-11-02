@@ -748,6 +748,8 @@ async function confirmAppRelease(feed, btn, msg, onReleased){
 /* Баннер сверху: у ВСЕХ на телефоне, 10 секунд, ссылка на выпущенную версию. */
 function mountAppTopBanner(container){
   if (!isMobileDevice() || isInsideNativeApp()) return;
+  // app.html — сама страница приложения с большой кнопкой «Установить»: второй баннер не нужен
+  if (document.body && document.body.hasAttribute('data-no-app-banner')) return;
   if (document.getElementById('appTopBanner')) return;
   try { if (sessionStorage.getItem('prokat_app_banner_closed')) return; } catch(e){}
   ivaReleased().then(function(rel){ showAppTopBanner(container, rel); });
