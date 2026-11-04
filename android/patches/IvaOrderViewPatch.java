@@ -788,6 +788,7 @@ public class IvaOrderViewPatch {
                 TextView t = tx(a, "Пункт выдачи: " + pt, 12f, cGray, false);
                 t.setPadding(0, dp(a, 8), 0, 0);
                 c.addView(t);
+                try { IvaGeoPatch.addOrder(a, c, p); } catch (Throwable ignore) {}   // 10.132: «Показать на карте»
             }
         }
         String gm = o.optString("get_method", "").trim();
@@ -847,6 +848,7 @@ public class IvaOrderViewPatch {
             if (Double.isNaN(s[0])) sumOk = false; else sum += s[0];
             dep += s[1];
             field(a, card, "Пункт выдачи", pointText(p, true), false);
+            try { IvaGeoPatch.addOrder(a, card, p); } catch (Throwable ignore) {}   // 10.132: «Показать на карте»
             JSONObject pt = p.optJSONObject("point");
             String tel = pt == null ? p.optString("prokat_tel", "") : pt.optString("tel", "");
             if (!adm) field(a, card, "Телефон", "null".equals(tel) ? "" : tel, true);
@@ -932,6 +934,7 @@ public class IvaOrderViewPatch {
             TextView t = tx(a, "Пункт выдачи: " + pt, 12f, col(a, "gray", 0xff9aa1b0), false);
             t.setPadding(0, dp(a, 8), 0, 0);
             box.addView(t);
+            try { IvaGeoPatch.addOrder(a, box, p); } catch (Throwable ignore) {}   // 10.132: «Показать на карте»
         }
         try { TextView pl = IvaOrderEditPatch.pendingLine(a, p); if (pl != null) box.addView(pl); } catch (Throwable ignore) {}   // 10.122
         date.setVisibility(View.GONE);                                  // штатные строки не переносим — прячем, наши — вместо них

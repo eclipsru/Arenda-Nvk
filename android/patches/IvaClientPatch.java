@@ -1706,6 +1706,7 @@ public final class IvaClientPatch {
                         try { toHub = detailFromHub && IvaLogoPatch.target(a) == IvaLogoPatch.CLIENT_HUB; } catch (Throwable ignore) {}
                         detailFromHub = false;
                         if (toHub && openClientHub(a)) return;
+                        try { if (IvaStaffToolsPatch.detailBack(a)) return; } catch (Throwable ignore) {}   // 10.130: со страницы «Инструменты пункта»
                         callNativeTab(a, "home");   // как штатная кнопка: на главную
                     }
                 });

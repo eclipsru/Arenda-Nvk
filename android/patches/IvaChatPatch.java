@@ -684,6 +684,9 @@ final class IvaChatPatch {
     static final LinkedHashMap<String, String[]> admins = new LinkedHashMap<String, String[]>(); // почта → {имя, аватар, active}
     static long adminsAt = 0;
     static final Map<String, String> clientNames = Collections.synchronizedMap(new HashMap<String, String>());
+    static final Map<String, String> peerNames = Collections.synchronizedMap(new HashMap<String, String>());   // 10.130: имя из профиля клиента
+    static long peerNamesAt = 0;
+    static boolean peerNamesMissing = false;
     static long ordersAt = 0;
     static final Map<String, String> peerPaths = Collections.synchronizedMap(new HashMap<String, String>());
     static final Map<String, Bitmap> peerBitmaps = Collections.synchronizedMap(new HashMap<String, Bitmap>());
@@ -1412,6 +1415,17 @@ final class IvaChatPatch {
                 } catch (Throwable ignore) {}
                 ordersAt = now;
             }
+            if (!peerNamesMissing && now - peerNamesAt > CACHE_MS) {     // 10.130: имена клиентов (SQL 20261121; нет — почтой, как раньше)
+                peerNamesAt = now;
+                try {
+                    String[] r = IvaClientPatch.apiCall(a, "/rest/v1/rpc/iva_chat_peer_names", "POST", "{}", true);
+                    if (r != null && "404".equals(r[0])) peerNamesMissing = true;
+                    else if (ok(r) && r.length > 1 && r[1] != null && r[1].trim().startsWith("[")) {
+                        Map<String, String> got = parsePeerNames(new JSONArray(r[1].trim()));
+                        synchronized (peerNames) { peerNames.clear(); peerNames.putAll(got); }
+                    }
+                } catch (Throwable ignore) {}
+            }
             if (!peersMissing && now - peersAt > CACHE_MS) {
                 peersAt = now;
                 try {
@@ -1518,6 +1532,8 @@ final class IvaChatPatch {
         setBg(a, card, "bg_card");
         card.setPadding(dp(a, 10), dp(a, 10), dp(a, 12), dp(a, 10));
         String small, title;
+        boolean headCli = false;
+        View headTool = null;
         String myH = low(str(IvaClientPatch.get(a, "userEmail")));
         if (isLend(openTool)) {                          // 10.72: «Хочу сдавать» — у владельца смайлик, у клиента аватарка владельца
             card.addView(lendSmile(myH, openTool) ? smiley(a) : avatar(a, openPartner, partnerTitle(openPartner), HEAD_TOOL_DP),
@@ -1526,7 +1542,12 @@ final class IvaChatPatch {
             title = partnerTitle(openPartner);
         } else if (!openTool.isEmpty()) {
             JSONObject t = toolCache.get(openTool);
-            card.addView(toolPic(a, t, openTool, HEAD_TOOL_DP), new LinearLayout.LayoutParams(dp(a, HEAD_TOOL_DP), dp(a, HEAD_TOOL_DP)));
+            headCli = !isAdmin(a);                       // 10.130: у клиента слева — аватарка проката, инструмент — справа
+            if (headCli) {
+                card.addView(prokatAvatar(a, openPartner, partnerTitle(openPartner), openTool, t, HEAD_TOOL_DP),
+                    new LinearLayout.LayoutParams(dp(a, HEAD_TOOL_DP), dp(a, HEAD_TOOL_DP)));
+                if (rightTool(openTool, true)) headTool = toolPic(a, t, openTool, HEAD_TOOL_DP);
+            } else card.addView(toolPic(a, t, openTool, HEAD_TOOL_DP), new LinearLayout.LayoutParams(dp(a, HEAD_TOOL_DP), dp(a, HEAD_TOOL_DP)));
             boolean pt = isPoint(openTool);
             small = (pt ? "Чат с пунктом выдачи · " : "Чат по инструменту · ") + partnerTitle(openPartner);
             title = t == null ? (pt ? IvaProkatPatch.chatTitle("") : "Инструмент") : clean(t.optString("name", "Инструмент"));
@@ -1550,6 +1571,10 @@ final class IvaChatPatch {
             LinearLayout.LayoutParams bl = new LinearLayout.LayoutParams(-2, dp(a, 26));
             bl.leftMargin = dp(a, 10);
             card.addView(adminBadge(a), bl);
+        } else if (headTool != null) {
+            LinearLayout.LayoutParams pl = new LinearLayout.LayoutParams(dp(a, HEAD_TOOL_DP), dp(a, HEAD_TOOL_DP));
+            pl.leftMargin = dp(a, 10);
+            card.addView(headTool, pl);
         }
         header.addView(card, new LinearLayout.LayoutParams(-1, -2));
         TextView back = text(a, BACK_TITLE, 15, "orange", true);
@@ -1562,6 +1587,19 @@ final class IvaChatPatch {
         header.addView(back, new LinearLayout.LayoutParams(-2, -2));
     }
 
+    /** 10.130: [{"email","name"}] → почта (нижний регистр) → имя; пустые пропускаются. */
+    static Map<String, String> parsePeerNames(JSONArray arr) {
+        HashMap<String, String> out = new HashMap<String, String>();
+        if (arr == null) return out;
+        for (int i = 0; i < arr.length(); i++) {
+            JSONObject o = arr.optJSONObject(i);
+            if (o == null) continue;
+            String e = low(o.optString("email", "")), n = clean(o.optString("name", ""));
+            if (!e.isEmpty() && !n.isEmpty() && n.indexOf('@') < 0) out.put(e, n);
+        }
+        return out;
+    }
+
     static String partnerTitle(String email) {
         String e = low(email);
         String[] ad;
@@ -1569,6 +1607,8 @@ final class IvaChatPatch {
         if (ad != null) return ad[0];
         if (OWNER.equals(e)) return "Владелец";
         String n;
+        synchronized (peerNames) { n = peerNames.get(e); }          // 10.130: имя из профиля клиента
+        if (n != null && !n.isEmpty()) return n;
         synchronized (clientNames) { n = clientNames.get(e); }
         if (n != null && !n.isEmpty()) return n;
         return clean(email).isEmpty() ? "Прокат" : clean(email);
@@ -2465,6 +2505,7 @@ final class IvaChatPatch {
     }
 
     static void renderList(final Activity a, String my) {
+        try { IvaArrowPatch.recount(a, false); } catch (Throwable ignore) {}   // 10.131: прочитали — стрелка гаснет
         boolean adm = isAdmin(a);
         body.addView(sectionTitle(a, adm ? "Переписки" : "Чаты"));
         if (!ready(my)) {
@@ -2522,14 +2563,16 @@ final class IvaChatPatch {
     static View chatRow(final Activity a, final Chat c, String my, TimeZone tz) {
         LinearLayout row = rowBase(a);
         String title = partnerTitle(c.partner);
-        row.addView(avatar(a, c.partner, title, LIST_AVATAR_DP), new LinearLayout.LayoutParams(dp(a, LIST_AVATAR_DP), dp(a, LIST_AVATAR_DP)));
+        JSONObject tool = c.tool.isEmpty() || isLend(c.tool) ? null : toolCache.get(c.tool);
+        boolean cli = !isAdmin(a);                       // 10.130: у клиента слева — аватарка проката, справа — только инструмент
+        row.addView(cli ? prokatAvatar(a, c.partner, title, c.tool, tool, LIST_AVATAR_DP) : avatar(a, c.partner, title, LIST_AVATAR_DP),
+            new LinearLayout.LayoutParams(dp(a, LIST_AVATAR_DP), dp(a, LIST_AVATAR_DP)));
         LinearLayout col = new LinearLayout(a);
         col.setOrientation(LinearLayout.VERTICAL);
         TextView n = text(a, title, 15, "text", true);
         n.setSingleLine(true); n.setEllipsize(TextUtils.TruncateAt.END);
         col.addView(n);
         String sub;
-        JSONObject tool = c.tool.isEmpty() || isLend(c.tool) ? null : toolCache.get(c.tool);
         sub = supportChat(my, c.partner, adminEmails(), c.tool) ? SUPPORT_SUB : chatSub(c.tool, tool == null ? "" : tool.optString("name", ""));
         TextView tl = text(a, sub, 12, "orange", false);
         tl.setSingleLine(true); tl.setEllipsize(TextUtils.TruncateAt.END);
@@ -2569,7 +2612,7 @@ final class IvaChatPatch {
             LinearLayout.LayoutParams pl = new LinearLayout.LayoutParams(-2, dp(a, 26));
             pl.leftMargin = dp(a, 10);
             row.addView(adminBadge(a), pl);
-        } else if (!c.tool.isEmpty() && !isLend(c.tool)) {
+        } else if (rightTool(c.tool, cli)) {
             LinearLayout.LayoutParams pl = new LinearLayout.LayoutParams(dp(a, LIST_TOOL_DP), dp(a, LIST_TOOL_DP));
             pl.leftMargin = dp(a, 10);
             row.addView(toolPic(a, tool, c.tool, LIST_TOOL_DP), pl);
@@ -2668,6 +2711,32 @@ final class IvaChatPatch {
         t.setPadding(dp(a, 12), dp(a, 18), dp(a, 12), dp(a, 18));
         t.setLayoutParams(new LinearLayout.LayoutParams(-1, -2));
         return t;
+    }
+
+    /** 10.130: справа в строке / шапке — фото инструмента; у клиента — только у переписки об инструменте
+     *  (чат пункта и общий чат проката — без картинки). */
+    static boolean rightTool(String tool, boolean client) {
+        String t = clean(tool);
+        if (t.isEmpty() || isLend(t)) return false;
+        return !client || !isPoint(t);
+    }
+
+    /** 10.130: у клиента слева — аватарка проката (фото из «Мои данные»); у переписки пункта без него — аватарка
+     *  проката из страницы проката; фото нет — буква, как раньше. */
+    static View prokatAvatar(Activity a, String email, String name, String tool, JSONObject toolObj, int sizeDp) {
+        View v = avatar(a, email, name, sizeDp);
+        try {
+            String[] ad;
+            synchronized (admins) { ad = admins.get(low(email)); }
+            boolean has = ad != null && !ad[1].isEmpty();
+            String img = isPoint(tool) ? toolImg(toolObj) : "";
+            if (!has && !img.isEmpty() && v instanceof FrameLayout) {
+                ImageView iv = (ImageView) ((FrameLayout) v).getChildAt(1);
+                iv.setVisibility(View.VISIBLE);
+                loadPhoto(a, iv, img, "prk" + Integer.toHexString(img.hashCode()));
+            }
+        } catch (Throwable ignore) {}
+        return v;
     }
 
     /** Круглая аватарка: фото администратора / клиента, иначе буква на штатном bg_avatar. */

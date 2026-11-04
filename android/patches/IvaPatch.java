@@ -401,6 +401,7 @@ public final class IvaPatch {
         try { IvaClientPatch.authStart(a); } catch (Throwable ignore) {}   // 10.69: ключ обновляется заранее
         try { IvaClientPatch.authEmailFix(a); } catch (Throwable ignore) {}   // 10.119: почта — из ключа
         try { IvaCensorPatch.guardStock(a); } catch (Throwable ignore) {}   // 24.10.2026: мат — имя при регистрации, «Мои данные»
+        try { IvaLogoPatch.header(a); } catch (Throwable ignore) {}   // 10.130: надпись v15 в шапке вместо текста
         reloadProfile(a);
     }
 
@@ -448,6 +449,8 @@ public final class IvaPatch {
         try { IvaToolEditPatch.onTab(a, tab); } catch (Throwable ignore) {}     // 10.122: правка целиком, подписи полей, удаление сотрудником
         try { IvaMyToolsPatch.onTab(a, tab); } catch (Throwable ignore) {}      // 10.122: вернулись в кабинет — список заново
         try { IvaOrderEditPatch.onTab(a, tab); } catch (Throwable ignore) {}    // 10.122: «Вы в итоге взяли инструмент?» после отмены
+        try { IvaArrowPatch.onTab(a); } catch (Throwable ignore) {}             // 10.131: «Стрелка оповещений»
+        try { IvaGeoPatch.onTab(a); } catch (Throwable ignore) {}               // 10.132: «≈ 2,4 км» на карточках ленты (если включено)
         try {
             String t = tab == null ? "" : tab;
             int orange = navColor(a, "orange", 0xffff9800);

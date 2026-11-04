@@ -2616,6 +2616,10 @@ public class IvaPatchTest {
         v125();                                                       // 10.125: телефон пункта в карточке, другой пункт проката
         j128();                                                       // 10.128: «Выдал / Принял» на карточках владельца
         st129();                                                      // 10.129: «Удаляет инструмент» не теряется в карточке сотрудника
+        st130();                                                      // 10.130: «Мой пункт» плитками, чат пункта, шапка
+        st131();                                                      // 10.131: «Стрелка оповещений»
+        st132();                                                      // 10.132: карта, расстояние, стрелки сразу
+        st133();                                                      // 10.133: оплата комиссии через ЮKassa
         if (fail > 0) { System.out.println("ошибок: " + fail); System.exit(1); }
         System.out.println("все проверки IvaPatch пройдены");
     }
@@ -3611,6 +3615,174 @@ public class IvaPatchTest {
 
     /** 10.128: «Выдал / Принял» на карточках заявок владельца (SQL 20261118, iva_parts_journal). */
     /** 10.129: карточка сотрудника у владельца — право «Удаляет инструмент» не теряется, понятные подписи. */
+    static void st130() {
+        String pt = IvaProkatPatch.key("11111111-2222-3333-4444-555555555555");
+        String tool = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee";
+        eq("чат 10.130: у клиента справа — инструмент", IvaChatPatch.rightTool(tool, true), true);
+        eq("чат 10.130: у клиента чат пункта — справа ничего", IvaChatPatch.rightTool(pt, true), false);
+        eq("чат 10.130: у клиента общий чат проката — справа ничего", IvaChatPatch.rightTool("", true), false);
+        eq("чат 10.130: «Хочу сдавать» — справа ничего", IvaChatPatch.rightTool(IvaChatPatch.LEND, true), false);
+        eq("чат 10.130: у админа чат пункта — как раньше", IvaChatPatch.rightTool(pt, false), true);
+        eq("инструменты пункта 10.130: со страницы — «Назад» с карточки и правки на неё",
+            IvaStaffToolsPatch.pageBack(true, "detail") + "" + IvaStaffToolsPatch.pageBack(true, "tooledit") + IvaStaffToolsPatch.pageBack(true, "home")
+            + IvaStaffToolsPatch.pageBack(false, "detail"), "truetruefalsefalse");
+        eq("заявки 10.130: заявки пункта во вкладке — только вид «как у админов» и право",
+            IvaStaffOrdersPatch.tabMode(true, true) + "" + IvaStaffOrdersPatch.tabMode(false, true) + IvaStaffOrdersPatch.tabMode(true, false), "truefalsefalse");
+        eq("шапка 10.130: оранжевый — в цвет проката, прозрачность та же", Integer.toHexString(IvaLogoPatch.recolor(0x80ff8f1f, 0xffffea00)), "80ffea00");
+        eq("шапка 10.130: белый и прозрачный не меняются",
+            Integer.toHexString(IvaLogoPatch.recolor(0xfff2f4f8, 0xffffea00)) + " " + IvaLogoPatch.recolor(0, 0xffffea00), "fff2f4f8 0");
+        eq("шапка 10.130: надпись — PNG", IvaLogoPatch.HEADER_PNG.startsWith("iVBORw0KGgo") && IvaLogoPatch.HEADER_PNG.length() > 5000, true);
+        eq("чат пункта 10.130: голосовое — в проигрыватель «Чата» (ключ — id, ссылка, длительность)", chatMsgStr(), "m1|https://x/v.m4a|12");
+        eq("мой пункт 10.130: плитка архива — общий заголовок", IvaOrderPatch.ARCH_TITLE, "Архив заявок");
+    }
+
+    static void st131() {
+        eq("стрелка 10.131: число — 0 без стрелки, больше 99 — «99+»",
+            IvaArrowPatch.label(0) + "|" + IvaArrowPatch.label(-2) + "|" + IvaArrowPatch.label(7) + "|" + IvaArrowPatch.label(120), "||7|99+");
+        eq("стрелка 10.131: 4 цвета — кислотно-зелёная, оранжевая, жёлтая, красная",
+            String.join(",", IvaArrowPatch.NAMES) + " " + Integer.toHexString(IvaArrowPatch.colorAt(0)) + " " + Integer.toHexString(IvaArrowPatch.colorAt(1))
+            + " " + Integer.toHexString(IvaArrowPatch.colorAt(2)) + " " + Integer.toHexString(IvaArrowPatch.colorAt(3)),
+            "Кислотно-зелёная,Оранжевая,Жёлтая,Красная ffa6ff00 ffff8f1f ffffea00 ffff3b30");
+        eq("стрелка 10.131: неизвестный цвет — оранжевая", Integer.toHexString(IvaArrowPatch.colorAt(9)) + " " + IvaArrowPatch.colorName(-1), "ffff8f1f Оранжевая");
+        int[] c = {2, 3, 4, 5};   // сообщения, заявки владельца, чат пункта, заявки пункта
+        eq("стрелка 10.131: клиенту — нигде",
+            IvaArrowPatch.forNav("chat", false, false, false, c) + IvaArrowPatch.forNav("orders", false, false, true, c) + IvaArrowPatch.forNav("profile", false, false, false, c), 0);
+        eq("стрелка 10.131: владельцу — «Чат» и «Заявки», кабинет без стрелки",
+            IvaArrowPatch.forNav("chat", true, false, false, c) + "," + IvaArrowPatch.forNav("orders", true, false, false, c) + "," + IvaArrowPatch.forNav("profile", true, false, false, c), "2,3,0");
+        eq("стрелка 10.131: сотруднику — «Чат», «Кабинет» (пункт), «Заявки» только в виде с логотипом",
+            IvaArrowPatch.forNav("chat", false, true, false, c) + "," + IvaArrowPatch.forNav("profile", false, true, false, c) + ","
+            + IvaArrowPatch.forNav("orders", false, true, false, c) + "," + IvaArrowPatch.forNav("orders", false, true, true, c), "2,9,0,5");
+        eq("стрелка 10.131: «Мой пункт» и плитки",
+            IvaArrowPatch.forKind(IvaArrowPatch.S_MINE, c) + "," + IvaArrowPatch.forKind(IvaArrowPatch.S_ORD, c) + "," + IvaArrowPatch.forKind(IvaArrowPatch.S_CHAT, c) + "," + IvaArrowPatch.forKind(99, c), "9,5,4,0");
+        eq("стрелка 10.131: строка в «Настройках»", IvaArrowPatch.summary(true, 0) + " / " + IvaArrowPatch.summary(false, 2), "Включена · Кислотно-зелёная / Выключена");
+        eq("стрелка 10.131: справа от значка, но внутри раздела",
+            IvaArrowPatch.placeLeft(40, 2, 20, 100, 2) + "," + IvaArrowPatch.placeLeft(90, 2, 20, 100, 2) + "," + IvaArrowPatch.placeLeft(0, 0, 200, 100, 2), "42,78,0");
+        eq("стрелка 10.131: заголовок пункта настроек", IvaArrowPatch.TITLE, "Стрелка оповещений");
+    }
+
+    @SuppressWarnings("unchecked")
+    static void st133() {
+        eq("ЮKassa 10.133: сумма — «1 500,50», копейки, пробелы",
+            IvaPayPatch.amount("1 500,50") + "|" + IvaPayPatch.amount("1500") + "|" + IvaPayPatch.amount(" 7.5 ") + "|" + IvaPayPatch.amount("100000"),
+            "1500.5|1500.0|7.5|100000.0");
+        eq("ЮKassa 10.133: сумма вне 1–100 000, три знака, буквы, пусто — нельзя",
+            IvaPayPatch.amount("0.99") + "|" + IvaPayPatch.amount("100000.01") + "|" + IvaPayPatch.amount("10.555") + "|" + IvaPayPatch.amount("10р")
+            + "|" + IvaPayPatch.amount("") + "|" + IvaPayPatch.amount(null) + "|" + IvaPayPatch.amount("-5"),
+            "null|null|null|null|null|null|null");
+        eq("ЮKassa 10.133: сумма в поле — без лишних копеек",
+            IvaPayPatch.amountText(1500) + "|" + IvaPayPatch.amountText(1500.5) + "|" + IvaPayPatch.amountText(0.07) + "|" + IvaPayPatch.amountText(99.999),
+            "1500|1500.50|0.07|100");
+        eq("ЮKassa 10.133: весь долг по карточке комиссии (до копейки вверх); переплата и нет данных — 0",
+            IvaPayPatch.debtOf("1500.0|200.0|1.0|1") + "|" + IvaPayPatch.debtOf("10.123|0|1|1") + "|" + IvaPayPatch.debtOf("100|150|1|1")
+            + "|" + IvaPayPatch.debtOf("") + "|" + IvaPayPatch.debtOf("мусор"),
+            "1300.0|10.13|0.0|0.0|0.0");
+        eq("ЮKassa 10.133: запросы к серверу — только сумма или номер, без почты",
+            IvaPayPatch.newBody(1500.5) + " " + IvaPayPatch.checkBody(42), "{\"a\":\"new\",\"amount\":\"1500.50\"} {\"a\":\"check\",\"id\":42}");
+        eq("ЮKassa 10.133: «подключено ли» — ready / test / нет / не JSON",
+            IvaPayPatch.readyOf("{\"ok\":true,\"ready\":true,\"test\":false}") + "," + IvaPayPatch.readyOf("{\"ready\":true,\"test\":true}")
+            + "," + IvaPayPatch.readyOf("{\"ok\":true,\"ready\":false}") + "," + IvaPayPatch.readyOf("<html>") + "," + IvaPayPatch.readyOf(null), "1,3,2,2,2");
+        eq("ЮKassa 10.133: ошибки сервера — понятный текст",
+            IvaPayPatch.errText("too_many", "") + " | " + IvaPayPatch.errText("yookassa", "Магазин не активирован") + " | " + IvaPayPatch.errText("", ""),
+            "Слишком много попыток подряд — подождите 10 минут | ЮKassa не приняла платёж: Магазин не активирован | Не получилось — проверьте интернет и попробуйте ещё раз");
+        eq("ЮKassa 10.133: «не подключено» — оплатить переводом, как раньше",
+            IvaPayPatch.errText("not_ready", null), "Онлайн-оплата пока не подключена — оплатите переводом, как раньше");
+        eq("ЮKassa 10.133: ответ сервера — url и номер; не JSON — пусто",
+            IvaPayPatch.jstr("{\"id\":17,\"url\":\"https://yoomoney.ru/checkout/payments/v2/contract?orderId=2f\"}", "url") + "|"
+            + IvaPayPatch.jstr("{\"id\":17}", "id") + "|" + IvaPayPatch.jstr("oops", "url") + "|",
+            "https://yoomoney.ru/checkout/payments/v2/contract?orderId=2f|17||");
+        long[] w = IvaPayPatch.waitParse(IvaPayPatch.waitVal(17, 1730700000000L));
+        eq("ЮKassa 10.133: отметка «ждём итог» — номер и время; мусор — нет",
+            (w == null ? "null" : w[0] + "@" + w[1]) + "|" + IvaPayPatch.waitParse("") + "|" + IvaPayPatch.waitParse("x@1") + "|" + IvaPayPatch.waitParse("0@5")
+            + "|" + IvaPayPatch.waitParse(null), "17@1730700000000|null|null|null|null");
+        eq("ЮKassa 10.133: опрос итога — 5 с первые 2 минуты, потом 20 с",
+            IvaPayPatch.pollDelay(0) + "," + IvaPayPatch.pollDelay(119999) + "," + IvaPayPatch.pollDelay(120000), "5000,5000,20000");
+        eq("ЮKassa 10.133: способ оплаты по-русски",
+            IvaPayPatch.method("sbp") + "," + IvaPayPatch.method("bank_card") + "," + IvaPayPatch.method("sberbank") + "," + IvaPayPatch.method("") + ","
+            + IvaPayPatch.method("qiwi"), "СБП,карта,SberPay,,qiwi");
+        double[] t = IvaPayPatch.chiefTotals(new String[]{"succeeded", "succeeded", "canceled", "pending"},
+            new double[]{1500.5, 200, 999, 50}, new boolean[]{false, true, false, false});
+        eq("ЮKassa 10.133: владельцу — оплачено онлайн, сколько чеков не пробито (отменённые и незавершённые не в счёт)",
+            t[0] + "|" + (int) t[1] + "|" + t[2] + "|" + IvaPayPatch.chiefTotals(null, null, null)[0], "1700.5|1|1500.5|0.0");
+        eq("ЮKassa 10.133: ответ сервера — экранирование JSON и логические значения",
+            IvaPayPatch.jstr("{\"url\":\"https:\\/\\/yoomoney.ru\\/a?b=1\\u0026c=\\\"2\\\"\",\"test\":true}", "url") + "|"
+            + IvaPayPatch.jstr("{\"test\": true}", "test"), "https://yoomoney.ru/a?b=1&c=\"2\"|true");
+        eq("ЮKassa 10.133: рубли — пробелы и копейки",
+            IvaPayPatch.rub(1500) + "|" + IvaPayPatch.rub(1234567.5) + "|" + IvaPayPatch.rub(0.07), "1 500 ₽|1 234 567,50 ₽|0,07 ₽");
+        eq("ЮKassa 10.133: адрес функции — свой проект Supabase",
+            IvaPayPatch.FN, "https://wdxdeatphizclskfmfxi.supabase.co/functions/v1/iva-pay");
+    }
+
+    static void st132() {
+        eq("карта 10.132: координаты с названием пункта (скобки из названия убраны)",
+            IvaGeoPatch.geoUri("Склад (центр)", "ул. Ленина, 1", "Новосибирск", 55.030204, 82.92043),
+            "geo:55.030204,82.92043?q=55.030204,82.92043(%D0%A1%D0%BA%D0%BB%D0%B0%D0%B4%20%20%D1%86%D0%B5%D0%BD%D1%82%D1%80)");
+        eq("карта 10.132: без координат — поиск по адресу с городом; нечего показать — пусто",
+            IvaGeoPatch.geoUri("Склад", "ул. Ленина, 1", "Бердск", null, null) + " | " + IvaGeoPatch.geoUri("Склад", " ", "null", null, null)
+            + " | " + IvaGeoPatch.geoUri("", "Новосибирск, ул. Ленина, 1", "Новосибирск", 0.0, 0.0),
+            "geo:0,0?q=%D0%91%D0%B5%D1%80%D0%B4%D1%81%D0%BA%2C%20%D1%83%D0%BB.%20%D0%9B%D0%B5%D0%BD%D0%B8%D0%BD%D0%B0%2C%201 |  | "
+            + "geo:0,0?q=%D0%9D%D0%BE%D0%B2%D0%BE%D1%81%D0%B8%D0%B1%D0%B8%D1%80%D1%81%D0%BA%2C%20%D1%83%D0%BB.%20%D0%9B%D0%B5%D0%BD%D0%B8%D0%BD%D0%B0%2C%201");
+        eq("карта 10.132: неверные координаты — по адресу",
+            IvaGeoPatch.ok(91.0, 10.0) + "," + IvaGeoPatch.ok(55.0, 181.0) + "," + IvaGeoPatch.ok(Double.NaN, 1.0) + "," + IvaGeoPatch.ok(55.0, 82.9), "false,false,false,true");
+        eq("карта 10.132: карт нет — Яндекс Карты на сайте",
+            IvaGeoPatch.webUrl("", "", 55.03, 82.92) + " | " + IvaGeoPatch.webUrl("ул. Мира, 5", "Омск", null, null),
+            "https://yandex.ru/maps/?pt=82.92,55.03&z=16&l=map | https://yandex.ru/maps/?text=%D0%9E%D0%BC%D1%81%D0%BA%2C%20%D1%83%D0%BB.%20%D0%9C%D0%B8%D1%80%D0%B0%2C%205");
+        eq("расстояние 10.132: по прямой — Новосибирск → Бердск ≈ 33 км, Москва → Санкт-Петербург ≈ 633 км",
+            Math.round(IvaGeoPatch.km(55.0302, 82.9204, 54.7580, 83.1073)) + "," + Math.round(IvaGeoPatch.km(55.7558, 37.6173, 59.9343, 30.3351)), "33,633");
+        eq("расстояние 10.132: подпись «≈ 2,4 км»",
+            IvaGeoPatch.distText(0.004) + "|" + IvaGeoPatch.distText(0.347) + "|" + IvaGeoPatch.distText(0.999) + "|" + IvaGeoPatch.distText(2.36)
+            + "|" + IvaGeoPatch.distText(9.96) + "|" + IvaGeoPatch.distText(24.4) + "|" + IvaGeoPatch.distText(1250.2) + "|" + IvaGeoPatch.distText(Double.NaN),
+            "≈ 10 м|≈ 350 м|≈ 1 км|≈ 2,4 км|≈ 10 км|≈ 24 км|≈ 1\u00a0250 км|");
+        java.util.List<String> cats = java.util.Arrays.asList("garden", "power");
+        eq("расстояние 10.132: отбор как в штатной ленте — «сдан», категория (cat / cats), подкатегория, поиск",
+            IvaGeoPatch.shown("rented", "", null, "", "Дрель", "", "all", "", "", "") + ","
+            + IvaGeoPatch.shown("", "drill", cats, "", "Дрель", "", "cat", "power", "", "") + ","
+            + IvaGeoPatch.shown("", "drill", cats, "", "Дрель", "", "cat", "auto", "", "") + ","
+            + IvaGeoPatch.shown("", "drill", null, "a", "Дрель", "", "cat", "drill", "b", "") + ","
+            + IvaGeoPatch.shown("", "drill", null, "a", "Дрель", "ударная", "all", "auto", "b", "удар") + ","
+            + IvaGeoPatch.shown("", "drill", null, "a", "Дрель", "", "all", "", "", "пила"),
+            "false,true,false,false,true,false");
+        eq("расстояние 10.132: карточка — тот инструмент (по началу названия)",
+            IvaGeoPatch.sameTitle("Перфоратор Makita HR2470 с…", "Перфоратор Makita HR2470 с кейсом") + "," + IvaGeoPatch.sameTitle("Дрель", "Шуруповёрт")
+            + "," + IvaGeoPatch.sameTitle("", "Дрель"), "true,false,false");
+        eq("расстояние 10.132: координаты адреса на телефоне",
+            java.util.Arrays.toString(IvaGeoPatch.cacheLatLng(IvaGeoPatch.cacheVal(55.03, 82.92, 7L))) + " " + IvaGeoPatch.cacheAt(IvaGeoPatch.cacheVal(55.03, 82.92, 7L))
+            + " " + IvaGeoPatch.cacheVal(null, null, 9L) + " " + IvaGeoPatch.cacheLatLng("-@9") + " " + IvaGeoPatch.dbl("54,75") + " " + IvaGeoPatch.dbl("null"),
+            "[55.03, 82.92] 7 -@9 null 54.75 null");
+        eq("расстояние 10.132: по умолчанию выключено, код запроса не штатный 771",
+            IvaGeoPatch.K_DIST + " " + IvaGeoPatch.REQ_LOC + " " + IvaGeoPatch.TITLE, "dist_on 7712 Расстояние до проката");
+        java.util.Map<String, Object> jo = (java.util.Map<String, Object>) IvaRealtimePatch.Json.parse(
+            IvaRealtimePatch.joinMsg(IvaRealtimePatch.X_TOPIC[1], IvaRealtimePatch.X_TABLE[1], IvaRealtimePatch.X_REF[1], " Ivan@Mail.RU ", "t"));
+        java.util.Map<String, Object> pc = (java.util.Map<String, Object>) ((java.util.List<Object>) ((java.util.Map<String, Object>)
+            ((java.util.Map<String, Object>) jo.get("payload")).get("config")).get("postgres_changes")).get(0);
+        eq("стрелки 10.132: каналы заявок и сообщений — своя строка, свой join_ref",
+            jo.get("topic") + "|" + jo.get("join_ref") + "|" + pc.get("table") + "|" + pc.get("filter") + "|" + String.join(",", IvaRealtimePatch.X_TABLE),
+            "realtime:iva_msg|3|iva_msg_ping|email=eq.ivan@mail.ru|iva_order_ping,iva_msg_ping");
+        String TO = "\"topic\":\"realtime:iva_order\"", TM = "\"topic\":\"realtime:iva_msg\"";
+        String okO = "{\"event\":\"phx_reply\",\"payload\":{\"status\":\"ok\"},\"ref\":\"2\"," + TO + "}";
+        String errM = "{\"event\":\"phx_reply\",\"payload\":{\"status\":\"error\"},\"ref\":\"3\"," + TM + "}";
+        String chM = "{\"event\":\"postgres_changes\",\"payload\":{},\"ref\":null," + TM + "}";
+        String role = "{\"event\":\"postgres_changes\",\"payload\":{},\"ref\":null,\"topic\":\"realtime:iva_role\"}";
+        eq("стрелки 10.132: ответы каналов — заявки вошли, сообщения нет (нет SQL), событие; роль — по-старому",
+            IvaRealtimePatch.extra(okO) + ":" + IvaRealtimePatch.classifyExtra(okO, 0) + "," + IvaRealtimePatch.extra(errM) + ":" + IvaRealtimePatch.classifyExtra(errM, 1)
+            + "," + IvaRealtimePatch.extra(chM) + ":" + IvaRealtimePatch.classifyExtra(chM, 1) + "," + IvaRealtimePatch.extra(role) + ":" + IvaRealtimePatch.classify(role)
+            + "," + IvaRealtimePatch.classify(okO) + "," + IvaRealtimePatch.extra("{x"),
+            "0:1,1:2,1:3,-1:3,0,-1");
+        java.util.Map<String, Object> tk = (java.util.Map<String, Object>) IvaRealtimePatch.Json.parse(IvaRealtimePatch.tokenMsg("realtime:iva_order", "2", "new", 9));
+        eq("стрелки 10.132: новый ключ — и каналам заявок / сообщений", tk.get("topic") + "|" + tk.get("join_ref") + "|" + tk.get("ref"), "realtime:iva_order|2|9");
+        eq("стрелки 10.132: последние числа на телефоне — по почте",
+            IvaArrowPatch.cacheKey(" Ivan@Mail.RU ") + " " + IvaArrowPatch.join(new int[] {0, 3, -1, 12}) + " "
+            + java.util.Arrays.toString(IvaArrowPatch.split("0,3,x", 4)) + " " + java.util.Arrays.toString(IvaArrowPatch.split(null, 2)),
+            "arrow_cnt_ivan@mail.ru 0,3,0,12 [0, 3, 0, 0] [0, 0]");
+        eq("стрелки 10.132: первый проход опроса — через 1 с", IvaNotifyPatch.FIRST_MS, 1000L);
+    }
+
+    static String chatMsgStr() {
+        IvaStaffChatPatch.Msg m = new IvaStaffChatPatch.Msg();
+        m.id = "m1"; m.audio = "https://x/v.m4a"; m.dur = 12; m.at = "";
+        IvaChatPatch.Msg x = IvaStaffChatPatch.chatMsg(m);
+        return IvaChatPatch.voiceKey(x) + "|" + x.audio + "|" + x.dur;
+    }
+
     static void st129() {
         IvaStaffPatch.Staff old = new IvaStaffPatch.Staff();
         old.id = "11111111-2222-3333-4444-555555555555"; old.name = "Иван"; old.email = "ivan@x.ru";

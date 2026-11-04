@@ -16,12 +16,16 @@ try {
   assert.match(code, /permissions:\s*\n\s*contents: read/, `${f}: права задачи должны быть только на чтение`);
   assert.ok(!/pull_request/.test(code), `${f}: выкладка из Pull Request (в т. ч. форков) запрещена`);
   assert.match(code, /branches: \['main', 'arena\/01a101d5-arenda-nvk'\]/, `${f}: выкладка с посторонних веток`);
-  for (const s of ['SUPABASE_ACCESS_TOKEN', 'SMTP_PASS', 'SMTP_USER', 'FCM_SERVICE_ACCOUNT', 'FCM_GOOGLE_SERVICES'])
+  for (const s of ['SUPABASE_ACCESS_TOKEN', 'SMTP_PASS', 'SMTP_USER', 'FCM_SERVICE_ACCOUNT', 'FCM_GOOGLE_SERVICES', 'YOOKASSA_SHOP_ID', 'YOOKASSA_SECRET_KEY'])
     assert.ok(!new RegExp(`echo[^\\n]*\\$\\{?${s}`).test(code), `${f}: секрет ${s} выводится в журнал запуска`);
   assert.ok(!/set\s+-[a-z]*x/.test(code), `${f}: set -x покажет секреты в журнале`);
   // 10.74: секреты Firebase уходят в Supabase только через временный файл (не в командной строке и не в журнал)
   const fcm = code.slice(code.indexOf('FCM_SERVICE_ACCOUNT: ${{'), code.indexOf('- name:', code.indexOf('FCM_SERVICE_ACCOUNT: ${{')));
   assert.ok(/FCM_SERVICE_ACCOUNT_B64=%s/.test(fcm) && /chmod 600 "\$f"/.test(fcm) && /secrets set --env-file "\$f"[^\n]*\n\s+rm -f "\$f"/.test(fcm) && !/secrets set FCM_/.test(code),
     `${f}: секреты Firebase — только через временный файл с правами 600`);
+  // 10.133: ключи ЮKassa — тоже только через временный файл с правами 600
+  const ykb = code.slice(code.indexOf('YOOKASSA_SECRET_KEY: ${{'), code.indexOf('- name:', code.indexOf('YOOKASSA_SECRET_KEY: ${{')));
+  assert.ok(/YOOKASSA_SECRET_KEY=%s/.test(ykb) && /chmod 600 "\$f"/.test(ykb) && /secrets set --env-file "\$f"[^\n]*\n\s+rm -f "\$f"/.test(ykb) && !/secrets set YOOKASSA/.test(code),
+    `${f}: ключи ЮKassa — только через временный файл с правами 600`);
   console.log('Выкладка функций: только функции, база не трогается, секреты не выводятся, права — чтение');
 } catch (e) { console.error('✘ ' + e.message); process.exit(1); }

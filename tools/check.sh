@@ -65,7 +65,7 @@ head_ "3. Релиз приложения (app-update.json ↔ APK ↔ этал�
 if node tools/check-release.js; then ok "релиз приложения согласован"; else bad "см. замечания выше"; fi
 
 head_ "4. Статические тесты (без браузера)"
-for t in syntax-and-release chat-auto-send-guard email-guard cities-sync directory-import city-pages city-priority py-compat empty-states p4-personal-data p6-commission diag-owner-readonly p5-bot-no-contacts p5-max-no-contacts p5-order-email deploy-functions-guard iva-push reset-password keystore-check-guard apk-build-guard app-test-channel publish-rights-guard qr-codes client-profile-page kind-guess model-search model-stage4 spec-filter; do
+for t in syntax-and-release chat-auto-send-guard email-guard cities-sync directory-import city-pages city-priority py-compat empty-states p4-personal-data p6-commission diag-owner-readonly p5-bot-no-contacts p5-max-no-contacts p5-order-email deploy-functions-guard iva-push iva-pay reset-password keystore-check-guard apk-build-guard app-test-channel publish-rights-guard qr-codes client-profile-page kind-guess model-search model-stage4 spec-filter; do
   if node "tests/$t.cjs" >"/tmp/iva-test-$t.log" 2>&1; then ok "tests/$t.cjs"
   else bad "tests/$t.cjs"; tail -6 "/tmp/iva-test-$t.log" | sed 's/^/      /'; fi
 done
@@ -435,6 +435,28 @@ if "$PG_PY" -c "import pgserver" >/dev/null 2>&1; then
   fi
 else
   skip "стенд «Роль — моментально»: нет pgserver (PG_PY=<python с pgserver> bash tools/check.sh)"
+fi
+
+head_ "4.5.18a. Стенд «Стрелки — сразу» (локальный PostgreSQL, SQL 10.132)"
+if "$PG_PY" -c "import pgserver" >/dev/null 2>&1; then
+  if "$PG_PY" tools/msg-ping-stand.py >/tmp/iva-test-msg-ping.log 2>&1; then
+    ok "стрелки — сразу: $(grep -c '✔' /tmp/iva-test-msg-ping.log) проверок SQL на PostgreSQL (новое сообщение и «прочитано» — получателю и сотрудникам пункта с правом чата, читает только сам человек, Realtime, откат)"
+  else
+    bad "стенд «Стрелки — сразу»"; grep -E '✘|Error|ERROR' /tmp/iva-test-msg-ping.log | head -8 | sed 's/^/      /'
+  fi
+else
+  skip "стенд «Стрелки — сразу»: нет pgserver (PG_PY=<python с pgserver> bash tools/check.sh)"
+fi
+
+head_ "4.5.18b. Стенд «Оплата комиссии через ЮKassa» (локальный PostgreSQL, SQL 10.133)"
+if "$PG_PY" -c "import pgserver" >/dev/null 2>&1; then
+  if "$PG_PY" tools/yk-pay-stand.py >/tmp/iva-test-yk-pay.log 2>&1; then
+    ok "оплата через ЮKassa: $(grep -c '✔' /tmp/iva-test-yk-pay.log) проверок SQL на PostgreSQL (только админ, сумма 1–100 000, засчитывается один раз и только «оплачено», служебные функции — только серверу, «Чек пробит» — только владельцу площадки, откат)"
+  else
+    bad "стенд «Оплата комиссии через ЮKassa»"; grep -E '✘|Error|ERROR' /tmp/iva-test-yk-pay.log | head -8 | sed 's/^/      /'
+  fi
+else
+  skip "стенд «Оплата комиссии через ЮKassa»: нет pgserver (PG_PY=<python с pgserver> bash tools/check.sh)"
 fi
 
 head_ "4.5.19. Стенд «Инструменты сотрудников — у пункта» (локальный PostgreSQL, SQL 10.113)"

@@ -19,6 +19,10 @@ package ru.prokatnvsk.app;
 //   подключаемся снова (сразу при смене раздела или в течение 30 секунд) и сразу проверяем.
 //   Создателю (eclips.ru@mail.ru) соединение не нужно — его роль не меняется. Новых вставок в smali нет: вход —
 //   IvaNotifyPatch.onShowTab и tick. Сеть — только в своём потоке.
+//
+// 10.132 (просьба владельца 04.11.2026): «стрелочки оповещений появлялись сразу». В том же соединении — ещё два канала:
+//   своя строка iva_order_ping (заявки, SQL 20261119) и iva_msg_ping (сообщения, SQL 20261122). Пришло событие —
+//   IvaNotifyPatch.wake(): опрос сразу, он же пересчитывает стрелки. Канал не вошёл (нет SQL) — работает без него.
 
 import android.app.Activity;
 import android.app.ActivityManager;
@@ -65,6 +69,21 @@ public final class IvaRealtimePatch {
         return b.append('"').toString();
     }
 
+    // 10.132: ещё две подписки в том же соединении, каждая своим каналом (нет таблицы — не мешает остальным):
+    // заявки (iva_order_ping, SQL 20261119) и сообщения (iva_msg_ping, SQL 20261122) — сразу пересчёт стрелок.
+    static final String[] X_TABLE = {"iva_order_ping", "iva_msg_ping"};
+    static final String[] X_TOPIC = {"realtime:iva_order", "realtime:iva_msg"};
+    static final String[] X_REF = {"2", "3"};
+
+    /** Вход в канал topic: подписка на свою строку table (любое событие), ключ входа — для RLS. */
+    static String joinMsg(String topic, String table, String joinRef, String email, String token) {
+        return "{\"topic\":" + q(topic) + ",\"event\":\"phx_join\",\"payload\":{\"config\":{"
+            + "\"broadcast\":{\"ack\":false,\"self\":false},\"presence\":{\"key\":\"\",\"enabled\":false},"
+            + "\"postgres_changes\":[{\"event\":\"*\",\"schema\":\"public\",\"table\":" + q(table)
+            + ",\"filter\":" + q("email=eq." + (email == null ? "" : email.trim().toLowerCase())) + "}],"
+            + "\"private\":false},\"access_token\":" + q(token) + "},\"ref\":" + q(joinRef) + ",\"join_ref\":" + q(joinRef) + "}";
+    }
+
     /** Вход в канал: подписка на свою строку iva_role_ping (любое событие), ключ входа — для RLS. */
     static String joinMsg(String email, String token) {
         return "{\"topic\":" + q(TOPIC) + ",\"event\":\"phx_join\",\"payload\":{\"config\":{"
@@ -78,6 +97,11 @@ public final class IvaRealtimePatch {
         return "{\"topic\":\"phoenix\",\"event\":\"heartbeat\",\"payload\":{},\"ref\":" + q(String.valueOf(ref)) + "}";
     }
 
+    static String tokenMsg(String topic, String joinRef, String token, int ref) {
+        return "{\"topic\":" + q(topic) + ",\"event\":\"access_token\",\"payload\":{\"access_token\":" + q(token)
+            + "},\"ref\":" + q(String.valueOf(ref)) + ",\"join_ref\":" + q(joinRef) + "}";
+    }
+
     static String tokenMsg(String token, int ref) {
         return "{\"topic\":" + q(TOPIC) + ",\"event\":\"access_token\",\"payload\":{\"access_token\":" + q(token)
             + "},\"ref\":" + q(String.valueOf(ref)) + ",\"join_ref\":" + q(JOIN_REF) + "}";
@@ -85,9 +109,28 @@ public final class IvaRealtimePatch {
 
     static final int M_OTHER = 0, M_JOIN_OK = 1, M_JOIN_ERR = 2, M_CHANGE = 3, M_SYS_OK = 4, M_SYS_ERR = 5, M_CLOSED = 6;
 
+    /** 10.132: канал заявок / сообщений, к которому относится ответ: 0, 1 или -1 (роль, heartbeat, чужое). */
+    @SuppressWarnings("unchecked")
+    static int extra(String msg) {
+        Object o;
+        try { o = Json.parse(msg); } catch (Throwable e) { return -1; }
+        if (!(o instanceof Map)) return -1;
+        String topic = str(((Map<String, Object>) o).get("topic"));
+        for (int i = 0; i < X_TOPIC.length; i++) if (X_TOPIC[i].equals(topic)) return i;
+        return -1;
+    }
+
+    /** То же, что classify, для канала заявок / сообщений i. */
+    static int classifyExtra(String msg, int i) {
+        if (i < 0 || i >= X_TOPIC.length) return M_OTHER;
+        return classify(msg, X_TOPIC[i], X_REF[i]);
+    }
+
+    static int classify(String msg) { return classify(msg, TOPIC, JOIN_REF); }
+
     /** Что пришло от сервера: вход в канал удался / нет, событие, системное сообщение, канал закрыт. */
     @SuppressWarnings("unchecked")
-    static int classify(String msg) {
+    static int classify(String msg, String TOPIC, String JOIN_REF) {
         Object o;
         try { o = Json.parse(msg); } catch (Throwable e) { return M_OTHER; }
         if (!(o instanceof Map)) return M_OTHER;
@@ -427,6 +470,14 @@ public final class IvaRealtimePatch {
         }
     }
 
+    /** 10.132: что-то поменялось в заявках / сообщениях — опрос уведомлений сразу (он же пересчитывает стрелки). */
+    static void wake(final Activity a) {
+        if (a == null || a.isFinishing()) return;
+        a.runOnUiThread(new Runnable() {
+            @Override public void run() { try { IvaNotifyPatch.wake(); } catch (Throwable ignore) {} }
+        });
+    }
+
     static boolean wanted(String email) {
         Activity a = act == null ? null : act.get();
         return a != null && !a.isFinishing() && IvaNotifyPatch.loggedIn(a) && email.equals(IvaPickupPatch.me(a));
@@ -442,6 +493,8 @@ public final class IvaRealtimePatch {
             if (a == null || tok.isEmpty()) return false;
             ws = Ws.open(host(), 443, true, path(IvaClientPatch.SB_KEY));
             ws.text(joinMsg(email, tok));
+            boolean[] xOn = new boolean[X_TOPIC.length];                    // 10.132: заявки и сообщения — своими каналами
+            for (int i = 0; i < X_TOPIC.length; i++) { ws.text(joinMsg(X_TOPIC[i], X_TABLE[i], X_REF[i], email, tok)); xOn[i] = true; }
             long now = System.currentTimeMillis(), hbAt = now, rxAt = now, bgSince = 0;
             int ref = 2;
             while (g == gen) {
@@ -449,7 +502,13 @@ public final class IvaRealtimePatch {
                 now = System.currentTimeMillis();
                 if (!wanted(email)) { if (g == gen) gen++; break; }          // вышли, сменили аккаунт, окно закрыто
                 a = act.get();
-                if (m != null) {
+                int x = m == null ? -1 : extra(m);
+                if (x >= 0) {                                                // 10.132: заявки / сообщения — пересчитать стрелки сразу
+                    rxAt = now;
+                    int kx = classifyExtra(m, x);
+                    if (kx == M_JOIN_OK || kx == M_CHANGE) { if (kx == M_CHANGE) lastEvent = now; wake(a); }
+                    else if (kx == M_JOIN_ERR || kx == M_SYS_ERR || kx == M_CLOSED) xOn[x] = false;   // нет SQL — без этого канала
+                } else if (m != null) {
                     rxAt = now;
                     int k = classify(m);
                     if (k == M_JOIN_OK) { ok = true; fails = 0; IvaAccessPatch.poke(a); }   // подписались — сразу сверить
@@ -461,7 +520,11 @@ public final class IvaRealtimePatch {
                     hbAt = now;
                     ws.text(heartbeatMsg(ref++));
                     String t2 = token(a);
-                    if (!t2.isEmpty() && !t2.equals(tok)) { tok = t2; ws.text(tokenMsg(tok, ref++)); }   // 10.69 обновил ключ
+                    if (!t2.isEmpty() && !t2.equals(tok)) {
+                        tok = t2;
+                        ws.text(tokenMsg(tok, ref++));                       // 10.69 обновил ключ
+                        for (int i = 0; i < X_TOPIC.length; i++) if (xOn[i]) ws.text(tokenMsg(X_TOPIC[i], X_REF[i], tok, ref++));
+                    }
                     if (foreground()) bgSince = 0;
                     else if (bgSince == 0) bgSince = now;
                     else if (now - bgSince > BG_GRACE_MS) { if (g == gen) gen++; break; }   // свёрнуто — до возвращения

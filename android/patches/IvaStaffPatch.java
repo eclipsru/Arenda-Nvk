@@ -1117,6 +1117,7 @@ public class IvaStaffPatch {
         Drawable ch = IvaSearchPatch.drawable(a, "ic_chevron");
         if (ch != null) { chev.setImageDrawable(ch); chev.setColorFilter(cGray); row.addView(chev, new LinearLayout.LayoutParams(dp(a, 18), dp(a, 18))); }
         row.setOnClickListener(new View.OnClickListener() { @Override public void onClick(View v) { try { openMine(a, m); } catch (Throwable ignore) {} } });
+        try { IvaArrowPatch.mark(a, row, null, IvaArrowPatch.S_MINE); } catch (Throwable ignore) {}   // 10.131: «Стрелка оповещений»
         return row;
     }
 
@@ -1124,37 +1125,7 @@ public class IvaStaffPatch {
         int cText = color(a, "text", 0xfff2f4f8), cGray = color(a, "gray", 0xff9aa1b0);
         IvaChiefPatch.Page pg = IvaChiefPatch.page(a, "Мой пункт", "Вы сотрудник «" + m.company + "». Права меняет владелец проката.", false);
         IvaStaffToolsPatch.minePage = new java.lang.ref.WeakReference<android.app.Dialog>(pg.d);   // 10.105: закрыть перед штатной формой
-        if (IvaStaffToolsPatch.want(m.status, m.r)) {                   // 10.105: инструменты пункта — добавить, править
-            final Activity fa = a;
-            final String co = m.company;
-            TextView tl = IvaPickupPatch.addButton(a, color(a, "orange", 0xffff8f1f));
-            tl.setText(IvaStaffToolsPatch.TITLE);
-            tl.setOnClickListener(new View.OnClickListener() { @Override public void onClick(View v) { try { IvaStaffToolsPatch.open(fa, co); } catch (Throwable ignore) {} } });
-            LinearLayout.LayoutParams tll = new LinearLayout.LayoutParams(-1, -2);
-            tll.bottomMargin = dp(a, 10);
-            pg.list.addView(tl, tll);
-        }
-        if (IvaStaffOrdersPatch.want(m.status, m.r)) {                   // 10.104: заявки пункта — «Выдал» / «Вернули»
-            final Activity fa = a;
-            final String co = m.company;
-            TextView ord = IvaPickupPatch.addButton(a, color(a, "orange", 0xffff8f1f));
-            ord.setText(IvaStaffOrdersPatch.TITLE);
-            ord.setOnClickListener(new View.OnClickListener() { @Override public void onClick(View v) { try { IvaStaffOrdersPatch.open(fa, co); } catch (Throwable ignore) {} } });
-            LinearLayout.LayoutParams ol = new LinearLayout.LayoutParams(-1, -2);
-            ol.bottomMargin = dp(a, 10);
-            pg.list.addView(ord, ol);
-        }
-        if (IvaStaffChatPatch.want(m.status, m.r)) {                     // 10.106: чат пункта — ответы клиентам
-            final Activity fa = a;
-            final String co = m.company;
-            TextView ch = IvaPickupPatch.addButton(a, color(a, "orange", 0xffff8f1f));
-            ch.setText(IvaStaffChatPatch.TITLE);
-            ch.setOnClickListener(new View.OnClickListener() { @Override public void onClick(View v) { try { IvaStaffChatPatch.open(fa, co); } catch (Throwable ignore) {} } });
-            LinearLayout.LayoutParams chl = new LinearLayout.LayoutParams(-1, -2);
-            chl.bottomMargin = dp(a, 10);
-            pg.list.addView(ch, chl);
-        }
-        for (IvaPickupPatch.Point p : m.points) {
+        for (IvaPickupPatch.Point p : m.points) {                        // 10.130: сначала — сам пункт
             LinearLayout c = IvaChiefPatch.card(a);
             c.addView(IvaChiefPatch.text(a, IvaToolPointPatch.chipText(p), 16f, cText, true));
             String ct = IvaToolPointPatch.cardText(p);
@@ -1162,7 +1133,29 @@ public class IvaStaffPatch {
             TextView t = IvaChiefPatch.text(a, nl >= 0 ? ct.substring(nl + 1) : "", 14f, cText, false);
             t.setPadding(0, dp(a, 6), 0, 0);
             c.addView(t);
+            try { IvaGeoPatch.add(a, c, p, false); } catch (Throwable ignore) {}   // 10.132: «Показать на карте»
             pg.list.addView(c);
+        }
+        // 10.130: плитки по 2 в ряд — инструменты, заявки, чат пункта и архив заявок (вместо кнопок и строки архива внизу)
+        final Activity fa = a;
+        final String co = m.company;
+        List<View> tiles = new ArrayList<View>();
+        if (IvaStaffToolsPatch.want(m.status, m.r)) {
+            tiles.add(tile(a, "ic_wrench", IvaStaffToolsPatch.TITLE, new Runnable() { @Override public void run() { IvaStaffToolsPatch.open(fa, co); } }));
+        }
+        if (IvaStaffOrdersPatch.want(m.status, m.r)) {
+            tiles.add(tile(a, "ic_receipt", IvaStaffOrdersPatch.TITLE, new Runnable() { @Override public void run() { IvaStaffOrdersPatch.open(fa, co); } }));
+            arrow(a, tiles.get(tiles.size() - 1), IvaArrowPatch.S_ORD);   // 10.131: «Стрелка оповещений»
+        }
+        if (IvaStaffChatPatch.want(m.status, m.r)) {
+            tiles.add(tile(a, "ic_chat", IvaStaffChatPatch.TITLE, new Runnable() { @Override public void run() { IvaStaffChatPatch.open(fa, co); } }));
+            arrow(a, tiles.get(tiles.size() - 1), IvaArrowPatch.S_CHAT);
+        }
+        tiles.add(tile(a, "ic_layers", IvaOrderPatch.ARCH_TITLE, new Runnable() { @Override public void run() { IvaOrderPatch.openArchive(fa); } }));
+        addTiles(a, pg.list, tiles);
+        try { IvaArrowPatch.recount(a, true); } catch (Throwable ignore) {}   // 10.131: открыли «Мой пункт» — свежие числа
+        if (IvaStaffToolsPatch.want(m.status, m.r)) {                   // 10.113: «Вид раздела с логотипом»
+            try { IvaLogoPatch.settingsRow(a, pg.list, cText, cGray, color(a, "orange", 0xffff8f1f)); } catch (Throwable ignore) {}
         }
         LinearLayout r = IvaChiefPatch.card(a);
         r.addView(IvaChiefPatch.text(a, "Ваши права", 16f, cText, true));
@@ -1179,14 +1172,57 @@ public class IvaStaffPatch {
         TextView s = IvaChiefPatch.text(a, m.self ? "Свои заявки можете выдавать сами" : "Свои заявки выдаёт другой сотрудник", 13f, cGray, false);
         s.setPadding(0, dp(a, 8), 0, 0);
         r.addView(s);
-        pg.list.addView(r);
-        if (IvaStaffToolsPatch.want(m.status, m.r)) {                   // 10.113: «Вид раздела с логотипом» — в самом низу
-            try { IvaLogoPatch.settingsRow(a, pg.list, cText, cGray, color(a, "orange", 0xffff8f1f)); } catch (Throwable ignore) {}
-        }
-        try {                                                           // 10.121: «Архив заявок» сотрудника — в самом низу «Моего пункта»
-            LinearLayout.LayoutParams al = new LinearLayout.LayoutParams(-1, -2);
-            al.topMargin = dp(a, 12);
-            pg.list.addView(IvaOrderPatch.archRowView(a), al);
+        pg.list.addView(r);                                             // 10.130: права — в самом низу
+    }
+
+    static final int TILE_H_DP = 104, TILE_ICON_DP = 30;
+
+    /** 10.131: стрелка на плитке — справа от значка (первый ребёнок плитки). */
+    static void arrow(Activity a, View tile, int kind) {
+        try {
+            View ic = tile instanceof LinearLayout && ((LinearLayout) tile).getChildCount() > 0 ? ((LinearLayout) tile).getChildAt(0) : null;
+            IvaArrowPatch.mark(a, tile, ic, kind);
         } catch (Throwable ignore) {}
+    }
+
+    /** 10.130: плитка «Моего пункта» — штатная карточка bg_card, значок приложения цветом проката, подпись под ним. */
+    static View tile(final Activity a, String icon, String title, final Runnable go) {
+        LinearLayout t = new LinearLayout(a);
+        t.setOrientation(LinearLayout.VERTICAL);
+        t.setGravity(Gravity.CENTER);
+        android.graphics.drawable.Drawable bg = IvaSearchPatch.drawable(a, "bg_card");
+        if (bg != null) t.setBackground(bg);
+        t.setPadding(dp(a, 10), dp(a, 12), dp(a, 10), dp(a, 12));
+        android.widget.ImageView ic = new android.widget.ImageView(a);
+        android.graphics.drawable.Drawable d = IvaSearchPatch.drawable(a, icon);
+        if (d != null) { ic.setImageDrawable(d.mutate()); ic.setColorFilter(color(a, "orange", 0xffff8f1f)); }
+        t.addView(ic, new LinearLayout.LayoutParams(dp(a, TILE_ICON_DP), dp(a, TILE_ICON_DP)));
+        TextView tv = IvaChiefPatch.text(a, title, 14f, color(a, "text", 0xfff2f4f8), true);
+        tv.setGravity(Gravity.CENTER);
+        tv.setMaxLines(2);
+        LinearLayout.LayoutParams tl = new LinearLayout.LayoutParams(-2, -2);
+        tl.topMargin = dp(a, 10);
+        t.addView(tv, tl);
+        t.setClickable(true);
+        t.setContentDescription(title);
+        t.setOnClickListener(new View.OnClickListener() { @Override public void onClick(View v) { try { go.run(); } catch (Throwable ignore) {} } });
+        return t;
+    }
+
+    /** По две плитки в ряд; нечётная последняя — на половину ширины (как остальные). */
+    static void addTiles(Activity a, LinearLayout list, List<View> tiles) {
+        for (int i = 0; i < tiles.size(); i += 2) {
+            LinearLayout row = new LinearLayout(a);
+            row.setOrientation(LinearLayout.HORIZONTAL);
+            for (int k = 0; k < 2; k++) {
+                LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(0, dp(a, TILE_H_DP), 1f);
+                if (k == 0) lp.rightMargin = dp(a, 5); else lp.leftMargin = dp(a, 5);
+                View v = i + k < tiles.size() ? tiles.get(i + k) : new View(a);
+                row.addView(v, lp);
+            }
+            LinearLayout.LayoutParams rl = new LinearLayout.LayoutParams(-1, -2);
+            rl.topMargin = dp(a, 10);
+            list.addView(row, rl);
+        }
     }
 }

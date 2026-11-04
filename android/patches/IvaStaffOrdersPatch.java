@@ -8,6 +8,7 @@ import android.net.Uri;
 import android.view.Gravity;
 import android.view.View;
 import android.widget.LinearLayout;
+import android.widget.ScrollView;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -104,6 +105,13 @@ public class IvaStaffOrdersPatch {
         return out;
     }
 
+    /** 10.131: сколько новых заявок пункта ждут сотрудника (те же, о которых уведомляем) — для «Стрелки оповещений». */
+    static int newCount(List<Part> ps) {
+        int n = 0;
+        if (ps != null) for (Part p : ps) if (p != null && "new".equals(p.status) && p.notify) n++;
+        return n;
+    }
+
     /** «Новая заявка · Склад» / «Новые заявки: 3». */
     static String noteTitle(int n, String point) {
         if (n > 1) return IvaNotifyPatch.orderTitle(n);
@@ -186,6 +194,7 @@ public class IvaStaffOrdersPatch {
             return;
         }
         List<Part> ps = parse(r.length > 1 ? r[1] : "");
+        try { IvaArrowPatch.setCount(c, IvaArrowPatch.ST_ORD, newCount(ps)); } catch (Throwable ignore) {}   // 10.131
         List<String> ids = new ArrayList<String>(), sts = new ArrayList<String>();
         List<Boolean> nt = new ArrayList<Boolean>();
         for (Part p : ps) { ids.add(p.id); sts.add(p.status); nt.add(p.notify); }
@@ -220,6 +229,7 @@ public class IvaStaffOrdersPatch {
     static final class Ui {
         Activity a;
         IvaChiefPatch.Page page;
+        View host;                                        // 10.130: во вкладке «Заявки» нижнего меню (страницы нет)
         LinearLayout tabs, items;
         TextView status;
         List<Part> parts;
@@ -250,6 +260,77 @@ public class IvaStaffOrdersPatch {
         reload(u);
     }
 
+    static boolean alive(Ui u) {
+        if (u.page != null) return u.page.open();
+        View h = u.host;
+        return h != null && h.getParent() != null && h.getVisibility() == View.VISIBLE;
+    }
+
+    // ───────────── 10.130: вкладка «Заявки» нижнего меню у сотрудника с видом «как у админов» ─────────────
+
+    static final String TAB_ROOT_TAG = "iva_staff_ord_root";
+    static Ui tabUi;
+    static long tabAt;
+    static final long TAB_FRESH_MS = 3000;
+
+    /** Чистая логика: показывать ли во вкладке «Заявки» заявки пункта (вид «как у админов» и право на заявки). */
+    static boolean tabMode(boolean hubMode, boolean want) { return hubMode && want; }
+
+    /** Из IvaOrderPatch.ordRender: у сотрудника с видом раздела «как у админов» вкладка «Заявки» — как «Заявки пункта».
+     *  Вид «как у клиентов» — свой список как раньше (только заявки, которые оформил сам). true — показали заявки пункта. */
+    static boolean inOrdersTab(final Activity a, LinearLayout page, View scroll, View clientRoot) {
+        View root = page.findViewWithTag(TAB_ROOT_TAG);
+        IvaStaffPatch.Me m = null;
+        try { m = IvaStaffPatch.parseMe(IvaStaffPatch.prefs(a).getString("me_" + IvaPickupPatch.me(a), "")); } catch (Throwable ignore) {}
+        boolean on = IvaStaffPatch.staffNow && m != null && tabMode(IvaStaffToolsPatch.hubMode(a), want(m.status, m.r));
+        if (!on) {
+            if (root != null) root.setVisibility(View.GONE);
+            return false;
+        }
+        if (scroll != null) scroll.setVisibility(View.GONE);
+        if (clientRoot != null) clientRoot.setVisibility(View.GONE);
+        try { IvaOrderPointPatch.hide(a); } catch (Throwable ignore) {}
+        if (root == null || tabUi == null || tabUi.host != root) {
+            if (root != null) page.removeView(root);
+            final Ui u = new Ui();
+            u.a = a;
+            u.cText = IvaStaffPatch.color(a, "text", 0xfff2f4f8);
+            u.cGray = IvaStaffPatch.color(a, "gray", 0xff9aa1b0);
+            u.cOrange = IvaStaffPatch.color(a, "orange", 0xffff8f1f);
+            ScrollView sc = new ScrollView(a);
+            sc.setTag(TAB_ROOT_TAG);
+            sc.setFillViewport(true);
+            LinearLayout list = new LinearLayout(a);
+            list.setOrientation(LinearLayout.VERTICAL);
+            list.setPadding(dp(a, 16), dp(a, 12), dp(a, 16), dp(a, 24));
+            sc.addView(list, new ScrollView.LayoutParams(-1, -2));
+            TextView title = IvaChiefPatch.text(a, TITLE, 20f, u.cText, true);
+            list.addView(title, new LinearLayout.LayoutParams(-1, -2));
+            String c = m.company == null || m.company.trim().isEmpty() ? "Прокат" : m.company.trim();
+            TextView sub = IvaChiefPatch.text(a, "«" + c + "»: заявки ваших пунктов. Закрытые видны 7 дней.", 13f, u.cGray, false);
+            sub.setPadding(0, dp(a, 4), 0, dp(a, 12));
+            list.addView(sub, new LinearLayout.LayoutParams(-1, -2));
+            u.tabs = new LinearLayout(a);
+            u.tabs.setOrientation(LinearLayout.HORIZONTAL);
+            list.addView(u.tabs, new LinearLayout.LayoutParams(-1, -2));
+            u.status = IvaChiefPatch.text(a, "Загружаем…", 13f, u.cGray, false);
+            u.status.setPadding(dp(a, 2), dp(a, 12), 0, 0);
+            list.addView(u.status, new LinearLayout.LayoutParams(-1, -2));
+            u.items = new LinearLayout(a);
+            u.items.setOrientation(LinearLayout.VERTICAL);
+            list.addView(u.items, new LinearLayout.LayoutParams(-1, -2));
+            u.host = sc;
+            tabUi = u;
+            tabAt = 0;
+            page.addView(sc, new LinearLayout.LayoutParams(-1, 0, 1f));
+            root = sc;
+        }
+        root.setVisibility(View.VISIBLE);
+        long now = System.currentTimeMillis();
+        if (now - tabAt > TAB_FRESH_MS) { tabAt = now; reload(tabUi); }   // вкладку открыли — свежие заявки (не чаще раза в 3 с)
+        return true;
+    }
+
     static void reload(final Ui u) {
         if (u.busy) return;
         u.busy = true;
@@ -269,9 +350,10 @@ public class IvaStaffOrdersPatch {
                     @Override public void run() {
                         try {
                             u.busy = false;
-                            if (!u.page.open()) return;
+                            if (!alive(u)) return;
                             if (fp == null) { u.status.setText(fe); u.status.setTextColor(u.cOrange); return; }
                             u.parts = fp;
+                            try { IvaArrowPatch.setCount(u.a, IvaArrowPatch.ST_ORD, newCount(fp)); } catch (Throwable ignore) {}   // 10.131
                             draw(u);
                         } catch (Throwable ignore) {}
                     }
