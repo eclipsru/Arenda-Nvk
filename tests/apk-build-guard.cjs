@@ -2979,7 +2979,7 @@ try {
     const tp = R('android/patches/test/IvaPatchTest.java'), ar = strip(R('android/patches/IvaArrowPatch.java'));
     const np = strip(R('android/patches/IvaNotifyPatch.java')), sp = strip(R('android/patches/IvaStaffPatch.java'));
     const so = strip(R('android/patches/IvaStaffOrdersPatch.java')), sc = R('android/patches/IvaStaffChatPatch.java');   // без strip: «audio/*»
-    assert.ok(/-d "\$C" (?:android\/patches\/IvaGeoPatch\.java )?android\/patches\/IvaArrowPatch\.java android\/patches\/IvaPatch\.java/.test(wf) && ck.includes('android/patches/IvaArrowPatch.java android/patches/IvaPatch.java'),   // 10.132: IvaGeoPatch — перед ним
+    assert.ok(/-d "\$C" (?:android\/patches\/IvaPayPatch\.java )?(?:android\/patches\/IvaGeoPatch\.java )?android\/patches\/IvaArrowPatch\.java android\/patches\/IvaPatch\.java/.test(wf) && ck.includes('android/patches/IvaArrowPatch.java android/patches/IvaPatch.java'),   // 10.132: IvaGeoPatch — перед ним
       '10.131: IvaArrowPatch собирается в обеих сборках');
     assert.ok(!/IvaArrowPatch/.test(ap) && R('android/patches/IvaPatch.java').includes('try { IvaArrowPatch.onTab(a); } catch (Throwable ignore) {}'),
       '10.131: без новых вставок в smali — вход через IvaPatch.onTab');
@@ -3048,7 +3048,35 @@ try {
       && rb.includes('DROP TABLE IF EXISTS public.iva_msg_ping;') && chk.includes('tools/msg-ping-stand.py'),
       '10.132: SQL 1122 — отметка только своя, пишет только база, Realtime; ошибка отметки сообщению не мешает; откат; стенд');
     assert.ok((tp.match(/eq\("[^"]*10\.132: /g) || []).length >= 14 && tp.includes('st132();'), 'IvaPatchTest: проверки 10.132');
-    assert.ok(/NEW_NAME: '10\.132'/.test(wf) && /NEW_CODE: '206'/.test(wf), 'сборка 10.132 (206)');
+    assert.ok(Number((/NEW_CODE: '(\d+)'/.exec(wf) || [])[1]) >= 206, 'сборка 10.132 (206) или новее');
+  }
+  // 10.133 (просьба владельца 04.11.2026): «подключить платежи владельцев прокатов к моей ЮKassa». Решения: только комиссия;
+  // кнопка — только в приложении; сумма любая (по умолчанию — весь долг); чеки — вручную в «Мой налог» по списку
+  // «Онлайн-оплаты ЮKassa» с отметкой «Чек пробит». Засчитывает только сервер по ответу ЮKassa (SQL 1123, функция iva-pay).
+  {
+    const strip = (t) => t.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/ [^\n]*/g, '');
+    const wf = R('.github/workflows/build-apk.yml'), ck = R('.github/workflows/check.yml'), ap = R('android/patches/apply.py');
+    const tp = R('android/patches/test/IvaPatchTest.java'), py = strip(R('android/patches/IvaPayPatch.java'));
+    const acc = R('android/patches/IvaAccessPatch.java'), chief = R('android/patches/IvaChiefPatch.java'), chk = R('tools/check.sh');
+    assert.ok(wf.includes('android/patches/IvaPayPatch.java android/patches/IvaGeoPatch.java') && ck.includes('android/patches/IvaPayPatch.java android/patches/IvaGeoPatch.java')
+      && !/IvaPayPatch/.test(ap) && acc.includes('try { IvaPayPatch.card(a, v, me); } catch (Throwable ignore) {}')
+      && chief.includes('try { IvaPayPatch.chief(a, p.list); } catch (Throwable ignore) {}'),
+      '10.133: IvaPayPatch собирается в обеих сборках, без новых вставок в smali — вход через карточку комиссии и «Комиссию» владельца');
+    // приложение ничего не засчитывает само: только создаёт платёж на сервере и спрашивает итог; в fee_payments не пишет
+    assert.ok(!/fee_payments/.test(py) && !/iva_yk_done|iva_yk_new|iva_yk_set|iva_yk_fee_insert/.test(py)
+      && py.includes('IvaClientPatch.SB_URL + "/functions/v1/iva-pay"') && py.includes('IvaClientPatch.apiCall(a, FN, "POST", newBody(v), true)')
+      && py.includes('IvaClientPatch.apiCall(a, FN, "POST", checkBody(id), true)') && py.includes('RECEIPT_RPC = "/rest/v1/rpc/iva_yk_receipt"'),
+      '10.133: приложение не засчитывает оплату — только сервер (iva-pay) по ответу ЮKassa');
+    assert.ok(py.includes('if (ready == 1 || ready == 3) addButton(a, v);') && py.includes('BTN = "Оплатить онлайн"')
+      && py.includes('debt >= MIN ? amountText(Math.min(debt, MAX)) : ""') && py.includes('"android.support.customtabs.extra.SESSION"'),
+      '10.133: кнопка — только когда ЮKassa подключена; сумма — весь долг по умолчанию; страница ЮKassa — во вкладке браузера');
+    assert.ok(!/0xffff5a5a|0xff3ddc84/.test(py) && py.includes('IvaPickupPatch.addButton(a, cOrange)'),
+      '10.133: цвета и кнопки — как в приложении (рамкой)');
+    assert.ok((tp.match(/eq\("[^"]*10\.133: /g) || []).length >= 14 && tp.includes('st133();'), 'IvaPatchTest: проверки 10.133');
+    assert.ok(chk.includes('tools/yk-pay-stand.py') && chk.includes(' iva-pay ') && fs.existsSync(path.join(__dirname, '..', 'supabase/functions/iva-pay/index.ts'))
+      && fs.existsSync(path.join(__dirname, '..', 'supabase/migrations/20261123_yookassa_fee_rollback.sql')) && fs.existsSync(path.join(__dirname, '..', 'pay-done.html')),
+      '10.133: функция iva-pay, SQL 1123 с откатом, страница возврата, стенд и тест в check.sh');
+    assert.ok(/NEW_NAME: '10\.133'/.test(wf) && /NEW_CODE: '207'/.test(wf), 'сборка 10.133 (207)');
   }
   // 10.75 (просьба владельца 14.10.2026): в «Настройках» — кнопка «Уведомления» (с 10.97 — открывает отдельную страницу);
   // внутри сверху «Открыть настройки уведомлений Android», потом какие присылать, потом расписание, потом всё остальное

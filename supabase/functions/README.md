@@ -8,8 +8,9 @@
 |---|---|---|
 | `order_email` | письма клиенту о заявке (принята / выдан / завершена) с ящика владельца на mail.ru | `docs/ПИСЬМА.md` |
 | `iva-push` | 10.74: мгновенные уведомления админам — сигнал «проверь сейчас» через Firebase (FCM), без текста сообщений | `docs/PUSH.md` |
+| `iva-pay` | 10.133: оплата комиссии площадки через ЮKassa — создаёт платёж, принимает уведомления ЮKassa и засчитывает оплату только по ответу самой ЮKassa | `docs/ЮKASSA.md` |
 
-Секреты функций (`SMTP_USER`, `SMTP_PASS`, для push — `FCM_SERVICE_ACCOUNT`, `FCM_GOOGLE_SERVICES`) владелец кладёт в секреты GitHub — выкладка переносит их
+Секреты функций (`SMTP_USER`, `SMTP_PASS`, для push — `FCM_SERVICE_ACCOUNT`, `FCM_GOOGLE_SERVICES`, для оплаты — `YOOKASSA_SHOP_ID`, `YOOKASSA_SECRET_KEY`) владелец кладёт в секреты GitHub — выкладка переносит их
 в Supabase, значения нигде не выводятся. Функции, созданные в Supabase вручную (`order_to_max`,
 `vk_wall_post`), здесь не лежат: их кода в репозитории нет, выкладка их не трогает.
 

@@ -2619,6 +2619,7 @@ public class IvaPatchTest {
         st130();                                                      // 10.130: «Мой пункт» плитками, чат пункта, шапка
         st131();                                                      // 10.131: «Стрелка оповещений»
         st132();                                                      // 10.132: карта, расстояние, стрелки сразу
+        st133();                                                      // 10.133: оплата комиссии через ЮKassa
         if (fail > 0) { System.out.println("ошибок: " + fail); System.exit(1); }
         System.out.println("все проверки IvaPatch пройдены");
     }
@@ -3660,6 +3661,57 @@ public class IvaPatchTest {
     }
 
     @SuppressWarnings("unchecked")
+    static void st133() {
+        eq("ЮKassa 10.133: сумма — «1 500,50», копейки, пробелы",
+            IvaPayPatch.amount("1 500,50") + "|" + IvaPayPatch.amount("1500") + "|" + IvaPayPatch.amount(" 7.5 ") + "|" + IvaPayPatch.amount("100000"),
+            "1500.5|1500.0|7.5|100000.0");
+        eq("ЮKassa 10.133: сумма вне 1–100 000, три знака, буквы, пусто — нельзя",
+            IvaPayPatch.amount("0.99") + "|" + IvaPayPatch.amount("100000.01") + "|" + IvaPayPatch.amount("10.555") + "|" + IvaPayPatch.amount("10р")
+            + "|" + IvaPayPatch.amount("") + "|" + IvaPayPatch.amount(null) + "|" + IvaPayPatch.amount("-5"),
+            "null|null|null|null|null|null|null");
+        eq("ЮKassa 10.133: сумма в поле — без лишних копеек",
+            IvaPayPatch.amountText(1500) + "|" + IvaPayPatch.amountText(1500.5) + "|" + IvaPayPatch.amountText(0.07) + "|" + IvaPayPatch.amountText(99.999),
+            "1500|1500.50|0.07|100");
+        eq("ЮKassa 10.133: весь долг по карточке комиссии (до копейки вверх); переплата и нет данных — 0",
+            IvaPayPatch.debtOf("1500.0|200.0|1.0|1") + "|" + IvaPayPatch.debtOf("10.123|0|1|1") + "|" + IvaPayPatch.debtOf("100|150|1|1")
+            + "|" + IvaPayPatch.debtOf("") + "|" + IvaPayPatch.debtOf("мусор"),
+            "1300.0|10.13|0.0|0.0|0.0");
+        eq("ЮKassa 10.133: запросы к серверу — только сумма или номер, без почты",
+            IvaPayPatch.newBody(1500.5) + " " + IvaPayPatch.checkBody(42), "{\"a\":\"new\",\"amount\":\"1500.50\"} {\"a\":\"check\",\"id\":42}");
+        eq("ЮKassa 10.133: «подключено ли» — ready / test / нет / не JSON",
+            IvaPayPatch.readyOf("{\"ok\":true,\"ready\":true,\"test\":false}") + "," + IvaPayPatch.readyOf("{\"ready\":true,\"test\":true}")
+            + "," + IvaPayPatch.readyOf("{\"ok\":true,\"ready\":false}") + "," + IvaPayPatch.readyOf("<html>") + "," + IvaPayPatch.readyOf(null), "1,3,2,2,2");
+        eq("ЮKassa 10.133: ошибки сервера — понятный текст",
+            IvaPayPatch.errText("too_many", "") + " | " + IvaPayPatch.errText("yookassa", "Магазин не активирован") + " | " + IvaPayPatch.errText("", ""),
+            "Слишком много попыток подряд — подождите 10 минут | ЮKassa не приняла платёж: Магазин не активирован | Не получилось — проверьте интернет и попробуйте ещё раз");
+        eq("ЮKassa 10.133: «не подключено» — оплатить переводом, как раньше",
+            IvaPayPatch.errText("not_ready", null), "Онлайн-оплата пока не подключена — оплатите переводом, как раньше");
+        eq("ЮKassa 10.133: ответ сервера — url и номер; не JSON — пусто",
+            IvaPayPatch.jstr("{\"id\":17,\"url\":\"https://yoomoney.ru/checkout/payments/v2/contract?orderId=2f\"}", "url") + "|"
+            + IvaPayPatch.jstr("{\"id\":17}", "id") + "|" + IvaPayPatch.jstr("oops", "url") + "|",
+            "https://yoomoney.ru/checkout/payments/v2/contract?orderId=2f|17||");
+        long[] w = IvaPayPatch.waitParse(IvaPayPatch.waitVal(17, 1730700000000L));
+        eq("ЮKassa 10.133: отметка «ждём итог» — номер и время; мусор — нет",
+            (w == null ? "null" : w[0] + "@" + w[1]) + "|" + IvaPayPatch.waitParse("") + "|" + IvaPayPatch.waitParse("x@1") + "|" + IvaPayPatch.waitParse("0@5")
+            + "|" + IvaPayPatch.waitParse(null), "17@1730700000000|null|null|null|null");
+        eq("ЮKassa 10.133: опрос итога — 5 с первые 2 минуты, потом 20 с",
+            IvaPayPatch.pollDelay(0) + "," + IvaPayPatch.pollDelay(119999) + "," + IvaPayPatch.pollDelay(120000), "5000,5000,20000");
+        eq("ЮKassa 10.133: способ оплаты по-русски",
+            IvaPayPatch.method("sbp") + "," + IvaPayPatch.method("bank_card") + "," + IvaPayPatch.method("sberbank") + "," + IvaPayPatch.method("") + ","
+            + IvaPayPatch.method("qiwi"), "СБП,карта,SberPay,,qiwi");
+        double[] t = IvaPayPatch.chiefTotals(new String[]{"succeeded", "succeeded", "canceled", "pending"},
+            new double[]{1500.5, 200, 999, 50}, new boolean[]{false, true, false, false});
+        eq("ЮKassa 10.133: владельцу — оплачено онлайн, сколько чеков не пробито (отменённые и незавершённые не в счёт)",
+            t[0] + "|" + (int) t[1] + "|" + t[2] + "|" + IvaPayPatch.chiefTotals(null, null, null)[0], "1700.5|1|1500.5|0.0");
+        eq("ЮKassa 10.133: ответ сервера — экранирование JSON и логические значения",
+            IvaPayPatch.jstr("{\"url\":\"https:\\/\\/yoomoney.ru\\/a?b=1\\u0026c=\\\"2\\\"\",\"test\":true}", "url") + "|"
+            + IvaPayPatch.jstr("{\"test\": true}", "test"), "https://yoomoney.ru/a?b=1&c=\"2\"|true");
+        eq("ЮKassa 10.133: рубли — пробелы и копейки",
+            IvaPayPatch.rub(1500) + "|" + IvaPayPatch.rub(1234567.5) + "|" + IvaPayPatch.rub(0.07), "1 500 ₽|1 234 567,50 ₽|0,07 ₽");
+        eq("ЮKassa 10.133: адрес функции — свой проект Supabase",
+            IvaPayPatch.FN, "https://wdxdeatphizclskfmfxi.supabase.co/functions/v1/iva-pay");
+    }
+
     static void st132() {
         eq("карта 10.132: координаты с названием пункта (скобки из названия убраны)",
             IvaGeoPatch.geoUri("Склад (центр)", "ул. Ленина, 1", "Новосибирск", 55.030204, 82.92043),

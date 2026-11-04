@@ -652,6 +652,7 @@ public final class IvaAccessPatch {
         double[] c = feeCache(prefs(a).getString(feeCacheKey(me), ""));
         if (c != null) feeShow(a, v, c, null);
         else { v[1].setText("…"); v[2].setText(""); }                    // первая загрузка на этом телефоне
+        try { IvaPayPatch.card(a, v, me); } catch (Throwable ignore) {}  // 10.133: «Оплатить онлайн» (ЮKassa)
         feeAgain = true;
         if (!FEE_BUSY.compareAndSet(false, true)) return;                 // идёт загрузка — повторит после неё
         new Thread(new Runnable() {

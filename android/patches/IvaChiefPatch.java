@@ -679,6 +679,7 @@ public final class IvaChiefPatch {
                 p.list.addView(kv(a, s));
                 if (m.pendingN > 0)
                     p.list.addView(note(a, "Подтвердить оплату", "Заявки на оплату подтверждаются в «Панели владельца» в кабинете (кнопки «Подтвердить» / «Отклонить»).", ""));
+                try { IvaPayPatch.chief(a, p.list); } catch (Throwable ignore) {}   // 10.133: онлайн-оплаты ЮKassa и «Чек пробит»
                 p.list.addView(head(a, "ПО АДМИНАМ"));
                 List<String> ks = byDebt(m);
                 if (ks.isEmpty()) { p.list.addView(hint(a, "Заявок у админов пока нет")); return; }
