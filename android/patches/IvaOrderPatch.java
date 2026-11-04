@@ -1536,6 +1536,7 @@ public final class IvaOrderPatch {
         View scroll = idView(a, "ordersScroll");
         View root = null;
         for (int i = 0; i < page.getChildCount(); i++) if (ORD_ROOT_TAG.equals(page.getChildAt(i).getTag())) root = page.getChildAt(i);
+        try { if (IvaStaffOrdersPatch.inOrdersTab(a, page, scroll, root)) return; } catch (Throwable ignore) {}   // 10.130: сотрудник, вид «как у админов»
         boolean client = IvaClientPatch.isClient(a);
         if (client) try { IvaOrderPointPatch.hide(a); } catch (Throwable ignore) {}   // 10.102: фильтр пунктов — только прокату
         if (!client || (!ordMine(a) && ordFailed)) {       // админ / гость — штатный список; не загрузилось — тоже (как 10.62)

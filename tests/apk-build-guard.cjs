@@ -95,7 +95,7 @@ try {
   // 10.113: что открыть — IvaLogoPatch.target («Вид раздела с логотипом»); гость и админ по умолчанию — штатный onPlus.
   assert.match(jpc, /t = IvaLogoPatch\.target\(a\);[\s\S]{0,120}if \(t == IvaLogoPatch\.CLIENT_HUB && openHub\(a, 0\)\) return;\n\s*if \(t == IvaLogoPatch\.STAFF_HUB && openHub\(a, 1\)\) return;\n\s*callNative\(a, "onPlus"\);/, 'IvaClientPatch: логотип у админа и гостя должен вести в штатный onPlus');
   assert.match(jpc, /View plus = a\.findViewById\(id\(a, "navPlus"\)\);/, 'IvaClientPatch: обработчик логотипа не ставится на navPlus');
-  assert.match(jpc, /if \(toHub && openClientHub\(a\)\) return;\n\s*callNativeTab\(a, "home"\);/, 'IvaClientPatch: «Назад» в карточке инструмента должна вести на главную, как штатная');
+  assert.match(jpc, /if \(toHub && openClientHub\(a\)\) return;\n\s*(?:try \{ if \(IvaStaffToolsPatch\.detailBack\(a\)\) return; \} catch \(Throwable ignore\) \{\}[^\n]*\n\s*)?callNativeTab\(a, "home"\);/, 'IvaClientPatch: «Назад» в карточке инструмента должна вести на главную, как штатная');
   assert.match(jpc, /try \{ installClientNav\(a\); \} catch \(Throwable ignore\) \{\}\n\s*try \{ IvaLogoPatch\.cabinet\(a\); \} catch \(Throwable ignore\) \{\}[^\n]*(?:\n\s*try \{ IvaShopPatch\.cabinet\(a\); \} catch \(Throwable ignore\) \{\}[^\n]*)?(?:\n\s*(?:\/\/[^\n]*|try \{ (?:IvaOrderPatch\.profileArchiveRow|IvaNotifyPatch\.ensureSupport|IvaAccessPatch\.feeCard)\(a\); \} catch \(Throwable ignore\) \{\}[^\n]*))*\n\s*try \{ if \(hubVisible && IvaLogoPatch\.target\(a\) == IvaLogoPatch\.NATIVE\) callNativeTab\(a, "home"\); \}/, 'IvaClientPatch: onProfile не ставит логотип клиента или не прячет раздел при выходе');
   assert.match(jp, /try \{ IvaClientPatch\.onShowTab\(a, tab\); \} catch \(Throwable ignore\) \{\}\n(?:\s*\/\/[^\n]*\n)?\s*try \{ IvaSearchPatch\.onShowTab\(a, tab\); \} catch \(Throwable ignore\) \{\}\n(?:\s*\/\/[^\n]*\n)?\s*try \{ IvaChatPatch\.onShowTab\(a, tab\); \} catch \(Throwable ignore\) \{\}\n(?:\s*\/\/[^\n]*\n)?\s*try \{ IvaOrderPatch\.onShowTab\(a, tab\); \} catch \(Throwable ignore\) \{\}\n(?:\s*\/\/[^\n]*\n)?\s*try \{ IvaNotifyPatch\.onShowTab\(a, tab\); \} catch \(Throwable ignore\) \{\}\n    \}/, 'IvaPatch.onTab: штатный переход должен прятать раздел клиента, включать/прятать поиск 10.45, чат 10.54, заявку 10.55 и уведомления 10.56');
   assert.match(jpc, /if \(hubVisible\) \{\n\s*detailFromHub = "detail"\.equals\(t\);\n\s*hideClientHub\(a\);/, 'IvaClientPatch: раздел клиента не прячется при штатном переходе');
@@ -2237,9 +2237,13 @@ try {
       && (op.match(/settingsRow\(|settingsSection\(/g) || []).length >= 4 && op.lastIndexOf('IvaLogoPatch.settingsRow(') > op.lastIndexOf('IvaStaffJournalPatch.settingsRow('),
       'логотип 10.113: «Вид раздела с логотипом» — последней строкой «Настройки проката»');
     const om = sp.slice(sp.indexOf('static void openMine('));
-    assert.ok(om.indexOf('IvaLogoPatch.settingsRow(a, pg.list,') > om.lastIndexOf('pg.list.addView(r);')
+    // 10.130 (просьба владельца 04.11.2026): пункт сверху, затем плитки и «Вид раздела с логотипом», права — в самом низу
+    const omEnd = om.indexOf('static View tile(');
+    assert.ok(om.indexOf('IvaLogoPatch.settingsRow(a, pg.list,') > om.indexOf('addTiles(a, pg.list, tiles);')
+      && om.indexOf('IvaLogoPatch.settingsRow(a, pg.list,') < om.lastIndexOf('pg.list.addView(r);', omEnd)
+      && om.indexOf('for (IvaPickupPatch.Point p : m.points)') < om.indexOf('addTiles(a, pg.list, tiles);')
       && /if \(IvaStaffToolsPatch\.want\(m\.status, m\.r\)\) \{[^\n]*\n\s*try \{ IvaLogoPatch\.settingsRow\(a, pg\.list,/.test(om),
-      'логотип 10.113: у сотрудника «Каталог» — последней строкой «Мой пункт»');
+      'логотип 10.113 / 10.130: у сотрудника «Мой пункт» — пункт, плитки, «Вид раздела с логотипом», права последними');
     // 2. страница: два образца, выбор сохраняется, строка «Кабинета»
     assert.ok(lg.includes('static final String[][] TABS = {{"Избранное", "Мои инструменты"}, {"Мой инструмент", "Добавить инструмент"}};')
       && lg.includes('shot.setBackground(new Shot(a, k));') && lg.includes('save(a, k == 1 ? ADMIN : CLIENT);') && lg.includes('cabinet(a);')
@@ -2928,7 +2932,38 @@ try {
     assert.ok(sp.includes('s.del = old.del;') && sp.includes('copyInto(s, old);') && sp.includes('sw(a, dc, DEL_TITLE, DEL_HINT, s.del && s.r[1]')
       && sp.includes('fDel.isChecked()'), '10.129: «Удаляет инструмент» копируется в редактор и уходит в «Сохранить»');
     assert.ok((tp.match(/eq\("сотрудник 10\.129: /g) || []).length >= 5 && tp.includes('st129();'), 'IvaPatchTest: проверки 10.129');
-    assert.ok(/NEW_NAME: '10\.129'/.test(wf) && /NEW_CODE: '203'/.test(wf), 'сборка 10.129 (203)');
+    assert.ok(Number((/NEW_CODE: '(\d+)'/.exec(wf) || [])[1]) >= 203, 'сборка 10.129 (203) или новее');
+  }
+  // 10.130 (просьба владельца 04.11.2026): «Мой пункт» плитками, «Инструменты пункта» как в разделе логотипа, голосовые и вид
+  // «Чата пункта», у клиента в «Чате» слева аватарка проката и справа только инструмент, имена клиентов у проката, надпись v15
+  // в шапке, у сотрудника с видом «как у админов» вкладка «Заявки» = «Заявки пункта».
+  {
+    const strip = (t) => t.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '');
+    const wf = R('.github/workflows/build-apk.yml'), ap = R('android/patches/apply.py'), tp = R('android/patches/test/IvaPatchTest.java');
+    const sp = strip(R('android/patches/IvaStaffPatch.java')), sc = R('android/patches/IvaStaffChatPatch.java');   // без strip: в коде есть "audio/*"
+    const ch = strip(R('android/patches/IvaChatPatch.java')), lg = strip(R('android/patches/IvaLogoPatch.java'));
+    const so = strip(R('android/patches/IvaStaffOrdersPatch.java')), op = strip(R('android/patches/IvaOrderPatch.java'));
+    const sq = R('supabase/migrations/20261121_chat_names.sql');
+    assert.ok(!/tile\(|addTiles|voiceReady|inOrdersTab|IvaLogoPatch\.header|peer_names|prokatAvatar/.test(ap), '10.130: без новых вставок в smali');
+    const om = sp.slice(sp.indexOf('static void openMine('));
+    assert.ok(om.includes('"ic_wrench"') && om.includes('"ic_receipt"') && om.includes('"ic_chat"') && om.includes('"ic_layers"')
+      && om.includes('IvaOrderPatch.openArchive(fa)') && !om.includes('archRowView') && !om.includes('IvaPickupPatch.addButton'),
+      '10.130: «Мой пункт» — плитки (инструменты, заявки, чат, архив) вместо кнопок и строки архива');
+    assert.ok(sc.includes('IvaChatPatch.voiceBubble(a, chatMsg(m), mine)')
+      && sc.includes('IvaChatPatch.handler = new android.os.Handler') && sc.includes('IvaChatPatch.voiceStop(a)'),
+      '10.130: «Чат пункта» — голосовые своим проигрывателем «Чата» (таймер запущен, при выходе — стоп)');
+    assert.ok(ch.includes('prokatAvatar(a, c.partner, title, c.tool, tool, LIST_AVATAR_DP)') && ch.includes('rightTool(c.tool, cli)')
+      && ch.includes('"/rest/v1/rpc/iva_chat_peer_names"') && ch.includes('peerNamesMissing = true'),
+      '10.130: «Чат» — у клиента аватарка проката слева, справа только инструмент; имена клиентов (без SQL — как раньше)');
+    assert.ok(lg.includes('HEADER_PNG') && lg.includes('tv.setVisibility(View.GONE);') && R('android/patches/IvaPatch.java').includes('try { IvaLogoPatch.header(a); } catch (Throwable ignore) {}'),
+      '10.130: шапка — надпись v15, штатный текст только прячется');
+    assert.ok(op.includes('if (IvaStaffOrdersPatch.inOrdersTab(a, page, scroll, root)) return;') && so.includes('IvaStaffToolsPatch.hubMode(a)'),
+      '10.130: «Заявки» у сотрудника с видом «как у админов» — заявки пункта');
+    assert.ok(sq.includes('public.iva_is_chat_admin()') && sq.includes('REVOKE ALL ON FUNCTION public.iva_chat_peer_names() FROM public, anon;')
+      && !/phone|passport|address|tel/i.test(sq.replace(/^--.*$/gm, '')) && R('supabase/migrations/20261121_chat_names_rollback.sql').includes('DROP FUNCTION IF EXISTS public.iva_chat_peer_names();'),
+      'SQL 1121: только имя клиента, только админам, которым писали; откат на месте');
+    assert.ok((tp.match(/eq\("[^"]*10\.130: /g) || []).length >= 10 && tp.includes('st130();'), 'IvaPatchTest: проверки 10.130');
+    assert.ok(/NEW_NAME: '10\.130'/.test(wf) && /NEW_CODE: '204'/.test(wf), 'сборка 10.130 (204)');
   }
   // 10.75 (просьба владельца 14.10.2026): в «Настройках» — кнопка «Уведомления» (с 10.97 — открывает отдельную страницу);
   // внутри сверху «Открыть настройки уведомлений Android», потом какие присылать, потом расписание, потом всё остальное

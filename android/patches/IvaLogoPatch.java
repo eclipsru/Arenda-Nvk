@@ -371,4 +371,165 @@ public class IvaLogoPatch {
         @Override public void setColorFilter(ColorFilter cf) { fill.setColorFilter(cf); stroke.setColorFilter(cf); font.setColorFilter(cf); }
         @Override public int getOpacity() { return PixelFormat.TRANSLUCENT; }
     }
+
+    // ───────────── 10.130: надпись в шапке (просьба владельца 04.11.2026) ─────────────
+    // Вместо обычного текста «Ива-Инструмент в аренду» рядом с круглым логотипом — надпись с наклейки v15 «Контур-скорость»
+    // (promo/decal/files/iva-steklo-15-kontur-skorost.pdf, без чёрной подложки, с «скоростными» линиями слева).
+    // Ресурсы сборки не пересобираются — PNG (960×69, палитра, ~7,6 КБ) здесь, в коде. Оранжевый — цвет проката
+    // (у пробной версии — её цвет). Не получилось — остаётся штатный текст.
+
+    static final String HEADER_TEXT = "Ива-Инструмент в аренду", HEADER_TAG = "iva_header_v15";
+    static final int HEADER_ORANGE = 0xffff8f1f, HEADER_MAX_DP = 22;
+    static final String HEADER_PNG =
+        "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" +
+        "Wz5dpQAAAABJRU5ErkJggg==";
+
+    /** Из IvaPatch.onCreated: в шапке главного экрана (scrMain) текст → надпись. */
+    static void header(Activity a) {
+        int id = a.getResources().getIdentifier("scrMain", "id", a.getPackageName());
+        View scr = id == 0 ? null : a.findViewById(id);
+        if (!(scr instanceof android.view.ViewGroup) || ((android.view.ViewGroup) scr).getChildCount() == 0) return;
+        View top = ((android.view.ViewGroup) scr).getChildAt(0);
+        if (top.findViewWithTag(HEADER_TAG) != null) return;
+        TextView tv = findText(top, HEADER_TEXT, 3);
+        if (tv == null || !(tv.getParent() instanceof LinearLayout)) return;
+        android.graphics.Bitmap bm = headerBitmap(IvaClientPatch.navColor(a, "orange", HEADER_ORANGE));
+        if (bm == null) return;
+        ImageView iv = new ImageView(a);
+        iv.setTag(HEADER_TAG);
+        iv.setImageBitmap(bm);
+        iv.setAdjustViewBounds(true);
+        iv.setScaleType(ImageView.ScaleType.FIT_START);
+        iv.setMaxHeight((int) (HEADER_MAX_DP * a.getResources().getDisplayMetrics().density + 0.5f));
+        iv.setContentDescription(HEADER_TEXT);
+        LinearLayout col = (LinearLayout) tv.getParent();
+        col.setGravity(Gravity.CENTER_VERTICAL);
+        col.addView(iv, col.indexOfChild(tv), new LinearLayout.LayoutParams(-1, -2));
+        tv.setVisibility(View.GONE);                       // штатный текст не удаляем — только прячем
+    }
+
+    static TextView findText(View v, String text, int depth) {
+        if (v instanceof TextView && text.contentEquals(((TextView) v).getText())) return (TextView) v;
+        if (depth <= 0 || !(v instanceof android.view.ViewGroup)) return null;
+        android.view.ViewGroup g = (android.view.ViewGroup) v;
+        for (int i = 0; i < g.getChildCount(); i++) {
+            TextView t = findText(g.getChildAt(i), text, depth - 1);
+            if (t != null) return t;
+        }
+        return null;
+    }
+
+    /** Надпись; оранжевые точки — в цвет проката (белые и прозрачные не трогаем). */
+    static android.graphics.Bitmap headerBitmap(int accent) {
+        try {
+            byte[] png = android.util.Base64.decode(HEADER_PNG, android.util.Base64.DEFAULT);
+            android.graphics.Bitmap src = android.graphics.BitmapFactory.decodeByteArray(png, 0, png.length);
+            if (src == null || (accent | 0xff000000) == HEADER_ORANGE) return src;
+            android.graphics.Bitmap bm = src.copy(android.graphics.Bitmap.Config.ARGB_8888, true);
+            int w = bm.getWidth(), h = bm.getHeight();
+            int[] px = new int[w * h];
+            bm.getPixels(px, 0, w, 0, 0, w, h);
+            for (int i = 0; i < px.length; i++) px[i] = recolor(px[i], accent);
+            bm.setPixels(px, 0, w, 0, 0, w, h);
+            return bm;
+        } catch (Throwable e) { return null; }
+    }
+
+    /** Чистая логика: точка оранжевая (красный заметно больше синего) — цвет проката с той же прозрачностью. */
+    static int recolor(int argb, int accent) {
+        int al = argb >>> 24, r = (argb >> 16) & 0xff, b = argb & 0xff;
+        if (al == 0 || r - b < 60) return argb;
+        return (al << 24) | (accent & 0x00ffffff);
+    }
 }

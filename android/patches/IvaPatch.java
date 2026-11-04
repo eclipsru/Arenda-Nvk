@@ -401,6 +401,7 @@ public final class IvaPatch {
         try { IvaClientPatch.authStart(a); } catch (Throwable ignore) {}   // 10.69: ключ обновляется заранее
         try { IvaClientPatch.authEmailFix(a); } catch (Throwable ignore) {}   // 10.119: почта — из ключа
         try { IvaCensorPatch.guardStock(a); } catch (Throwable ignore) {}   // 24.10.2026: мат — имя при регистрации, «Мои данные»
+        try { IvaLogoPatch.header(a); } catch (Throwable ignore) {}   // 10.130: надпись v15 в шапке вместо текста
         reloadProfile(a);
     }
 

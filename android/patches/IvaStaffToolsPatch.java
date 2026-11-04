@@ -349,9 +349,38 @@ public class IvaStaffToolsPatch {
         try { if (d != null && d.isShowing()) d.dismiss(); } catch (Throwable ignore) {}
     }
 
+    /** 10.130: карточку / правку открыли со страницы «Инструменты пункта» — «Назад» возвращает на неё. */
+    static volatile boolean fromPage;
+
+    static boolean showing(WeakReference<Dialog> r) {
+        Dialog d = r == null ? null : r.get();
+        try { return d != null && d.isShowing(); } catch (Throwable e) { return false; }
+    }
+
+    /** Перед штатной карточкой / правкой: открыта страница «Инструменты пункта» — закрыть её (и «Мой пункт») и запомнить. */
+    static void leavePage() {
+        if (!showing(toolsPage)) return;
+        fromPage = true;
+        close(toolsPage);
+        close(minePage);
+    }
+
+    /** Чистая логика: вернуть ли на страницу при «Назад» с этой вкладки. */
+    static boolean pageBack(boolean fromPage, String curTab) {
+        return fromPage && ("detail".equals(curTab) || "tooledit".equals(curTab) || "addtool".equals(curTab) || "admhub".equals(curTab));
+    }
+
+    /** Кнопка «‹» штатной карточки (IvaClientPatch.installClientNav): со страницы — обратно на неё. */
+    static boolean detailBack(Activity a) {
+        if (!fromPage) return false;
+        backToList(a);
+        return true;
+    }
+
     /** Из IvaPatch.onTab (последним): вкладки «Мои инструменты / Добавить» — прятать у сотрудника; кабинет — возврат. */
     static void onTab(final Activity a, String tab) {
         String t = tab == null ? "" : tab;
+        if (!pageBack(true, t)) fromPage = false;              // 10.130: ушли с карточки / формы куда-то ещё — не возвращаем
         boolean form = "addtool".equals(t) || "admhub".equals(t) || "tooledit".equals(t);
         boolean st = form && staff(a);
         boolean hm = st && hubMode(a);                       // 10.113: вид «как у админов» — вкладки кабинета видны
@@ -366,13 +395,16 @@ public class IvaStaffToolsPatch {
 
     /** Из IvaPatch.onBack: сотрудник на штатной форме / правке — «Назад» ведёт в «Инструменты пункта». */
     static boolean onBack(Activity a, String curTab) {
+        if (pageBack(fromPage, curTab)) { backToList(a); return true; }   // 10.130: со страницы «Инструменты пункта»
         if (!backTab(curTab, staff(a), false)) return false;
         backToList(a);
         return true;
     }
 
     static void backToList(Activity a) {
-        if (hubMode(a) && IvaClientPatch.openHub(a, 1)) return;   // 10.113: вид «как у админов» — в «Мой инструмент»
+        boolean page = fromPage;
+        fromPage = false;
+        if (!page && hubMode(a) && IvaClientPatch.openHub(a, 1)) return;   // 10.113: вид «как у админов» — в «Мой инструмент»
         IvaNotifyPatch.tab(a, "profile");
         IvaStaffPatch.Me m = cached(a);
         if (m != null && want(m.status, m.r)) open(a, m.company);
@@ -546,8 +578,8 @@ public class IvaStaffToolsPatch {
     static void draw(final Ui u, List<Tool> tools) {
         final Activity a = u.a;
         u.items.removeAllViews();
-        if (u.page == null && u.hubGen >= 0) {                 // 10.122: раздел логотипа — пункты → инструменты, как у владельца
-            u.status.setVisibility(View.GONE);
+        if (u.page != null || u.hubGen >= 0) {                 // 10.122: раздел логотипа — пункты → инструменты, как у владельца
+            u.status.setVisibility(View.GONE);                 // 10.130: и на странице «Инструменты пункта» — так же
             IvaMyToolsPatch.drawStaff(a, u.items, tools, new Runnable() { @Override public void run() { reload(u); } });
             return;
         }

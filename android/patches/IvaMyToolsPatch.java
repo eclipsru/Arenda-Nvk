@@ -398,6 +398,7 @@ public class IvaMyToolsPatch {
     }
 
     static void openDetail(Activity a, JSONObject j) {
+        try { IvaStaffToolsPatch.leavePage(); } catch (Throwable ignore) {}   // 10.130: со страницы «Инструменты пункта» — закрыть её, «Назад» вернёт
         try {
             IvaChatPatch.call(a, "openDetail", new Class<?>[]{JSONObject.class, boolean.class}, j, false);
         } catch (Throwable e) {
@@ -412,6 +413,7 @@ public class IvaMyToolsPatch {
                 JSONObject use = j != null ? j : t.raw;
                 if (use == null) { Toast.makeText(a, err, Toast.LENGTH_LONG).show(); return; }
                 IvaToolEditPatch.markFull(str(use, "id"));
+                try { IvaStaffToolsPatch.leavePage(); } catch (Throwable ignore) {}   // 10.130: страница-окно не закрывает правку
                 try {
                     IvaChatPatch.call(a, "openToolEdit", new Class<?>[]{JSONObject.class}, use);
                 } catch (Throwable e) { Toast.makeText(a, "Не получилось открыть инструмент", Toast.LENGTH_LONG).show(); }

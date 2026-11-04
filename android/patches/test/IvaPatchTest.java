@@ -2616,6 +2616,7 @@ public class IvaPatchTest {
         v125();                                                       // 10.125: телефон пункта в карточке, другой пункт проката
         j128();                                                       // 10.128: «Выдал / Принял» на карточках владельца
         st129();                                                      // 10.129: «Удаляет инструмент» не теряется в карточке сотрудника
+        st130();                                                      // 10.130: «Мой пункт» плитками, чат пункта, шапка
         if (fail > 0) { System.out.println("ошибок: " + fail); System.exit(1); }
         System.out.println("все проверки IvaPatch пройдены");
     }
@@ -3611,6 +3612,34 @@ public class IvaPatchTest {
 
     /** 10.128: «Выдал / Принял» на карточках заявок владельца (SQL 20261118, iva_parts_journal). */
     /** 10.129: карточка сотрудника у владельца — право «Удаляет инструмент» не теряется, понятные подписи. */
+    static void st130() {
+        String pt = IvaProkatPatch.key("11111111-2222-3333-4444-555555555555");
+        String tool = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee";
+        eq("чат 10.130: у клиента справа — инструмент", IvaChatPatch.rightTool(tool, true), true);
+        eq("чат 10.130: у клиента чат пункта — справа ничего", IvaChatPatch.rightTool(pt, true), false);
+        eq("чат 10.130: у клиента общий чат проката — справа ничего", IvaChatPatch.rightTool("", true), false);
+        eq("чат 10.130: «Хочу сдавать» — справа ничего", IvaChatPatch.rightTool(IvaChatPatch.LEND, true), false);
+        eq("чат 10.130: у админа чат пункта — как раньше", IvaChatPatch.rightTool(pt, false), true);
+        eq("инструменты пункта 10.130: со страницы — «Назад» с карточки и правки на неё",
+            IvaStaffToolsPatch.pageBack(true, "detail") + "" + IvaStaffToolsPatch.pageBack(true, "tooledit") + IvaStaffToolsPatch.pageBack(true, "home")
+            + IvaStaffToolsPatch.pageBack(false, "detail"), "truetruefalsefalse");
+        eq("заявки 10.130: заявки пункта во вкладке — только вид «как у админов» и право",
+            IvaStaffOrdersPatch.tabMode(true, true) + "" + IvaStaffOrdersPatch.tabMode(false, true) + IvaStaffOrdersPatch.tabMode(true, false), "truefalsefalse");
+        eq("шапка 10.130: оранжевый — в цвет проката, прозрачность та же", Integer.toHexString(IvaLogoPatch.recolor(0x80ff8f1f, 0xffffea00)), "80ffea00");
+        eq("шапка 10.130: белый и прозрачный не меняются",
+            Integer.toHexString(IvaLogoPatch.recolor(0xfff2f4f8, 0xffffea00)) + " " + IvaLogoPatch.recolor(0, 0xffffea00), "fff2f4f8 0");
+        eq("шапка 10.130: надпись — PNG", IvaLogoPatch.HEADER_PNG.startsWith("iVBORw0KGgo") && IvaLogoPatch.HEADER_PNG.length() > 5000, true);
+        eq("чат пункта 10.130: голосовое — в проигрыватель «Чата» (ключ — id, ссылка, длительность)", chatMsgStr(), "m1|https://x/v.m4a|12");
+        eq("мой пункт 10.130: плитка архива — общий заголовок", IvaOrderPatch.ARCH_TITLE, "Архив заявок");
+    }
+
+    static String chatMsgStr() {
+        IvaStaffChatPatch.Msg m = new IvaStaffChatPatch.Msg();
+        m.id = "m1"; m.audio = "https://x/v.m4a"; m.dur = 12; m.at = "";
+        IvaChatPatch.Msg x = IvaStaffChatPatch.chatMsg(m);
+        return IvaChatPatch.voiceKey(x) + "|" + x.audio + "|" + x.dur;
+    }
+
     static void st129() {
         IvaStaffPatch.Staff old = new IvaStaffPatch.Staff();
         old.id = "11111111-2222-3333-4444-555555555555"; old.name = "Иван"; old.email = "ivan@x.ru";

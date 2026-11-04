@@ -314,6 +314,7 @@ public class IvaStaffChatPatch {
         TextView status;
         boolean busy;
         String[] want;                                    // открыть эту переписку после загрузки (из уведомления)
+        String company = "";                              // 10.130: буква в кружке у ответов проката
         int cText, cGray, cOrange;
     }
 
@@ -329,6 +330,7 @@ public class IvaStaffChatPatch {
         u.cGray = IvaStaffPatch.color(a, "gray", 0xff9aa1b0);
         u.cOrange = IvaStaffPatch.color(a, "orange", 0xffff8f1f);
         String c = company == null || company.trim().isEmpty() ? "Прокат" : company.trim();
+        u.company = c;
         u.page = IvaChiefPatch.page(a, TITLE, "«" + c + "»: вопросы клиентов вашим пунктам и по их инструментам. Клиент видит ответ от проката.", false);
         u.status = IvaChiefPatch.text(a, "Загружаем…", 13f, u.cGray, false);
         u.status.setPadding(dp(a, 2), dp(a, 4), 0, 0);
@@ -388,41 +390,12 @@ public class IvaStaffChatPatch {
         u.status.setText(cs.isEmpty() ? "Пока никто не писал. Здесь появятся вопросы клиентов вашим пунктам и об их инструментах." : "");
         u.status.setVisibility(cs.isEmpty() ? View.VISIBLE : View.GONE);
         Chat jump = null;
+        TimeZone tz = TimeZone.getDefault();
         for (final Chat c : cs) {
             if (u.want != null && u.want[0].equalsIgnoreCase(c.tool) && u.want[1].equals(c.peer)) jump = c;
-            LinearLayout card = IvaChiefPatch.card(a);
-            LinearLayout top = new LinearLayout(a);
-            top.setOrientation(LinearLayout.HORIZONTAL);
-            top.setGravity(Gravity.CENTER_VERTICAL);
-            top.addView(IvaChiefPatch.text(a, c.client.isEmpty() ? "Клиент" : c.client, 15f, u.cText, true), new LinearLayout.LayoutParams(0, -2, 1f));
-            top.addView(IvaChiefPatch.text(a, when(c.at), 12f, u.cGray, false));
-            card.addView(top);
-            TextView tl = IvaChiefPatch.text(a, subTitle(c.toolName, c.point), 13f, u.cGray, false);
-            tl.setPadding(0, dp(a, 4), 0, 0);
-            card.addView(tl);
-            LinearLayout bottom = new LinearLayout(a);
-            bottom.setOrientation(LinearLayout.HORIZONTAL);
-            bottom.setGravity(Gravity.CENTER_VERTICAL);
-            bottom.setPadding(0, dp(a, 4), 0, 0);
-            TextView pv = IvaChiefPatch.text(a, preview(c.last, c.lastMine), 14f, c.unread > 0 ? u.cText : u.cGray, c.unread > 0);
-            pv.setSingleLine(true);
-            pv.setEllipsize(android.text.TextUtils.TruncateAt.END);
-            bottom.addView(pv, new LinearLayout.LayoutParams(0, -2, 1f));
-            String un = unreadText(c.unread);
-            if (!un.isEmpty()) {
-                TextView b = IvaChiefPatch.text(a, un, 12f, u.cOrange, true);
-                b.setBackground(IvaPatch.accentBg(a, u.cOrange, 10));
-                b.setPadding(dp(a, 8), dp(a, 2), dp(a, 8), dp(a, 2));
-                LinearLayout.LayoutParams bl = new LinearLayout.LayoutParams(-2, -2);
-                bl.leftMargin = dp(a, 8);
-                bottom.addView(b, bl);
-            }
-            card.addView(bottom);
-            card.setClickable(true);
-            card.setOnClickListener(new View.OnClickListener() { @Override public void onClick(View v) { openThread(u, c); } });
-            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2);
-            lp.topMargin = dp(a, 10);
-            u.items.addView(card, lp);
+            View row = chatRow(u, c, tz);                    // 10.130: строка как в «Чате» нижнего меню
+            row.setOnClickListener(new View.OnClickListener() { @Override public void onClick(View v) { openThread(u, c); } });
+            u.items.addView(row);
         }
         if (u.want != null) {
             String[] w = u.want;
@@ -430,6 +403,62 @@ public class IvaStaffChatPatch {
             if (jump != null) openThread(u, jump);
             else if (w != null) IvaStaffPatch.toast(a, "Переписка не найдена — возможно, инструмент перенесли в другой пункт");
         }
+    }
+
+    static final int LIST_AVATAR_DP = 46, LIST_TOOL_DP = 44, MSG_AVATAR_DP = 30;
+
+    /** 10.130: строка переписки как в «Чате» нижнего меню — кружок с буквой клиента, имя, инструмент · пункт (оранжевым),
+     *  последнее сообщение, справа время, дата и счётчик, затем фото инструмента (у переписки пункта — ничего). */
+    static View chatRow(Ui u, Chat c, TimeZone tz) {
+        final Activity a = u.a;
+        LinearLayout row = IvaChatPatch.rowBase(a);
+        String name = c.client.isEmpty() ? "Клиент" : c.client;
+        row.addView(IvaChatPatch.avatar(a, "", name, LIST_AVATAR_DP), new LinearLayout.LayoutParams(dp(a, LIST_AVATAR_DP), dp(a, LIST_AVATAR_DP)));
+        LinearLayout col = new LinearLayout(a);
+        col.setOrientation(LinearLayout.VERTICAL);
+        TextView n = IvaChatPatch.text(a, name, 15, "text", true);
+        n.setSingleLine(true); n.setEllipsize(android.text.TextUtils.TruncateAt.END);
+        col.addView(n);
+        String sub = subTitle(c.toolName, c.point);
+        if (!sub.isEmpty()) {
+            TextView tl = IvaChatPatch.text(a, sub, 12, "orange", false);
+            tl.setSingleLine(true); tl.setEllipsize(android.text.TextUtils.TruncateAt.END);
+            col.addView(tl);
+        }
+        TextView pv = IvaChatPatch.text(a, preview(c.last, c.lastMine), 13, c.unread > 0 ? "text" : "gray", c.unread > 0);
+        pv.setSingleLine(true); pv.setEllipsize(android.text.TextUtils.TruncateAt.END);
+        col.addView(pv);
+        LinearLayout.LayoutParams cl = new LinearLayout.LayoutParams(0, -2, 1f);
+        cl.leftMargin = dp(a, 12);
+        cl.rightMargin = dp(a, 8);
+        row.addView(col, cl);
+        LinearLayout when = new LinearLayout(a);
+        when.setOrientation(LinearLayout.VERTICAL);
+        when.setGravity(Gravity.END);
+        long at = IvaChatPatch.parseIso(c.at);
+        when.addView(IvaChatPatch.text(a, IvaChatPatch.hm(at > 0 ? at : -1, tz), 12, c.unread > 0 ? "orange" : "gray2", c.unread > 0));
+        when.addView(IvaChatPatch.text(a, IvaChatPatch.dmy(at > 0 ? at : -1, tz), 11, "gray2", false));
+        String un = unreadText(c.unread);
+        if (!un.isEmpty()) {
+            TextView badge = IvaChatPatch.text(a, un, 11, "orange", true);
+            badge.setGravity(Gravity.CENTER);
+            IvaChatPatch.setBg(a, badge, "bg_badge");
+            badge.setMinWidth(dp(a, 18));
+            badge.setPadding(dp(a, 5), 0, dp(a, 5), 0);
+            LinearLayout.LayoutParams bl = new LinearLayout.LayoutParams(-2, dp(a, 18));
+            bl.topMargin = dp(a, 3);
+            bl.gravity = Gravity.END;
+            when.addView(badge, bl);
+        }
+        row.addView(when, new LinearLayout.LayoutParams(-2, -2));
+        if (!isPt(c.tool)) {                                // о чём писали: фото инструмента
+            JSONObject t = new JSONObject();
+            try { t.put("img", c.img); } catch (Throwable ignore) {}
+            LinearLayout.LayoutParams pl = new LinearLayout.LayoutParams(dp(a, LIST_TOOL_DP), dp(a, LIST_TOOL_DP));
+            pl.leftMargin = dp(a, 10);
+            row.addView(IvaChatPatch.toolPic(a, t, c.tool, LIST_TOOL_DP), pl);
+        }
+        return row;
     }
 
     // ───────────── переписка ─────────────
@@ -497,6 +526,7 @@ public class IvaStaffChatPatch {
             @Override public void onDismiss(DialogInterface d) {
                 if (openChat == c) openChat = null;
                 try { IvaChatWhoPatch.setThread(t.who, ""); } catch (Throwable ignore) {}
+                try { IvaChatPatch.voiceStop(a); } catch (Throwable ignore) {}       // 10.130: ушли — голосовое не играет дальше
                 if (u.page.open()) reload(u);                   // вернулись к списку — счётчики заново
             }
         });
@@ -564,51 +594,109 @@ public class IvaStaffChatPatch {
         t.status.setVisibility(t.shown.isEmpty() ? View.VISIBLE : View.GONE);
         TimeZone tz = TimeZone.getDefault();
         long now = System.currentTimeMillis(), prevDay = Long.MIN_VALUE;
-        int maxW = (int) (a.getResources().getDisplayMetrics().widthPixels * 0.72f);
+        voiceReady(a);
+        int maxW = (int) (a.getResources().getDisplayMetrics().widthPixels * 0.68f);
+        String client = t.c.client.isEmpty() ? "Клиент" : t.c.client;
         for (final Msg m : t.shown) {
             long ms = IvaChatPatch.parseIso(m.at);
             long day = ms > 0 ? IvaChatPatch.dayIndex(ms, tz) : prevDay;
             if (ms > 0 && day != prevDay) {
-                TextView d = IvaChiefPatch.text(a, IvaChatPatch.dayLabel(ms, now, tz), 12f, t.u.cGray, false);
+                TextView d = IvaChatPatch.text(a, IvaChatPatch.dayLabel(ms, now, tz), 12, "gray2", false);
                 d.setGravity(Gravity.CENTER);
-                d.setPadding(0, dp(a, 10), 0, dp(a, 4));
+                d.setPadding(0, dp(a, 8), 0, dp(a, 8));
                 list.addView(d, new LinearLayout.LayoutParams(-1, -2));
                 prevDay = day;
             }
-            LinearLayout col = new LinearLayout(a);
-            col.setOrientation(LinearLayout.VERTICAL);
-            col.setGravity(m.mine ? Gravity.END : Gravity.START);
-            String who = whoText(m.mine, m.byMe);
-            if (!who.isEmpty()) col.addView(IvaChiefPatch.text(a, who, 11f, t.u.cGray, false));
-            if (!m.img.isEmpty()) {
-                ImageView iv = new ImageView(a);
-                iv.setScaleType(ImageView.ScaleType.CENTER_CROP);
-                IvaChatPatch.setBg(a, iv, "bg_photo");
-                LinearLayout.LayoutParams il = new LinearLayout.LayoutParams(dp(a, 150), dp(a, 110));
-                il.bottomMargin = dp(a, 4);
-                col.addView(iv, il);
-                IvaChatPatch.loadPhoto(a, iv, m.img, "msg" + m.id);
-                iv.setOnClickListener(new View.OnClickListener() { @Override public void onClick(View v) { view(a, m.img, "image/*"); } });
-            }
-            String body = !m.audio.isEmpty() ? voiceText(m.dur) : m.text;
-            if (!body.isEmpty()) {
-                TextView b = IvaChiefPatch.text(a, body, 15f, m.mine ? t.u.cOrange : t.u.cText, false);
-                IvaChatPatch.setBg(a, b, m.mine ? "bg_bubble_me" : "bg_bubble_other");
-                b.setPadding(dp(a, 14), dp(a, 8), dp(a, 14), dp(a, 8));
-                b.setMaxWidth(maxW);
-                col.addView(b, new LinearLayout.LayoutParams(-2, -2));
-                if (!m.audio.isEmpty()) b.setOnClickListener(new View.OnClickListener() { @Override public void onClick(View v) { view(a, m.audio, "audio/*"); } });
-            }
-            String time = ms > 0 ? IvaChatPatch.hm(ms, tz) : "";
-            if (m.mine && !time.isEmpty()) time = time + (m.read ? "  ✓✓" : "  ✓");
-            TextView tt = IvaChiefPatch.text(a, time, 10f, t.u.cGray, false);
-            tt.setPadding(0, dp(a, 2), 0, 0);
-            col.addView(tt);
-            LinearLayout.LayoutParams cl = new LinearLayout.LayoutParams(-1, -2);
-            cl.topMargin = dp(a, 6);
-            list.addView(col, cl);
+            list.addView(bubbleRow(t, m, ms, tz, maxW, client));   // 10.130: как в «Чате» нижнего меню
         }
         if (t.sc != null) t.sc.post(new Runnable() { @Override public void run() { try { t.sc.fullScroll(View.FOCUS_DOWN); } catch (Throwable ignore) {} } });
+    }
+
+    /** 10.130: сообщение как в «Чате» нижнего меню: кружок с буквой (клиент слева, прокат справа), пузырь или голосовое
+     *  со своим проигрывателем (▶, волна, перемотка), время и ✓✓; у ответов — кто ответил («Вы» / «Прокат»). */
+    static View bubbleRow(final Th t, final Msg m, long ms, TimeZone tz, int maxW, String client) {
+        final Activity a = t.u.a;
+        boolean mine = m.mine;
+        LinearLayout row = new LinearLayout(a);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setGravity(mine ? Gravity.END | Gravity.BOTTOM : Gravity.START | Gravity.BOTTOM);
+        LinearLayout.LayoutParams rl = new LinearLayout.LayoutParams(-1, -2);
+        rl.bottomMargin = dp(a, 8);
+        row.setLayoutParams(rl);
+        LinearLayout col = new LinearLayout(a);
+        col.setOrientation(LinearLayout.VERTICAL);
+        col.setGravity(mine ? Gravity.END : Gravity.START);
+        if (!m.img.isEmpty()) {
+            ImageView iv = new ImageView(a);
+            iv.setScaleType(ImageView.ScaleType.CENTER_CROP);
+            IvaChatPatch.setBg(a, iv, "bg_photo");
+            IvaChatPatch.round(iv, dp(a, 12), false);
+            LinearLayout.LayoutParams il = new LinearLayout.LayoutParams(dp(a, 150), dp(a, 110));
+            il.gravity = mine ? Gravity.END : Gravity.START;
+            il.bottomMargin = dp(a, 4);
+            col.addView(iv, il);
+            IvaChatPatch.loadPhoto(a, iv, m.img, "msg" + m.id);
+            iv.setOnClickListener(new View.OnClickListener() { @Override public void onClick(View v) { view(a, m.img, "image/*"); } });
+        }
+        if (!m.audio.isEmpty()) {
+            View voice = null;
+            try { voice = IvaChatPatch.voiceBubble(a, chatMsg(m), mine); } catch (Throwable ignore) {}
+            if (voice != null) col.addView(voice, new LinearLayout.LayoutParams(-2, -2));
+            else {                                           // запасной путь — как раньше, внешним проигрывателем
+                TextView b = IvaChatPatch.text(a, voiceText(m.dur), 15, mine ? "orange" : "text", false);
+                IvaChatPatch.setBg(a, b, mine ? "bg_bubble_me" : "bg_bubble_other");
+                b.setPadding(dp(a, 14), dp(a, 8), dp(a, 14), dp(a, 8));
+                b.setMaxWidth(maxW);
+                b.setOnClickListener(new View.OnClickListener() { @Override public void onClick(View v) { view(a, m.audio, "audio/*"); } });
+                col.addView(b, new LinearLayout.LayoutParams(-2, -2));
+            }
+        } else if (!m.text.isEmpty()) {
+            TextView b = IvaChatPatch.text(a, m.text, 15, mine ? "orange" : "text", false);
+            IvaChatPatch.setBg(a, b, mine ? "bg_bubble_me" : "bg_bubble_other");
+            b.setPadding(dp(a, 14), dp(a, 8), dp(a, 14), dp(a, 8));
+            b.setMaxWidth(maxW);
+            col.addView(b, new LinearLayout.LayoutParams(-2, -2));
+        }
+        String time = ms > 0 ? IvaChatPatch.hm(ms, tz) : "";
+        if (mine && !time.isEmpty()) time = time + (m.read ? "  ✓✓" : "  ✓");
+        String who = whoText(m.mine, m.byMe);
+        if (!who.isEmpty()) time = time.isEmpty() ? who : who + " · " + time;
+        TextView tt = IvaChatPatch.text(a, time, 10, mine && m.read ? "orange" : "gray2", false);
+        LinearLayout.LayoutParams ml = new LinearLayout.LayoutParams(-2, -2);
+        ml.topMargin = dp(a, 2);
+        col.addView(tt, ml);
+        View ava = IvaChatPatch.avatar(a, "", mine ? t.u.company : client, MSG_AVATAR_DP);
+        LinearLayout.LayoutParams al = new LinearLayout.LayoutParams(dp(a, MSG_AVATAR_DP), dp(a, MSG_AVATAR_DP));
+        al.bottomMargin = dp(a, 16);
+        if (mine) {
+            al.leftMargin = dp(a, 6);
+            row.addView(col, new LinearLayout.LayoutParams(-2, -2));
+            row.addView(ava, al);
+        } else {
+            al.rightMargin = dp(a, 6);
+            row.addView(ava, al);
+            row.addView(col, new LinearLayout.LayoutParams(-2, -2));
+        }
+        return row;
+    }
+
+    /** Сообщение «Чата пункта» → сообщение «Чата» (для его проигрывателя голосовых: ключ — id, файл — ссылка). */
+    static IvaChatPatch.Msg chatMsg(Msg m) {
+        IvaChatPatch.Msg x = new IvaChatPatch.Msg();
+        x.id = m.id == null ? "" : m.id;
+        x.audio = m.audio;
+        x.dur = Math.max(0, m.dur);
+        x.read = m.read;
+        x.at = IvaChatPatch.parseIso(m.at);
+        return x;
+    }
+
+    /** Проигрыватель «Чата» обновляет кнопку и волну таймером — запускаем его, даже если «Чат» ещё не открывали. */
+    static void voiceReady(Activity a) {
+        try {
+            IvaChatPatch.act = new java.lang.ref.WeakReference<Activity>(a);
+            if (IvaChatPatch.handler == null) IvaChatPatch.handler = new android.os.Handler(android.os.Looper.getMainLooper());
+        } catch (Throwable ignore) {}
     }
 
     /** Голосовое / фото клиента — системным проигрывателем или просмотром (своё воспроизведение — в «Чате» владельца). */
