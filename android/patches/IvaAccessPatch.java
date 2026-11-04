@@ -617,12 +617,16 @@ public final class IvaAccessPatch {
 
     /** Строки карточки, как у штатной: {процент, сумма, подпись}; [3] = "1" — задолженность (красным). */
     static String[] feeTexts(double fee, double paid, double pct) {
-        double debt = Math.max(0, fee - paid), over = Math.max(0, paid - fee);
-        String sum = debt > 0 ? "−" + feeMoney(debt) + " ₽" : over > 0 ? "+" + feeMoney(over) + " ₽" : "0 ₽";
+        double debt = Math.max(0, fee - paid);
+        String sum = feeSumText(fee, paid);                               // 10.134: «К оплате …» / «Переплата …»
         String sub = "начислено " + feeMoney(fee) + " ₽ · оплачено " + feeMoney(paid) + " ₽";
-        if (debt > 0) sub = "задолженность · " + sub;
-        else if (over > 0) sub = "переплата · " + sub;
         return new String[]{"Комиссия владельцу — " + num(String.valueOf(pct)) + "% от аренды", sum, sub, debt > 0 ? "1" : "0"};
+    }
+
+    /** 10.134 (просьба владельца 04.11.2026): сумма словами — «К оплате 1 250 ₽» или «Переплата 300 ₽»; ровно — «К оплате 0 ₽». */
+    static String feeSumText(double fee, double paid) {
+        double debt = Math.max(0, fee - paid), over = Math.max(0, paid - fee);
+        return debt > 0 ? "К оплате " + feeMoney(debt) + " ₽" : over > 0 ? "Переплата " + feeMoney(over) + " ₽" : "К оплате 0 ₽";
     }
 
     static String feeCacheKey(String me) { return "feecard_" + me; }

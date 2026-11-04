@@ -2620,6 +2620,7 @@ public class IvaPatchTest {
         st131();                                                      // 10.131: «Стрелка оповещений»
         st132();                                                      // 10.132: карта, расстояние, стрелки сразу
         st133();                                                      // 10.133: оплата комиссии через ЮKassa
+        st134();                                                      // 10.134: «К оплате» / «Переплата», окно суммы, лимит 5 000 ₽
         if (fail > 0) { System.out.println("ошибок: " + fail); System.exit(1); }
         System.out.println("все проверки IvaPatch пройдены");
     }
@@ -3259,12 +3260,12 @@ public class IvaPatchTest {
             IvaAccessPatch.feePctField("[{\"fee_pct\":7.5}]") + "|" + IvaAccessPatch.feePctField("[]") + "|" + IvaAccessPatch.feePctField("[{\"fee_pct\":null}]")
             + "|" + IvaAccessPatch.feePctField("{\"message\":\"x\"}"), "7.5|5.0|5.0|null");
         String[] d = IvaAccessPatch.feeTexts(1250, 1000, 7.5), o = IvaAccessPatch.feeTexts(100, 250, 5), z = IvaAccessPatch.feeTexts(0, 0, 5);
-        eq("кабинет 10.117: задолженность — как штатная карточка, красным",
+        eq("кабинет 10.117: задолженность — «К оплате» (10.134), красным",
             d[0] + "|" + d[1] + "|" + d[2] + "|" + d[3],
-            "Комиссия владельцу — 7,5% от аренды|−250 ₽|задолженность · начислено 1 250 ₽ · оплачено 1 000 ₽|1");
-        eq("кабинет 10.117: переплата и ноль — зелёным",
+            "Комиссия владельцу — 7,5% от аренды|К оплате 250 ₽|начислено 1 250 ₽ · оплачено 1 000 ₽|1");
+        eq("кабинет 10.117: «Переплата» (10.134) и ноль — зелёным",
             o[1] + "|" + o[2] + "|" + o[3] + "|" + z[1] + "|" + z[2] + "|" + z[3],
-            "+150 ₽|переплата · начислено 100 ₽ · оплачено 250 ₽|0|0 ₽|начислено 0 ₽ · оплачено 0 ₽|0");
+            "Переплата 150 ₽|начислено 100 ₽ · оплачено 250 ₽|0|К оплате 0 ₽|начислено 0 ₽ · оплачено 0 ₽|0");
         eq("кабинет 10.117: деньги как штатный money", IvaAccessPatch.feeMoney(1234567.4) + "|" + IvaAccessPatch.feeMoney(0.6), "1 234 567|1");
         double[] k = IvaAccessPatch.feeCache(IvaAccessPatch.feeMoneyKey(new double[]{1250, 1000, 7.5, 1760000000000d}));
         eq("кабинет 10.117: последняя удачная сумма на телефоне — туда и обратно",
@@ -3661,6 +3662,35 @@ public class IvaPatchTest {
     }
 
     @SuppressWarnings("unchecked")
+    static void st134() {
+        eq("комиссия 10.134: сумма словами на карточке",
+            IvaAccessPatch.feeSumText(1250, 1000) + "|" + IvaAccessPatch.feeSumText(100, 5350) + "|" + IvaAccessPatch.feeSumText(300, 300)
+            + "|" + IvaPayPatch.sumLine(10, 0), "К оплате 250 ₽|Переплата 5 250 ₽|К оплате 0 ₽|К оплате 10 ₽");
+        eq("комиссия 10.134: долг по числам — до копейки вверх, переплата — 0",
+            IvaPayPatch.debtOf(1250, 1000) + "|" + IvaPayPatch.debtOf(10.123, 0) + "|" + IvaPayPatch.debtOf(100, 150) + "|" + IvaPayPatch.debtOf(100, 99.999),
+            "250.0|10.13|0.0|0.0");
+        eq("комиссия 10.134: сколько можно внести — переплата не больше 5 000 ₽",
+            IvaPayPatch.payMax(1250, 1000) + "|" + IvaPayPatch.payMax(0, 0) + "|" + IvaPayPatch.payMax(100, 4600) + "|" + IvaPayPatch.payMax(100, 5099.5)
+            + "|" + IvaPayPatch.payMax(100, 5100) + "|" + IvaPayPatch.payMax(0, 6200) + "|" + IvaPayPatch.payMax(200000, 0),
+            "5250.0|5000.0|500.0|0.5|0.0|-1200.0|100000.0");
+        eq("комиссия 10.134: переплата больше 5 000 — ввести нельзя (окно сразу говорит почему)",
+            IvaPayPatch.amountError(100.0, IvaPayPatch.payMax(0, 6200)), IvaPayPatch.BLOCKED);
+        eq("комиссия 10.134: сумма больше допустимой, пустая, в пределах",
+            IvaPayPatch.amountError(600.0, 500) + " | " + IvaPayPatch.amountError(null, 500) + " | " + IvaPayPatch.amountError(500.0, 500)
+            + " | " + IvaPayPatch.amountError(IvaPayPatch.amount("100000"), 100000),
+            "Не больше 500 ₽ — переплата не может быть больше 5 000 ₽ | Введите сумму от 1 до 500 ₽ | null | null");
+        eq("комиссия 10.134: подсказка под полем",
+            IvaPayPatch.limitText(5250) + " | " + IvaPayPatch.limitText(100000), "От 1 до 5 250 ₽ — переплата не больше 5 000 ₽ | От 1 до 100 000 ₽ за один раз");
+        eq("комиссия 10.134: текст окна по способу оплаты",
+            IvaPayPatch.modeText(1).startsWith("Через ЮKassa") + "|" + IvaPayPatch.modeText(3).contains("Тестовый режим") + "|"
+            + IvaPayPatch.modeText(2) + "|" + IvaPayPatch.modeText(0),
+            "true|true|Переведите сумму владельцу площадки и отправьте запрос — он подтвердит получение.|Проверяем способ оплаты…");
+        eq("комиссия 10.134: запрос «оплатил переводом» — как у штатного окна, «pending»",
+            IvaPayPatch.manualBody("a@b.ru", 1500.5), "{\"admin_email\":\"a@b.ru\",\"amount\":1500.50,\"note\":\"Оплата комиссии\",\"status\":\"pending\"}");
+        eq("комиссия 10.134: заголовок поля и кнопка", IvaPayPatch.ASK + "|" + IvaPayPatch.NATIVE_BTN + "|" + IvaPayPatch.OVER_MAX,
+            "Введите сумму для оплаты|Оплатить|5000.0");
+    }
+
     static void st133() {
         eq("ЮKassa 10.133: сумма — «1 500,50», копейки, пробелы",
             IvaPayPatch.amount("1 500,50") + "|" + IvaPayPatch.amount("1500") + "|" + IvaPayPatch.amount(" 7.5 ") + "|" + IvaPayPatch.amount("100000"),
