@@ -3,7 +3,8 @@
 //
 // Кто вызывает:
 //   • приложение админа (ключ входа пользователя в Authorization):
-//       POST {a: "new", amount}  — создать платёж в ЮKassa на любую сумму 1–100 000 ₽ → {id, url} (страница оплаты ЮKassa);
+//       POST {a: "new", amount, method?} — создать платёж в ЮKassa на любую сумму 1–100 000 ₽ → {id, url, sbp, fallback}
+//                                 (страница оплаты ЮKassa; method "sbp" — 10.135: сразу страница СБП, не вышло — обычная);
 //       POST {a: "check", id?}   — спросить у ЮKassa статус своих незавершённых оплат (после возврата со страницы оплаты);
 //   • ЮKassa — HTTP-уведомление {type: "notification", event: "payment.succeeded" | "payment.canceled", object: {id}};
 //   • GET без параметров — проверка выкладки и «подключено ли»: {ok, ready, test} (без ключей и сумм).
@@ -56,16 +57,24 @@ export function parseAmount(x: unknown): number | null {
   return v >= MIN_RUB && v <= MAX_RUB ? v : null;
 }
 
-/** Тело создания платежа: сумма, сразу списать, страница оплаты ЮKassa, без чека и без личных данных. */
-export function createBody(id: number, amount: number) {
-  return {
+/** Тело создания платежа: сумма, сразу списать, страница оплаты ЮKassa, без чека и без личных данных.
+ *  sbp — 10.135 (просьба владельца 04.11.2026 «чтобы сразу открывалась СБП»): способ задан заранее, ЮKassa открывает
+ *  сразу свою страницу СБП (на телефоне — список банков), без выбора способа оплаты. Для СБП в ручной интеграции
+ *  ЮKassa поддерживает только сценарий redirect (документация ЮKassa, «Система быстрых платежей»). */
+export function createBody(id: number, amount: number, sbp = false) {
+  const b: Record<string, unknown> = {
     amount: { value: amount.toFixed(2), currency: "RUB" },
     capture: true,
     confirmation: { type: "redirect", return_url: RETURN_URL + "?p=" + id },
     description: `Комиссия площадки «Ива», платёж №${id}`,
     metadata: { iva_id: String(id) },
   };
+  if (sbp) b.payment_method_data = { type: "sbp" };
+  return b;
 }
+
+/** Ключ повтора ЮKassa: у СБП свой — тело другое (повтор с тем же ключом и другим телом ЮKassa не примет). */
+export const idemKey = (id: number, sbp: boolean) => "iva-pay-" + id + (sbp ? "-sbp" : "");
 
 /** Из ответа ЮKassa — то, что нужно базе. Не платёж — null. */
 export function outcome(p: any): { id: string; status: string; amount: number; paid: boolean; method: string; reason: string } | null {
@@ -172,7 +181,15 @@ export async function handle(req: Request): Promise<Response> {
       return json({ error: d.code }, d.status);
     }
     if (!Number.isSafeInteger(id) || id <= 0) return json({ error: "db" }, 500);
-    const r = await yk("/payments", auth, { method: "POST", body: createBody(id, amount), key: "iva-pay-" + id });
+    const wantSbp = b.method === "sbp";
+    let viaSbp = wantSbp;
+    let r = await yk("/payments", auth, { method: "POST", body: createBody(id, amount, wantSbp), key: idemKey(id, wantSbp) });
+    if (wantSbp && !r.ok && r.status >= 400 && r.status < 500) {
+      // СБП не включена в магазине или ЮKassa отказала именно в СБП — обычная страница со всеми способами
+      console.error(`iva-pay: СБП для платежа ${id} не создана (HTTP ${r.status}: ${String(r.j?.description ?? r.j?.code ?? "").slice(0, 120)}) — обычная страница`);
+      viaSbp = false;
+      r = await yk("/payments", auth, { method: "POST", body: createBody(id, amount, false), key: idemKey(id, false) });
+    }
     const url = String(r.j?.confirmation?.confirmation_url ?? "");
     if (!r.ok || typeof r.j?.id !== "string" || !/^https:\/\//.test(url)) {
       const why = String(r.j?.description ?? r.j?.code ?? `HTTP ${r.status}`).slice(0, 200);
@@ -181,7 +198,7 @@ export async function handle(req: Request): Promise<Response> {
       return json({ error: "yookassa", message: why }, 502);
     }
     await db("iva_yk_set", { p_id: id, p_yk_id: r.j.id, p_url: url });
-    return json({ id, url, test: r.j.test === true });
+    return json({ id, url, test: r.j.test === true, sbp: viaSbp, fallback: wantSbp && !viaSbp });
   }
 
   if (b.a === "check") {

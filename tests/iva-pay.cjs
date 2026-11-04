@@ -63,7 +63,10 @@ try {
         if (dbFail[name]) return { ok: false, status: 400, text: async () => dbFail[name] };
         return { ok: true, status: 200, text: async () => JSON.stringify(dbRet[name] ?? null) };
       }
-      if (c.url === 'https://api.yookassa.ru/v3/payments' && c.method === 'POST') return res(yk.create.status, yk.create.j);
+      if (c.url === 'https://api.yookassa.ru/v3/payments' && c.method === 'POST') {
+        const cr = typeof yk.create === 'function' ? yk.create(JSON.parse(c.body)) : yk.create;
+        return res(cr.status, cr.j);
+      }
       const m = c.url.match(/^https:\/\/api\.yookassa\.ru\/v3\/payments\/([^/]+)$/);
       if (m) { const g = yk.get[decodeURIComponent(m[1])]; return g ? res(g.status, g.j) : res(404, {}); }
       return res(599, {});
@@ -99,6 +102,20 @@ try {
     out.ykIdem = cr.headers['Idempotence-Key'];
     out.ykBody = JSON.parse(cr.body);
     out.setArgs = JSON.parse(calls.find((c) => c.url.endsWith('/rpc/iva_yk_set')).body);
+
+    // 10.135: «Оплатить через СБП» — способ задан заранее; СБП не включена — обычная страница
+    const PAY = (url) => ({ status: 200, j: { id: '2f6a1b7c-000f-5000-9000-1b68e7b15f3f', status: 'pending', test: true, confirmation: { type: 'redirect', confirmation_url: url } } });
+    yk.create = (b) => PAY(b.payment_method_data ? 'https://yoomoney.ru/checkout/payments/sbp?orderId=2f6a' : 'https://yoomoney.ru/checkout/payments/v2/contract?orderId=2f6a');
+    out.sbp = await run('POST', { a: 'new', amount: 100, method: 'sbp' }, 'Bearer eyJgood');
+    out.sbpPosts = calls.filter((c) => c.url === 'https://api.yookassa.ru/v3/payments').map((c) => [c.headers['Idempotence-Key'], JSON.parse(c.body).payment_method_data || null]);
+    yk.create = (b) => b.payment_method_data ? { status: 400, j: { type: 'error', code: 'invalid_request', description: 'Способ оплаты недоступен' } }
+      : PAY('https://yoomoney.ru/checkout/payments/v2/contract?orderId=2f6a');
+    out.sbpOff = await run('POST', { a: 'new', amount: 100, method: 'sbp' }, 'Bearer eyJgood');
+    out.sbpOffPosts = calls.filter((c) => c.url === 'https://api.yookassa.ru/v3/payments').map((c) => [c.headers['Idempotence-Key'], !!JSON.parse(c.body).payment_method_data]);
+    out.sbpOffFail = calls.some((c) => c.url.endsWith('/rpc/iva_yk_fail'));
+    yk.create = (b) => b.payment_method_data ? { status: 503, j: {} } : PAY('https://x');
+    out.sbpDown = await run('POST', { a: 'new', amount: 100, method: 'sbp' }, 'Bearer eyJgood');
+    out.sbpDownPosts = calls.filter((c) => c.url === 'https://api.yookassa.ru/v3/payments').length;
 
     yk.create = { status: 403, j: { type: 'error', code: 'forbidden', description: 'Магазин не активирован' } };
     out.ykRefused = await run('POST', { a: 'new', amount: 100 }, 'Bearer eyJgood');
@@ -175,7 +192,12 @@ try {
   eq(o.noAuthCalls, 0, 'без входа — никуда не ходим');
   ok(o.badTok.s === 401 && !o.badTokCalls.some((u) => u.includes('/auth/v1/user')), 'не ключ входа (не JWT) — отказ без запроса к Auth');
   ok(o.badAmount.s === 400 && o.badAmount.j.error === 'bad_amount' && o.badAmountRpc === 0, 'сумма меньше 1 ₽ — отказ до базы');
-  eq(o.created, { s: 200, j: { id: 17, url: 'https://yoomoney.ru/checkout/payments/v2/contract?orderId=2f6a', test: true } }, 'новая оплата → номер и ссылка ЮKassa');
+  eq(o.created, { s: 200, j: { id: 17, url: 'https://yoomoney.ru/checkout/payments/v2/contract?orderId=2f6a', test: true, sbp: false, fallback: false } }, 'новая оплата → номер и ссылка ЮKassa');
+  eq(o.sbp, { s: 200, j: { id: 17, url: 'https://yoomoney.ru/checkout/payments/sbp?orderId=2f6a', test: true, sbp: true, fallback: false } }, '10.135: «через СБП» — сразу страница СБП');
+  eq(o.sbpPosts, [['iva-pay-17-sbp', { type: 'sbp' }]], '10.135: в ЮKassa — payment_method_data sbp, свой ключ повтора');
+  eq(o.sbpOff, { s: 200, j: { id: 17, url: 'https://yoomoney.ru/checkout/payments/v2/contract?orderId=2f6a', test: true, sbp: false, fallback: true } }, '10.135: СБП не включена — обычная страница, приложение узнает');
+  ok(JSON.stringify(o.sbpOffPosts) === JSON.stringify([['iva-pay-17-sbp', true], ['iva-pay-17', false]]) && !o.sbpOffFail, '10.135: вторая попытка — без способа и со своим ключом; оплата не отменена');
+  ok(o.sbpDown.s === 502 && o.sbpDown.j.error === 'yookassa' && o.sbpDownPosts === 1, '10.135: ЮKassa недоступна (5xx) — без второй попытки, ошибка');
   eq(o.newArgs, { p_email: 'admin@x.ru', p_amount: 1500.5 }, 'почта — из Supabase Auth (не из запроса), сумма разобрана');
   ok(o.dbHeaders.apikey === DBKEY && !o.dbHeaders.Authorization, 'ключ базы (новый sb_…) — только в apikey');
   eq(o.ykAuth, 'Basic ' + Buffer.from('123456:test_' + 'k'.repeat(30)).toString('base64'), 'ЮKassa: Basic shopId:secretKey');

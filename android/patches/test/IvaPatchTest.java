@@ -2621,6 +2621,7 @@ public class IvaPatchTest {
         st132();                                                      // 10.132: карта, расстояние, стрелки сразу
         st133();                                                      // 10.133: оплата комиссии через ЮKassa
         st134();                                                      // 10.134: «К оплате» / «Переплата», окно суммы, лимит 5 000 ₽
+        st135();                                                      // 10.135: «Оплатить через СБП» + «Другой способ»
         if (fail > 0) { System.out.println("ошибок: " + fail); System.exit(1); }
         System.out.println("все проверки IvaPatch пройдены");
     }
@@ -3661,6 +3662,21 @@ public class IvaPatchTest {
         eq("стрелка 10.131: заголовок пункта настроек", IvaArrowPatch.TITLE, "Стрелка оповещений");
     }
 
+    static void st135() {
+        eq("СБП 10.135: главная кнопка и ссылка «другой способ»", IvaPayPatch.GO + "|" + IvaPayPatch.OTHER,
+            "Оплатить через СБП|Другой способ (карта, SberPay)");
+        eq("СБП 10.135: запрос — сумма и способ; без способа — как раньше; без почты",
+            IvaPayPatch.newBody(1500.5, true) + " " + IvaPayPatch.newBody(1500.5, false) + " " + IvaPayPatch.newBody(10),
+            "{\"a\":\"new\",\"amount\":\"1500.50\",\"method\":\"sbp\"} {\"a\":\"new\",\"amount\":\"1500.50\"} {\"a\":\"new\",\"amount\":\"10\"}");
+        eq("СБП 10.135: СБП не включена — функция открыла обычную страницу, приложение скажет",
+            IvaPayPatch.sbpOff(true, "{\"id\":17,\"url\":\"https://x\",\"sbp\":false,\"fallback\":true}") + "|"
+            + IvaPayPatch.sbpOff(true, "{\"id\":17,\"sbp\":true,\"fallback\":false}") + "|"
+            + IvaPayPatch.sbpOff(false, "{\"fallback\":true}") + "|" + IvaPayPatch.sbpOff(true, "{\"id\":17}") + "|" + IvaPayPatch.sbpOff(true, null),
+            "true|false|false|false|false");
+        eq("СБП 10.135: текст окна — сразу выбор банка", IvaPayPatch.modeText(1).contains("сразу откроется выбор банка") + "|" + IvaPayPatch.SBP_OFF,
+            "true|СБП в ЮKassa пока не включена — открыта обычная страница оплаты");
+    }
+
     @SuppressWarnings("unchecked")
     static void st134() {
         eq("комиссия 10.134: сумма словами на карточке",
@@ -3682,7 +3698,7 @@ public class IvaPatchTest {
         eq("комиссия 10.134: подсказка под полем",
             IvaPayPatch.limitText(5250) + " | " + IvaPayPatch.limitText(100000), "От 1 до 5 250 ₽ — переплата не больше 5 000 ₽ | От 1 до 100 000 ₽ за один раз");
         eq("комиссия 10.134: текст окна по способу оплаты",
-            IvaPayPatch.modeText(1).startsWith("Через ЮKassa") + "|" + IvaPayPatch.modeText(3).contains("Тестовый режим") + "|"
+            IvaPayPatch.modeText(1).startsWith("СБП через ЮKassa") + "|" + IvaPayPatch.modeText(3).contains("Тестовый режим") + "|"
             + IvaPayPatch.modeText(2) + "|" + IvaPayPatch.modeText(0),
             "true|true|Переведите сумму владельцу площадки и отправьте запрос — он подтвердит получение.|Проверяем способ оплаты…");
         eq("комиссия 10.134: запрос «оплатил переводом» — как у штатного окна, «pending»",
