@@ -31,7 +31,8 @@ await c.route('https://*.supabase.co/**',async route=>{const r=route.request(),u
     asked=JSON.parse(r.postData()).p_parts;data=asked.map(String).filter(id=>J[id]).map(id=>J[id]);}
   await route.fulfill({json:data});});
 const p=await c.newPage();const errors=[];p.on('pageerror',e=>errors.push(e.message));
-await p.goto('http://127.0.0.1:8000/',{waitUntil:'domcontentloaded'});await p.evaluate(()=>localStorage.setItem('iva_auth',JSON.stringify({tok:'test-token',ref:'test-refresh',exp:9999999999999})));
+// вход кладём с лёгкой страницы: главная тянет десятки картинок, и уход с неё посреди загрузки вешал следующий переход (тест падал по таймауту)
+await p.goto('http://127.0.0.1:8000/robots.txt',{waitUntil:'domcontentloaded'});await p.evaluate(()=>localStorage.setItem('iva_auth',JSON.stringify({tok:'test-token',ref:'test-refresh',exp:9999999999999})));
 const open=async q=>{await p.goto('http://127.0.0.1:8000/account.html'+q+'#orders',{waitUntil:'domcontentloaded'});await p.waitForSelector('#ordList .order-card');};
 const txt=async id=>(await p.locator('[data-order-id="'+id+'"]').textContent()).replace(/\s+/g,' ');
 await open('?a=1');
