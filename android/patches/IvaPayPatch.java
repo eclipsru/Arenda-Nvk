@@ -47,7 +47,11 @@ final class IvaPayPatch {
     static final String Q_OPEN = "/rest/v1/iva_yk_pay?select=id&status=eq.pending&limit=200";
     static final String RECEIPT_RPC = "/rest/v1/rpc/iva_yk_receipt";
     static final String TITLE = "Оплата комиссии";
-    static final String GO = "Перейти к оплате";
+    // 10.135 (владелец 04.11.2026: «слишком много нужно клацать… чтобы сразу открывалась СБП»): главная кнопка —
+    // сразу страница СБП ЮKassa (на телефоне — список банков), ссылка ниже — обычная страница со всеми способами.
+    static final String GO = "Оплатить через СБП";
+    static final String OTHER = "Другой способ (карта, SberPay)";
+    static final String SBP_OFF = "СБП в ЮKassa пока не включена — открыта обычная страница оплаты";
     static final String NATIVE_BTN = "Оплатить";
     static final String ASK = "Введите сумму для оплаты";
     static final String MANUAL = "Отправить запрос";
@@ -121,7 +125,7 @@ final class IvaPayPatch {
 
     /** Пояснение в окне: 1 / 3 — ЮKassa (3 — тестовый режим), 2 — переводом с запросом, 0 — ещё не знаем. */
     static String modeText(int r) {
-        if (r == 1 || r == 3) return "Через ЮKassa: СБП, карта, SberPay. Долг уменьшится сам, как только ЮKassa подтвердит оплату."
+        if (r == 1 || r == 3) return "СБП через ЮKassa — сразу откроется выбор банка. Долг уменьшится сам, как только ЮKassa подтвердит оплату."
             + (r == 3 ? "\nТестовый режим ЮKassa — настоящие деньги не списываются." : "");
         if (r == 2) return "Переведите сумму владельцу площадки и отправьте запрос — он подтвердит получение.";
         return "Проверяем способ оплаты…";
@@ -137,11 +141,19 @@ final class IvaPayPatch {
     }
 
     /** Тело запроса «создать платёж». */
-    static String newBody(double v) { return "{\"a\":\"new\",\"amount\":\"" + amountText(v) + "\"}"; }
+    static String newBody(double v) { return newBody(v, false); }
+
+    /** 10.135: sbp — «Оплатить через СБП» (функция задаёт способ заранее); false — обычная страница со всеми способами. */
+    static String newBody(double v, boolean sbp) {
+        return "{\"a\":\"new\",\"amount\":\"" + amountText(v) + "\"" + (sbp ? ",\"method\":\"sbp\"" : "") + "}";
+    }
 
     static String checkBody(long id) { return "{\"a\":\"check\",\"id\":" + id + "}"; }
 
     /** Строка или число из JSON-ответа сервера (без org.json — проверяется на JVM); нет / не JSON — "". */
+    /** 10.135: просили СБП, а функция открыла обычную страницу (СБП в магазине ЮKassa не включена). */
+    static boolean sbpOff(boolean sbp, String body) { return sbp && "true".equals(jstr(body, "fallback")); }
+
     static String jstr(String body, String key) {
         String t = body == null ? "" : body.trim();
         if (!t.startsWith("{")) return "";
@@ -320,6 +332,14 @@ final class IvaPayPatch {
         hint.setPadding(0, IvaChiefPatch.dp(a, 8), 0, 0);
         form.addView(hint, new LinearLayout.LayoutParams(-1, -2));
         final TextView go = IvaAccessPatch.bubble(a, card, "…", true, 16);
+        // 10.135: «Другой способ (карта, SberPay)» — тихая ссылка под главной кнопкой, только при оплате через ЮKassa
+        final TextView other = IvaChiefPatch.text(a, OTHER, 13f, cGray, false);
+        other.setGravity(Gravity.CENTER);
+        other.setPaintFlags(other.getPaintFlags() | android.graphics.Paint.UNDERLINE_TEXT_FLAG);
+        other.setPadding(0, IvaChiefPatch.dp(a, 10), 0, IvaChiefPatch.dp(a, 4));
+        other.setContentDescription(OTHER);
+        other.setVisibility(View.GONE);
+        card.addView(other, new LinearLayout.LayoutParams(-1, -2));
         final TextView no = IvaAccessPatch.bubble(a, card, "Отмена", false, 8);
         no.setOnClickListener(new View.OnClickListener() { @Override public void onClick(View x) { try { d.dismiss(); } catch (Throwable ignore) {} } });
 
@@ -351,6 +371,7 @@ final class IvaPayPatch {
                 boolean can = blocked || (known && m != 0);
                 go.setEnabled(can);
                 go.setAlpha(can ? 1f : 0.6f);
+                other.setVisibility(!blocked && (m == 1 || m == 3) ? View.VISIBLE : View.GONE);
             }
         };
         double[] c = IvaAccessPatch.feeCache(IvaAccessPatch.prefs(a).getString(IvaAccessPatch.feeCacheKey(me), ""));
@@ -399,7 +420,8 @@ final class IvaPayPatch {
             }
         }).start();
 
-        go.setOnClickListener(new View.OnClickListener() {
+        final boolean[] sbpPick = {true};                                 // 10.135: главная кнопка — СБП, ссылка — все способы
+        final View.OnClickListener pay = new View.OnClickListener() {
             @Override public void onClick(View x) {
                 if (Double.isNaN(st[0]) || mode(rk[0]) == 0 && payMax(st[0], st[1]) >= MIN) return;
                 double max = payMax(st[0], st[1]);
@@ -409,24 +431,28 @@ final class IvaPayPatch {
                 if (bad != null) { hint.setText(bad); hint.setTextColor(cRed); hint.setTag("err"); return; }
                 final int m = mode(rk[0]);
                 final boolean online = m == 1 || m == 3;
+                final boolean sbp = online && sbpPick[0];
                 final String label0 = go.getText().toString();
                 go.setEnabled(false);
                 go.setAlpha(0.6f);
+                other.setEnabled(false);
                 go.setText(online ? "Создаём платёж…" : "Отправляем…");
                 new Thread(new Runnable() {
                     @Override public void run() {
                         String err = null, url = "";
                         long id = 0;
+                        boolean off = false;
                         try {
                             IvaClientPatch.authFresh(a);
                             if (online) {
-                                String[] r = IvaClientPatch.apiCall(a, FN, "POST", newBody(v), true);
+                                String[] r = IvaClientPatch.apiCall(a, FN, "POST", newBody(v, sbp), true);
                                 String body = r != null && r.length > 1 ? r[1] : "";
                                 if (r == null || r[0] == null) err = errText("", "");
                                 else if (!r[0].startsWith("2")) err = errText(jstr(body, "error"), jstr(body, "message"));
                                 else {
                                     url = jstr(body, "url");
                                     try { id = Long.parseLong(jstr(body, "id")); } catch (Throwable e) { id = 0; }
+                                    off = sbpOff(sbp, body);
                                     if (!url.startsWith("https://")) err = errText("", "");
                                 }
                             } else {
@@ -436,15 +462,18 @@ final class IvaPayPatch {
                         } catch (Throwable e) { err = errText("", ""); }
                         final String fe = err, fu = url;
                         final long fid = id;
+                        final boolean foff = off;
                         if (fe == null && online && fid > 0) IvaAccessPatch.prefs(a).edit().putString(waitKey(me), waitVal(fid, System.currentTimeMillis())).apply();
                         a.runOnUiThread(new Runnable() {
                             @Override public void run() {
                                 go.setEnabled(true);
                                 go.setAlpha(1f);
                                 go.setText(label0);
+                                other.setEnabled(true);
                                 if (fe != null) { hint.setText(fe); hint.setTextColor(cRed); hint.setTag("err"); return; }
                                 try { d.dismiss(); } catch (Throwable ignore) {}
                                 if (!online) { IvaStaffPatch.toast(a, "Запрос отправлен — владелец площадки подтвердит оплату"); return; }
+                                if (foff) IvaStaffPatch.toast(a, SBP_OFF);
                                 openUrl(a, fu);
                                 if (fid > 0) poll(a, me, fid, POLL_MAX_MS);
                             }
@@ -452,6 +481,12 @@ final class IvaPayPatch {
                     }
                 }).start();
             }
+        };
+        go.setOnClickListener(new View.OnClickListener() {
+            @Override public void onClick(View x) { sbpPick[0] = true; pay.onClick(go); }
+        });
+        other.setOnClickListener(new View.OnClickListener() {
+            @Override public void onClick(View x) { if (!go.isEnabled()) return; sbpPick[0] = false; pay.onClick(go); }
         });
         IvaAccessPatch.track(d);
         IvaAccessPatch.show(a, d, card, true);

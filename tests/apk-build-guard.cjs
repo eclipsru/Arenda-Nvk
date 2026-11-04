@@ -3066,7 +3066,7 @@ try {
     // 10.134: запрос «оплатил переводом» (как штатное окно) пишет в fee_payments только «pending» — подтверждает владелец площадки
     assert.ok(!/confirmed/.test(py) && (py.match(/fee_payments/g) || []).length === 1 && py.includes('\\"status\\":\\"pending\\"')
       && !/iva_yk_done|iva_yk_new|iva_yk_set|iva_yk_fee_insert/.test(py)
-      && py.includes('IvaClientPatch.SB_URL + "/functions/v1/iva-pay"') && py.includes('IvaClientPatch.apiCall(a, FN, "POST", newBody(v), true)')
+      && py.includes('IvaClientPatch.SB_URL + "/functions/v1/iva-pay"') && py.includes('IvaClientPatch.apiCall(a, FN, "POST", newBody(v, sbp), true)')
       && py.includes('IvaClientPatch.apiCall(a, FN, "POST", checkBody(id), true)') && py.includes('RECEIPT_RPC = "/rest/v1/rpc/iva_yk_receipt"'),
       '10.133: приложение не засчитывает оплату — только сервер (iva-pay) по ответу ЮKassa');
     // 10.134: отдельной кнопки «Оплатить онлайн» нет — родная «Оплатить» открывает окно; онлайн — только когда ЮKassa подключена
@@ -3096,7 +3096,25 @@ try {
     assert.ok(py.includes('IvaAccessPatch.feeFetch(a, me)') && /new Thread\(new Runnable\(\) \{\s*@Override public void run\(\) \{\s*double\[\] r = null;/.test(py),
       '10.134: свежие суммы в окне — в своём потоке');
     assert.ok((tp.match(/eq\("комиссия 10\.134: /g) || []).length >= 9 && tp.includes('st134();'), 'IvaPatchTest: проверки 10.134');
-    assert.ok(/NEW_NAME: '10\.134'/.test(wf) && /NEW_CODE: '208'/.test(wf), 'сборка 10.134 (208)');
+    assert.ok(Number((/NEW_CODE: '(\d+)'/.exec(wf) || [])[1]) >= 208, 'сборка 10.134 (208) или новее');
+  }
+  // 10.135 (просьба владельца 04.11.2026): «слишком много нужно клацать чтобы оплатить… чтобы сразу открывалась СБП».
+  // Главная кнопка — «Оплатить через СБП» (функция задаёт способ sbp — ЮKassa сразу открывает страницу СБП со списком банков),
+  // ниже ссылка «Другой способ (карта, SberPay)» — обычная страница. СБП не включена в магазине — функция сама открывает обычную.
+  {
+    const strip = (t) => t.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/ [^\n]*/g, '');
+    const wf = R('.github/workflows/build-apk.yml'), tp = R('android/patches/test/IvaPatchTest.java');
+    const py = strip(R('android/patches/IvaPayPatch.java')), fn = strip(R('supabase/functions/iva-pay/index.ts'));
+    assert.ok(py.includes('GO = "Оплатить через СБП"') && py.includes('OTHER = "Другой способ (карта, SberPay)"')
+      && py.includes('other.setVisibility(!blocked && (m == 1 || m == 3) ? View.VISIBLE : View.GONE);')
+      && py.includes('final boolean sbp = online && sbpPick[0];') && py.includes('sbpPick[0] = true; pay.onClick(go);') && py.includes('sbpPick[0] = false; pay.onClick(go);'),
+      '10.135: «Оплатить через СБП» — главная; «Другой способ» — только при оплате через ЮKassa; ручной запрос — как раньше');
+    assert.ok(fn.includes('if (sbp) b.payment_method_data = { type: "sbp" };') && fn.includes('const wantSbp = b.method === "sbp";')
+      && fn.includes('if (wantSbp && !r.ok && r.status >= 400 && r.status < 500)') && fn.includes('fallback: wantSbp && !viaSbp')
+      && !/type: "qr"/.test(fn),
+      '10.135: функция — способ sbp по документации ЮKassa (redirect); отказ в СБП — обычная страница, приложение узнает');
+    assert.ok((tp.match(/eq\("СБП 10\.135: /g) || []).length >= 4 && tp.includes('st135();'), 'IvaPatchTest: проверки 10.135');
+    assert.ok(/NEW_NAME: '10\.135'/.test(wf) && /NEW_CODE: '209'/.test(wf), 'сборка 10.135 (209)');
   }
   // 10.75 (просьба владельца 14.10.2026): в «Настройках» — кнопка «Уведомления» (с 10.97 — открывает отдельную страницу);
   // внутри сверху «Открыть настройки уведомлений Android», потом какие присылать, потом расписание, потом всё остальное
