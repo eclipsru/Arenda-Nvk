@@ -883,6 +883,37 @@ select.inp{cursor:pointer;appearance:none;
   .cat.pop img{max-width:46%}
   .cat.pop b{right:9px;max-width:58%;font-size:12.5px;hyphens:manual}
 }
+/* 02.11.2026 (просьба владельца): мобильная версия — плитки категорий и подкатегорий меньше, по 5 в ряд.
+   Как сетка значков: квадратная плитка с предметом (или значком), подпись мелко под ней; число объявлений
+   и «ко всем категориям» не показываем — не влезают. Компьютер и планшет шире 760 px — без изменений. */
+@media (max-width:760px){
+  .cats,.cats.pop{grid-template-columns:repeat(5,minmax(0,1fr));gap:12px 6px;padding-top:0;row-gap:12px}
+  .cat,.cat.pop{background:none;border:0;border-radius:0;padding:0;min-height:0;gap:5px;
+    display:flex;flex-direction:column;align-items:center;justify-content:flex-start;overflow:visible;text-align:center;
+    align-self:start}
+  .cat:hover,.cat.pop:hover{transform:none}
+  .cat.pop img{position:static;display:block;width:100%;height:auto;max-width:none;aspect-ratio:1/1;object-fit:contain;
+    object-position:center;box-sizing:border-box;padding:6px;background:var(--card);border:1px solid var(--line);
+    border-radius:12px;filter:none;transition:border-color .15s}
+  .cat.pop:hover img{transform:none;border-color:var(--or)}
+  .cat .ico{width:100%;height:auto;aspect-ratio:1/1;box-sizing:border-box;display:flex;align-items:center;justify-content:center;
+    background:var(--card);border:1px solid var(--line);border-radius:12px;transition:border-color .15s}
+  .cat:hover .ico{border-color:var(--or)}
+  .cat .ico svg{width:44%;height:44%}
+  .cat b,.cat.pop b{position:static;max-width:100%;text-align:center;font-size:10.5px;font-weight:600;line-height:1.2;
+    color:var(--tx);text-shadow:none;hyphens:manual;overflow-wrap:break-word}
+  .cat > span:not(.ico){display:none}
+  .cat.back,.cat.on,.cat.pop.on{background:none;border:0}
+  .cat.back .ico{background:var(--field);border-color:var(--line-2)}
+  .cat.back b{color:var(--gr)}
+  .cat.on .ico,.cat.pop.on img{border-color:var(--or);background:var(--or-soft)}
+  .cat.on b,.cat.pop.on b{color:var(--or)}
+}
+@media (max-width:380px){ .cat b,.cat.pop b{font-size:10px;letter-spacing:-.1px} }
+@media (min-width:480px) and (max-width:760px){
+  .cats,.cats.pop{gap:14px 10px}
+  .cat b,.cat.pop b{font-size:12px}
+}
 
 /* Заголовок раздела категорий с «хлебной крошкой» */
 .cats-head{display:flex;align-items:baseline;gap:10px;margin-bottom:14px;flex-wrap:wrap}
