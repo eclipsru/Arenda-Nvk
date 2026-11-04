@@ -91,6 +91,24 @@ public final class IvaArrowPatch {
     }
 
     /** Подпись строки в «Настройках». */
+    /** 10.132: последние числа — на телефоне, отдельно для каждой почты («0,3,0,1»). */
+    static String cacheKey(String email) { return "arrow_cnt_" + (email == null ? "" : email.trim().toLowerCase()); }
+
+    static String join(int[] c) {
+        StringBuilder b = new StringBuilder();
+        for (int i = 0; i < c.length; i++) b.append(i > 0 ? "," : "").append(Math.max(0, c[i]));
+        return b.toString();
+    }
+
+    static int[] split(String s, int n) {
+        int[] out = new int[n];
+        String[] p = (s == null ? "" : s).split(",");
+        for (int i = 0; i < n && i < p.length; i++) {
+            try { out[i] = Math.max(0, Math.min(9999, Integer.parseInt(p[i].trim()))); } catch (NumberFormatException ignore) {}
+        }
+        return out;
+    }
+
     static String summary(boolean on, int color) { return on ? "Включена · " + colorName(color) : "Выключена"; }
 
     /** Левая граница стрелки: справа от значка, но целиком внутри раздела. */
@@ -127,10 +145,13 @@ public final class IvaArrowPatch {
     static void setCount(Context c, int which, int n) {
         if (which < 0 || which >= cnt.length) return;
         int v = n < 0 ? 0 : n;
+        String key;
         synchronized (cnt) {
             if (cnt[which] == v) return;
             cnt[which] = v;
+            key = who.isEmpty() ? null : cacheKey(who);
         }
+        if (key != null && c != null) try { prefs(c).edit().putString(key, join(snapshot())).apply(); } catch (Throwable ignore) {}   // 10.132
         if (main == null) main = new Handler(Looper.getMainLooper());
         main.post(new Runnable() {
             @Override public void run() {
@@ -205,8 +226,20 @@ public final class IvaArrowPatch {
             }
         } catch (Throwable ignore) {}
         if (!email.equals(who)) {                        // вышли или вошёл другой — чужие числа не показываем
-            who = email;
-            synchronized (cnt) { for (int i = 0; i < cnt.length; i++) cnt[i] = 0; }
+            synchronized (cnt) {
+                // 10.132: первое знакомство с почтой (после запуска) числа не обнуляет — их мог уже принести опрос;
+                // а если чисел ещё нет — последние известные с телефона, чтобы стрелки были сразу (опрос через 1 с уточнит)
+                if (!who.isEmpty()) for (int i = 0; i < cnt.length; i++) cnt[i] = 0;
+                who = email;
+                boolean none = true;
+                for (int x : cnt) if (x > 0) none = false;
+                if (none && !email.isEmpty()) {
+                    try {
+                        int[] v = split(prefs(a).getString(cacheKey(email), ""), cnt.length);
+                        System.arraycopy(v, 0, cnt, 0, cnt.length);
+                    } catch (Throwable ignore) {}
+                }
+            }
         }
         try { hub = staff && IvaStaffToolsPatch.hubMode(a); } catch (Throwable ignore) {}
         boolean show = (admin || staff) && on(a);

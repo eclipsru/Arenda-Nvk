@@ -437,6 +437,17 @@ else
   skip "стенд «Роль — моментально»: нет pgserver (PG_PY=<python с pgserver> bash tools/check.sh)"
 fi
 
+head_ "4.5.18a. Стенд «Стрелки — сразу» (локальный PostgreSQL, SQL 10.132)"
+if "$PG_PY" -c "import pgserver" >/dev/null 2>&1; then
+  if "$PG_PY" tools/msg-ping-stand.py >/tmp/iva-test-msg-ping.log 2>&1; then
+    ok "стрелки — сразу: $(grep -c '✔' /tmp/iva-test-msg-ping.log) проверок SQL на PostgreSQL (новое сообщение и «прочитано» — получателю и сотрудникам пункта с правом чата, читает только сам человек, Realtime, откат)"
+  else
+    bad "стенд «Стрелки — сразу»"; grep -E '✘|Error|ERROR' /tmp/iva-test-msg-ping.log | head -8 | sed 's/^/      /'
+  fi
+else
+  skip "стенд «Стрелки — сразу»: нет pgserver (PG_PY=<python с pgserver> bash tools/check.sh)"
+fi
+
 head_ "4.5.19. Стенд «Инструменты сотрудников — у пункта» (локальный PostgreSQL, SQL 10.113)"
 if "$PG_PY" -c "import pgserver" >/dev/null 2>&1; then
   if "$PG_PY" tools/point-publish-stand.py >/tmp/iva-test-point-publish.log 2>&1; then

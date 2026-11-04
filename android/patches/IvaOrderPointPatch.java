@@ -402,6 +402,7 @@ final class IvaOrderPointPatch {
                     IvaOrderPatch.ordFieldView(a, body, new String[]{LABEL, pointText(p)}, false);
                     String ad = p.address == null ? "" : p.address.trim();
                     if (!ad.isEmpty()) IvaOrderPatch.ordFieldView(a, body, new String[]{"Адрес", ad}, false);
+                    try { IvaGeoPatch.place(a, body, p.name, p.address, p.city, p.lat, p.lng, false, false); } catch (Throwable ignore) {}   // 10.132
                 }
             return;
         }
@@ -410,5 +411,11 @@ final class IvaOrderPointPatch {
         if (ps == null || ps.isEmpty()) return;
         for (String[] f : clientFields(new ArrayList<IvaPickupPatch.Point>(ps), clientTools.get(oid)))
             IvaOrderPatch.ordFieldView(a, body, f, false);
+        for (IvaPickupPatch.Point p : new ArrayList<IvaPickupPatch.Point>(ps)) {   // 10.132: «Показать на карте» у каждого пункта
+            try {
+                View b = IvaGeoPatch.place(a, body, p.name, p.address, p.city, p.lat, p.lng, false, false);
+                if (ps.size() > 1 && b instanceof TextView) ((TextView) b).setText(IvaGeoPatch.MAP + " · " + pointText(p));
+            } catch (Throwable ignore) {}
+        }
     }
 }

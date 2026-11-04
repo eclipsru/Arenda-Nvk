@@ -62,6 +62,7 @@ final class IvaProkatPatch {
         int[] open, close;
         int tools;
         boolean main;
+        Double lat, lng;                    // 10.132: «Показать на карте» (нет — по адресу)
     }
 
     /** {"p_point":"…"}; не uuid — null (не шлём). */
@@ -90,6 +91,8 @@ final class IvaProkatPatch {
             p.avatar = s(o, "avatar");
             p.tools = o.optInt("tools", 0);
             p.main = o.optBoolean("main", false);
+            p.lat = IvaGeoPatch.dbl(o.opt("lat"));
+            p.lng = IvaGeoPatch.dbl(o.opt("lng"));
             int[] op = IvaPickupPatch.arr(String.valueOf(o.opt("open_min"))), cl = IvaPickupPatch.arr(String.valueOf(o.opt("close_min")));
             if (op != null && cl != null) { p.open = op; p.close = cl; }
             if (IvaToolPointPatch.uuid(p.id)) out.add(p);
@@ -479,6 +482,7 @@ final class IvaProkatPatch {
             t.setPadding(0, dp(a, 6), 0, 0);
             card.addView(t);
         }
+        try { IvaGeoPatch.add(a, card, p.name, p.address, p.city, p.lat, p.lng, false); } catch (Throwable ignore) {}   // 10.132
         LinearLayout.LayoutParams cl = new LinearLayout.LayoutParams(-1, -2);
         cl.topMargin = dp(a, 14);
         list.addView(card, cl);
@@ -613,6 +617,7 @@ final class IvaProkatPatch {
             LinearLayout.LayoutParams gl = new LinearLayout.LayoutParams(-2, -2);
             gl.topMargin = dp(a, 10);
             card.addView(go, gl);
+            try { IvaGeoPatch.add(a, card, p.name, p.address, p.city, p.lat, p.lng, false); } catch (Throwable ignore) {}   // 10.132
             go.setOnClickListener(new View.OnClickListener() {
                 @Override public void onClick(View v) {
                     try {

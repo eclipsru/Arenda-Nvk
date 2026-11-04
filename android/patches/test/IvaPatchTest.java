@@ -2618,6 +2618,7 @@ public class IvaPatchTest {
         st129();                                                      // 10.129: «Удаляет инструмент» не теряется в карточке сотрудника
         st130();                                                      // 10.130: «Мой пункт» плитками, чат пункта, шапка
         st131();                                                      // 10.131: «Стрелка оповещений»
+        st132();                                                      // 10.132: карта, расстояние, стрелки сразу
         if (fail > 0) { System.out.println("ошибок: " + fail); System.exit(1); }
         System.out.println("все проверки IvaPatch пройдены");
     }
@@ -3656,6 +3657,71 @@ public class IvaPatchTest {
         eq("стрелка 10.131: справа от значка, но внутри раздела",
             IvaArrowPatch.placeLeft(40, 2, 20, 100, 2) + "," + IvaArrowPatch.placeLeft(90, 2, 20, 100, 2) + "," + IvaArrowPatch.placeLeft(0, 0, 200, 100, 2), "42,78,0");
         eq("стрелка 10.131: заголовок пункта настроек", IvaArrowPatch.TITLE, "Стрелка оповещений");
+    }
+
+    @SuppressWarnings("unchecked")
+    static void st132() {
+        eq("карта 10.132: координаты с названием пункта (скобки из названия убраны)",
+            IvaGeoPatch.geoUri("Склад (центр)", "ул. Ленина, 1", "Новосибирск", 55.030204, 82.92043),
+            "geo:55.030204,82.92043?q=55.030204,82.92043(%D0%A1%D0%BA%D0%BB%D0%B0%D0%B4%20%20%D1%86%D0%B5%D0%BD%D1%82%D1%80)");
+        eq("карта 10.132: без координат — поиск по адресу с городом; нечего показать — пусто",
+            IvaGeoPatch.geoUri("Склад", "ул. Ленина, 1", "Бердск", null, null) + " | " + IvaGeoPatch.geoUri("Склад", " ", "null", null, null)
+            + " | " + IvaGeoPatch.geoUri("", "Новосибирск, ул. Ленина, 1", "Новосибирск", 0.0, 0.0),
+            "geo:0,0?q=%D0%91%D0%B5%D1%80%D0%B4%D1%81%D0%BA%2C%20%D1%83%D0%BB.%20%D0%9B%D0%B5%D0%BD%D0%B8%D0%BD%D0%B0%2C%201 |  | "
+            + "geo:0,0?q=%D0%9D%D0%BE%D0%B2%D0%BE%D1%81%D0%B8%D0%B1%D0%B8%D1%80%D1%81%D0%BA%2C%20%D1%83%D0%BB.%20%D0%9B%D0%B5%D0%BD%D0%B8%D0%BD%D0%B0%2C%201");
+        eq("карта 10.132: неверные координаты — по адресу",
+            IvaGeoPatch.ok(91.0, 10.0) + "," + IvaGeoPatch.ok(55.0, 181.0) + "," + IvaGeoPatch.ok(Double.NaN, 1.0) + "," + IvaGeoPatch.ok(55.0, 82.9), "false,false,false,true");
+        eq("карта 10.132: карт нет — Яндекс Карты на сайте",
+            IvaGeoPatch.webUrl("", "", 55.03, 82.92) + " | " + IvaGeoPatch.webUrl("ул. Мира, 5", "Омск", null, null),
+            "https://yandex.ru/maps/?pt=82.92,55.03&z=16&l=map | https://yandex.ru/maps/?text=%D0%9E%D0%BC%D1%81%D0%BA%2C%20%D1%83%D0%BB.%20%D0%9C%D0%B8%D1%80%D0%B0%2C%205");
+        eq("расстояние 10.132: по прямой — Новосибирск → Бердск ≈ 33 км, Москва → Санкт-Петербург ≈ 633 км",
+            Math.round(IvaGeoPatch.km(55.0302, 82.9204, 54.7580, 83.1073)) + "," + Math.round(IvaGeoPatch.km(55.7558, 37.6173, 59.9343, 30.3351)), "33,633");
+        eq("расстояние 10.132: подпись «≈ 2,4 км»",
+            IvaGeoPatch.distText(0.004) + "|" + IvaGeoPatch.distText(0.347) + "|" + IvaGeoPatch.distText(0.999) + "|" + IvaGeoPatch.distText(2.36)
+            + "|" + IvaGeoPatch.distText(9.96) + "|" + IvaGeoPatch.distText(24.4) + "|" + IvaGeoPatch.distText(1250.2) + "|" + IvaGeoPatch.distText(Double.NaN),
+            "≈ 10 м|≈ 350 м|≈ 1 км|≈ 2,4 км|≈ 10 км|≈ 24 км|≈ 1\u00a0250 км|");
+        java.util.List<String> cats = java.util.Arrays.asList("garden", "power");
+        eq("расстояние 10.132: отбор как в штатной ленте — «сдан», категория (cat / cats), подкатегория, поиск",
+            IvaGeoPatch.shown("rented", "", null, "", "Дрель", "", "all", "", "", "") + ","
+            + IvaGeoPatch.shown("", "drill", cats, "", "Дрель", "", "cat", "power", "", "") + ","
+            + IvaGeoPatch.shown("", "drill", cats, "", "Дрель", "", "cat", "auto", "", "") + ","
+            + IvaGeoPatch.shown("", "drill", null, "a", "Дрель", "", "cat", "drill", "b", "") + ","
+            + IvaGeoPatch.shown("", "drill", null, "a", "Дрель", "ударная", "all", "auto", "b", "удар") + ","
+            + IvaGeoPatch.shown("", "drill", null, "a", "Дрель", "", "all", "", "", "пила"),
+            "false,true,false,false,true,false");
+        eq("расстояние 10.132: карточка — тот инструмент (по началу названия)",
+            IvaGeoPatch.sameTitle("Перфоратор Makita HR2470 с…", "Перфоратор Makita HR2470 с кейсом") + "," + IvaGeoPatch.sameTitle("Дрель", "Шуруповёрт")
+            + "," + IvaGeoPatch.sameTitle("", "Дрель"), "true,false,false");
+        eq("расстояние 10.132: координаты адреса на телефоне",
+            java.util.Arrays.toString(IvaGeoPatch.cacheLatLng(IvaGeoPatch.cacheVal(55.03, 82.92, 7L))) + " " + IvaGeoPatch.cacheAt(IvaGeoPatch.cacheVal(55.03, 82.92, 7L))
+            + " " + IvaGeoPatch.cacheVal(null, null, 9L) + " " + IvaGeoPatch.cacheLatLng("-@9") + " " + IvaGeoPatch.dbl("54,75") + " " + IvaGeoPatch.dbl("null"),
+            "[55.03, 82.92] 7 -@9 null 54.75 null");
+        eq("расстояние 10.132: по умолчанию выключено, код запроса не штатный 771",
+            IvaGeoPatch.K_DIST + " " + IvaGeoPatch.REQ_LOC + " " + IvaGeoPatch.TITLE, "dist_on 7712 Расстояние до проката");
+        java.util.Map<String, Object> jo = (java.util.Map<String, Object>) IvaRealtimePatch.Json.parse(
+            IvaRealtimePatch.joinMsg(IvaRealtimePatch.X_TOPIC[1], IvaRealtimePatch.X_TABLE[1], IvaRealtimePatch.X_REF[1], " Ivan@Mail.RU ", "t"));
+        java.util.Map<String, Object> pc = (java.util.Map<String, Object>) ((java.util.List<Object>) ((java.util.Map<String, Object>)
+            ((java.util.Map<String, Object>) jo.get("payload")).get("config")).get("postgres_changes")).get(0);
+        eq("стрелки 10.132: каналы заявок и сообщений — своя строка, свой join_ref",
+            jo.get("topic") + "|" + jo.get("join_ref") + "|" + pc.get("table") + "|" + pc.get("filter") + "|" + String.join(",", IvaRealtimePatch.X_TABLE),
+            "realtime:iva_msg|3|iva_msg_ping|email=eq.ivan@mail.ru|iva_order_ping,iva_msg_ping");
+        String TO = "\"topic\":\"realtime:iva_order\"", TM = "\"topic\":\"realtime:iva_msg\"";
+        String okO = "{\"event\":\"phx_reply\",\"payload\":{\"status\":\"ok\"},\"ref\":\"2\"," + TO + "}";
+        String errM = "{\"event\":\"phx_reply\",\"payload\":{\"status\":\"error\"},\"ref\":\"3\"," + TM + "}";
+        String chM = "{\"event\":\"postgres_changes\",\"payload\":{},\"ref\":null," + TM + "}";
+        String role = "{\"event\":\"postgres_changes\",\"payload\":{},\"ref\":null,\"topic\":\"realtime:iva_role\"}";
+        eq("стрелки 10.132: ответы каналов — заявки вошли, сообщения нет (нет SQL), событие; роль — по-старому",
+            IvaRealtimePatch.extra(okO) + ":" + IvaRealtimePatch.classifyExtra(okO, 0) + "," + IvaRealtimePatch.extra(errM) + ":" + IvaRealtimePatch.classifyExtra(errM, 1)
+            + "," + IvaRealtimePatch.extra(chM) + ":" + IvaRealtimePatch.classifyExtra(chM, 1) + "," + IvaRealtimePatch.extra(role) + ":" + IvaRealtimePatch.classify(role)
+            + "," + IvaRealtimePatch.classify(okO) + "," + IvaRealtimePatch.extra("{x"),
+            "0:1,1:2,1:3,-1:3,0,-1");
+        java.util.Map<String, Object> tk = (java.util.Map<String, Object>) IvaRealtimePatch.Json.parse(IvaRealtimePatch.tokenMsg("realtime:iva_order", "2", "new", 9));
+        eq("стрелки 10.132: новый ключ — и каналам заявок / сообщений", tk.get("topic") + "|" + tk.get("join_ref") + "|" + tk.get("ref"), "realtime:iva_order|2|9");
+        eq("стрелки 10.132: последние числа на телефоне — по почте",
+            IvaArrowPatch.cacheKey(" Ivan@Mail.RU ") + " " + IvaArrowPatch.join(new int[] {0, 3, -1, 12}) + " "
+            + java.util.Arrays.toString(IvaArrowPatch.split("0,3,x", 4)) + " " + java.util.Arrays.toString(IvaArrowPatch.split(null, 2)),
+            "arrow_cnt_ivan@mail.ru 0,3,0,12 [0, 3, 0, 0] [0, 0]");
+        eq("стрелки 10.132: первый проход опроса — через 1 с", IvaNotifyPatch.FIRST_MS, 1000L);
     }
 
     static String chatMsgStr() {

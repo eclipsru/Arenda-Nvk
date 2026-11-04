@@ -1133,6 +1133,7 @@ public class IvaStaffPatch {
             TextView t = IvaChiefPatch.text(a, nl >= 0 ? ct.substring(nl + 1) : "", 14f, cText, false);
             t.setPadding(0, dp(a, 6), 0, 0);
             c.addView(t);
+            try { IvaGeoPatch.add(a, c, p, false); } catch (Throwable ignore) {}   // 10.132: «Показать на карте»
             pg.list.addView(c);
         }
         // 10.130: плитки по 2 в ряд — инструменты, заявки, чат пункта и архив заявок (вместо кнопок и строки архива внизу)

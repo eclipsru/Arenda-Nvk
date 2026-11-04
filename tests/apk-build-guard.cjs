@@ -1614,7 +1614,9 @@ try {
       'настройки 10.97: «Уведомления», «Пункт выдачи», «Срок аренды» — каждый открывается своей страницей');
     // новый пункт в «Настройках» — только строкой, открывающей страницу: всё, что вставляется в page, — это head/строки пунктов
     const pageAdds = (os97.match(/page\.addView\((\w+)/g) || []).map(x => x.replace('page.addView(', ''));
-    assert.ok(pageAdds.length === 1 && pageAdds[0] === 'head' && (os97.match(/\(a, page, cText, cGray, cOrange\)/g) || []).length === 1
+    assert.ok(pageAdds.length === 1 && pageAdds[0] === 'head' && (os97.match(/\(a, page, cText, cGray, cOrange\)/g) || []).length === 2   // 10.132: + «Расстояние до проката»
+      && os97.includes('try { IvaGeoPatch.settingsRow(a, page, cText, cGray, cOrange); } catch (Throwable ignore) {}')
+      && R('android/patches/IvaGeoPatch.java').includes('IvaChiefPatch.subPage(a, TITLE, body, new Runnable() {')
       && os97.includes('try { IvaArrowPatch.settingsRow(a, page, cText, cGray, cOrange); } catch (Throwable ignore) {}')   // 10.131: «Стрелка оповещений» — строкой со своей страницей
       && R('android/patches/IvaArrowPatch.java').includes('IvaChiefPatch.subPage(a, TITLE, settingsBody(a, cText, cGray, cOrange, onChange), null)'),   // 10.98: одна строка «Настройка проката» вместо двух; 10.116: и та — в «Кабинете»
       'настройки 10.97: в «Настройки» вставляются только строки пунктов (новый пункт — строкой со своей страницей)');
@@ -2077,7 +2079,9 @@ try {
     for (const f of fs.readdirSync(dir).filter((x) => /^Iva\w+\.java$/.test(x))) {
       const code = strip(fs.readFileSync(path.join(dir, f), 'utf8'));
       const n = (code.match(/ACTION_GET_CONTENT|"android\.intent\.action\.GET_CONTENT"|OPEN_DOCUMENT|createChooser\(/g) || []).length;
-      assert.ok(f === 'IvaPhotoPatch.java' ? n === 2 : n === 0, 'галерея 10.109: проводник не открывается напрямую — ' + f + ' (' + n + ')');
+      assert.ok(f === 'IvaPhotoPatch.java' ? n === 2
+        : f === 'IvaGeoPatch.java' ? n === 1 && !/GET_CONTENT|OPEN_DOCUMENT/.test(code) && code.includes('a.startActivity(Intent.createChooser(i, CHOOSER));')   // 10.132: выбор карт (geo:), не проводник
+        : n === 0, 'галерея 10.109: проводник не открывается напрямую — ' + f + ' (' + n + ')');
     }
     const gi = fn(ph, 'galleryIntents'), ga = fn(ph, 'galleryActions');
     assert.ok(ga.includes('photoPicker ? new String[]{ACT_PHOTO_PICKER, ACT_GALLERY, ACT_FILES} : new String[]{ACT_GALLERY, ACT_FILES}')
@@ -2975,7 +2979,7 @@ try {
     const tp = R('android/patches/test/IvaPatchTest.java'), ar = strip(R('android/patches/IvaArrowPatch.java'));
     const np = strip(R('android/patches/IvaNotifyPatch.java')), sp = strip(R('android/patches/IvaStaffPatch.java'));
     const so = strip(R('android/patches/IvaStaffOrdersPatch.java')), sc = R('android/patches/IvaStaffChatPatch.java');   // без strip: «audio/*»
-    assert.ok(wf.includes('-d "$C" android/patches/IvaArrowPatch.java android/patches/IvaPatch.java') && ck.includes('android/patches/IvaArrowPatch.java android/patches/IvaPatch.java'),
+    assert.ok(/-d "\$C" (?:android\/patches\/IvaGeoPatch\.java )?android\/patches\/IvaArrowPatch\.java android\/patches\/IvaPatch\.java/.test(wf) && ck.includes('android/patches/IvaArrowPatch.java android/patches/IvaPatch.java'),   // 10.132: IvaGeoPatch — перед ним
       '10.131: IvaArrowPatch собирается в обеих сборках');
     assert.ok(!/IvaArrowPatch/.test(ap) && R('android/patches/IvaPatch.java').includes('try { IvaArrowPatch.onTab(a); } catch (Throwable ignore) {}'),
       '10.131: без новых вставок в smali — вход через IvaPatch.onTab');
@@ -2999,7 +3003,52 @@ try {
       && sp.includes('IvaArrowPatch.mark(a, row, null, IvaArrowPatch.S_MINE)'),
       '10.131: стрелки на «Мой пункт» и плитках «Заявки пункта», «Чат пункта»');
     assert.ok((tp.match(/eq\("[^"]*10\.131: /g) || []).length >= 8 && tp.includes('st131();'), 'IvaPatchTest: проверки 10.131');
-    assert.ok(/NEW_NAME: '10\.131'/.test(wf) && /NEW_CODE: '205'/.test(wf), 'сборка 10.131 (205)');
+    assert.ok(Number((/NEW_CODE: '(\d+)'/.exec(wf) || [])[1]) >= 205, 'сборка 10.131 (205) или новее');
+  }
+  // 10.132 (просьба владельца 04.11.2026): «Показать на карте» у каждого пункта выдачи (выбор установленных карт);
+  // «≈ 2,4 км» на карточках главной (настройка «Расстояние до проката», по умолчанию выключена, геолокация — только после
+  // включения); стрелки оповещений — сразу (Realtime: заявки iva_order_ping 1119, сообщения iva_msg_ping 1122).
+  {
+    const strip = (t) => t.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/ [^\n]*/g, '');
+    const wf = R('.github/workflows/build-apk.yml'), ck = R('.github/workflows/check.yml'), ap = R('android/patches/apply.py');
+    const tp = R('android/patches/test/IvaPatchTest.java'), geo = strip(R('android/patches/IvaGeoPatch.java'));
+    const rt = strip(R('android/patches/IvaRealtimePatch.java')), np = strip(R('android/patches/IvaNotifyPatch.java')), ar = strip(R('android/patches/IvaArrowPatch.java'));
+    const sql = R('supabase/migrations/20261122_msg_ping.sql'), rb = R('supabase/migrations/20261122_msg_ping_rollback.sql'), chk = R('tools/check.sh');
+    assert.ok(wf.includes('android/patches/IvaGeoPatch.java android/patches/IvaArrowPatch.java') && ck.includes('android/patches/IvaGeoPatch.java android/patches/IvaArrowPatch.java')
+      && !/IvaGeoPatch/.test(ap) && R('android/patches/IvaPatch.java').includes('try { IvaGeoPatch.onTab(a); } catch (Throwable ignore) {}'),
+      '10.132: IvaGeoPatch собирается в обеих сборках, без новых вставок в smali — вход через IvaPatch.onTab');
+    // карта: системный выбор установленных карт по geo:, нет карт — сайт; кнопка во всех местах, где показан пункт
+    assert.ok(geo.includes('a.startActivity(Intent.createChooser(i, CHOOSER));') && geo.includes('"geo:" + ll + "?q=" + ll') && geo.includes('"geo:0,0?q=" + enc(q)')
+      && geo.includes('https://yandex.ru/maps/?pt=') && geo.includes('MAP = "Показать на карте"') && geo.includes('IvaPatch.accentBg(a, cOrange, 12)'),
+      '10.132: «Показать на карте» — рамкой; выбор карт телефона (geo: с координатами или адресом), карт нет — Яндекс Карты на сайте');
+    const uses = [['IvaToolPointPatch', 2], ['IvaProkatPatch', 2], ['IvaOrderViewPatch', 3], ['IvaOrderPointPatch', 2], ['IvaStaffPatch', 1], ['IvaPickupPatch', 1]];
+    for (const [f, n] of uses) assert.ok((strip(R('android/patches/' + f + '.java')).match(/IvaGeoPatch\.(?:add|addOrder|place|detail)\(/g) || []).length === n,
+      '10.132: «Показать на карте» — ' + f + ' (' + n + ')');
+    // расстояние: по умолчанию выключено, разрешение — только из выключателя, свой код запроса, место телефона никуда не уходит
+    assert.ok(geo.includes('getBoolean(K_DIST, false)') && (geo.match(/requestPermissions\(/g) || []).length === 1 && geo.includes('REQ_LOC = 7712')
+      && geo.indexOf('a.requestPermissions(new String[] {FINE, COARSE}, REQ_LOC);') > geo.indexOf('sw.setOnCheckedChangeListener(')
+      && !/apiCall|HttpURLConnection|select=|IvaClientPatch\.SB_URL/.test(geo) && geo.includes('IvaPickupPatch.suggest(q)'),
+      '10.132: «Расстояние до проката» выключено по умолчанию; геолокация спрашивается только при включении (код 7712, не 771); место телефона не отправляется');
+    assert.ok(geo.includes('new FrameLayout.LayoutParams(-2, -2, Gravity.BOTTOM | Gravity.RIGHT)') && geo.includes('if (show && tools.size() != frames.size()) show = false;')
+      && geo.includes('sameTitle(titles.get(i), tools.get(i).optString("name", ""))') && geo.includes('"≈ " + String.format(Locale.ROOT, "%.1f", km)'),
+      '10.132: «≈ 2,4 км» — справа снизу на картинке; карточка сверяется с инструментом, не сошлось — без подписи');
+    assert.ok(wf.indexOf('python3 android/patches/axml_install.py "$W/AndroidManifest.xml"') < wf.indexOf('python3 android/patches/axml_permissions.py "$W/AndroidManifest.xml"')
+      && wf.indexOf('python3 android/patches/axml_permissions.py "$W/AndroidManifest.xml"') < wf.indexOf('python3 android/patches/axml_outline.py "$W"'),
+      '10.132: разрешения геолокации — в манифесте (иначе запрос отклоняется сам)');
+    // стрелки сразу: каналы заявок и сообщений, событие — опрос сразу; первый опрос через 1 с; числа не обнуляются при запуске
+    assert.ok(rt.includes('X_TABLE = {"iva_order_ping", "iva_msg_ping"}') && rt.includes('if (kx == M_JOIN_OK || kx == M_CHANGE) { if (kx == M_CHANGE) lastEvent = now; wake(a); }')
+      && rt.includes('else if (kx == M_JOIN_ERR || kx == M_SYS_ERR || kx == M_CLOSED) xOn[x] = false;') && rt.includes('try { IvaNotifyPatch.wake(); } catch (Throwable ignore) {}'),
+      '10.132: Realtime — каналы заявок и сообщений; событие — пересчёт сразу; нет SQL — без этого канала');
+    assert.ok(np.includes('FIRST_MS = 1000L') && np.includes('if (tickAt > now && tickAt <= now + d) return;') && ar.includes('if (!who.isEmpty()) for (int i = 0; i < cnt.length; i++) cnt[i] = 0;')
+      && ar.includes('split(prefs(a).getString(cacheKey(email), ""), cnt.length)'),
+      '10.132: первый опрос — через 1 с; смена раздела его не откладывает; последние числа — сразу при запуске');
+    assert.ok(sql.includes('GRANT SELECT ON public.iva_msg_ping TO authenticated;') && sql.includes('REVOKE ALL ON public.iva_msg_ping FROM public, anon, authenticated;')
+      && sql.includes("USING (email = lower(btrim(coalesce(auth.jwt() ->> 'email', ''))))") && sql.includes('ALTER PUBLICATION supabase_realtime ADD TABLE public.iva_msg_ping;')
+      && sql.includes('AFTER INSERT OR UPDATE OF is_read ON public.app_messages') && (sql.match(/exception when others then/g) || []).length === 2
+      && rb.includes('DROP TABLE IF EXISTS public.iva_msg_ping;') && chk.includes('tools/msg-ping-stand.py'),
+      '10.132: SQL 1122 — отметка только своя, пишет только база, Realtime; ошибка отметки сообщению не мешает; откат; стенд');
+    assert.ok((tp.match(/eq\("[^"]*10\.132: /g) || []).length >= 14 && tp.includes('st132();'), 'IvaPatchTest: проверки 10.132');
+    assert.ok(/NEW_NAME: '10\.132'/.test(wf) && /NEW_CODE: '206'/.test(wf), 'сборка 10.132 (206)');
   }
   // 10.75 (просьба владельца 14.10.2026): в «Настройках» — кнопка «Уведомления» (с 10.97 — открывает отдельную страницу);
   // внутри сверху «Открыть настройки уведомлений Android», потом какие присылать, потом расписание, потом всё остальное
@@ -3021,7 +3070,8 @@ try {
     const os75 = os.replace('IvaRentPatch.settingsSection(a, page, cText, cGray, cOrange)', '')   // 10.77: «Аренда» — отдельная кнопка ниже
       .replace('IvaPickupPatch.settingsRow(a, page, cText, cGray, cOrange)', '')   // 10.95: «Пункт выдачи» — тоже отдельная кнопка
       .replace('IvaShopPatch.settingsRow(a, page, cText, cGray, cOrange)', '')     // 10.98: «Настройка проката» вместо двух строк выше
-      .replace('IvaArrowPatch.settingsRow(a, page, cText, cGray, cOrange)', '');   // 10.131: «Стрелка оповещений» — отдельная кнопка
+      .replace('IvaArrowPatch.settingsRow(a, page, cText, cGray, cOrange)', '')    // 10.131: «Стрелка оповещений» — отдельная кнопка
+      .replace('IvaGeoPatch.settingsRow(a, page, cText, cGray, cOrange)', '');     // 10.132: «Расстояние до проката» — отдельная кнопка
     assert.ok(!/(?:page|root)\.addView\((?:status|test|note|push|card|sc|sys|body)\b/.test(os75) && (os75.match(/page\.addView\(/g) || []).length === 1
       && (os75.match(/\bpage\b/g) || []).length === 5 && !/\(a, page\b/.test(os75),
       'настройки 10.75: всё про уведомления — внутри списка, снаружи только кнопка');

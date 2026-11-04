@@ -551,6 +551,7 @@ final class IvaToolPointPatch {
         final Object it = IvaClientPatch.get(a, "detItem");
         if (Boolean.TRUE.equals(IvaClientPatch.get(a, "detIsSrv"))) return;
         final String pid = pointOf(it).toLowerCase(java.util.Locale.ROOT);
+        try { IvaGeoPatch.detail(a, null); } catch (Throwable ignore) {}   // 10.132: «Показать на карте» под адресом
         if (!uuid(pid)) return;                                          // пункта нет (или нет SQL) — штатный адрес
         IvaPickupPatch.Point p;
         Long at;
@@ -603,5 +604,6 @@ final class IvaToolPointPatch {
         TextView t = (TextView) v;
         if (!s.contentEquals(t.getText())) t.setText(s);
         if (t.getVisibility() != View.VISIBLE) t.setVisibility(View.VISIBLE);
+        try { IvaGeoPatch.detail(a, p); } catch (Throwable ignore) {}   // 10.132: «Показать на карте» — с названием пункта
     }
 }

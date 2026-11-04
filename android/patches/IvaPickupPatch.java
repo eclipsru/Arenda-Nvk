@@ -685,6 +685,7 @@ public class IvaPickupPatch {
             LinearLayout.LayoutParams sl = new LinearLayout.LayoutParams(-2, -2);
             sl.topMargin = dp(a, 8);
             info.addView(staff, sl);
+            try { IvaGeoPatch.add(a, info, p, false); } catch (Throwable ignore) {}   // 10.132: «Показать на карте»
             c.addView(info);
             LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2);
             lp.topMargin = dp(a, 10);
