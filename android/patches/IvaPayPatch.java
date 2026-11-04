@@ -46,9 +46,14 @@ final class IvaPayPatch {
         + "&status=eq.succeeded&order=id.desc&limit=200";
     static final String Q_OPEN = "/rest/v1/iva_yk_pay?select=id&status=eq.pending&limit=200";
     static final String RECEIPT_RPC = "/rest/v1/rpc/iva_yk_receipt";
-    static final String BTN = "Оплатить онлайн";
     static final String TITLE = "Оплата комиссии";
     static final String GO = "Перейти к оплате";
+    static final String NATIVE_BTN = "Оплатить";
+    static final String ASK = "Введите сумму для оплаты";
+    static final String MANUAL = "Отправить запрос";
+    static final String MANUAL_PATH = "/rest/v1/fee_payments";
+    static final double OVER_MAX = 5000;          // 10.134: переплата — не больше 5 000 ₽ (решение владельца 04.11.2026)
+    static final String BLOCKED = "Переплата больше 5 000 ₽ — вносить оплату пока не нужно: комиссия с новых аренд спишется из переплаты.";
     static final String TAG = "iva_yk_btn";
     static final String K_WAIT = "yk_wait_";
     static final double MIN = 1, MAX = 100000;
@@ -84,6 +89,51 @@ final class IvaPayPatch {
         if (c == null) return 0;
         double d = c[0] - c[1];
         return d <= 0.004 ? 0 : Math.ceil(d * 100 - 1e-6) / 100.0;
+    }
+
+    /** 10.134: долг по числам карточки (начислено, оплачено): до копейки вверх; нет долга — 0. */
+    static double debtOf(double fee, double paid) {
+        double d = fee - paid;
+        return d <= 0.004 ? 0 : Math.ceil(d * 100 - 1e-6) / 100.0;
+    }
+
+    /** 10.134: сколько можно внести, чтобы переплата не стала больше 5 000 ₽ (и не больше 100 000 за раз); меньше 1 — нельзя. */
+    static double payMax(double fee, double paid) {
+        double m = Math.floor((fee - paid + OVER_MAX) * 100 + 1e-6) / 100.0;
+        return Math.min(m, MAX);
+    }
+
+    /** «К оплате 1 250 ₽» / «Переплата 300 ₽» — как на карточке комиссии. */
+    static String sumLine(double fee, double paid) { return IvaAccessPatch.feeSumText(fee, paid); }
+
+    /** Подсказка под полем. */
+    static String limitText(double max) {
+        return max >= MAX ? "От 1 до 100 000 ₽ за один раз" : "От 1 до " + rub(max) + " — переплата не больше 5 000 ₽";
+    }
+
+    /** Ошибка суммы или null — можно. */
+    static String amountError(Double v, double max) {
+        if (max < MIN) return BLOCKED;
+        if (v == null) return "Введите сумму от 1 до " + rub(max);
+        if (v > max + 0.004) return max >= MAX ? "Не больше 100 000 ₽ за один раз" : "Не больше " + rub(max) + " — переплата не может быть больше 5 000 ₽";
+        return null;
+    }
+
+    /** Пояснение в окне: 1 / 3 — ЮKassa (3 — тестовый режим), 2 — переводом с запросом, 0 — ещё не знаем. */
+    static String modeText(int r) {
+        if (r == 1 || r == 3) return "Через ЮKassa: СБП, карта, SberPay. Долг уменьшится сам, как только ЮKassa подтвердит оплату."
+            + (r == 3 ? "\nТестовый режим ЮKassa — настоящие деньги не списываются." : "");
+        if (r == 2) return "Переведите сумму владельцу площадки и отправьте запрос — он подтвердит получение.";
+        return "Проверяем способ оплаты…";
+    }
+
+    /** Способ оплаты для окна: ЮKassa не ответила / функции нет, а проверка уже была — переводом (2). */
+    static int mode(boolean checked) { return ready == 0 ? (checked ? 2 : 0) : ready; }
+
+    /** Запрос «я оплатил переводом» — как у штатного окна: строка «pending», подтверждает владелец площадки. */
+    static String manualBody(String me, double v) {
+        String e = (me == null ? "" : me).replace("\\", "\\\\").replace("\"", "\\\"");
+        return "{\"admin_email\":\"" + e + "\",\"amount\":" + amountText(v) + ",\"note\":\"Оплата комиссии\",\"status\":\"pending\"}";
     }
 
     /** Тело запроса «создать платёж». */
@@ -172,7 +222,7 @@ final class IvaPayPatch {
     /** Из IvaAccessPatch.feeCard (главный поток): кнопка под суммой; узнать «подключено ли»; проверить начатую оплату. */
     static void card(final Activity a, final TextView[] v, final String me) {
         if (a == null || v == null || v.length < 3 || me == null || me.isEmpty()) return;
-        if (ready == 1 || ready == 3) addButton(a, v);
+        hookNative(a);                                                     // 10.134: одна кнопка — родная «Оплатить»
         if (ready == 0 || System.currentTimeMillis() - readyAt > READY_TTL) fetchReady(a);
         long[] w = waitParse(IvaAccessPatch.prefs(a).getString(waitKey(me), ""));
         if (w != null) {
@@ -181,20 +231,16 @@ final class IvaPayPatch {
         }
     }
 
-    static void addButton(final Activity a, TextView[] v) {
-        if (!(v[2].getParent() instanceof LinearLayout)) return;
-        LinearLayout box = (LinearLayout) v[2].getParent();
-        if (box.findViewWithTag(TAG) != null) return;
-        TextView b = IvaPickupPatch.addButton(a, IvaChiefPatch.color(a, "orange", 0xffff8f1f));
-        b.setText(BTN);
+    /** 10.134: родная кнопка «Оплатить» карточки комиссии открывает наше окно (родное — простое окно Android и запрос
+     *  к несуществующей функции yk-create-payment). Отдельной кнопки «Оплатить онлайн» больше нет — одна кнопка. */
+    static void hookNative(final Activity a) {
+        Object o = IvaClientPatch.get(a, "feePay");
+        if (!(o instanceof TextView)) return;
+        TextView b = (TextView) o;
+        if (TAG.equals(b.getTag())) return;
         b.setTag(TAG);
-        b.setTextSize(14f);
-        b.setPadding(IvaChiefPatch.dp(a, 14), IvaChiefPatch.dp(a, 10), IvaChiefPatch.dp(a, 14), IvaChiefPatch.dp(a, 10));
-        b.setContentDescription(BTN + " — комиссия площадки через ЮKassa");
+        b.setText(NATIVE_BTN);
         b.setOnClickListener(new View.OnClickListener() { @Override public void onClick(View x) { open(a); } });
-        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2);
-        lp.topMargin = IvaChiefPatch.dp(a, 10);
-        box.addView(b, box.indexOfChild(v[2]) + 1, lp);
     }
 
     static void fetchReady(final Activity a) {
@@ -215,83 +261,204 @@ final class IvaPayPatch {
         }).start();
     }
 
+    /** Окно «Оплата комиссии» в стиле приложения (как окно приглашения): сумма к оплате / переплата, поле «Введите сумму
+     *  для оплаты», «Весь долг». Переплата больше 5 000 ₽ — ввести сумму нельзя; сумма — не больше той, после которой
+     *  переплата станет больше 5 000 ₽. ЮKassa подключена — «Перейти к оплате»; нет — «Отправить запрос», как раньше. */
     static void open(final Activity a) {
         final String me = IvaAccessPatch.me(a);
         if (me.isEmpty()) return;
-        int cText = IvaChiefPatch.color(a, "text", 0xfff2f4f8), cGray = IvaChiefPatch.color(a, "gray", 0xff9aa1b0);
-        int cOrange = IvaChiefPatch.color(a, "orange", 0xffff8f1f);
-        final IvaChiefPatch.Page pg = IvaChiefPatch.page(a, TITLE,
-            "Через ЮKassa: СБП, карта, SberPay и другие способы. Долг уменьшится сам, как только ЮKassa подтвердит оплату.", false);
-        final double debt = debtOf(IvaAccessPatch.prefs(a).getString(IvaAccessPatch.feeCacheKey(me), ""));
-        TextView l = IvaChiefPatch.text(a, "Сумма, ₽", 13f, cGray, false);
-        l.setPadding(0, IvaChiefPatch.dp(a, 14), 0, IvaChiefPatch.dp(a, 6));
-        pg.list.addView(l);
-        final EditText f = IvaOrderEditPatch.field(a, "Например, 500", debt >= MIN ? amountText(Math.min(debt, MAX)) : "");
-        f.setInputType(InputType.TYPE_CLASS_NUMBER | InputType.TYPE_NUMBER_FLAG_DECIMAL);
+        final int cText = IvaChiefPatch.color(a, "text", 0xfff2f4f8), cGray = IvaChiefPatch.color(a, "gray", 0xff9aa1b0);
+        final int cRed = IvaChiefPatch.color(a, "redBright", 0xffff8f1f), cGreen = IvaChiefPatch.color(a, "greenBright", 0xff3ec27a);
+        final int cOrange = IvaChiefPatch.color(a, "orange", 0xffff8f1f);
+        final android.app.Dialog d = new android.app.Dialog(a);
+        final LinearLayout card = IvaAccessPatch.card(a, d, TITLE, modeText(mode(ready != 0)));
+        final TextView mode = (TextView) card.getChildAt(1);
+        final TextView status = IvaChiefPatch.text(a, "…", 22f, cText, true);
+        status.setGravity(Gravity.CENTER);
+        LinearLayout.LayoutParams sl = new LinearLayout.LayoutParams(-1, -2);
+        sl.topMargin = IvaChiefPatch.dp(a, 14);
+        card.addView(status, sl);
+        final TextView sub = IvaChiefPatch.text(a, "", 12f, cGray, false);
+        sub.setGravity(Gravity.CENTER);
+        card.addView(sub, new LinearLayout.LayoutParams(-1, -2));
+        // ── поле суммы ──
+        final LinearLayout form = new LinearLayout(a);
+        form.setOrientation(LinearLayout.VERTICAL);
+        LinearLayout.LayoutParams fl = new LinearLayout.LayoutParams(-1, -2);
+        fl.topMargin = IvaChiefPatch.dp(a, 16);
+        card.addView(form, fl);
+        TextView label = IvaChiefPatch.text(a, ASK, 14f, cText, true);
+        label.setPadding(0, 0, 0, IvaChiefPatch.dp(a, 8));
+        form.addView(label);
+        LinearLayout box = new LinearLayout(a);
+        box.setOrientation(LinearLayout.HORIZONTAL);
+        box.setGravity(Gravity.CENTER_VERTICAL);
+        android.graphics.drawable.Drawable fb = IvaSearchPatch.drawable(a, "bg_field");
+        if (fb != null) box.setBackground(fb);
+        box.setPadding(IvaChiefPatch.dp(a, 16), IvaChiefPatch.dp(a, 4), IvaChiefPatch.dp(a, 16), IvaChiefPatch.dp(a, 4));
+        final EditText f = new EditText(a);
+        f.setBackground(null);
+        f.setHint("0");
+        f.setHintTextColor(IvaChiefPatch.color(a, "gray2", 0xff6b7080));
+        f.setTextColor(cText);
+        f.setTextSize(24f);
+        f.setTypeface(null, android.graphics.Typeface.BOLD);
         f.setSingleLine(true);
-        pg.list.addView(f, new LinearLayout.LayoutParams(-1, -2));
-        if (debt >= MIN) {
-            TextView ch = IvaSearchPatch.chip(a, "Весь долг — " + rub(Math.min(debt, MAX)), false, false);
-            LinearLayout.LayoutParams cl = new LinearLayout.LayoutParams(-2, -2);
-            cl.topMargin = IvaChiefPatch.dp(a, 8);
-            pg.list.addView(ch, cl);
-            ch.setOnClickListener(new View.OnClickListener() {
-                @Override public void onClick(View x) { f.setText(amountText(Math.min(debt, MAX))); f.setSelection(f.getText().length()); }
-            });
-        }
-        String note = "Можно оплатить любую сумму — частями или заранее. Откроется страница оплаты ЮKassa; данные карты в приложение не попадают."
-            + "\nЧек самозанятого пришлёт владелец площадки.";
-        if (ready == 3) note += "\nСейчас тестовый режим ЮKassa — настоящие деньги не списываются.";
-        TextView n = IvaChiefPatch.text(a, note, 12f, cGray, false);
-        n.setPadding(0, IvaChiefPatch.dp(a, 12), 0, 0);
-        pg.list.addView(n);
-        final TextView go = IvaPickupPatch.addButton(a, cOrange);
-        go.setText(GO);
-        go.setGravity(Gravity.CENTER);
-        LinearLayout.LayoutParams gl = new LinearLayout.LayoutParams(-1, IvaChiefPatch.dp(a, 48));
-        gl.topMargin = IvaChiefPatch.dp(a, 16);
-        pg.list.addView(go, gl);
+        f.setInputType(InputType.TYPE_CLASS_NUMBER | InputType.TYPE_NUMBER_FLAG_DECIMAL);
+        f.setPadding(0, IvaChiefPatch.dp(a, 8), 0, IvaChiefPatch.dp(a, 8));
+        f.setContentDescription(ASK);
+        box.addView(f, new LinearLayout.LayoutParams(0, -2, 1f));
+        box.addView(IvaChiefPatch.text(a, "₽", 22f, cGray, true));
+        form.addView(box, new LinearLayout.LayoutParams(-1, -2));
+        final TextView chip = IvaSearchPatch.chip(a, "", false, false);
+        LinearLayout.LayoutParams cl = new LinearLayout.LayoutParams(-2, -2);
+        cl.topMargin = IvaChiefPatch.dp(a, 10);
+        cl.gravity = Gravity.CENTER_HORIZONTAL;
+        form.addView(chip, cl);
+        final TextView hint = IvaChiefPatch.text(a, "", 12f, cGray, false);
+        hint.setGravity(Gravity.CENTER);
+        hint.setPadding(0, IvaChiefPatch.dp(a, 8), 0, 0);
+        form.addView(hint, new LinearLayout.LayoutParams(-1, -2));
+        final TextView go = IvaAccessPatch.bubble(a, card, "…", true, 16);
+        final TextView no = IvaAccessPatch.bubble(a, card, "Отмена", false, 8);
+        no.setOnClickListener(new View.OnClickListener() { @Override public void onClick(View x) { try { d.dismiss(); } catch (Throwable ignore) {} } });
+
+        // состояние окна: {начислено, оплачено} — с телефона, затем свежие с сервера
+        final double[] st = {Double.NaN, Double.NaN};
+        final boolean[] rk = {ready != 0};                                // узнали, подключена ли ЮKassa (или не смогли — переводом)
+        final Runnable paint = new Runnable() {
+            @Override public void run() {
+                boolean known = !Double.isNaN(st[0]);
+                int m = mode(rk[0]);
+                double debt = known ? debtOf(st[0], st[1]) : 0, max = known ? payMax(st[0], st[1]) : 0;
+                status.setText(known ? sumLine(st[0], st[1]) : "…");
+                status.setTextColor(known && debt > 0 ? cRed : known ? cGreen : cText);
+                sub.setText(known ? "начислено " + IvaAccessPatch.feeMoney(st[0]) + " ₽ · оплачено " + IvaAccessPatch.feeMoney(st[1]) + " ₽" : "Загружаем сумму…");
+                boolean blocked = known && max < MIN;
+                form.setVisibility(blocked ? View.GONE : View.VISIBLE);
+                mode.setText(blocked ? BLOCKED : modeText(m));
+                if (known && debt >= MIN && max >= MIN) {
+                    final double all = Math.min(debt, max);
+                    chip.setText("Весь долг — " + rub(all));
+                    chip.setVisibility(View.VISIBLE);
+                    chip.setOnClickListener(new View.OnClickListener() {
+                        @Override public void onClick(View x) { f.setText(amountText(all)); f.setSelection(f.getText().length()); }
+                    });
+                    if (f.getText().length() == 0) { f.setText(amountText(all)); f.setSelection(f.getText().length()); }
+                } else chip.setVisibility(View.GONE);
+                if (hint.getTag() == null) { hint.setText(known && !blocked ? limitText(max) : ""); hint.setTextColor(cGray); }
+                go.setText(blocked ? "Понятно" : m == 0 ? "…" : (m == 1 || m == 3) ? GO : MANUAL);
+                boolean can = blocked || (known && m != 0);
+                go.setEnabled(can);
+                go.setAlpha(can ? 1f : 0.6f);
+            }
+        };
+        double[] c = IvaAccessPatch.feeCache(IvaAccessPatch.prefs(a).getString(IvaAccessPatch.feeCacheKey(me), ""));
+        if (c != null) { st[0] = c[0]; st[1] = c[1]; }
+        paint.run();
+        f.addTextChangedListener(new android.text.TextWatcher() {
+            @Override public void beforeTextChanged(CharSequence q, int x, int y, int z) {}
+            @Override public void onTextChanged(CharSequence q, int x, int y, int z) {}
+            @Override public void afterTextChanged(android.text.Editable e) {
+                if (hint.getTag() == null) return;
+                hint.setTag(null);
+                hint.setText(Double.isNaN(st[0]) ? "" : limitText(payMax(st[0], st[1])));
+                hint.setTextColor(cGray);
+            }
+        });
+        // свежие суммы и «подключено ли» — в своём потоке
+        new Thread(new Runnable() {
+            @Override public void run() {
+                double[] r = null;
+                try {
+                    IvaClientPatch.authFresh(a);
+                    r = IvaAccessPatch.feeFetch(a, me);
+                    if (r != null) {
+                        double[] k = {r[0], r[1], r[2], System.currentTimeMillis()};
+                        IvaAccessPatch.prefs(a).edit().putString(IvaAccessPatch.feeCacheKey(me), IvaAccessPatch.feeMoneyKey(k)).apply();
+                        IvaAccessPatch.feePost(a, me, k, null);
+                    }
+                } catch (Throwable ignore) {}
+                try {
+                    String[] q = IvaClientPatch.apiCall(a, FN, "GET", null, false);
+                    if (q != null && q.length > 1 && q[0] != null && q[0].startsWith("2")) ready = readyOf(q[1]);
+                    else if (q != null && q[0] != null && q[0].startsWith("4")) ready = 2;   // функции нет (404) — переводом
+                    readyAt = System.currentTimeMillis();
+                } catch (Throwable ignore) {}
+                final double[] fr = r;
+                a.runOnUiThread(new Runnable() {
+                    @Override public void run() {
+                        try {
+                            rk[0] = true;
+                            if (fr != null) { st[0] = fr[0]; st[1] = fr[1]; }
+                            else if (Double.isNaN(st[0])) { paint.run(); sub.setText("Не удалось загрузить сумму — проверьте интернет"); return; }
+                            paint.run();
+                        } catch (Throwable ignore) {}
+                    }
+                });
+            }
+        }).start();
+
         go.setOnClickListener(new View.OnClickListener() {
             @Override public void onClick(View x) {
+                if (Double.isNaN(st[0]) || mode(rk[0]) == 0 && payMax(st[0], st[1]) >= MIN) return;
+                double max = payMax(st[0], st[1]);
+                if (max < MIN) { try { d.dismiss(); } catch (Throwable ignore) {} return; }
                 final Double v = amount(f.getText().toString());
-                if (v == null) { IvaStaffPatch.toast(a, errText("bad_amount", "")); return; }
+                String bad = amountError(v, max);
+                if (bad != null) { hint.setText(bad); hint.setTextColor(cRed); hint.setTag("err"); return; }
+                final int m = mode(rk[0]);
+                final boolean online = m == 1 || m == 3;
+                final String label0 = go.getText().toString();
                 go.setEnabled(false);
                 go.setAlpha(0.6f);
-                go.setText("Создаём платёж…");
+                go.setText(online ? "Создаём платёж…" : "Отправляем…");
                 new Thread(new Runnable() {
                     @Override public void run() {
                         String err = null, url = "";
                         long id = 0;
                         try {
                             IvaClientPatch.authFresh(a);
-                            String[] r = IvaClientPatch.apiCall(a, FN, "POST", newBody(v), true);
-                            String body = r != null && r.length > 1 ? r[1] : "";
-                            if (r == null || r[0] == null) err = errText("", "");
-                            else if (!r[0].startsWith("2")) err = errText(jstr(body, "error"), jstr(body, "message"));
-                            else {
-                                url = jstr(body, "url");
-                                try { id = Long.parseLong(jstr(body, "id")); } catch (Throwable e) { id = 0; }
-                                if (!url.startsWith("https://") || id <= 0) err = errText("", "");
+                            if (online) {
+                                String[] r = IvaClientPatch.apiCall(a, FN, "POST", newBody(v), true);
+                                String body = r != null && r.length > 1 ? r[1] : "";
+                                if (r == null || r[0] == null) err = errText("", "");
+                                else if (!r[0].startsWith("2")) err = errText(jstr(body, "error"), jstr(body, "message"));
+                                else {
+                                    url = jstr(body, "url");
+                                    try { id = Long.parseLong(jstr(body, "id")); } catch (Throwable e) { id = 0; }
+                                    if (!url.startsWith("https://")) err = errText("", "");
+                                }
+                            } else {
+                                String[] r = IvaClientPatch.apiCall(a, MANUAL_PATH, "POST", manualBody(me, v), true);
+                                if (r == null || r[0] == null || !r[0].startsWith("2")) err = "Не удалось отправить запрос — проверьте интернет и попробуйте ещё раз";
                             }
                         } catch (Throwable e) { err = errText("", ""); }
                         final String fe = err, fu = url;
                         final long fid = id;
-                        if (fe == null) IvaAccessPatch.prefs(a).edit().putString(waitKey(me), waitVal(fid, System.currentTimeMillis())).apply();
+                        if (fe == null && online && fid > 0) IvaAccessPatch.prefs(a).edit().putString(waitKey(me), waitVal(fid, System.currentTimeMillis())).apply();
                         a.runOnUiThread(new Runnable() {
                             @Override public void run() {
                                 go.setEnabled(true);
                                 go.setAlpha(1f);
-                                go.setText(GO);
-                                if (fe != null) { IvaStaffPatch.toast(a, fe); return; }
-                                try { pg.d.dismiss(); } catch (Throwable ignore) {}
+                                go.setText(label0);
+                                if (fe != null) { hint.setText(fe); hint.setTextColor(cRed); hint.setTag("err"); return; }
+                                try { d.dismiss(); } catch (Throwable ignore) {}
+                                if (!online) { IvaStaffPatch.toast(a, "Запрос отправлен — владелец площадки подтвердит оплату"); return; }
                                 openUrl(a, fu);
-                                poll(a, me, fid, POLL_MAX_MS);
+                                if (fid > 0) poll(a, me, fid, POLL_MAX_MS);
                             }
                         });
                     }
                 }).start();
             }
         });
+        IvaAccessPatch.track(d);
+        IvaAccessPatch.show(a, d, card, true);
+        try {
+            android.view.Window w = d.getWindow();
+            if (w != null) w.setSoftInputMode(android.view.WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);
+        } catch (Throwable ignore) {}
     }
 
     /** Страница ЮKassa во вкладке браузера поверх приложения (Custom Tab без библиотек); не вышло — обычный браузер. */

@@ -3063,20 +3063,40 @@ try {
       && chief.includes('try { IvaPayPatch.chief(a, p.list); } catch (Throwable ignore) {}'),
       '10.133: IvaPayPatch собирается в обеих сборках, без новых вставок в smali — вход через карточку комиссии и «Комиссию» владельца');
     // приложение ничего не засчитывает само: только создаёт платёж на сервере и спрашивает итог; в fee_payments не пишет
-    assert.ok(!/fee_payments/.test(py) && !/iva_yk_done|iva_yk_new|iva_yk_set|iva_yk_fee_insert/.test(py)
+    // 10.134: запрос «оплатил переводом» (как штатное окно) пишет в fee_payments только «pending» — подтверждает владелец площадки
+    assert.ok(!/confirmed/.test(py) && (py.match(/fee_payments/g) || []).length === 1 && py.includes('\\"status\\":\\"pending\\"')
+      && !/iva_yk_done|iva_yk_new|iva_yk_set|iva_yk_fee_insert/.test(py)
       && py.includes('IvaClientPatch.SB_URL + "/functions/v1/iva-pay"') && py.includes('IvaClientPatch.apiCall(a, FN, "POST", newBody(v), true)')
       && py.includes('IvaClientPatch.apiCall(a, FN, "POST", checkBody(id), true)') && py.includes('RECEIPT_RPC = "/rest/v1/rpc/iva_yk_receipt"'),
       '10.133: приложение не засчитывает оплату — только сервер (iva-pay) по ответу ЮKassa');
-    assert.ok(py.includes('if (ready == 1 || ready == 3) addButton(a, v);') && py.includes('BTN = "Оплатить онлайн"')
-      && py.includes('debt >= MIN ? amountText(Math.min(debt, MAX)) : ""') && py.includes('"android.support.customtabs.extra.SESSION"'),
-      '10.133: кнопка — только когда ЮKassa подключена; сумма — весь долг по умолчанию; страница ЮKassa — во вкладке браузера');
-    assert.ok(!/0xffff5a5a|0xff3ddc84/.test(py) && py.includes('IvaPickupPatch.addButton(a, cOrange)'),
-      '10.133: цвета и кнопки — как в приложении (рамкой)');
+    // 10.134: отдельной кнопки «Оплатить онлайн» нет — родная «Оплатить» открывает окно; онлайн — только когда ЮKassa подключена
+    assert.ok(py.includes('hookNative(a);') && py.includes('Object o = IvaClientPatch.get(a, "feePay");') && !py.includes('Оплатить онлайн')
+      && py.includes('final double all = Math.min(debt, max);') && py.includes('(m == 1 || m == 3) ? GO : MANUAL') && py.includes('"android.support.customtabs.extra.SESSION"'),
+      '10.133/10.134: онлайн — только когда ЮKassa подключена; сумма — весь долг по умолчанию; страница ЮKassa — во вкладке браузера');
+    assert.ok(!/0xffff5a5a|0xff3ddc84/.test(py) && py.includes('IvaAccessPatch.bubble(a, card, "…", true, 16)') && py.includes('IvaAccessPatch.show(a, d, card, true)'),
+      '10.133/10.134: цвета и кнопки — как в приложении (окно как у приглашения)');
     assert.ok((tp.match(/eq\("[^"]*10\.133: /g) || []).length >= 14 && tp.includes('st133();'), 'IvaPatchTest: проверки 10.133');
     assert.ok(chk.includes('tools/yk-pay-stand.py') && chk.includes(' iva-pay ') && fs.existsSync(path.join(__dirname, '..', 'supabase/functions/iva-pay/index.ts'))
       && fs.existsSync(path.join(__dirname, '..', 'supabase/migrations/20261123_yookassa_fee_rollback.sql')) && fs.existsSync(path.join(__dirname, '..', 'pay-done.html')),
       '10.133: функция iva-pay, SQL 1123 с откатом, страница возврата, стенд и тест в check.sh');
-    assert.ok(/NEW_NAME: '10\.133'/.test(wf) && /NEW_CODE: '207'/.test(wf), 'сборка 10.133 (207)');
+    assert.ok(Number((/NEW_CODE: '(\d+)'/.exec(wf) || [])[1]) >= 207, 'сборка 10.133 (207) или новее');
+  }
+  // 10.134 (просьба владельца 04.11.2026): на карточке комиссии — «К оплате …» / «Переплата …»; окно суммы в стиле приложения
+  // с текстом «Введите сумму для оплаты»; переплата больше 5 000 ₽ — сумму ввести нельзя (и нельзя внести больше, чем до 5 000 переплаты)
+  {
+    const strip = (t) => t.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/ [^\n]*/g, '');
+    const wf = R('.github/workflows/build-apk.yml'), tp = R('android/patches/test/IvaPatchTest.java');
+    const py = strip(R('android/patches/IvaPayPatch.java')), acc = strip(R('android/patches/IvaAccessPatch.java'));
+    assert.ok(acc.includes('"К оплате " + feeMoney(debt) + " ₽"') && acc.includes('"Переплата " + feeMoney(over) + " ₽"')
+      && acc.includes('String sum = feeSumText(fee, paid);') && !/"−" \+ feeMoney|"\+" \+ feeMoney/.test(acc),
+      '10.134: сумма на карточке — «К оплате» / «Переплата», без «−» / «+»');
+    assert.ok(py.includes('ASK = "Введите сумму для оплаты"') && py.includes('OVER_MAX = 5000') && py.includes('form.setVisibility(blocked ? View.GONE : View.VISIBLE)')
+      && py.includes('String bad = amountError(v, max);') && py.includes('return Math.min(m, MAX);'),
+      '10.134: окно «Введите сумму для оплаты»; переплата больше 5 000 ₽ — поля нет; сумма — не больше допустимой');
+    assert.ok(py.includes('IvaAccessPatch.feeFetch(a, me)') && /new Thread\(new Runnable\(\) \{\s*@Override public void run\(\) \{\s*double\[\] r = null;/.test(py),
+      '10.134: свежие суммы в окне — в своём потоке');
+    assert.ok((tp.match(/eq\("комиссия 10\.134: /g) || []).length >= 9 && tp.includes('st134();'), 'IvaPatchTest: проверки 10.134');
+    assert.ok(/NEW_NAME: '10\.134'/.test(wf) && /NEW_CODE: '208'/.test(wf), 'сборка 10.134 (208)');
   }
   // 10.75 (просьба владельца 14.10.2026): в «Настройках» — кнопка «Уведомления» (с 10.97 — открывает отдельную страницу);
   // внутри сверху «Открыть настройки уведомлений Android», потом какие присылать, потом расписание, потом всё остальное
