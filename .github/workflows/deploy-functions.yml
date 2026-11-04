@@ -55,7 +55,8 @@ jobs:
             [ -f "$d/index.ts" ] || continue
             echo "== выкладываю $fn"
             # Проверку JWT выключаем: функции защищены своими одноразовыми пропусками (см. код функции).
-            supabase functions deploy "$fn" --project-ref "$PROJECT_REF" --no-verify-jwt --use-api
+            # --yes: новые версии Supabase CLI без него спрашивают подтверждение и в Actions ничего не выкладывают (04.11.2026).
+            supabase functions deploy "$fn" --project-ref "$PROJECT_REF" --no-verify-jwt --use-api --yes
           done
 
       - name: Секреты почты (если заданы в GitHub)
@@ -67,7 +68,7 @@ jobs:
           if [ -n "$SMTP_USER" ] && [ -n "$SMTP_PASS" ]; then
             f="$(mktemp)"; chmod 600 "$f"
             printf 'SMTP_USER=%s\nSMTP_PASS=%s\n' "$SMTP_USER" "$SMTP_PASS" > "$f"
-            supabase secrets set --env-file "$f" --project-ref "$PROJECT_REF" >/dev/null
+            supabase secrets set --env-file "$f" --project-ref "$PROJECT_REF" --yes >/dev/null
             rm -f "$f"
             echo "SMTP_USER/SMTP_PASS перенесены в Supabase (значения не показываются)"
             echo "SMTP_SET=да" >> "$GITHUB_ENV"
@@ -96,7 +97,7 @@ jobs:
               printf 'FCM_SERVICE_ACCOUNT_B64=%s\n' "$(printf '%s' "$FCM_SERVICE_ACCOUNT" | jq -c . | base64 -w0)"
               printf 'FCM_GOOGLE_SERVICES_B64=%s\n' "$(printf '%s' "$FCM_GOOGLE_SERVICES" | jq -c . | base64 -w0)"
             } > "$f"
-            supabase secrets set --env-file "$f" --project-ref "$PROJECT_REF" >/dev/null
+            supabase secrets set --env-file "$f" --project-ref "$PROJECT_REF" --yes >/dev/null
             rm -f "$f"
             echo "секреты Firebase перенесены в Supabase (значения не показываются)"
             echo "FCM_SET=да" >> "$GITHUB_ENV"
@@ -120,7 +121,7 @@ jobs:
             fi
             f="$(mktemp)"; chmod 600 "$f"
             printf 'YOOKASSA_SHOP_ID=%s\nYOOKASSA_SECRET_KEY=%s\n' "$YOOKASSA_SHOP_ID" "$YOOKASSA_SECRET_KEY" > "$f"
-            supabase secrets set --env-file "$f" --project-ref "$PROJECT_REF" >/dev/null
+            supabase secrets set --env-file "$f" --project-ref "$PROJECT_REF" --yes >/dev/null
             rm -f "$f"
             echo "ключи ЮKassa перенесены в Supabase (значения не показываются)"
             echo "YK_SET=да" >> "$GITHUB_ENV"
