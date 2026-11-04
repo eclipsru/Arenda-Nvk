@@ -152,6 +152,7 @@ def diff(a, b):
 def stroke(p, w, join=pathops.LineJoin.ROUND_JOIN):
     q = pathops.Path(p)
     q.stroke(w, pathops.LineCap.ROUND_CAP, join, 4)
+    q.convertConicsToQuads()
     return union([q])
 
 

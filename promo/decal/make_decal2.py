@@ -33,6 +33,7 @@ def outset(p, d, join=MITER):
     """Grow a shape by d mm (sharp corners)."""
     q = pathops.Path(p)
     q.stroke(2 * d, pathops.LineCap.BUTT_CAP, join, 4)
+    q.convertConicsToQuads()
     return union([p, q])
 
 
