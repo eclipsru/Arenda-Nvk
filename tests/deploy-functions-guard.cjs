@@ -13,6 +13,7 @@ try {
   for (const re of [/supabase\s+db\b/i, /\bmigration\b/i, /database\/query/i, /\bpsql\b/i, /\bdb\s+push\b/i, /\bdb\s+reset\b/i])
     assert.ok(!re.test(code), `${f}: задача трогает базу (${re}) — по решению владельца №21 только функции`);
   assert.match(code, /supabase functions deploy/, `${f}: нет выкладки функций`);
+  assert.ok(!/supabase (functions deploy|secrets set)(?![^\n]*--yes)/.test(code), `${f}: команды Supabase без --yes — новая CLI в Actions спрашивает подтверждение и ничего не делает`);
   assert.match(code, /permissions:\s*\n\s*contents: read/, `${f}: права задачи должны быть только на чтение`);
   assert.ok(!/pull_request/.test(code), `${f}: выкладка из Pull Request (в т. ч. форков) запрещена`);
   assert.match(code, /branches: \['main', 'arena\/01a101d5-arenda-nvk'\]/, `${f}: выкладка с посторонних веток`);
