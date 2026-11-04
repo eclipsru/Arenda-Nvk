@@ -2617,6 +2617,7 @@ public class IvaPatchTest {
         j128();                                                       // 10.128: «Выдал / Принял» на карточках владельца
         st129();                                                      // 10.129: «Удаляет инструмент» не теряется в карточке сотрудника
         st130();                                                      // 10.130: «Мой пункт» плитками, чат пункта, шапка
+        st131();                                                      // 10.131: «Стрелка оповещений»
         if (fail > 0) { System.out.println("ошибок: " + fail); System.exit(1); }
         System.out.println("все проверки IvaPatch пройдены");
     }
@@ -3631,6 +3632,30 @@ public class IvaPatchTest {
         eq("шапка 10.130: надпись — PNG", IvaLogoPatch.HEADER_PNG.startsWith("iVBORw0KGgo") && IvaLogoPatch.HEADER_PNG.length() > 5000, true);
         eq("чат пункта 10.130: голосовое — в проигрыватель «Чата» (ключ — id, ссылка, длительность)", chatMsgStr(), "m1|https://x/v.m4a|12");
         eq("мой пункт 10.130: плитка архива — общий заголовок", IvaOrderPatch.ARCH_TITLE, "Архив заявок");
+    }
+
+    static void st131() {
+        eq("стрелка 10.131: число — 0 без стрелки, больше 99 — «99+»",
+            IvaArrowPatch.label(0) + "|" + IvaArrowPatch.label(-2) + "|" + IvaArrowPatch.label(7) + "|" + IvaArrowPatch.label(120), "||7|99+");
+        eq("стрелка 10.131: 4 цвета — кислотно-зелёная, оранжевая, жёлтая, красная",
+            String.join(",", IvaArrowPatch.NAMES) + " " + Integer.toHexString(IvaArrowPatch.colorAt(0)) + " " + Integer.toHexString(IvaArrowPatch.colorAt(1))
+            + " " + Integer.toHexString(IvaArrowPatch.colorAt(2)) + " " + Integer.toHexString(IvaArrowPatch.colorAt(3)),
+            "Кислотно-зелёная,Оранжевая,Жёлтая,Красная ffa6ff00 ffff8f1f ffffea00 ffff3b30");
+        eq("стрелка 10.131: неизвестный цвет — оранжевая", Integer.toHexString(IvaArrowPatch.colorAt(9)) + " " + IvaArrowPatch.colorName(-1), "ffff8f1f Оранжевая");
+        int[] c = {2, 3, 4, 5};   // сообщения, заявки владельца, чат пункта, заявки пункта
+        eq("стрелка 10.131: клиенту — нигде",
+            IvaArrowPatch.forNav("chat", false, false, false, c) + IvaArrowPatch.forNav("orders", false, false, true, c) + IvaArrowPatch.forNav("profile", false, false, false, c), 0);
+        eq("стрелка 10.131: владельцу — «Чат» и «Заявки», кабинет без стрелки",
+            IvaArrowPatch.forNav("chat", true, false, false, c) + "," + IvaArrowPatch.forNav("orders", true, false, false, c) + "," + IvaArrowPatch.forNav("profile", true, false, false, c), "2,3,0");
+        eq("стрелка 10.131: сотруднику — «Чат», «Кабинет» (пункт), «Заявки» только в виде с логотипом",
+            IvaArrowPatch.forNav("chat", false, true, false, c) + "," + IvaArrowPatch.forNav("profile", false, true, false, c) + ","
+            + IvaArrowPatch.forNav("orders", false, true, false, c) + "," + IvaArrowPatch.forNav("orders", false, true, true, c), "2,9,0,5");
+        eq("стрелка 10.131: «Мой пункт» и плитки",
+            IvaArrowPatch.forKind(IvaArrowPatch.S_MINE, c) + "," + IvaArrowPatch.forKind(IvaArrowPatch.S_ORD, c) + "," + IvaArrowPatch.forKind(IvaArrowPatch.S_CHAT, c) + "," + IvaArrowPatch.forKind(99, c), "9,5,4,0");
+        eq("стрелка 10.131: строка в «Настройках»", IvaArrowPatch.summary(true, 0) + " / " + IvaArrowPatch.summary(false, 2), "Включена · Кислотно-зелёная / Выключена");
+        eq("стрелка 10.131: справа от значка, но внутри раздела",
+            IvaArrowPatch.placeLeft(40, 2, 20, 100, 2) + "," + IvaArrowPatch.placeLeft(90, 2, 20, 100, 2) + "," + IvaArrowPatch.placeLeft(0, 0, 200, 100, 2), "42,78,0");
+        eq("стрелка 10.131: заголовок пункта настроек", IvaArrowPatch.TITLE, "Стрелка оповещений");
     }
 
     static String chatMsgStr() {

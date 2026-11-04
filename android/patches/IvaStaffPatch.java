@@ -1117,6 +1117,7 @@ public class IvaStaffPatch {
         Drawable ch = IvaSearchPatch.drawable(a, "ic_chevron");
         if (ch != null) { chev.setImageDrawable(ch); chev.setColorFilter(cGray); row.addView(chev, new LinearLayout.LayoutParams(dp(a, 18), dp(a, 18))); }
         row.setOnClickListener(new View.OnClickListener() { @Override public void onClick(View v) { try { openMine(a, m); } catch (Throwable ignore) {} } });
+        try { IvaArrowPatch.mark(a, row, null, IvaArrowPatch.S_MINE); } catch (Throwable ignore) {}   // 10.131: «Стрелка оповещений»
         return row;
     }
 
@@ -1143,12 +1144,15 @@ public class IvaStaffPatch {
         }
         if (IvaStaffOrdersPatch.want(m.status, m.r)) {
             tiles.add(tile(a, "ic_receipt", IvaStaffOrdersPatch.TITLE, new Runnable() { @Override public void run() { IvaStaffOrdersPatch.open(fa, co); } }));
+            arrow(a, tiles.get(tiles.size() - 1), IvaArrowPatch.S_ORD);   // 10.131: «Стрелка оповещений»
         }
         if (IvaStaffChatPatch.want(m.status, m.r)) {
             tiles.add(tile(a, "ic_chat", IvaStaffChatPatch.TITLE, new Runnable() { @Override public void run() { IvaStaffChatPatch.open(fa, co); } }));
+            arrow(a, tiles.get(tiles.size() - 1), IvaArrowPatch.S_CHAT);
         }
         tiles.add(tile(a, "ic_layers", IvaOrderPatch.ARCH_TITLE, new Runnable() { @Override public void run() { IvaOrderPatch.openArchive(fa); } }));
         addTiles(a, pg.list, tiles);
+        try { IvaArrowPatch.recount(a, true); } catch (Throwable ignore) {}   // 10.131: открыли «Мой пункт» — свежие числа
         if (IvaStaffToolsPatch.want(m.status, m.r)) {                   // 10.113: «Вид раздела с логотипом»
             try { IvaLogoPatch.settingsRow(a, pg.list, cText, cGray, color(a, "orange", 0xffff8f1f)); } catch (Throwable ignore) {}
         }
@@ -1171,6 +1175,14 @@ public class IvaStaffPatch {
     }
 
     static final int TILE_H_DP = 104, TILE_ICON_DP = 30;
+
+    /** 10.131: стрелка на плитке — справа от значка (первый ребёнок плитки). */
+    static void arrow(Activity a, View tile, int kind) {
+        try {
+            View ic = tile instanceof LinearLayout && ((LinearLayout) tile).getChildCount() > 0 ? ((LinearLayout) tile).getChildAt(0) : null;
+            IvaArrowPatch.mark(a, tile, ic, kind);
+        } catch (Throwable ignore) {}
+    }
 
     /** 10.130: плитка «Моего пункта» — штатная карточка bg_card, значок приложения цветом проката, подпись под ним. */
     static View tile(final Activity a, String icon, String title, final Runnable go) {

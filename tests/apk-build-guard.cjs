@@ -1614,7 +1614,9 @@ try {
       'настройки 10.97: «Уведомления», «Пункт выдачи», «Срок аренды» — каждый открывается своей страницей');
     // новый пункт в «Настройках» — только строкой, открывающей страницу: всё, что вставляется в page, — это head/строки пунктов
     const pageAdds = (os97.match(/page\.addView\((\w+)/g) || []).map(x => x.replace('page.addView(', ''));
-    assert.ok(pageAdds.length === 1 && pageAdds[0] === 'head' && (os97.match(/\(a, page, cText, cGray, cOrange\)/g) || []).length === 0,   // 10.98: одна строка «Настройка проката» вместо двух; 10.116: и та — в «Кабинете»
+    assert.ok(pageAdds.length === 1 && pageAdds[0] === 'head' && (os97.match(/\(a, page, cText, cGray, cOrange\)/g) || []).length === 1
+      && os97.includes('try { IvaArrowPatch.settingsRow(a, page, cText, cGray, cOrange); } catch (Throwable ignore) {}')   // 10.131: «Стрелка оповещений» — строкой со своей страницей
+      && R('android/patches/IvaArrowPatch.java').includes('IvaChiefPatch.subPage(a, TITLE, settingsBody(a, cText, cGray, cOrange, onChange), null)'),   // 10.98: одна строка «Настройка проката» вместо двух; 10.116: и та — в «Кабинете»
       'настройки 10.97: в «Настройки» вставляются только строки пунктов (новый пункт — строкой со своей страницей)');
     assert.ok(dev.includes('Каждый пункт «Настроек» — отдельной страницей (правило владельца 16.10.2026, приложение с 10.97)'),
       'настройки 10.97: правило записано в README-DEV');
@@ -2963,7 +2965,41 @@ try {
       && !/phone|passport|address|tel/i.test(sq.replace(/^--.*$/gm, '')) && R('supabase/migrations/20261121_chat_names_rollback.sql').includes('DROP FUNCTION IF EXISTS public.iva_chat_peer_names();'),
       'SQL 1121: только имя клиента, только админам, которым писали; откат на месте');
     assert.ok((tp.match(/eq\("[^"]*10\.130: /g) || []).length >= 10 && tp.includes('st130();'), 'IvaPatchTest: проверки 10.130');
-    assert.ok(/NEW_NAME: '10\.130'/.test(wf) && /NEW_CODE: '204'/.test(wf), 'сборка 10.130 (204)');
+    assert.ok(Number((/NEW_CODE: '(\d+)'/.exec(wf) || [])[1]) >= 204, 'сборка 10.130 (204) или новее');
+  }
+  // 10.131 (просьба владельца 04.11.2026): «Стрелка оповещений» — у сотрудника и владельца стрелка с числом новых сообщений
+  // и заявок на входе в раздел (нижнее меню, «Мой пункт», плитки пункта); в «Настройках» — выключатель и 4 цвета.
+  {
+    const strip = (t) => t.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '');
+    const wf = R('.github/workflows/build-apk.yml'), ck = R('.github/workflows/check.yml'), ap = R('android/patches/apply.py');
+    const tp = R('android/patches/test/IvaPatchTest.java'), ar = strip(R('android/patches/IvaArrowPatch.java'));
+    const np = strip(R('android/patches/IvaNotifyPatch.java')), sp = strip(R('android/patches/IvaStaffPatch.java'));
+    const so = strip(R('android/patches/IvaStaffOrdersPatch.java')), sc = R('android/patches/IvaStaffChatPatch.java');   // без strip: «audio/*»
+    assert.ok(wf.includes('-d "$C" android/patches/IvaArrowPatch.java android/patches/IvaPatch.java') && ck.includes('android/patches/IvaArrowPatch.java android/patches/IvaPatch.java'),
+      '10.131: IvaArrowPatch собирается в обеих сборках');
+    assert.ok(!/IvaArrowPatch/.test(ap) && R('android/patches/IvaPatch.java').includes('try { IvaArrowPatch.onTab(a); } catch (Throwable ignore) {}'),
+      '10.131: без новых вставок в smali — вход через IvaPatch.onTab');
+    assert.ok(!/apiCall|HttpURLConnection|select=\*|customer_profiles|passport|phone/.test(ar) && ar.includes('new Thread(new Runnable()')
+      && ar.includes('IvaNotifyPatch.busy = true;') && ar.includes('now - recountAt < RECOUNT_MS'),
+      '10.131: стрелка сама в базу не ходит — пересчёт теми же проверками опроса, в фоне, не чаще раза в 10 с');
+    assert.ok(ar.includes('COLORS = {0xffa6ff00, 0xffff8f1f, 0xffffea00, 0xffff3b30}') && ar.includes('NAMES = {"Кислотно-зелёная", "Оранжевая", "Жёлтая", "Красная"}')
+      && ar.includes('getBoolean(K_ON, true)') && ar.includes('v.getOverlay().add(t.d)'),
+      '10.131: 4 цвета, по умолчанию включено, стрелка поверх раздела (разметка не меняется)');
+    assert.ok(ar.includes('if (!IvaNotifyPatch.isAdmin(a) && !staffAny(a)) return;') && ar.includes('boolean show = (admin || staff) && on(a);'),
+      '10.131: только сотруднику и владельцу — клиентам ни стрелок, ни пункта настроек');
+    const cm = np.slice(np.indexOf('static void checkMessages('));
+    assert.ok(np.includes('IvaArrowPatch.setCount(a, IvaArrowPatch.ORD, n)') && cm.indexOf('IvaArrowPatch.setCount(a, IvaArrowPatch.MSG, list.size())') > 0
+      && cm.indexOf('IvaArrowPatch.setCount(a, IvaArrowPatch.MSG, list.size())') < cm.indexOf('if (quiet(a, admin)) return;')
+      && cm.indexOf('if (quiet(a, admin)) return;') < cm.indexOf('String k = key("seen_m", email);'),
+      '10.131: числа владельца — из опроса; расписание по-прежнему решает, что запоминать и о чём уведомлять');
+    assert.ok(so.includes('IvaArrowPatch.setCount(c, IvaArrowPatch.ST_ORD, newCount(ps))') && so.includes('IvaArrowPatch.setCount(u.a, IvaArrowPatch.ST_ORD, newCount(fp))')
+      && sc.includes('IvaArrowPatch.setCount(c, IvaArrowPatch.ST_CHAT, unreadCount(cs))') && sc.includes('IvaArrowPatch.setCount(u.a, IvaArrowPatch.ST_CHAT, unreadCount(fc))'),
+      '10.131: числа сотрудника — заявки и «Чат пункта» (опрос и открытые страницы)');
+    assert.ok(sp.includes('arrow(a, tiles.get(tiles.size() - 1), IvaArrowPatch.S_ORD);') && sp.includes('arrow(a, tiles.get(tiles.size() - 1), IvaArrowPatch.S_CHAT);')
+      && sp.includes('IvaArrowPatch.mark(a, row, null, IvaArrowPatch.S_MINE)'),
+      '10.131: стрелки на «Мой пункт» и плитках «Заявки пункта», «Чат пункта»');
+    assert.ok((tp.match(/eq\("[^"]*10\.131: /g) || []).length >= 8 && tp.includes('st131();'), 'IvaPatchTest: проверки 10.131');
+    assert.ok(/NEW_NAME: '10\.131'/.test(wf) && /NEW_CODE: '205'/.test(wf), 'сборка 10.131 (205)');
   }
   // 10.75 (просьба владельца 14.10.2026): в «Настройках» — кнопка «Уведомления» (с 10.97 — открывает отдельную страницу);
   // внутри сверху «Открыть настройки уведомлений Android», потом какие присылать, потом расписание, потом всё остальное
@@ -2984,7 +3020,8 @@ try {
       'настройки 10.75: порядок — Android, какие присылать, расписание, остальное');
     const os75 = os.replace('IvaRentPatch.settingsSection(a, page, cText, cGray, cOrange)', '')   // 10.77: «Аренда» — отдельная кнопка ниже
       .replace('IvaPickupPatch.settingsRow(a, page, cText, cGray, cOrange)', '')   // 10.95: «Пункт выдачи» — тоже отдельная кнопка
-      .replace('IvaShopPatch.settingsRow(a, page, cText, cGray, cOrange)', '');    // 10.98: «Настройка проката» вместо двух строк выше
+      .replace('IvaShopPatch.settingsRow(a, page, cText, cGray, cOrange)', '')     // 10.98: «Настройка проката» вместо двух строк выше
+      .replace('IvaArrowPatch.settingsRow(a, page, cText, cGray, cOrange)', '');   // 10.131: «Стрелка оповещений» — отдельная кнопка
     assert.ok(!/(?:page|root)\.addView\((?:status|test|note|push|card|sc|sys|body)\b/.test(os75) && (os75.match(/page\.addView\(/g) || []).length === 1
       && (os75.match(/\bpage\b/g) || []).length === 5 && !/\(a, page\b/.test(os75),
       'настройки 10.75: всё про уведомления — внутри списка, снаружи только кнопка');

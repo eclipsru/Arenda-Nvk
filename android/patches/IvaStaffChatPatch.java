@@ -137,6 +137,13 @@ public class IvaStaffChatPatch {
         return out;
     }
 
+    /** 10.131: непрочитанные сообщения клиентов в «Чате пункта» — для «Стрелки оповещений». */
+    static int unreadCount(List<Chat> cs) {
+        int n = 0;
+        if (cs != null) for (Chat c : cs) if (c != null && c.unread > 0 && !c.lastMine) n += c.unread;
+        return n;
+    }
+
     /** «Новое сообщение · Дрель» / «Новые сообщения: 3». */
     static String noteTitle(int n, String tool) {
         if (n > 1) return "Новые сообщения: " + n;
@@ -278,6 +285,7 @@ public class IvaStaffChatPatch {
                 sp.edit().putLong("pchat_nodb_" + email, now + NO_DB_PAUSE_MS).apply();
             cs = merge(cs, pointChats(pr));
         }
+        try { IvaArrowPatch.setCount(c, IvaArrowPatch.ST_CHAT, unreadCount(cs)); } catch (Throwable ignore) {}   // 10.131
         List<String> ids = notifyIds(cs);
         SharedPreferences p = IvaNotifyPatch.prefs(c);
         String k = IvaNotifyPatch.key("seen_sc", email);
@@ -366,6 +374,7 @@ public class IvaStaffChatPatch {
                             u.busy = false;
                             if (!u.page.open()) return;
                             if (fc == null) { u.status.setText(fe); u.status.setTextColor(u.cOrange); return; }
+                            try { IvaArrowPatch.setCount(u.a, IvaArrowPatch.ST_CHAT, unreadCount(fc)); } catch (Throwable ignore) {}   // 10.131
                             draw(u, fc);
                         } catch (Throwable ignore) {}
                     }

@@ -603,6 +603,7 @@ public final class IvaNotifyPatch {
     static void checkOrders(final Context a, String email) throws Exception {
         JSONArray rows = getArr(a, "/rest/v1/order_parts?select=id,tools_text&status=eq.new&archived=eq.false&owner_email=eq." + enc(email) + "&order=id.desc&limit=50");
         final int n = rows.length();
+        try { IvaArrowPatch.setCount(a, IvaArrowPatch.ORD, n); } catch (Throwable ignore) {}   // 10.131: «Стрелка оповещений»
         List<String> ids = new ArrayList<String>();
         for (int i = 0; i < n; i++) ids.add(rows.getJSONObject(i).optString("id", ""));
         if (a instanceof Activity) ((Activity) a).runOnUiThread(new Runnable() {
@@ -635,7 +636,7 @@ public final class IvaNotifyPatch {
     /** Непрочитанные входящие сообщения. Не уведомляем только о том, что и так видно: открытая переписка с этим
      *  собеседником или список чатов (оба обновляются сами, 10.57). Письмо от другого при открытом чате — уведомление. */
     static void checkMessages(Context a, String email, boolean admin, String openWith) throws Exception {
-        if (quiet(a, admin)) return;         // 10.73: вне расписания — ничего не запоминаем, покажем позже
+        // 10.131: число непрочитанных нужно «Стрелке оповещений» и вне расписания — расписание проверяем после подсчёта
         String mq = "/rest/v1/app_messages?select=id,from_email,text,img,audio,created_at&to_email=eq." + enc(email)
             + "&is_read=eq.false&order=created_at.desc&limit=50";
         JSONArray rows;
@@ -662,6 +663,8 @@ public final class IvaNotifyPatch {
             created.add(m.optString("created_at", ""));
             list.add(m);
         }
+        try { IvaArrowPatch.setCount(a, IvaArrowPatch.MSG, list.size()); } catch (Throwable ignore) {}   // 10.131
+        if (quiet(a, admin)) return;         // 10.73: вне расписания — ничего не запоминаем, покажем позже
         SharedPreferences p = prefs(a);
         String k = key("seen_m", email);
         Set<String> seen = splitSet(p.getString(k, null));
@@ -2031,6 +2034,7 @@ public final class IvaNotifyPatch {
             ref0[0] = refresh;
             onPage[0] = refresh;                 // 10.97: вернулись на страницу «Уведомления» из настроек Android — обновить
             refresh.run();
+            try { IvaArrowPatch.settingsRow(a, page, cText, cGray, cOrange); } catch (Throwable ignore) {}   // 10.131: «Стрелка оповещений» — своя страница
 
             final Dialog d = new Dialog(a, android.R.style.Theme_Material_NoActionBar);
             back.setOnClickListener(new View.OnClickListener() { @Override public void onClick(View v) { d.dismiss(); } });

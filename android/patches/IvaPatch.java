@@ -449,6 +449,7 @@ public final class IvaPatch {
         try { IvaToolEditPatch.onTab(a, tab); } catch (Throwable ignore) {}     // 10.122: правка целиком, подписи полей, удаление сотрудником
         try { IvaMyToolsPatch.onTab(a, tab); } catch (Throwable ignore) {}      // 10.122: вернулись в кабинет — список заново
         try { IvaOrderEditPatch.onTab(a, tab); } catch (Throwable ignore) {}    // 10.122: «Вы в итоге взяли инструмент?» после отмены
+        try { IvaArrowPatch.onTab(a); } catch (Throwable ignore) {}             // 10.131: «Стрелка оповещений»
         try {
             String t = tab == null ? "" : tab;
             int orange = navColor(a, "orange", 0xffff9800);

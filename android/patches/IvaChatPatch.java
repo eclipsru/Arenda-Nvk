@@ -2505,6 +2505,7 @@ final class IvaChatPatch {
     }
 
     static void renderList(final Activity a, String my) {
+        try { IvaArrowPatch.recount(a, false); } catch (Throwable ignore) {}   // 10.131: прочитали — стрелка гаснет
         boolean adm = isAdmin(a);
         body.addView(sectionTitle(a, adm ? "Переписки" : "Чаты"));
         if (!ready(my)) {

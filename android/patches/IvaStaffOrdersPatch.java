@@ -105,6 +105,13 @@ public class IvaStaffOrdersPatch {
         return out;
     }
 
+    /** 10.131: сколько новых заявок пункта ждут сотрудника (те же, о которых уведомляем) — для «Стрелки оповещений». */
+    static int newCount(List<Part> ps) {
+        int n = 0;
+        if (ps != null) for (Part p : ps) if (p != null && "new".equals(p.status) && p.notify) n++;
+        return n;
+    }
+
     /** «Новая заявка · Склад» / «Новые заявки: 3». */
     static String noteTitle(int n, String point) {
         if (n > 1) return IvaNotifyPatch.orderTitle(n);
@@ -187,6 +194,7 @@ public class IvaStaffOrdersPatch {
             return;
         }
         List<Part> ps = parse(r.length > 1 ? r[1] : "");
+        try { IvaArrowPatch.setCount(c, IvaArrowPatch.ST_ORD, newCount(ps)); } catch (Throwable ignore) {}   // 10.131
         List<String> ids = new ArrayList<String>(), sts = new ArrayList<String>();
         List<Boolean> nt = new ArrayList<Boolean>();
         for (Part p : ps) { ids.add(p.id); sts.add(p.status); nt.add(p.notify); }
@@ -345,6 +353,7 @@ public class IvaStaffOrdersPatch {
                             if (!alive(u)) return;
                             if (fp == null) { u.status.setText(fe); u.status.setTextColor(u.cOrange); return; }
                             u.parts = fp;
+                            try { IvaArrowPatch.setCount(u.a, IvaArrowPatch.ST_ORD, newCount(fp)); } catch (Throwable ignore) {}   // 10.131
                             draw(u);
                         } catch (Throwable ignore) {}
                     }
