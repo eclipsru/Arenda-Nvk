@@ -396,6 +396,8 @@ public final class IvaAdsPatch {
         if (ad.maxShows < 0 || ad.maxShows > 1000) return "«Не больше, раз» — от 0 до 1000";
         if (ad.gapHours < 0 || ad.gapHours > 8760) return "Перерыв — от 0 до 8760 часов";
         if (!ad.inn.trim().isEmpty() && !ad.inn.trim().matches("[0-9]{10}|[0-9]{12}")) return "ИНН — 10 или 12 цифр";
+        if (ad.advertiser.trim().length() > 160) return "Рекламодатель — не длиннее 160 знаков";
+        if (ad.erid.trim().length() > 80) return "erid — не длиннее 80 знаков";
         if (ad.adLabel && ad.advertiser.trim().isEmpty()) return "Для пометки «Реклама» укажите рекламодателя";
         return "";
     }
@@ -2239,7 +2241,7 @@ public final class IvaAdsPatch {
         L.addView(mc);
         L.addView(label(a, "Рекламодатель"));
         e.advertiser = field(a, "Например: ИП Иванов И. И.", f.advertiser);
-        limit(e.advertiser, 200);
+        limit(e.advertiser, 160);
         L.addView(e.advertiser);
         L.addView(label(a, "ИНН рекламодателя"));
         e.inn = field(a, "10 или 12 цифр", f.inn);
@@ -2248,7 +2250,7 @@ public final class IvaAdsPatch {
         L.addView(e.inn);
         L.addView(label(a, "erid (токен)"));
         e.erid = field(a, "Выдаёт оператор рекламных данных (ОРД)", f.erid);
-        limit(e.erid, 100);
+        limit(e.erid, 80);
         L.addView(e.erid);
         L.addView(small(a, "Чужую рекламу по закону (ст. 18.1 ФЗ «О рекламе») нужно маркировать: пометка «Реклама», рекламодатель "
             + "и erid, полученный до показа. О своих услугах в своём приложении — обычно не нужно; если сомневаетесь — уточните у юриста."));
