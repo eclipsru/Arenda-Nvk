@@ -1,7 +1,8 @@
 // Сайт 05.11.2026 (просьба и правки владельца): «Работа» сотрудника — слева заявки выбранного пункта (новые зелёные, в аренде
 // жёлтые, меньше часа / просрочено — красные), справа чаты (непрочитанные зелёные, без ответа жёлтые, не открыты больше суток —
-// красные). Названия «Заявки» / «Чаты» — над окнами, на линии ФИО; окна — на линии карточки пункта. Шапка (ФИО + «Пункт выдачи» —
-// свой выпадающий список в стиле сайта) и окна стоят на месте при прокрутке. По центру выбранный пункт, права, разделы «Инструменты пункта · Заявки · Сообщения · Статистика · Добавить».
+// красные). Как на главной: названия «Заявки» / «Чаты» — над окнами на уровне «Глобальный поиск» / «Полезная информация», окна —
+// на уровне окон фильтра и информации. Шапка сайта, шапка «Работы» (ФИО + «Пункт выдачи» — свой выпадающий список в стиле сайта)
+// и окна стоят на месте при прокрутке. По центру выбранный пункт, права, разделы «Инструменты пункта · Заявки · Сообщения · Статистика · Добавить».
 // И стабильность: сбой связи не превращает сотрудника в клиента («Хотите сдавать свой инструмент?»), ключ входа
 // обновляется один раз на все запросы, роль не узнали — «Нет связи — Повторить», а не чужой кабинет.
 const {chromium}=require('playwright');const assert=require('assert');
@@ -52,7 +53,7 @@ const CHATS=[pc('pc4',0,true,0.2,'Отвечено'),pc('pc3',1,false,3,'Ста�
 const UNR=[{kind:'p',key:P1,peer:'pc3',first_unread_at:iso(now-50*3600e3)},{kind:'p',key:P1,peer:'pc1',first_unread_at:iso(now-3600e3)}];
 const cls=async(pg,sel)=>pg.locator(sel).evaluateAll(a=>a.map(x=>(x.className.match(/c-([a-z])/)||[])[1]));
 
-// 1. Раскладка: слева заявки, в центре основное, справа чаты; названия окон — на линии ФИО, окна — на линии пункта;
+// 1. Раскладка: слева заявки, в центре основное, справа чаты; названия и окна — на тех же линиях, что на главной;
 //    пункт — свой выпадающий список справа от ФИО (клик, стрелки, Esc, клик мимо); шапка и окна — на месте при прокрутке;
 //    пункт по центру, ниже права, ниже 5 разделов; «Главная» в шапке
 {const o={staff:Object.assign({},staff,{can_chat:true}),chats:CHATS,unr:UNR};const {c,pg,errors}=await ctx(o);
@@ -61,12 +62,16 @@ const cls=async(pg,sel)=>pg.locator(sel).evaluateAll(a=>a.map(x=>(x.className.ma
  const L=await box('#stOrdCol'),M=await box('#stMain'),R=await box('#stChatCol');
  assert(L.x<M.x&&M.x<R.x,'три колонки: заявки — основное — чаты');assert(Math.abs(L.width-306)<2&&Math.abs(R.width-306)<2,'боковые окна — ширина «Глобального поиска» (306px)');
  const fio=await box('.st-head .acct-head');
- // названия «Заявки» / «Чаты» — над окнами, на одной линии с ФИО; окна — на линии карточки пункта
+ // названия «Заявки» / «Чаты» и окна — на тех же линиях, что «Глобальный поиск» / «Полезная информация» и их окна на главной
  const oh=await box('#stOrdCol .st-side-h'),ch=await box('#stChatCol .st-side-h'),oc=await box('#stOrdCol .st-side-card'),cc=await box('#stChatCol .st-side-card');
- assert(Math.abs(oh.y-fio.y)<=2&&Math.abs(ch.y-fio.y)<=2&&Math.abs(oh.height-fio.height)<=2,'названия окон — на линии ФИО: '+[oh.y,ch.y,fio.y]);
+ assert(Math.abs(oh.y-fio.y)<=2&&Math.abs(ch.y-fio.y)<=2,'названия окон — на линии ФИО: '+[oh.y,ch.y,fio.y]);
  assert(oh.y+oh.height<=oc.y&&ch.y+ch.height<=cc.y,'названия — над окнами, не внутри');
  assert.equal(await pg.locator('#stOrdCol .st-side-card h2, #stChatCol .st-side-card h2').count(),0);
- const pcY=(await box('.st-pcard')).y;assert(Math.abs(oc.y-pcY)<=2&&Math.abs(cc.y-pcY)<=2,'окна — на линии карточки пункта: '+[oc.y,cc.y,pcY]);
+ assert.equal(await pg.locator('#stOrdCol .st-side-h.cats-head').count(),1,'название — как на главной (.cats-head)');
+ {const hp=await c.newPage();await hp.setViewportSize({width:1600,height:1200});await hp.goto(BASE+'/index.html',{waitUntil:'domcontentloaded'});await hp.waitForSelector('#filters');await hp.waitForTimeout(300);
+  const hy=await hp.evaluate(()=>['#globalSearchTitle','#filters','#usefulInfoTitle','.useful-card'].map(s=>document.querySelector(s).getBoundingClientRect().y));await hp.close();
+  const sy=[await pg.locator('#stOrdTitle').boundingBox(),oc,await pg.locator('#stChatTitle').boundingBox(),cc].map(b=>b.y);
+  sy.forEach((y,i)=>assert(Math.abs(y-hy[i])<=2,'линии как на главной: «Работа» '+sy+' / главная '+hy));}
  // «Пункт выдачи» — свой выпадающий список только с названиями, справа от ФИО, в той же строке; подпись крупная и белая
  const sel=await box('#stPtSel'),h2=await box('.st-head h2');assert(sel.x>h2.x+h2.width&&Math.abs((sel.y+sel.height/2)-(fio.y+fio.height/2))<30,'список пунктов — напротив ФИО');
  assert.equal(await pg.locator('#stPtSel .st-dd-v').textContent(),'Маресьева');
@@ -103,8 +108,9 @@ const cls=async(pg,sel)=>pg.locator(sel).evaluateAll(a=>a.map(x=>(x.className.ma
  // окна стоят на месте при прокрутке страницы
  await pg.setViewportSize({width:1600,height:600});await pg.click('[data-st-view=orders]');await pg.evaluate(()=>window.scrollTo({top:700,behavior:'instant'}));await pg.waitForTimeout(150);
  const L2=await box('#stOrdCol .st-side-card'),R2=await box('#stChatCol .st-side-card'),M2=await box('#stMain'),H2=await box('.st-head .acct-head'),T2=await box('#stOrdCol .st-side-h');
- assert(M2.y<-300,'страница прокрутилась: '+M2.y);assert(L2.y>=60&&L2.y<=130&&Math.abs(R2.y-L2.y)<2,'окна заявок и чатов — на месте: '+L2.y);
- assert(H2.y>=0&&H2.y<=40&&Math.abs(T2.y-H2.y)<=2,'шапка с ФИО и «Пункт выдачи» — на месте, на линии названий окон: '+[H2.y,T2.y]);
+ assert(M2.y<-300,'страница прокрутилась: '+M2.y);assert(Math.abs(L2.y-oc.y)<=2&&Math.abs(R2.y-L2.y)<2,'окна заявок и чатов — на месте: '+L2.y);
+ assert.equal(await pg.evaluate(()=>document.querySelector('#hdr .head').getBoundingClientRect().y),0,'шапка сайта — на месте');
+ assert(Math.abs(H2.y-fio.y)<=2&&Math.abs(T2.y-H2.y)<=2,'шапка с ФИО и «Пункт выдачи» — на месте, на линии названий окон: '+[H2.y,T2.y]);
  assert.equal(await pg.evaluate(()=>{const r=document.querySelector('#stPtSel').getBoundingClientRect();const e=document.elementFromPoint(r.x+r.width/2,r.y+r.height/2);return !!e.closest('#stPtSel');}),true,'список пунктов поверх содержимого');
  const hh=await pg.evaluate(()=>{const l=document.querySelector('#stOrdCol .st-side-card').getBoundingClientRect();return [l.bottom,innerHeight];});
  assert(hh[0]<=hh[1]+1,'окно заявок целиком на экране: '+hh);

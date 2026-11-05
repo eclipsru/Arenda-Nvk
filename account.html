@@ -10,7 +10,7 @@
 <link rel="icon" href="assets/favicon-32.png" type="image/png" sizes="32x32">
 <link rel="icon" href="assets/icon-192.png" type="image/png" sizes="192x192">
 <link rel="apple-touch-icon" href="assets/apple-touch-icon.png">
-<link rel="stylesheet" href="assets/theme.css?v=20261105-head">
+<link rel="stylesheet" href="assets/theme.css?v=20261105-hdr">
 <link rel="stylesheet" href="assets/profile.css?v=20260923-rental-profile">
 <style>
 .tabs{display:flex;gap:4px;border-bottom:1px solid var(--line);margin-bottom:18px;
@@ -2359,7 +2359,7 @@
     });
   }
   function stSideHead(id, title, n, view, label){
-    return '<div class="st-side-h"><h2 id="' + id + '">' + title + '</h2>' + (n != null ? '<span class="st-side-c">' + n + '</span>' : '') +
+    return '<div class="cats-head st-side-h"><h2 id="' + id + '">' + title + '</h2>' + (n != null ? '<span class="st-side-c">' + n + '</span>' : '') +
       (view ? '<button type="button" class="st-link" data-st-view="' + view + '">' + label + '</button>' : '') + '</div>';
   }
   function stOrdColHTML(cur){
@@ -2443,11 +2443,12 @@
   function stTopVar(){
     const hd = document.querySelector('.head'), lay = $('stLayout');
     if (hd && lay){
-      const pos = getComputedStyle(hd).position, par = hd.parentElement;
-      const stays = pos === 'fixed' || (pos === 'sticky' && (!par || par === document.body ||
-        getComputedStyle(par).display === 'contents' ||
-        par.getBoundingClientRect().bottom - hd.getBoundingClientRect().bottom > 40));   // есть куда «ехать» внутри родителя
-      lay.style.setProperty('--st-top', (stays ? hd.offsetHeight : 0) + 'px');
+      const pos = getComputedStyle(hd).position, par = hd.parentElement, pp = par ? getComputedStyle(par).position : '';
+      let top = 0;
+      if (par && par !== document.body && (pp === 'sticky' || pp === 'fixed')) top = par.offsetHeight;      // на месте стоит #hdr (от 769px)
+      else if (pos === 'fixed' || (pos === 'sticky' && (!par || par === document.body || getComputedStyle(par).display === 'contents' ||
+        par.getBoundingClientRect().bottom - hd.getBoundingClientRect().bottom > 40))) top = hd.offsetHeight;   // на месте стоит сама шапка
+      lay.style.setProperty('--st-top', top + 'px');
     }
     const sh = $('stHead'); if (sh && lay) lay.style.setProperty('--st-hh', sh.offsetHeight + 'px');
   }
