@@ -10,7 +10,7 @@
 <link rel="icon" href="assets/favicon-32.png" type="image/png" sizes="32x32">
 <link rel="icon" href="assets/icon-192.png" type="image/png" sizes="192x192">
 <link rel="apple-touch-icon" href="assets/apple-touch-icon.png">
-<link rel="stylesheet" href="assets/theme.css?v=20261105-work">
+<link rel="stylesheet" href="assets/theme.css?v=20261105-head">
 <link rel="stylesheet" href="assets/profile.css?v=20260923-rental-profile">
 <style>
 .tabs{display:flex;gap:4px;border-bottom:1px solid var(--line);margin-bottom:18px;
@@ -163,6 +163,7 @@
   let FEES = [];
   let REVIEWS = [];
   let SENT = [];
+  let ST_DD = false;   // открыт ли список «Пункт выдачи» в шапке «Работы»
   let ST_PT = 'all', ST_F = 'all', ST_Q = '', ST_UPD = 0, ST_TIMER = null, ST_FRESH = {};   // «Смена» сотрудника (этап 1)
   let STOOLS = null, ST_VIEW = 'orders', ST_TF = 'all', ST_TQ = '';                          // инструмент пунктов (этап 2)
   if (TAB === 'staff-tools'){ TAB = 'staff'; ST_VIEW = 'tools'; history.replaceState(null, '', location.pathname + location.search + '#staff'); }   // возврат из формы инструмента
@@ -2217,21 +2218,32 @@
       '</div>' +
       '</div>';
   }
-  /* шапка «Работы»: слева фото и ФИО, справа «Пункт выдачи» — выпадающий список только с названиями */
+  /* шапка «Работы» (стоит на месте при прокрутке): слева фото и ФИО, справа «Пункт выдачи» — свой выпадающий список
+     в стиле сайта (тёмная карточка, оранжевый выбранный пункт), только названия */
+  const ST_CHEV = '<svg class="st-dd-ch" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>';
+  const ST_TICK = '<svg class="st-dd-tick" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>';
   function stHeadHTML(){
     const ad = A.admin || {};
     const who = esc(A.uname || ad.full_name || 'Сотрудник');
     const meta = (STAFF.company ? '«' + esc(STAFF.company) + '» · ' : '') + 'сотрудник проката · ' + esc(A.me);
-    const pts = stPts();
-    const sel = pts.length ? '<div class="st-ptsel"><label for="stPtSel">Пункт выдачи</label>' +
-      '<select class="inp" id="stPtSel">' + pts.map(function(p){
-        const id = String(p.id);
-        return '<option value="' + esc(id) + '"' + (id === ST_PT ? ' selected' : '') + '>' + esc(p.name || 'Пункт') + '</option>';
-      }).join('') + '</select></div>' : '';
-    return '<div class="sect st-head"><div class="acct-head st-headrow">' +
+    const pts = stPts(), many = pts.length > 1;
+    const cur = pts.find(function(p){ return String(p.id) === ST_PT; }) || pts[0];
+    if (!many) ST_DD = false;
+    const sel = pts.length ? '<div class="st-ptsel"><span class="st-ptsel-l" id="stPtSelL">Пункт выдачи</span>' +
+      '<div class="st-dd' + (ST_DD ? ' open' : '') + (many ? '' : ' one') + '" id="stPtDd">' +
+        '<button type="button" class="st-dd-btn" id="stPtSel" aria-haspopup="listbox" aria-controls="stPtMenu" aria-expanded="' + ST_DD + '"' +
+          ' aria-labelledby="stPtSelL stPtSel"' + (many ? '' : ' disabled') + '>' +
+          '<span class="st-dd-v">' + esc((cur && cur.name) || 'Пункт') + '</span>' + (many ? ST_CHEV : '') + '</button>' +
+        '<div class="st-dd-menu" id="stPtMenu" role="listbox" aria-labelledby="stPtSelL"' + (ST_DD ? '' : ' hidden') + '>' + pts.map(function(p){
+          const id = String(p.id), on = cur && id === String(cur.id);
+          return '<button type="button" role="option" tabindex="-1" class="st-dd-o' + (on ? ' on' : '') + '" aria-selected="' + !!on + '" data-st-pt="' + esc(id) + '">' +
+            '<span>' + esc(p.name || 'Пункт') + '</span>' + (on ? ST_TICK : '') + '</button>';
+        }).join('') + '</div>' +
+      '</div></div>' : '';
+    return '<div class="acct-head st-headrow">' +
         '<span class="ava acct-head-ava" data-ava="' + esc(A.me) + '">' + esc(initials(A.uname || A.me)) + '</span>' +
         '<div class="acct-head-t"><h2>' + who + '</h2><div class="small muted">' + meta + '</div></div>' + sel +
-      '</div></div>';
+      '</div>';
   }
   /* выбранный пункт — по центру: название, адрес, график, телефон и счётчики */
   function stPtCardHTML(cur){
@@ -2351,12 +2363,12 @@
       (view ? '<button type="button" class="st-link" data-st-view="' + view + '">' + label + '</button>' : '') + '</div>';
   }
   function stOrdColHTML(cur){
-    if (!cur) return '<div class="st-side-card">' + stSideHead('stOrdTitle', 'Заявки') + '<p class="small muted st-side-e">Пункт не выбран.</p></div>';
-    if (!stCanOrd()) return '<div class="st-side-card">' + stSideHead('stOrdTitle', 'Заявки') +
+    if (!cur) return stSideHead('stOrdTitle', 'Заявки') + '<div class="st-side-card">' + '<p class="small muted st-side-e">Пункт не выбран.</p></div>';
+    if (!stCanOrd()) return stSideHead('stOrdTitle', 'Заявки') + '<div class="st-side-card">' +
       '<p class="small muted st-side-e">Заявки вам не показываются: нужно право «Выдача» или «Уведомления о заявках».</p></div>';
     const rows = stOrdRows(), now = Date.now();
     const ng = rows.filter(function(r){ return r.c === 'g'; }).length, nr = rows.filter(function(r){ return r.c === 'r'; }).length;
-    let h = '<div class="st-side-card">' + stSideHead('stOrdTitle', 'Заявки', rows.length, 'orders', 'Все') +
+    let h = stSideHead('stOrdTitle', 'Заявки', rows.length, 'orders', 'Все') + '<div class="st-side-card">' +
       '<div class="st-side-lg"><span class="g">Новые ' + ng + '</span><span class="y">В аренде ' + (rows.length - ng) + '</span>' +
         '<span class="r">Меньше часа ' + nr + '</span></div>';
     if (!rows.length) return h + '<p class="small muted st-side-e">Новых заявок и выданного инструмента нет — список обновляется сам.</p></div>';
@@ -2382,16 +2394,16 @@
     return c.last_mine ? 'n' : 'y';
   }
   function stChatColHTML(cur){
-    if (!STAFF.can_chat) return '<div class="st-side-card">' + stSideHead('stChatTitle', 'Чаты') +
+    if (!STAFF.can_chat) return stSideHead('stChatTitle', 'Чаты') + '<div class="st-side-card">' +
       '<p class="small muted st-side-e">Чаты вам не показываются: нужно право «Отвечает в чате пункта».</p></div>';
-    if (!STCHATS) return '<div class="st-side-card">' + stSideHead('stChatTitle', 'Чаты') +
+    if (!STCHATS) return stSideHead('stChatTitle', 'Чаты') + '<div class="st-side-card">' +
       '<p class="small muted st-side-e">Чаты не загрузились. <button type="button" class="st-link" data-staff-reload="1">Обновить</button></p></div>';
     const now = Date.now(), ord = { g: 0, y: 1, r: 2, n: 3 };
     const rows = (cur ? stChatScope() : []).map(function(c){ return { c: c, k: stChatCls(c, now) }; }).sort(function(a, b){
       return ord[a.k] - ord[b.k] || (Date.parse(b.c.last_at) || 0) - (Date.parse(a.c.last_at) || 0);
     });
     const cnt = function(k){ return rows.filter(function(r){ return r.k === k; }).length; };
-    let h = '<div class="st-side-card">' + stSideHead('stChatTitle', 'Чаты', rows.length, 'chats', 'Все') +
+    let h = stSideHead('stChatTitle', 'Чаты', rows.length, 'chats', 'Все') + '<div class="st-side-card">' +
       '<div class="st-side-lg"><span class="g">Непрочитанные ' + cnt('g') + '</span><span class="y">Без ответа ' + cnt('y') + '</span>' +
         '<span class="r">Больше суток ' + cnt('r') + '</span></div>';
     if (!rows.length) return h + '<p class="small muted st-side-e">Переписок нет. Когда клиент напишет про инструмент пункта или в чат пункта, она появится здесь.</p></div>';
@@ -2426,12 +2438,62 @@
     fr.className = 'st-add-if';
     box.appendChild(fr);
   }
-  /* смена пункта — выпадающий список в шапке */
-  document.addEventListener('change', function(e){
-    if (!e.target || e.target.id !== 'stPtSel') return;
-    ST_PT = String(e.target.value || '');
+  /* закреплённая шапка «Работы» встаёт к верху экрана — или под шапкой сайта, если та сама стоит на месте
+     (сейчас шапка сайта лежит в #hdr и уезжает при прокрутке; на телефоне в ней две строки) */
+  function stTopVar(){
+    const hd = document.querySelector('.head'), lay = $('stLayout');
+    if (hd && lay){
+      const pos = getComputedStyle(hd).position, par = hd.parentElement;
+      const stays = pos === 'fixed' || (pos === 'sticky' && (!par || par === document.body ||
+        getComputedStyle(par).display === 'contents' ||
+        par.getBoundingClientRect().bottom - hd.getBoundingClientRect().bottom > 40));   // есть куда «ехать» внутри родителя
+      lay.style.setProperty('--st-top', (stays ? hd.offsetHeight : 0) + 'px');
+    }
+    const sh = $('stHead'); if (sh && lay) lay.style.setProperty('--st-hh', sh.offsetHeight + 'px');
+  }
+  window.addEventListener('resize', function(){ if ($('stLayout')) stTopVar(); });
+  /* «Пункт выдачи» — свой выпадающий список: клик, стрелки, Enter, Esc, клик мимо — закрыть */
+  function stDdSet(open, focusSel){
+    const dd = $('stPtDd'), btn = $('stPtSel'), menu = $('stPtMenu');
+    ST_DD = !!open && !!dd && !dd.classList.contains('one');
+    if (!dd) return;
+    dd.classList.toggle('open', ST_DD);
+    btn.setAttribute('aria-expanded', String(ST_DD));
+    if (ST_DD) menu.removeAttribute('hidden'); else menu.setAttribute('hidden', '');
+    const hd = $('stHead'); if (hd) hd._h = stHeadHTML();
+    if (ST_DD && focusSel){ const o = menu.querySelector('.st-dd-o.on') || menu.querySelector('.st-dd-o'); if (o) o.focus(); }
+  }
+  function stPickPoint(id){
+    ST_DD = false;
+    if (id === ST_PT){ stDdSet(false); const b = $('stPtSel'); if (b) b.focus(); return; }
+    ST_PT = String(id || '');
     try { localStorage.setItem(ST_PT_KEY, ST_PT); } catch(x){}
     const y = window.scrollY; render(); window.scrollTo(0, y);
+    const b = $('stPtSel'); if (b) b.focus();
+  }
+  document.addEventListener('click', function(e){
+    const t = e.target && e.target.closest ? e.target : null;
+    if (!t) return;
+    const o = t.closest('[data-st-pt]');
+    if (o){ stPickPoint(o.getAttribute('data-st-pt')); return; }
+    if (t.closest('#stPtSel')){ stDdSet(!ST_DD, e.detail === 0); return; }
+    if (ST_DD && !t.closest('#stPtDd')) stDdSet(false);
+  });
+  document.addEventListener('keydown', function(e){
+    const dd = $('stPtDd');
+    if (!dd || !dd.contains(document.activeElement)) return;
+    const opts = Array.prototype.slice.call(dd.querySelectorAll('.st-dd-o'));
+    const i = opts.indexOf(document.activeElement);
+    if (e.key === 'Escape' && ST_DD){ e.preventDefault(); stDdSet(false); $('stPtSel').focus(); return; }
+    if (e.key === 'Tab' && ST_DD){ stDdSet(false); return; }
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp'){
+      e.preventDefault();
+      if (!ST_DD){ stDdSet(true, true); return; }
+      const n = i < 0 ? 0 : (i + (e.key === 'ArrowDown' ? 1 : -1) + opts.length) % opts.length;
+      if (opts[n]) opts[n].focus();
+      return;
+    }
+    if ((e.key === 'Home' || e.key === 'End') && ST_DD && opts.length){ e.preventDefault(); opts[e.key === 'Home' ? 0 : opts.length - 1].focus(); }
   });
   /* сообщения от формы «Добавить»: высота, «вернуться к началу формы», уведомления, «инструмент добавлен» */
   window.addEventListener('message', function(ev){
@@ -2560,7 +2622,7 @@
     return h;
   }
   function stMainHTML(cur){
-    let h = stHeadHTML() + stPtCardHTML(cur);
+    let h = stPtCardHTML(cur);
     if (!cur) return h;
     h += stRightsHTML(cur);
     const ord = stCanOrd();
@@ -2605,7 +2667,7 @@
     root.className = 'wrap catalog-wide';
     if (!$('stLayout') || $('stLayout').getAttribute('data-key') !== key){
       root.innerHTML = '<div class="st-layout" id="stLayout" data-key="' + esc(key) + '">' +
-        '<section class="st-main" id="stMain"><div id="stMainTop"></div>' +
+        '<section class="st-main" id="stMain"><div class="sect st-head" id="stHead"></div><div id="stMainTop"></div>' +
           '<div class="st-addpane" id="stAddPane">' + stAddPaneHTML(cur) + '</div></section>' +
         '<div class="st-side" id="stSide">' +
           '<aside class="st-scol st-ocol" id="stOrdCol" aria-labelledby="stOrdTitle"></aside>' +
@@ -2613,7 +2675,10 @@
         '</div>' +
       '</div>';
     }
+    const hh = stHeadHTML(), hd = $('stHead');   // шапку не перерисовывать без изменений — не сбивать открытый список и фокус
+    if (hd._h !== hh){ hd.innerHTML = hh; hd._h = hh; }
     $('stMainTop').innerHTML = stMainHTML(cur);
+    stTopVar();
     $('stAddPane').classList.toggle('hide', ST_VIEW !== 'add' || !cur);
     stSidePaint(cur, keep);
     stAddMount();

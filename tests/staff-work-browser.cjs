@@ -1,7 +1,7 @@
 // Сайт 05.11.2026 (просьба и правки владельца): «Работа» сотрудника — слева заявки выбранного пункта (новые зелёные, в аренде
 // жёлтые, меньше часа / просрочено — красные), справа чаты (непрочитанные зелёные, без ответа жёлтые, не открыты больше суток —
-// красные); окна стоят на месте при прокрутке, верх — на линии ФИО. В центре: ФИО и справа «Пункт выдачи» (выпадающий список),
-// по центру выбранный пункт, права, разделы «Инструменты пункта · Заявки · Сообщения · Статистика · Добавить».
+// красные). Названия «Заявки» / «Чаты» — над окнами, на линии ФИО; окна — на линии карточки пункта. Шапка (ФИО + «Пункт выдачи» —
+// свой выпадающий список в стиле сайта) и окна стоят на месте при прокрутке. По центру выбранный пункт, права, разделы «Инструменты пункта · Заявки · Сообщения · Статистика · Добавить».
 // И стабильность: сбой связи не превращает сотрудника в клиента («Хотите сдавать свой инструмент?»), ключ входа
 // обновляется один раз на все запросы, роль не узнали — «Нет связи — Повторить», а не чужой кабинет.
 const {chromium}=require('playwright');const assert=require('assert');
@@ -52,7 +52,8 @@ const CHATS=[pc('pc4',0,true,0.2,'Отвечено'),pc('pc3',1,false,3,'Ста�
 const UNR=[{kind:'p',key:P1,peer:'pc3',first_unread_at:iso(now-50*3600e3)},{kind:'p',key:P1,peer:'pc1',first_unread_at:iso(now-3600e3)}];
 const cls=async(pg,sel)=>pg.locator(sel).evaluateAll(a=>a.map(x=>(x.className.match(/c-([a-z])/)||[])[1]));
 
-// 1. Раскладка: слева заявки, в центре основное, справа чаты; верх окон — на линии ФИО; пункт — выпадающий список справа от ФИО;
+// 1. Раскладка: слева заявки, в центре основное, справа чаты; названия окон — на линии ФИО, окна — на линии пункта;
+//    пункт — свой выпадающий список справа от ФИО (клик, стрелки, Esc, клик мимо); шапка и окна — на месте при прокрутке;
 //    пункт по центру, ниже права, ниже 5 разделов; «Главная» в шапке
 {const o={staff:Object.assign({},staff,{can_chat:true}),chats:CHATS,unr:UNR};const {c,pg,errors}=await ctx(o);
  await pg.goto(BASE+'/account.html#staff',{waitUntil:'domcontentloaded'});await pg.waitForSelector('#stLayout #stPtSel');await pg.waitForSelector('#stChatList .st-si');
@@ -60,11 +61,30 @@ const cls=async(pg,sel)=>pg.locator(sel).evaluateAll(a=>a.map(x=>(x.className.ma
  const L=await box('#stOrdCol'),M=await box('#stMain'),R=await box('#stChatCol');
  assert(L.x<M.x&&M.x<R.x,'три колонки: заявки — основное — чаты');assert(Math.abs(L.width-306)<2&&Math.abs(R.width-306)<2,'боковые окна — ширина «Глобального поиска» (306px)');
  const fio=await box('.st-head .acct-head');
- assert(Math.abs((await box('#stOrdCol .st-side-card')).y-fio.y)<=2&&Math.abs((await box('#stChatCol .st-side-card')).y-fio.y)<=2,'верх окон заявок и чатов — на линии ФИО');
- // «Пункт выдачи» — выпадающий список только с названиями, справа от ФИО, в той же строке
- assert.deepEqual(await pg.locator('#stPtSel option').evaluateAll(a=>a.map(x=>[x.value,x.textContent])),[[P1,'Маресьева'],[P2,'Центр']]);
+ // названия «Заявки» / «Чаты» — над окнами, на одной линии с ФИО; окна — на линии карточки пункта
+ const oh=await box('#stOrdCol .st-side-h'),ch=await box('#stChatCol .st-side-h'),oc=await box('#stOrdCol .st-side-card'),cc=await box('#stChatCol .st-side-card');
+ assert(Math.abs(oh.y-fio.y)<=2&&Math.abs(ch.y-fio.y)<=2&&Math.abs(oh.height-fio.height)<=2,'названия окон — на линии ФИО: '+[oh.y,ch.y,fio.y]);
+ assert(oh.y+oh.height<=oc.y&&ch.y+ch.height<=cc.y,'названия — над окнами, не внутри');
+ assert.equal(await pg.locator('#stOrdCol .st-side-card h2, #stChatCol .st-side-card h2').count(),0);
+ const pcY=(await box('.st-pcard')).y;assert(Math.abs(oc.y-pcY)<=2&&Math.abs(cc.y-pcY)<=2,'окна — на линии карточки пункта: '+[oc.y,cc.y,pcY]);
+ // «Пункт выдачи» — свой выпадающий список только с названиями, справа от ФИО, в той же строке; подпись крупная и белая
  const sel=await box('#stPtSel'),h2=await box('.st-head h2');assert(sel.x>h2.x+h2.width&&Math.abs((sel.y+sel.height/2)-(fio.y+fio.height/2))<30,'список пунктов — напротив ФИО');
- assert.match(await pg.locator('.st-ptsel label').textContent(),/Пункт выдачи/);
+ assert.equal(await pg.locator('#stPtSel .st-dd-v').textContent(),'Маресьева');
+ assert.equal(await pg.locator('#stPtMenu').isVisible(),false,'список закрыт');
+ const lab=await pg.locator('.st-ptsel-l').evaluate(e=>{const c=getComputedStyle(e),b=getComputedStyle(document.querySelector('#stPtSel'));return {t:e.textContent,fs:parseFloat(c.fontSize),bfs:parseFloat(b.fontSize),col:c.color};});
+ assert.equal(lab.t,'Пункт выдачи');assert(lab.fs>=lab.bfs&&lab.fs>=16,'подпись — как текст списка: '+JSON.stringify(lab));assert.equal(lab.col,'rgb(242, 244, 248)','подпись — белая');
+ await pg.click('#stPtSel');await pg.waitForSelector('#stPtMenu',{state:'visible'});
+ assert.equal(await pg.locator('#stPtSel').getAttribute('aria-expanded'),'true');
+ assert.deepEqual(await pg.locator('#stPtMenu [role=option]').evaluateAll(a=>a.map(x=>[x.getAttribute('data-st-pt'),x.innerText.trim(),x.getAttribute('aria-selected')])),
+   [[P1,'Маресьева','true'],[P2,'Центр','false']],'в списке только названия, выбранный отмечен');
+ const mn=await pg.locator('#stPtMenu').evaluate(e=>{const c=getComputedStyle(e);return [c.backgroundColor,c.borderRadius];});
+ assert.equal(mn[0],'rgb(26, 29, 36)','меню — карточка сайта');
+ await pg.mouse.click(800,700);await pg.waitForSelector('#stPtMenu',{state:'hidden'});
+ await pg.focus('#stPtSel');await pg.keyboard.press('ArrowDown');await pg.waitForSelector('#stPtMenu',{state:'visible'});
+ assert.equal(await pg.evaluate(()=>document.activeElement.getAttribute('data-st-pt')),P1,'стрелка — открыть на выбранном');
+ await pg.keyboard.press('ArrowDown');assert.equal(await pg.evaluate(()=>document.activeElement.getAttribute('data-st-pt')),P2);
+ await pg.keyboard.press('Escape');await pg.waitForSelector('#stPtMenu',{state:'hidden'});
+ assert.equal(await pg.evaluate(()=>document.activeElement.id),'stPtSel','Esc — закрыть, фокус на списке');
  assert.equal(await pg.locator('.st-ptile').count(),0,'плиток пунктов больше нет');
  // ниже по центру — выбранный пункт; ниже права; ниже разделы
  assert.equal(await pg.locator('.st-pcard h3').textContent(),'«Маресьева»');
@@ -82,8 +102,10 @@ const cls=async(pg,sel)=>pg.locator(sel).evaluateAll(a=>a.map(x=>(x.className.ma
  assert.match((await pg.locator('#stChatList .st-si').allInnerTexts())[2],/Старое[\s\S]*больше суток/);
  // окна стоят на месте при прокрутке страницы
  await pg.setViewportSize({width:1600,height:600});await pg.click('[data-st-view=orders]');await pg.evaluate(()=>window.scrollTo({top:700,behavior:'instant'}));await pg.waitForTimeout(150);
- const L2=await box('#stOrdCol .st-side-card'),R2=await box('#stChatCol .st-side-card'),M2=await box('#stMain');
- assert(M2.y<-300,'страница прокрутилась: '+M2.y);assert(L2.y>=60&&L2.y<=100&&Math.abs(R2.y-L2.y)<2,'окна заявок и чатов — на месте: '+L2.y);
+ const L2=await box('#stOrdCol .st-side-card'),R2=await box('#stChatCol .st-side-card'),M2=await box('#stMain'),H2=await box('.st-head .acct-head'),T2=await box('#stOrdCol .st-side-h');
+ assert(M2.y<-300,'страница прокрутилась: '+M2.y);assert(L2.y>=60&&L2.y<=130&&Math.abs(R2.y-L2.y)<2,'окна заявок и чатов — на месте: '+L2.y);
+ assert(H2.y>=0&&H2.y<=40&&Math.abs(T2.y-H2.y)<=2,'шапка с ФИО и «Пункт выдачи» — на месте, на линии названий окон: '+[H2.y,T2.y]);
+ assert.equal(await pg.evaluate(()=>{const r=document.querySelector('#stPtSel').getBoundingClientRect();const e=document.elementFromPoint(r.x+r.width/2,r.y+r.height/2);return !!e.closest('#stPtSel');}),true,'список пунктов поверх содержимого');
  const hh=await pg.evaluate(()=>{const l=document.querySelector('#stOrdCol .st-side-card').getBoundingClientRect();return [l.bottom,innerHeight];});
  assert(hh[0]<=hh[1]+1,'окно заявок целиком на экране: '+hh);
  await pg.setViewportSize({width:1600,height:1200});await pg.evaluate(()=>window.scrollTo(0,0));
@@ -104,7 +126,8 @@ const cls=async(pg,sel)=>pg.locator(sel).evaluateAll(a=>a.map(x=>(x.className.ma
  await pg.click('[data-staff-reload]');await pg.waitForTimeout(400);await pg.click('[data-st-view=add]');
  assert.equal(await pg.evaluate(()=>document.querySelector('#stAddFrame iframe').dataset.keep),'1','iframe формы тот же');
  // другой пункт из списка: форма — для него, слева его заявки, выбор запоминается
- await pg.selectOption('#stPtSel',P2);await pg.waitForTimeout(250);
+ await pg.click('#stPtSel');await pg.click('#stPtMenu [data-st-pt="'+P2+'"]');await pg.waitForTimeout(250);
+ assert.equal(await pg.locator('#stPtSel .st-dd-v').textContent(),'Центр');assert.equal(await pg.locator('#stPtMenu').isVisible(),false);
  assert.match(await pg.locator('#stAddFrame iframe').getAttribute('src'),new RegExp('point='+P2));
  assert.equal(await pg.locator('.st-pcard h3').textContent(),'«Центр»');
  assert.deepEqual(await cls(pg,'#stOrdList .st-si'),['g']);
@@ -181,12 +204,19 @@ const cls=async(pg,sel)=>pg.locator(sel).evaluateAll(a=>a.map(x=>(x.className.ma
  assert.match(await pg.locator('#stStats').textContent(),/SQL 20261125/);
  assert.deepEqual(errors,[]);await c.close();}
 
-// 6. Телефон: одна колонка, сначала основное, потом заявки и чаты; список пунктов во всю ширину; форма — во вкладке «Добавить»
+// 6. Телефон: одна колонка, сначала основное, потом заявки и чаты; «Пункт выдачи» и список — строкой под ФИО, до края;
+//    шапка на месте при прокрутке; форма — во вкладке «Добавить»
 {const o={vp:{width:390,height:844},staff:Object.assign({},staff,{can_chat:true}),chats:CHATS,unr:UNR};const {c,pg,errors}=await ctx(o);
  await pg.goto(BASE+'/account.html#staff',{waitUntil:'domcontentloaded'});await pg.waitForSelector('#stLayout #stPtSel');
  const m=await pg.locator('#stMain').boundingBox(),sd=await pg.locator('#stSide').boundingBox();
  assert(m.y+m.height<=sd.y+1,'на телефоне основное — выше заявок и чатов');
- assert((await pg.locator('#stPtSel').boundingBox()).width>250,'список пунктов — во всю ширину');
+ const sl=await pg.locator('#stPtSel').boundingBox(),lb=await pg.locator('.st-ptsel-l').boundingBox(),hr=await pg.locator('.st-headrow').boundingBox();
+ assert(sl.width>180&&Math.abs(sl.x+sl.width-(hr.x+hr.width))<=2&&Math.abs((lb.y+lb.height/2)-(sl.y+sl.height/2))<4,'список — рядом с подписью, до края: '+JSON.stringify([sl,lb]));
+ await pg.evaluate(()=>window.scrollTo({top:1200,behavior:'instant'}));await pg.waitForTimeout(150);
+ const hy=(await pg.locator('.st-head .acct-head').boundingBox()).y;assert(hy>=0&&hy<=30,'шапка на месте на телефоне: '+hy);
+ await pg.click('#stPtSel');await pg.waitForSelector('#stPtMenu',{state:'visible'});
+ const mb=await pg.locator('#stPtMenu').boundingBox();assert(mb.x>=0&&mb.x+mb.width<=391,'меню не уходит за экран');
+ await pg.keyboard.press('Escape');await pg.evaluate(()=>window.scrollTo({top:0,behavior:'instant'}));
  await pg.$eval('[data-st-view=add]',e=>e.scrollIntoView({block:'center'}));await pg.click('[data-st-view=add]');await pg.waitForSelector('#stAddFrame iframe');
  const sw=await pg.evaluate(()=>document.documentElement.scrollWidth);assert(sw<=392,'нет прокрутки вбок: '+sw);
  assert.deepEqual(errors,[]);await c.close();}
@@ -201,6 +231,13 @@ const cls=async(pg,sel)=>pg.locator(sel).evaluateAll(a=>a.map(x=>(x.className.ma
  // не сотрудник, доступ арендодателя выключен — «Размещение приостановлено» как и раньше
  o.nostaff=true;await pg.reload({waitUntil:'domcontentloaded'});
  await pg.waitForFunction(()=>/Размещение приостановлено/.test(document.body.innerText));
+ assert.deepEqual(errors,[]);await c.close();}
+
+// 9. Один пункт: в шапке его название без стрелки, список не открывается
+{const o={staff:Object.assign({},staff,{points:[staff.points[0]]})};const {c,pg,errors}=await ctx(o);
+ await pg.goto(BASE+'/account.html#staff',{waitUntil:'domcontentloaded'});await pg.waitForSelector('#stLayout #stPtSel');
+ assert.equal(await pg.locator('#stPtSel .st-dd-v').textContent(),'Маресьева');assert(await pg.locator('#stPtSel').isDisabled());
+ assert.equal(await pg.locator('#stPtSel .st-dd-ch').count(),0,'без стрелки');assert.equal(await pg.locator('#stPtMenu').isVisible(),false);
  assert.deepEqual(errors,[]);await c.close();}
 
 await b.close();console.log('staff-work-browser: OK');})().catch(e=>{console.error(e);process.exit(1);});
