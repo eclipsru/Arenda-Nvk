@@ -1258,3 +1258,97 @@ textarea.inp.st-ch-inp{height:46px;padding:12px 14px}
 .pick button[data-spt] small{display:block;font-weight:400;color:var(--g2);font-size:12px;line-height:1.35}
 .st-tadd{display:flex;gap:10px;align-items:center;justify-content:space-between;flex-wrap:wrap;margin:6px 2px 4px}
 @media (max-width:640px){.form-grid .nav-btns{flex-wrap:wrap}.form-grid .nav-btns .btn{min-width:0;flex:1 1 30%}}
+/* «Работа» сотрудника — раскладка 05.11.2026 (просьба владельца): как главная — слева форма добавления инструмента
+   шириной «Глобального поиска» (306px), в центре ФИО, пункты, права и разделы, справа — инструмент выбранного пункта.
+   Меньше 1500px список инструмента — под формой; на телефоне — одна колонка: основное, форма, список. */
+.st-layout{display:grid;grid-template-columns:306px minmax(0,1fr);grid-template-areas:"add main" "tools main";grid-template-rows:auto 1fr;gap:0 20px;align-items:start;padding-bottom:40px}
+.st-layout > aside,.st-layout > section{min-width:0}
+.st-add-col{grid-area:add;padding-top:20px}
+.st-main{grid-area:main}
+.st-main > .sect:first-child{padding-top:20px}
+.st-tools-col{grid-area:tools;padding-top:20px}
+@media (min-width:1500px){
+  .st-layout{grid-template-columns:306px minmax(0,1fr) 306px;grid-template-areas:"add main tools";grid-template-rows:auto}
+}
+@media (max-width:1024px){ .st-layout{grid-template-columns:260px minmax(0,1fr);gap:0 14px} }
+@media (max-width:860px){ .st-layout{grid-template-columns:minmax(0,1fr);grid-template-areas:"main" "add" "tools";grid-template-rows:auto} }
+.filters.st-add{display:block;position:static;padding:14px}
+.st-add-pt{display:flex;flex-direction:column;gap:2px;padding:10px 12px;border-radius:var(--r-s);background:var(--or-soft);border:1px solid rgba(255,143,31,.35);margin-bottom:12px}
+.st-add-pt span{font-size:11px;letter-spacing:.6px;text-transform:uppercase;color:var(--or);font-weight:700}
+.st-add-pt b{font-size:15px;line-height:1.35}
+.st-add-pt small{font-size:12.5px;color:var(--gr);line-height:1.4}
+.st-add-if{display:block;width:100%;height:760px;border:0;background:transparent;color-scheme:dark}
+.st-add-open{display:none}
+@media (max-width:860px){ .st-add-open{display:flex;justify-content:center} }
+.st-add-no b{display:block;margin-bottom:6px;font-size:14.5px}
+.st-add-no p{font-size:13.5px;color:var(--gr);line-height:1.55}
+.st-add-note{margin-top:10px;line-height:1.5}
+.st-sec-h{display:flex;align-items:baseline;gap:10px;margin:18px 0 10px;flex-wrap:wrap}
+.st-sec-h h3{font-size:17px;font-weight:800}
+.st-ptiles{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:10px}
+.st-ptile{display:flex;flex-direction:column;gap:6px;text-align:left;background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:12px 14px;color:var(--tx);font:inherit;cursor:pointer;transition:border-color .15s,background .15s}
+.st-ptile:hover{border-color:var(--line-2)}
+.st-ptile.on{border-color:var(--or);background:var(--or-soft)}
+.st-ptile-top{display:flex;align-items:center;gap:8px}
+.st-ptile-top b{flex:1;min-width:0;font-size:15px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.st-ptile-sel{font-size:11px;font-weight:700;color:var(--or);text-transform:uppercase;letter-spacing:.5px}
+.st-ptile-l{font-size:12.5px;color:var(--gr);line-height:1.45}
+.st-ptile-n{display:flex;flex-wrap:wrap;gap:5px;margin-top:2px}
+.st-pn{font-size:11.5px;color:var(--gr);background:var(--field);border:1px solid var(--line);border-radius:20px;padding:2px 8px}
+.st-pn b{color:var(--tx)}
+.st-pn.g b{color:var(--grn)}
+.st-pn.r{border-color:rgba(255,138,128,.45)}
+.st-pn.r b{color:var(--red)}
+.st-pn.o b{color:var(--or)}
+.st-rights{background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:12px 14px;margin:12px 0 4px}
+.st-rights-h{display:flex;gap:10px;align-items:baseline;flex-wrap:wrap;margin-bottom:10px}
+.st-rights-h b{font-size:14.5px}
+.st-rights-h a{margin-left:auto;color:var(--or);font-size:13.5px;white-space:nowrap}
+.st-rights-l{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:8px 12px}
+.st-right{display:flex;gap:9px;align-items:flex-start;font-size:13px;color:var(--g2)}
+.st-right b{display:block;color:var(--gr);font-weight:600}
+.st-right small{display:block;font-size:12px;line-height:1.4}
+.st-right-i{flex:0 0 22px;height:22px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:var(--field);border:1px solid var(--line);font-size:12px;font-weight:800;color:var(--g2)}
+.st-right.on b{color:var(--tx)}
+.st-right.on .st-right-i{background:rgba(76,175,80,.14);border-color:rgba(76,175,80,.5);color:var(--grn)}
+.st-rights-note{margin-top:10px}
+.tabs.st-tabs{margin-top:16px}
+.st-ccard{background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:14px;display:flex;flex-direction:column;gap:10px}
+.st-clist{display:flex;flex-direction:column;gap:4px}
+.st-ct{display:flex;gap:10px;align-items:center;padding:6px;border-radius:var(--r-s);color:var(--tx);border:1px solid transparent}
+a.st-ct:hover{background:var(--field);border-color:var(--line)}
+.st-ct-ph{flex:0 0 52px;width:52px;height:52px;border-radius:9px;overflow:hidden;background:var(--field)}
+.st-ct-ph img{width:100%;height:100%;object-fit:cover;display:block}
+.st-ct-mid{flex:1;min-width:0;display:flex;flex-direction:column;gap:3px;align-items:flex-start}
+.st-ct-mid b{font-size:13.5px;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.st-ct-mid small{font-size:12px;color:var(--gr)}
+.st-ct-mid .badge{font-size:10.5px;padding:1px 7px}
+/* «Статистика» сотрудника: только числа по пункту (без денег и данных клиентов) */
+.st-sd{margin-bottom:6px}
+.st-sh{margin:16px 2px 8px;font-size:12.5px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--g2)}
+.kpis.st-skpis{grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px;margin-bottom:4px}
+.st-skpis .kpi{padding:13px 14px}
+.st-skpis .kpi .vl{font-size:22px}
+.st-skpis .st-k-late .vl{color:var(--red)}
+.st-note{background:var(--or-soft);border:1px solid rgba(255,143,31,.3);border-radius:var(--r-s);padding:10px 12px;font-size:13px;color:var(--gr);line-height:1.55;margin:4px 0 8px}
+.st-chart{display:flex;align-items:flex-end;gap:3px;height:150px;background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:12px 10px 6px}
+.st-col{flex:1;min-width:0;height:100%;display:flex;flex-direction:column;align-items:center;gap:4px}
+.st-bars{flex:1;width:100%;display:flex;align-items:flex-end;justify-content:center;gap:2px}
+.st-bars i{display:block;width:40%;max-width:12px;min-height:2px;border-radius:3px 3px 0 0}
+.st-chart .b-n,.st-legend .b-n{background:var(--or)}
+.st-chart .b-i,.st-legend .b-i{background:var(--grn)}
+.st-col small{font-size:10px;color:var(--g2);white-space:nowrap}
+.st-chart.many .st-col small{visibility:hidden}
+.st-chart.many .st-col:nth-child(5n+1) small{visibility:visible}
+.st-legend{display:flex;gap:14px;margin:6px 2px 0;font-size:12px;color:var(--gr)}
+.st-legend span{display:flex;align-items:center;gap:6px}
+.st-legend i{width:10px;height:10px;border-radius:3px;display:inline-block}
+.st-top{display:flex;flex-direction:column;gap:9px;background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:12px 14px}
+.st-top-r{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,1fr) auto;gap:10px;align-items:center;font-size:13.5px}
+.st-top-n{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.st-top-b{height:8px;background:var(--field);border-radius:4px;overflow:hidden}
+.st-top-b i{display:block;height:100%;background:var(--or);border-radius:4px}
+/* форма добавления внутри «Работы» (new.html?embed=1): без шапки и подвала, одна колонка */
+body.emb{background:transparent}
+body.emb .page{padding:0;min-height:0}
+body.emb #root.wrap{max-width:none;padding:0}

@@ -454,6 +454,9 @@ function headerHTML(active, q){
       '<div class="sug hide" id="sug"></div>' +
     '</div>' +
     '<nav class="hlinks">' +
+      /* «Главная» справа от поиска (просьба владельца 05.11.2026) */
+      '<a class="hlink home-link' + (active === 'home' ? ' on' : '') + '" href="index.html">' +
+        IC.home + '<span>Главная</span></a>' +
       '<a class="hlink' + (active === 'fav' ? ' on' : '') + '" href="favorites.html">' +
         IC.heart + '<span>Избранное</span>' +
         '<span class="dot fav-count" style="display:none">0</span>' +
@@ -1060,7 +1063,13 @@ async function workGet(){
   try {
     const r = await api('/rest/v1/rpc/iva_staff_me', 'POST', {});
     workPut((Array.isArray(r) ? r[0] : r) || null);
-  } catch(e){ workPut(null); }
+  } catch(e){
+    /* 05.11.2026: нет функции в базе — точно не сотрудник; сбой связи — оставляем прежний ответ и спросим через минуту
+       (раньше один сбой прятал «Работу» на 30 минут) */
+    if (typeof apiMissing === 'function' && apiMissing(e)) workPut(null);
+    else if (w && w.me === me){ try { w.at = Date.now() - (w.on ? 240000 : 1740000); sessionStorage.setItem(WORK_KEY, JSON.stringify(w)); } catch(x){} return w; }
+    else return null;
+  }
   try { w = JSON.parse(sessionStorage.getItem(WORK_KEY) || 'null'); } catch(e){ w = null; }
   return w;
 }

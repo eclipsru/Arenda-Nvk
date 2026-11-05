@@ -10,7 +10,7 @@
 <link rel="icon" href="assets/favicon-32.png" type="image/png" sizes="32x32">
 <link rel="icon" href="assets/icon-192.png" type="image/png" sizes="192x192">
 <link rel="apple-touch-icon" href="assets/apple-touch-icon.png">
-<link rel="stylesheet" href="assets/theme.css?v=20261102-tiles">
+<link rel="stylesheet" href="assets/theme.css?v=20261105-staff">
 <link rel="stylesheet" href="assets/profile.css?v=20260923-rental-profile">
 <style>
 .tabs{display:flex;gap:4px;border-bottom:1px solid var(--line);margin-bottom:18px;
@@ -149,9 +149,9 @@
 
 <script src="assets/data.js"></script>
 <script src="assets/geo.js?v=20260923-photon"></script>
-<script src="assets/email-guard.js?v=20260926-email"></script><script src="assets/sb.js?v=20261024-live"></script>
+<script src="assets/email-guard.js?v=20260926-email"></script><script src="assets/sb.js?v=20261105-staff"></script>
 <script src="assets/app-release.js?v=20261009-rel"></script>
-<script src="assets/app.js?v=20261102-play"></script>
+<script src="assets/app.js?v=20261105-staff"></script>
 <script src="assets/profile.js?v=20261022-a"></script>
 <script>
 (function(){
@@ -212,6 +212,7 @@
   let AUTH_MODE = 'in';
   function screenLogin(msg){
     const up = AUTH_MODE === 'up';
+    $('root').className = 'wrap';
     $('root').innerHTML =
       '<div class="auth-box">' +
         '<div class="auth-tabs" role="tablist">' +
@@ -485,6 +486,12 @@
       tabsHtml = tbtn('sent', 'Я арендую', SENT.length ? '<span class="n">' + SENT.length + '</span>' : '') +
         tbtn('fav', 'Избранное', '<span class="n fav-n">' + favList().length + '</span>') +
         tbtn('msg', 'Сообщения') + profBtn;
+    } else if (stWorkMode()){
+      /* 05.11.2026: у сотрудника вкладки — внутри «Работы»; личное (мои заявки, избранное, сообщения) открывается
+         из меню «Кабинет» в шапке — здесь только путь назад */
+      const PL = { orders: 'Мои заявки', fav: 'Избранное', msg: 'Сообщения' };
+      tabsHtml = '<button data-tab="staff">← Работа в прокате</button>' +
+        '<button class="on" aria-current="page">' + (PL[TAB] || 'Кабинет') + '</button>';
     } else {
       tabsHtml = (STAFF ? tbtn('staff', STAFF.status === 'invited' ? 'Приглашение' : 'Работа', staffNewBadge()) : '') +
         tbtn('orders', 'Мои заявки', ORDERS.length ? '<span class="n">' + ORDERS.length + '</span>' : '') +
@@ -492,18 +499,7 @@
         tbtn('msg', 'Сообщения') + profBtn;
     }
 
-    /* Шапка кабинета (этап 2): своё фото, имя, прокат и роль; переключатель режима — справа */
-    const ad = A.admin || {};
-    const who = esc(A.uname || ad.full_name || 'Кабинет');
-    const org = isAdmin() && ad.company ? '«' + esc(ad.company) + '»' : (STAFF && STAFF.status === 'active' && STAFF.company ? '«' + esc(STAFF.company) + '»' : '');
-    const role = isCreator() ? ' · создатель' : isAdmin() ? ' · арендодатель' : (STAFF && STAFF.status === 'active' ? ' · сотрудник проката' : '');
-    const meta = (org + role + ' · ' + esc(A.me)).replace(/^ · /, '');
-    return '<div class="sect" style="padding-bottom:0"><div class="acct-head">' +
-        '<span class="ava acct-head-ava" data-ava="' + esc(A.me) + '">' + esc(initials(A.uname || A.me)) + '</span>' +
-        '<div class="acct-head-t"><h2>' + who + '</h2><div class="small muted">' + meta + '</div></div>' +
-        (isAdmin() && typeof modeSwitchHTML === 'function' ? '<div class="acct-head-mode">' + modeSwitchHTML() + '</div>' : '') +
-      '</div>' +
-      '</div>' +
+    return headHTML() +
       '<div class="tabs">' + tabsHtml + '</div>' + inner + (isAdmin() || STAFF ? '' : lendCardHTML());
   }
 
@@ -1001,7 +997,8 @@
     try {
       const s0 = oSig();
       let fresh;
-      try { fresh = await oReload(); } catch(e){ return; }
+      try { fresh = await oReload(); } catch(e){ sessLost(); return; }
+      if (sessLost()) return;
       if (fresh.length) liveNew(fresh.length, fresh[0].tools_text || '');
       if (oSig() === s0){ const u = $('ordUpd'); if (u) u.textContent = oUpdTxt(); return; }
       if (TAB === 'orders') oRepaint();
@@ -1661,27 +1658,39 @@
        iva_staff_parts — заявки ТОЛЬКО своих пунктов (без денег и почты клиента);
        iva_staff_set_status — «Выдал» / «Вернули» (право «Выдача», свой пункт, new → rented → closed).
      Без SQL сотрудников (20261028/1029) функции не найдутся — вкладка просто не появится. */
+  /* 05.11.2026 (стабильность): раньше loadStaff первым делом обнуляла STAFF, и любой сбой запроса (сеть, ключ входа
+     обновлялся) оставлял человека «без работы» — пропадала вкладка «Работа», появлялось «Хотите сдавать свой инструмент?».
+     Теперь сбой связи ничего не стирает: остаётся прежний ответ, следующий опрос попробует снова. Стираем только по ответу
+     базы («вы не сотрудник» или функции нет — SQL не применён). Возвращает true, если ответ базы получен. */
+  let STAFF_OK = false;      // был ли хоть один ответ iva_staff_me (а не сбой связи)
   async function loadStaff(){
-    STAFF = null; SPARTS = []; SCARDS = null; STOOLS = null; STCHATS = null;
+    let me;
     try {
       const r = await api('/rest/v1/rpc/iva_staff_me', 'POST', {});
-      STAFF = (Array.isArray(r) ? r[0] : r) || null;
-    } catch(e){ STAFF = null; }
+      me = (Array.isArray(r) ? r[0] : r) || null;
+    } catch(e){
+      if (!apiMissing(e)) return false;              // сбой связи — всё как было
+      me = null;
+    }
+    STAFF_OK = true;
+    STAFF = me;
     try { if (STAFF) localStorage.setItem('iva_staff_hint', '1'); else localStorage.removeItem('iva_staff_hint'); } catch(e){}
     try { if (typeof workPut === 'function'){ workPut(STAFF); paintWork(); } } catch(e){}   // кружок «Работа» в шапке
-    if (STAFF && STAFF.status === 'active' && (STAFF.can_issue || STAFF.can_notify)){
-      try { SPARTS = await api('/rest/v1/rpc/iva_staff_parts', 'POST', {}) || []; } catch(e){ SPARTS = []; }
-      try { SCARDS = lcMap(await api('/rest/v1/rpc/iva_order_cards', 'POST', { p_scope: 'staff' })); } catch(e){ SCARDS = null; }
-    }
+    const on = !!(STAFF && STAFF.status === 'active');
+    if (on && (STAFF.can_issue || STAFF.can_notify)){
+      try { SPARTS = await api('/rest/v1/rpc/iva_staff_parts', 'POST', {}) || []; } catch(e){ if (apiMissing(e)) SPARTS = []; }
+      try { SCARDS = lcMap(await api('/rest/v1/rpc/iva_order_cards', 'POST', { p_scope: 'staff' })); } catch(e){ if (apiMissing(e)) SCARDS = null; }
+    } else { SPARTS = []; SCARDS = null; }
     /* этап 2 «Работы в прокате»: инструмент пунктов сотрудника с правом «Добавляет инструмент» (iva_staff_tools, SQL 10.122) */
-    if (STAFF && STAFF.status === 'active' && STAFF.can_catalog){
+    if (on && STAFF.can_catalog){
       try {
         const r = await api('/rest/v1/rpc/iva_staff_tools', 'POST', {});
         STOOLS = Array.isArray(r) ? r.map(function(x){ return x && x.iva_staff_tools ? x.iva_staff_tools : x; }).filter(Boolean) : null;
-      } catch(e){ STOOLS = null; }
-    }
+      } catch(e){ if (apiMissing(e)) STOOLS = null; }
+    } else STOOLS = null;
     /* этап 3: переписки пунктов сотрудника с правом «Отвечает в чате» */
-    if (STAFF && STAFF.status === 'active' && STAFF.can_chat) await stLoadChats();
+    if (on && STAFF.can_chat) await stLoadChats(); else STCHATS = null;
+    return true;
   }
   function staffNewBadge(){
     if (!STAFF) return '';
@@ -1880,7 +1889,7 @@
         '<button class="btn sec sm" data-staff-reload="1">Обновить</button>' +
       '</div>' +
       '<div class="st-tadd"><span class="small muted">Новый инструмент и правки опубликованного клиенты увидят после одобрения владельцем проката.</span>' +
-        '<a class="btn sm" href="new.html">+ Добавить инструмент</a></div>';
+        (stWorkMode() ? '<button type="button" class="btn sm" data-st-addgo="1">+ Добавить инструмент</button>' : '<a class="btn sm" href="new.html">+ Добавить инструмент</a>') + '</div>';
     h += '<div id="stTList" class="st-tlist">' + stToolListHTML() + '</div>';
     return h;
   }
@@ -1893,7 +1902,10 @@
       api('/rest/v1/rpc/iva_staff_chats', 'POST', {}),
       api('/rest/v1/rpc/iva_staff_point_chats', 'POST', {})
     ]);
-    if (r[0].status === 'rejected' && r[1].status === 'rejected'){ STCHATS = null; return; }
+    if (r[0].status === 'rejected' && r[1].status === 'rejected'){
+      if (apiMissing(r[0].reason) && apiMissing(r[1].reason)) STCHATS = null;   // 05.11.2026: сбой связи — прежний список остаётся
+      return;
+    }
     const a = r[0].status === 'fulfilled' && Array.isArray(r[0].value) ? r[0].value.map(function(c){ return Object.assign({ kind: 't', key: c.tool_id }, c); }) : [];
     const b = r[1].status === 'fulfilled' && Array.isArray(r[1].value) ? r[1].value.map(function(c){ return Object.assign({ kind: 'p', key: c.point_id }, c); }) : [];
     STCHATS = a.concat(b).filter(function(c){ return c.key && c.peer; })
@@ -2149,6 +2161,370 @@
     h += '<div id="stList">' + stListHTML() + '</div>';
     return h;
   }
+  /* ---------- «Работа» сотрудника — раскладка 05.11.2026 (просьба владельца) ----------
+     Как главная страница: слева (ширина «Глобального поиска») — форма добавления инструмента в ВЫБРАННЫЙ пункт,
+     в центре — ФИО и роль, плитки своих пунктов, права, разделы «Инструменты пункта · Заявки · Сообщения · Статистика»,
+     справа — короткий список инструмента выбранного пункта. Личное (мои заявки, избранное, профиль) — в меню «Кабинет».
+     Колонки обновляются по отдельности: форма слева (iframe new.html?embed=1) не перезагружается при автообновлении. */
+  const ST_PT_KEY = 'iva_st_pt', ST_VIEW_KEY = 'iva_st_view';
+  let ST_STATS = {}, ST_SD = 7, PUBTOOLS = {}, ST_ADD_OPEN = false;
+  try { const v = sessionStorage.getItem(ST_VIEW_KEY); if (/^(tools|orders|chats|stats)$/.test(v || '') && ST_VIEW === 'orders') ST_VIEW = v; } catch(e){}
+  function stWorkMode(){ return !isAdmin() && !!STAFF && STAFF.status === 'active'; }
+  function stCanOrd(){ return !!(STAFF && (STAFF.can_issue || STAFF.can_notify)); }
+  /* выбранный пункт: всегда конкретный (форма слева и список справа — для одного пункта); запоминается на устройстве */
+  function stPickPt(){
+    const pts = stPts();
+    if (!pts.length){ ST_PT = 'all'; return null; }
+    if (!pts.some(function(p){ return String(p.id) === ST_PT; })){
+      let saved = ''; try { saved = localStorage.getItem(ST_PT_KEY) || ''; } catch(e){}
+      ST_PT = pts.some(function(p){ return String(p.id) === saved; }) ? saved : String(pts[0].id);
+    }
+    return pts.find(function(p){ return String(p.id) === ST_PT; }) || null;
+  }
+  function stTel(t){
+    t = String(t || '').replace(/\D/g, '');
+    return t.length === 11 ? '+7 (' + t.slice(1, 4) + ') ' + t.slice(4, 7) + '-' + t.slice(7, 9) + '-' + t.slice(9) : t;
+  }
+  function stPtTools(id){
+    if (STAFF && STAFF.can_catalog) return STOOLS ? STOOLS.filter(function(t){ return String(t.point_id || '') === String(id); }) : null;
+    const pb = PUBTOOLS[String(id)];
+    return pb && pb.list ? pb.list : null;
+  }
+  /* шапка: фото, ФИО, прокат и роль — как было */
+  function headHTML(){
+    const ad = A.admin || {};
+    const who = esc(A.uname || ad.full_name || 'Кабинет');
+    const org = isAdmin() && ad.company ? '«' + esc(ad.company) + '»' : (STAFF && STAFF.status === 'active' && STAFF.company ? '«' + esc(STAFF.company) + '»' : '');
+    const role = isCreator() ? ' · создатель' : isAdmin() ? ' · арендодатель' : (STAFF && STAFF.status === 'active' ? ' · сотрудник проката' : '');
+    const meta = (org + role + ' · ' + esc(A.me)).replace(/^ · /, '');
+    return '<div class="sect" style="padding-bottom:0"><div class="acct-head">' +
+        '<span class="ava acct-head-ava" data-ava="' + esc(A.me) + '">' + esc(initials(A.uname || A.me)) + '</span>' +
+        '<div class="acct-head-t"><h2>' + who + '</h2><div class="small muted">' + meta + '</div></div>' +
+        (isAdmin() && typeof modeSwitchHTML === 'function' ? '<div class="acct-head-mode">' + modeSwitchHTML() + '</div>' : '') +
+      '</div>' +
+      '</div>';
+  }
+  function stTilesHTML(){
+    const pts = stPts();
+    if (!pts.length) return '<div class="empty"><b>Пункт выдачи не назначен</b><p>Попросите владельца проката добавить вас в пункт выдачи.</p></div>';
+    const ord = stCanOrd();
+    return '<div class="st-ptiles" role="group" aria-label="Пункт выдачи">' + pts.map(function(p){
+      const id = String(p.id), on = id === ST_PT;
+      const mine = ord ? SPARTS.filter(function(x){ return String(x.point_id || '') === id; }) : [];
+      const c = stCounts(mine), tl = stPtTools(id), un = STAFF.can_chat ? stUnread((STCHATS || []).filter(function(ch){ return ch.kind === 'p' ? String(ch.point_id) === id : ch.point_name === p.name; })) : 0;
+      const addr = [p.city, p.address].filter(Boolean).join(', ');
+      const n = [];
+      if (ord) n.push('<span class="st-pn' + (c.new ? ' g' : '') + '">Новые <b>' + c.new + '</b></span>');
+      if (ord && c.late) n.push('<span class="st-pn r">Просрочены <b>' + c.late + '</b></span>');
+      if (ord) n.push('<span class="st-pn">В аренде <b>' + c.rented + '</b></span>');
+      if (tl) n.push('<span class="st-pn">Инструмент <b>' + tl.length + '</b></span>');
+      if (un) n.push('<span class="st-pn o">Сообщения <b>' + un + '</b></span>');
+      return '<button type="button" class="st-ptile' + (on ? ' on' : '') + '" data-st-pt="' + esc(id) + '" aria-pressed="' + on + '">' +
+        '<span class="st-ptile-top"><b>' + esc(p.name || 'Пункт') + '</b>' + (on ? '<span class="st-ptile-sel">выбран</span>' : '') + '</span>' +
+        (addr ? '<span class="st-ptile-l">' + esc(addr) + '</span>' : '') +
+        (stOpen(p) || p.tel ? '<span class="st-ptile-l">' + stOpen(p) + (stOpen(p) && p.tel ? ' · ' : '') + (p.tel ? esc(stTel(p.tel)) : '') + '</span>' : '') +
+        (n.length ? '<span class="st-ptile-n">' + n.join('') + '</span>' : '') +
+      '</button>';
+    }).join('') + '</div>';
+  }
+  /* права — у сотрудника они одни на все его пункты (так их хранит база: iva_staff), показываем для выбранного */
+  function stRightsHTML(cur){
+    const st = STAFF;
+    const R = [
+      [st.can_issue,   'Выдача и приём',         st.can_issue ? 'отмечает «Выдал» и «Вернули»' + (st.self_issue ? ', в том числе по своим заявкам' : '') : 'не отмечает «Выдал» и «Вернули»'],
+      [st.can_notify,  'Уведомления о заявках',  'видит новые заявки пункта'],
+      [st.can_catalog, 'Добавляет инструмент',   'новый и правки — после одобрения владельца'],
+      [st.can_delete,  'Удаляет инструмент',     'с одобрения владельца'],
+      [st.can_chat,    'Отвечает в чате пункта', 'от имени проката']
+    ];
+    const tel = String(cur.tel || '').replace(/\D/g, '');
+    return '<div class="st-rights">' +
+      '<div class="st-rights-h"><b>Ваши права в пункте «' + esc(cur.name || 'Пункт') + '»</b>' +
+        (tel ? '<a href="tel:+' + esc(tel) + '">' + esc(stTel(tel)) + '</a>' : '') + '</div>' +
+      '<div class="st-rights-l">' + R.map(function(r){
+        return '<div class="st-right' + (r[0] ? ' on' : '') + '"><span class="st-right-i" aria-hidden="true">' + (r[0] ? '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12.5 4.5 4.5L19 7"/></svg>' : '<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M6 12h12"/></svg>') + '</span>' +
+          '<span><b>' + r[1] + '</b><small>' + (r[0] ? r[2] : 'нет права') + '</small></span></div>';
+      }).join('') + '</div>' +
+      '<div class="small muted st-rights-note">Права одни на все ваши пункты — их задаёт владелец проката «' + esc(st.company || 'Прокат') + '».</div>' +
+    '</div>';
+  }
+  function stOrdersView(){
+    if (!stCanOrd()){
+      return '<div class="empty" style="margin-top:4px"><b>Заявки вам не показываются</b>' +
+        '<p>Владелец проката не дал право «Выдача» или «Уведомления о заявках».</p></div>';
+    }
+    return '<div class="kpis st-kpis" id="stKpis">' + stKpisHTML() + '</div>' +
+      '<div class="st-bar">' +
+        '<label for="stQ" class="sr-lbl">Поиск по заявкам</label>' +
+        '<input class="inp" id="stQ" type="search" autocomplete="off" placeholder="№, клиент, телефон, инструмент" value="' + esc(ST_Q) + '">' +
+        '<button class="btn sec sm" data-staff-reload="1">Обновить</button>' +
+      '</div>' +
+      '<div class="small muted st-upd"><span id="stUpd">' + stUpdTxt() + '</span>' + livePerm() +
+        (ST_F !== 'all' ? ' · фильтр «' + { new: 'Новые', late: 'Просрочены', today: 'Вернуть сегодня', rented: 'В аренде' }[ST_F] +
+          '» — <button type="button" class="st-link" data-st-f="all">показать все</button>' : '') + '</div>' +
+      '<div id="stList">' + stListHTML() + '</div>';
+  }
+  /* «Инструменты пункта»: с правом «Добавляет инструмент» — полный список с фильтрами, правкой и запросом на удаление;
+     без права — то, что клиенты видят в каталоге по этому пункту (только просмотр) */
+  function stToolsTab(cur){
+    if (STAFF.can_catalog) return stToolsView();
+    const pb = PUBTOOLS[String(cur.id)];
+    let h = '<div class="small muted st-upd" style="margin:0 2px 10px">Инструмент пункта в каталоге. Добавлять и менять его может сотрудник с правом «Добавляет инструмент».</div>';
+    if (!pb || pb.busy && !pb.list) return h + '<div class="empty"><b>Загружаем…</b></div>';
+    if (!pb.list) return h + '<div class="empty"><b>Список не загрузился</b><p>' + esc(pb.err || '') + '</p><button class="btn sec sm" data-st-pubre="1">Обновить</button></div>';
+    if (!pb.list.length) return h + '<div class="empty"><b>В каталоге пока нет инструмента этого пункта</b></div>';
+    return h + '<div class="st-tlist">' + pb.list.map(function(t){
+      const img = (Array.isArray(t.imgs) && t.imgs[0]) || t.img || '';
+      return '<div class="row-ad ad-c st-tool"><a class="rph" href="tool.html?id=' + encodeURIComponent(t.id) + '" aria-label="Открыть в каталоге">' +
+          (/^https:\/\//.test(img) ? '<img src="' + esc(img) + '" alt="" loading="lazy">' : '<span class="ad-noimg">нет фото</span>') + '</a>' +
+        '<div class="rmid"><div class="rnm">' + esc(t.name || 'Инструмент') + '</div>' +
+          (Number(t.price) ? '<div class="rpr">' + rub(t.price) + ' <span>/ сутки</span></div>' : '') +
+          '<div class="ad-acts"><a class="btn sec sm" href="tool.html?id=' + encodeURIComponent(t.id) + '">Открыть</a></div></div></div>';
+    }).join('') + '</div>';
+  }
+  async function stPubLoad(cur, force){
+    if (!cur || STAFF.can_catalog) return;
+    const id = String(cur.id), pb = PUBTOOLS[id];
+    if (pb && (pb.busy || (!force && Date.now() - pb.at < 120000))) return;
+    PUBTOOLS[id] = Object.assign({}, pb || {}, { busy: true, at: Date.now() });
+    let res;
+    try {
+      const r = await api('/rest/v1/tools?select=id,name,price,imgs,img,status&point_id=eq.' + encodeURIComponent(id) +
+        '&status=eq.active&order=created_at.desc&limit=200');
+      res = { list: Array.isArray(r) ? r : [], at: Date.now() };
+    } catch(e){ res = pb && pb.list ? Object.assign({}, pb, { busy: false }) : { err: e.message, at: Date.now() }; }
+    PUBTOOLS[id] = res;
+    if (TAB === 'staff' && ST_PT === id) stRepaint();
+  }
+  /* справа — коротко: фото, название, цена, статус; всё остальное — во вкладке «Инструменты пункта» */
+  function stToolsColHTML(cur){
+    const list = cur ? stPtTools(cur.id) : null;
+    let h = '<div class="cats-head"><h2 id="stToolsTitle">Инструменты пункта</h2>' + (list ? '<span class="crumb">' + list.length + '</span>' : '') + '</div>';
+    h += '<div class="useful-card st-ccard">';
+    if (!cur) return h + '<p class="small muted">Пункт не выбран.</p></div>';
+    h += '<div class="st-cpt small muted">«' + esc(cur.name || 'Пункт') + '»</div>';
+    if (!list){
+      const pb = PUBTOOLS[String(cur.id)];
+      h += STAFF.can_catalog || (pb && pb.err && !pb.busy) ? '<p class="small muted">Список не загрузился. <button type="button" class="st-link" data-staff-reload="1">Обновить</button></p>'
+                                                             : '<p class="small muted">Загружаем…</p>';
+      return h + '</div>';
+    }
+    if (!list.length) return h + '<p class="small muted">Инструмента в этом пункте пока нет.' + (STAFF.can_catalog ? ' Добавьте первый — форма слева.' : '') + '</p></div>';
+    const ord = { wait: 0, rej: 1, on: 2, off: 3 };
+    const rows = list.slice().sort(function(a, b){
+      if (STAFF.can_catalog) return ord[stToolState(a).k] - ord[stToolState(b).k] || String(a.name || '').localeCompare(String(b.name || ''), 'ru');
+      return String(a.name || '').localeCompare(String(b.name || ''), 'ru');
+    });
+    h += '<div class="st-clist">' + rows.slice(0, 30).map(function(t){
+      const s = STAFF.can_catalog ? stToolState(t) : { k: 'on', cls: 'act', title: 'В каталоге' };
+      const img = (Array.isArray(t.imgs) && t.imgs[0]) || t.img || '';
+      const inCat = s.k === 'on' || (s.k === 'wait' && t.edit_state && t.review !== 'pending') || (s.k === 'rej' && t.edit_state === 'rejected');
+      const href = inCat ? 'tool.html?id=' + encodeURIComponent(t.id) : (STAFF.can_catalog && t.edit_state !== 'delete' ? 'new.html?edit=' + encodeURIComponent(t.id) : '');
+      const inner = '<span class="st-ct-ph">' + (/^https:\/\//.test(img) ? '<img src="' + esc(img) + '" alt="" loading="lazy">' : '') + '</span>' +
+        '<span class="st-ct-mid"><b>' + esc(t.name || 'Инструмент') + '</b>' +
+          '<small>' + (Number(t.price) ? rub(t.price) + ' / сутки' : 'цена не указана') + '</small>' +
+          '<span class="badge ' + s.cls + '">' + esc(s.title) + '</span></span>';
+      return href ? '<a class="st-ct" href="' + href + '">' + inner + '</a>' : '<div class="st-ct">' + inner + '</div>';
+    }).join('') + '</div>';
+    if (rows.length > 30) h += '<div class="small muted">Показаны 30 из ' + rows.length + '.</div>';
+    h += '<button type="button" class="btn sec wide" data-st-view="tools">' + (STAFF.can_catalog ? 'Все действия' : 'Весь инструмент') + '</button>';
+    return h + '</div>';
+  }
+  /* слева — форма добавления (та же, что new.html: шаги, фото, модель, цена) только для выбранного пункта */
+  function stAddColHTML(cur){
+    let h = '<div class="cats-head"><h2 id="stAddTitle">Добавить инструмент</h2></div><div class="filters st-add">';
+    if (!cur) return h + '<p class="small muted">Пункт выдачи не назначен — добавлять инструмент некуда.</p></div>';
+    const addr = [cur.city, cur.address].filter(Boolean).join(', ');
+    h += '<div class="st-add-pt"><span>Пункт выдачи</span><b>«' + esc(cur.name || 'Пункт') + '»</b>' + (addr ? '<small>' + esc(addr) + '</small>' : '') + '</div>';
+    if (!STAFF.can_catalog){
+      return h + '<div class="st-add-no"><b>Добавлять инструмент вам нельзя</b>' +
+        '<p>Право «Добавляет инструмент» включает владелец проката. Когда включит — форма появится здесь.</p></div></div>';
+    }
+    return h + '<button type="button" class="btn wide st-add-open" id="stAddOpen">+ Открыть форму</button>' +
+      '<div class="st-add-frame" id="stAddFrame"></div>' +
+      '<p class="small muted st-add-note">Новый инструмент появится в каталоге после одобрения владельцем проката.</p></div>';
+  }
+  function stAddWide(){ return !window.matchMedia || window.matchMedia('(min-width:861px)').matches; }
+  function stAddMount(){
+    const box = $('stAddFrame');
+    if (!box || box.querySelector('iframe') || !(stAddWide() || ST_ADD_OPEN)) return;
+    const fr = document.createElement('iframe');
+    fr.src = 'new.html?embed=1&point=' + encodeURIComponent(ST_PT);
+    fr.title = 'Форма добавления инструмента';
+    fr.className = 'st-add-if';
+    box.appendChild(fr);
+    const ob = $('stAddOpen'); if (ob) ob.classList.add('hide');
+  }
+  if (window.matchMedia){
+    try { window.matchMedia('(min-width:861px)').addEventListener('change', function(){ if (TAB === 'staff') stAddMount(); }); } catch(e){}
+  }
+  /* сообщения от формы слева: высота, «вернуться к началу формы», «инструмент добавлен» */
+  window.addEventListener('message', function(ev){
+    if (ev.origin !== location.origin) return;
+    const fr = document.querySelector('#stAddFrame iframe');
+    if (!fr || ev.source !== fr.contentWindow) return;
+    const d = ev.data || {};
+    if (d.iva === 'emb-h'){ const hh = Math.max(160, Math.min(8000, Number(d.h) || 0)); fr.style.height = hh + 'px'; }
+    else if (d.iva === 'emb-top'){
+      const r = fr.getBoundingClientRect(), head = document.querySelector('.head'), hh = head ? head.offsetHeight : 0;
+      if (r.top < hh) window.scrollBy(0, r.top - hh - 12);
+    }
+    else if (d.iva === 'emb-toast'){ if (d.m) toast(String(d.m).slice(0, 300)); }
+    else if (d.iva === 'emb-added'){ loadStaff().then(function(){ ST_UPD = Date.now(); stRepaint(); }); }
+  });
+
+  /* ---------- «Статистика»: по выбранному пункту за 7 / 30 / 90 дней — только числа, без денег и данных клиентов ---------- */
+  function stStatsLocal(cur){
+    const id = String(cur.id), since = Date.now() - ST_SD * 86400000;
+    const list = SPARTS.filter(function(p){ return String(p.point_id || '') === id; });
+    const c = stCounts(list);
+    const inP = function(t){ const ms = Date.parse(t || ''); return !!ms && ms >= since; };
+    const top = {}, daily = {};
+    list.forEach(function(p){
+      if (!inP(p.created_at)) return;
+      if ((p.status || 'new') !== 'cancelled') String(p.tools_text || '').split(/\s*,\s*/).filter(Boolean).forEach(function(n){ top[n] = (top[n] || 0) + 1; });
+    });
+    const days = [];
+    for (let i = ST_SD - 1; i >= 0; i--){
+      const d = new Date(); d.setHours(0, 0, 0, 0); d.setDate(d.getDate() - i);
+      const k = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+      daily[k] = { d: k, n: 0, i: 0 }; days.push(k);
+    }
+    const dk = function(t){ const d = new Date(Date.parse(t)); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); };
+    list.forEach(function(p){
+      if (inP(p.created_at) && daily[dk(p.created_at)]) daily[dk(p.created_at)].n++;
+      if (inP(p.rented_at) && daily[dk(p.rented_at)]) daily[dk(p.rented_at)].i++;
+    });
+    return {
+      days: ST_SD, local: true,
+      orders: list.filter(function(p){ return inP(p.created_at); }).length,
+      issued: list.filter(function(p){ return inP(p.rented_at); }).length,
+      returned: list.filter(function(p){ return p.status === 'closed' && p.rented_at && inP(p.created_at); }).length,
+      cancelled: list.filter(function(p){ return p.status === 'cancelled' && inP(p.created_at); }).length,
+      rented_now: c.rented, late_now: c.late, avg_days: null, my_issued: null, my_returned: null, journal: false,
+      top: Object.keys(top).map(function(k){ return { name: k, n: top[k] }; }).sort(function(a, b){ return b.n - a.n || a.name.localeCompare(b.name, 'ru'); }).slice(0, 5),
+      daily: days.map(function(k){ return daily[k]; })
+    };
+  }
+  async function stStatsLoad(cur, force){
+    if (!cur || !stCanOrd()) return;
+    const k = ST_PT + '|' + ST_SD, s = ST_STATS[k];
+    if (s && (s.busy || (!force && Date.now() - s.at < 60000))) return;
+    ST_STATS[k] = Object.assign({}, s || {}, { busy: true, at: Date.now() });
+    let res;
+    try {
+      const r = await api('/rest/v1/rpc/iva_staff_stats', 'POST', { p_point: cur.id, p_days: ST_SD });
+      res = Object.assign({}, (r && r.iva_staff_stats) || r || {}, { at: Date.now() });
+    } catch(e){
+      if (apiMissing(e)) res = Object.assign(stStatsLocal(cur), { at: Date.now() });
+      else if (s && s.orders != null) res = Object.assign({}, s, { busy: false, at: Date.now() - 45000 });   // сбой — прежние числа, повтор через 15 с
+      else res = { err: e.message, at: Date.now() };
+    }
+    ST_STATS[k] = res;
+    if (TAB === 'staff' && ST_VIEW === 'stats' && k === ST_PT + '|' + ST_SD){ const b = $('stStats'); if (b) b.innerHTML = stStatsBody(cur); }
+  }
+  function stStatsBody(cur){
+    const s = ST_STATS[ST_PT + '|' + ST_SD];
+    if (!s || (s.orders == null && !s.err)) return '<div class="empty"><b>Считаем…</b></div>';
+    if (s.err) return '<div class="empty"><b>Статистика не загрузилась</b><p>' + esc(s.err) + '</p><button type="button" class="btn sec sm" data-st-sre="1">Повторить</button></div>';
+    const n = function(v){ return v == null ? '—' : String(v); };
+    const k = function(lb, v, sub, cls){ return '<div class="kpi' + (cls ? ' ' + cls : '') + '"><div class="lb">' + lb + '</div><div class="vl">' + n(v) + '</div><div class="sub">' + sub + '</div></div>'; };
+    const per = { 7: 'за 7 дней', 30: 'за 30 дней', 90: 'за 90 дней' }[ST_SD] || 'за период';
+    let h = '';
+    if (s.local) h += '<div class="st-note">Сейчас — по заявкам, которые видны во вкладке «Заявки» (активные и закрытые за 7 дней). ' +
+      'Полная статистика за 30 и 90 дней и «Мой вклад» появятся, когда владелец площадки обновит базу (SQL 20261125).</div>';
+    h += '<div class="st-sh">Заявки ' + per + '</div><div class="kpis st-skpis">' +
+      k('Заявок', s.orders, 'пришло в пункт') + k('Выдано', s.issued, 'отметили «Выдал»') +
+      k('Вернули', s.returned, 'закрыто с возвратом') + k('Отменено', s.cancelled, 'клиент отменил') + '</div>';
+    h += '<div class="st-sh">Сейчас</div><div class="kpis st-skpis">' +
+      k('В аренде', s.rented_now, 'выдано сейчас') + k('Просрочены', s.late_now, s.late_now ? 'свяжитесь с клиентом' : 'всё в срок', s.late_now ? 'st-k-late' : '') +
+      k('Средний срок', s.avg_days == null ? null : String(s.avg_days).replace('.', ','), s.avg_days == null ? 'нет закрытых' : 'суток на аренду') + '</div>';
+    h += '<div class="st-sh">Мой вклад ' + per + '</div>';
+    h += s.local || s.journal === false
+      ? '<div class="st-note">Кто выдал и кто принял, база запоминает с журнала заявок (SQL 20261101)' + (s.local ? ' — посчитаем после SQL 20261125.' : ' — его в базе пока нет.') + '</div>'
+      : '<div class="kpis st-skpis">' + k('Выдал лично', s.my_issued, 'отметки «Выдал»') + k('Принял лично', s.my_returned, 'отметки «Вернули»') + '</div>';
+    const dl = Array.isArray(s.daily) ? s.daily : [];
+    if (dl.length){
+      let cols = dl;
+      if (dl.length > 31){ cols = []; for (let i = 0; i < dl.length; i += 7){ const g = dl.slice(i, i + 7); cols.push({ d: g[0].d, d2: g[g.length - 1].d, n: g.reduce(function(a, x){ return a + (x.n || 0); }, 0), i: g.reduce(function(a, x){ return a + (x.i || 0); }, 0) }); } }
+      const mx = Math.max(1, Math.max.apply(null, cols.map(function(x){ return Math.max(x.n || 0, x.i || 0); })));
+      const dd = function(x){ const p = String(x || '').split('-'); return p.length === 3 ? p[2] + '.' + p[1] : ''; };
+      h += '<div class="st-sh">' + (dl.length > 31 ? 'По неделям' : 'По дням') + '</div><div class="st-chart' + (cols.length > 14 ? ' many' : '') + '" role="img" aria-label="Заявки и выдачи ' + per + '">' +
+        cols.map(function(x){
+          const t = (x.d2 ? dd(x.d) + '–' + dd(x.d2) : dd(x.d)) + ': заявок ' + (x.n || 0) + ', выдано ' + (x.i || 0);
+          return '<div class="st-col" title="' + esc(t) + '"><div class="st-bars"><i class="b-n" style="height:' + Math.round((x.n || 0) / mx * 100) + '%"></i>' +
+            '<i class="b-i" style="height:' + Math.round((x.i || 0) / mx * 100) + '%"></i></div><small>' + esc(dd(x.d)) + '</small></div>';
+        }).join('') + '</div><div class="st-legend"><span><i class="b-n"></i>заявки</span><span><i class="b-i"></i>выдано</span></div>';
+    }
+    const top = Array.isArray(s.top) ? s.top : [];
+    if (top.length){
+      const mt = Math.max(1, top[0].n || 1);
+      h += '<div class="st-sh">Чаще всего берут ' + per + '</div><div class="st-top">' + top.map(function(t){
+        return '<div class="st-top-r"><span class="st-top-n">' + esc(t.name) + '</span><span class="st-top-b"><i style="width:' + Math.round((t.n || 0) / mt * 100) + '%"></i></span><b>' + (t.n || 0) + '</b></div>';
+      }).join('') + '</div>';
+    }
+    return h;
+  }
+  function stStatsView(cur){
+    let h = '<div class="chips st-sd" role="group" aria-label="Период">' + [[7, '7 дней'], [30, '30 дней'], [90, '90 дней']].map(function(x){
+      const on = ST_SD === x[0];
+      return '<button class="chip' + (on ? ' on' : '') + '" data-st-sd="' + x[0] + '"' + (on ? ' style="border-color:var(--or);color:var(--or)"' : '') + '>' + x[1] + '</button>';
+    }).join('') + '</div>';
+    if (!stCanOrd()) h += '<div class="empty"><b>Статистика заявок вам не показывается</b><p>Нужно право «Выдача» или «Уведомления о заявках».</p></div>';
+    else h += '<div id="stStats">' + stStatsBody(cur) + '</div>';
+    const tl = STAFF.can_catalog ? stPtTools(cur.id) : null;
+    if (tl){
+      const c = { on: 0, wait: 0, rej: 0, off: 0 };
+      tl.forEach(function(t){ c[stToolState(t).k]++; });
+      h += '<div class="st-sh">Инструмент пункта</div><div class="kpis st-skpis">' +
+        '<div class="kpi"><div class="lb">В каталоге</div><div class="vl">' + c.on + '</div><div class="sub">видят клиенты</div></div>' +
+        '<div class="kpi"><div class="lb">Ждут владельца</div><div class="vl">' + c.wait + '</div><div class="sub">новые и правки</div></div>' +
+        '<div class="kpi"><div class="lb">Отклонены</div><div class="vl">' + c.rej + '</div><div class="sub">владелец не одобрил</div></div>' +
+        '<div class="kpi"><div class="lb">Сняты</div><div class="vl">' + c.off + '</div><div class="sub">не в каталоге</div></div></div>';
+    }
+    return h;
+  }
+  function stMainHTML(cur){
+    let h = headHTML();
+    h += '<div class="st-sec-h"><h3>Мои пункты выдачи</h3><span class="small muted">«' + esc(STAFF.company || 'Прокат') + '»</span></div>';
+    h += stTilesHTML();
+    if (!cur) return h;
+    h += stRightsHTML(cur);
+    const ord = stCanOrd();
+    const nOrd = ord ? stScope().filter(function(p){ const s = p.status || 'new'; return s === 'new' || s === 'rented'; }).length : 0;
+    const tl = stPtTools(cur.id), nCh = STAFF.can_chat ? stUnread(stChatScope()) : 0;
+    const V = [['tools', 'Инструменты пункта', tl ? '<span class="n">' + tl.length + '</span>' : ''],
+               ['orders', 'Заявки', nOrd ? '<span class="n">' + nOrd + '</span>' : ''],
+               ['chats', 'Сообщения', nCh ? '<span class="n warn">' + nCh + '</span>' : ''],
+               ['stats', 'Статистика', '']];
+    h += '<div class="tabs st-tabs" role="tablist" aria-label="Раздел работы">' + V.map(function(v){
+      const on = ST_VIEW === v[0];
+      return '<button type="button" role="tab" data-st-view="' + v[0] + '" aria-selected="' + on + '" class="' + (on ? 'on' : '') + '">' + v[1] + v[2] + '</button>';
+    }).join('') + '</div>';
+    h += '<div id="stTabBody">';
+    if (ST_VIEW === 'tools') h += stToolsTab(cur);
+    else if (ST_VIEW === 'chats') h += STAFF.can_chat ? stChatsView() : '<div class="empty"><b>Сообщения пункта вам не показываются</b><p>Владелец проката не дал право «Отвечает в чате пункта».</p></div>';
+    else if (ST_VIEW === 'stats') h += stStatsView(cur);
+    else h += stOrdersView();
+    return h + '</div>';
+  }
+  function stRender(){
+    const root = $('root'), cur = stPickPt();
+    const key = ST_PT + '|' + (STAFF.can_catalog ? 1 : 0);
+    root.className = 'wrap catalog-wide';
+    if (!$('stLayout') || $('stLayout').getAttribute('data-key') !== key){
+      root.innerHTML = '<div class="st-layout" id="stLayout" data-key="' + esc(key) + '">' +
+        '<aside class="st-add-col" id="stAddCol" aria-labelledby="stAddTitle">' + stAddColHTML(cur) + '</aside>' +
+        '<section class="st-main" id="stMain"></section>' +
+        '<aside class="st-tools-col" id="stToolsCol" aria-labelledby="stToolsTitle"></aside>' +
+      '</div>';
+      stAddMount();
+    }
+    $('stMain').innerHTML = stMainHTML(cur);
+    $('stToolsCol').innerHTML = stToolsColHTML(cur);
+    if (cur && !STAFF.can_catalog) stPubLoad(cur);
+    if (cur && ST_VIEW === 'stats') stStatsLoad(cur);
+  }
   /* обновить только список и плитки — когда курсор в поиске (не сбивать ввод) */
   function stPaintList(){
     const k = $('stKpis'), l = $('stList'), u = $('stUpd');
@@ -2181,7 +2557,10 @@
         '|' + JSON.stringify((STOOLS || []).map(function(t){ return [t.id, t.review || '', t.edit_state || '', t.status || '', t.active]; })) +
         '|' + JSON.stringify((STCHATS || []).map(function(c){ return [c.kind, c.key, c.peer, c.unread, c.last_at]; })); };
       const s0 = sig(), u0 = stUnread(STCHATS);
-      try { await loadStaff(); } catch(e){ return; }
+      let ok = false;
+      try { ok = await loadStaff(); } catch(e){ return; }
+      if (sessLost()) return;
+      if (!ok) return;                       // сбой связи — прежние данные на экране, следующий опрос через 30 с
       ST_UPD = Date.now();
       if (!STAFF || STAFF.status !== 'active'){ render(); return; }
       const fresh = SPARTS.filter(function(p){ return !seen[p.part_id] && (p.status || 'new') === 'new'; });
@@ -2339,7 +2718,7 @@
     else if (TAB === 'orders')   inner = viewOrders();
     else if (TAB === 'reviews')  inner = viewReviews();
     else if (TAB === 'sent')     inner = viewTenantOrders(SENT);
-    else if (TAB === 'staff')    inner = viewStaff();
+    else if (TAB === 'staff')    inner = stWorkMode() ? '' : viewStaff();
     else if (TAB === 'fav')      inner = viewFav();
     else if (TAB === 'msg')      inner = viewMsg();
     else if (TAB === 'prof')     inner = viewProf();
@@ -2347,7 +2726,8 @@
     else if (TAB === 'ads' && isAdmin())  inner = viewAds();
     else                         inner = isAdmin() ? viewHome() : viewFav();
 
-    $('root').innerHTML = shell(inner);
+    if (TAB === 'staff' && stWorkMode()) stRender();
+    else { $('root').className = 'wrap'; $('root').innerHTML = shell(inner); }
     paintFavCount();
     /* выбранная вкладка видна и на узком экране (строка вкладок прокручивается) */
     (function(){ const tb = document.querySelector('.tabs'), on = tb && tb.querySelector('button.on');
@@ -2413,6 +2793,11 @@
 
   /* Делегированные клики */
   document.addEventListener('click', function(e){
+    if (e.target.closest('[data-boot-retry]')){
+      $('root').innerHTML = '<div class="empty" style="padding:70px 20px"><b>Загрузка…</b></div>';
+      (async function(){ if (A.adminFail && !A.admin) await loadAdmin(); boot(); })();
+      return;
+    }
     const tb = e.target.closest('[data-tab]');
     if (tb){
       TAB = tb.getAttribute('data-tab');
@@ -2511,14 +2896,33 @@
       return;
     }
     if (e.target.closest('[data-staff-reload]')){
-      loadStaff().then(function(){ ST_UPD = Date.now(); render(); toast('Обновлено'); });
+      ST_STATS = {}; PUBTOOLS = {};
+      loadStaff().then(function(ok){ ST_UPD = Date.now(); render(); toast(ok ? 'Обновлено' : 'Нет связи с сервером — показаны прежние данные'); });
       return;
     }
     /* «Работа»: заявки / инструмент, фильтр инструмента, запрос на удаление */
     const stCh = e.target.closest('[data-st-chat]');
     if (stCh){ stOpenChat(stCh.getAttribute('data-st-chat')); return; }
     const stV = e.target.closest('[data-st-view]');
-    if (stV){ ST_VIEW = stV.getAttribute('data-st-view'); render(); return; }
+    if (stV){
+      ST_VIEW = stV.getAttribute('data-st-view');
+      try { sessionStorage.setItem(ST_VIEW_KEY, ST_VIEW); } catch(x){}
+      render();
+      if (stV.closest('#stToolsCol')){ const tb = document.querySelector('.st-tabs'); if (tb) tb.scrollIntoView({ block: 'start', behavior: 'smooth' }); }
+      return;
+    }
+    /* «Статистика»: период, повтор; «Инструменты пункта» без права — повтор загрузки */
+    const stSd = e.target.closest('[data-st-sd]');
+    if (stSd){ ST_SD = Number(stSd.getAttribute('data-st-sd')) || 7; render(); return; }
+    if (e.target.closest('[data-st-sre]')){ stStatsLoad(stPickPt(), true); const b = $('stStats'); if (b) b.innerHTML = '<div class="empty"><b>Считаем…</b></div>'; return; }
+    if (e.target.closest('[data-st-pubre]')){ stPubLoad(stPickPt(), true); return; }
+    /* форма слева: на телефоне открывается по кнопке; «+ Добавить инструмент» во вкладке — к форме */
+    if (e.target.closest('#stAddOpen')){ ST_ADD_OPEN = true; stAddMount(); return; }
+    if (e.target.closest('[data-st-addgo]')){
+      ST_ADD_OPEN = true; stAddMount();
+      const col = $('stAddCol'); if (col) col.scrollIntoView({ block: 'start', behavior: 'smooth' });
+      return;
+    }
     const stTf = e.target.closest('[data-st-tf]');
     if (stTf){ ST_TF = stTf.getAttribute('data-st-tf'); if (stTf.hasAttribute('data-st-clear')) ST_TQ = ''; render(); return; }
     const stDel = e.target.closest('[data-st-tdel]');
@@ -2539,7 +2943,13 @@
     }
     /* «Смена»: пункт, плитки-фильтры */
     const stPt = e.target.closest('[data-st-pt]');
-    if (stPt){ ST_PT = stPt.getAttribute('data-st-pt'); render(); return; }
+    if (stPt){
+      ST_PT = stPt.getAttribute('data-st-pt');
+      try { if (ST_PT !== 'all') localStorage.setItem(ST_PT_KEY, ST_PT); } catch(x){}
+      ST_ADD_OPEN = false;
+      const y = window.scrollY; render(); window.scrollTo(0, y);
+      return;
+    }
     const stF = e.target.closest('[data-st-f]');
     if (stF){
       const f = stF.getAttribute('data-st-f');
@@ -2770,7 +3180,30 @@
     return rows;
   }
 
+  /* 05.11.2026 (стабильность): роль (арендодатель / сотрудник / клиент) не узнали из-за сбоя связи — два повтора,
+     потом «Нет связи — Повторить». Раньше в этом случае открывался кабинет клиента с «Хотите сдавать свой инструмент?». */
+  function bootWait(ms){ return new Promise(function(r){ setTimeout(r, ms); }); }
+  function bootFail(){
+    $('root').className = 'wrap';
+    $('root').innerHTML = '<div class="empty" style="padding:70px 20px">' +
+      '<svg viewBox="0 0 24 24"><path d="M2 8.8a15 15 0 0 1 20 0M5 12.6a10 10 0 0 1 14 0M8.5 16.4a5 5 0 0 1 7 0"/><path d="M12 20h.01"/></svg>' +
+      '<b>Нет связи с сервером</b><p>Кабинет не загрузился: не удалось узнать вашу роль. Проверьте интернет и нажмите «Повторить».</p>' +
+      '<button type="button" class="btn" data-boot-retry="1">Повторить</button></div>';
+  }
+  function sessLost(){
+    if (isAuthed()) return false;
+    if (ST_TIMER){ clearInterval(ST_TIMER); ST_TIMER = null; }
+    if (O_TIMER){ clearInterval(O_TIMER); O_TIMER = null; }
+    try { localStorage.removeItem('iva_staff_hint'); } catch(x){}
+    $('root').className = 'wrap';
+    screenLogin('Сессия завершилась — войдите снова');
+    return true;
+  }
   async function boot(){
+    if (A.adminFail && !A.admin){
+      for (let i = 0; i < 2 && A.adminFail; i++){ await bootWait(1500 * (i + 1)); await loadAdmin(); }
+      if (A.adminFail && !A.admin){ bootFail(); return; }
+    }
     const showcase = hydrateShowcase(); // Избранное берём из живой витрины, а не демо-данных.
     if (isAdmin()){
       try {
@@ -2798,7 +3231,9 @@
         const both = await Promise.all([loadClientOrders(), loadClientCards()]);
         ORDERS = both[0] || [];
       } catch(e){ ORDERS = []; }
-      await loadStaff();
+      let ok = await loadStaff();
+      for (let i = 0; !ok && i < 2; i++){ await bootWait(1500 * (i + 1)); ok = await loadStaff(); }
+      if (!ok && !STAFF_OK){ await showcase; bootFail(); return; }
     }
     await showcase;
     if (!isAdmin() && (TAB === 'ads' || TAB === 'sent' || TAB === 'home')) TAB = STAFF ? 'staff' : 'orders';
