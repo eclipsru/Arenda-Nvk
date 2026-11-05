@@ -10,7 +10,7 @@
 <link rel="icon" href="assets/favicon-32.png" type="image/png" sizes="32x32">
 <link rel="icon" href="assets/icon-192.png" type="image/png" sizes="192x192">
 <link rel="apple-touch-icon" href="assets/apple-touch-icon.png">
-<link rel="stylesheet" href="assets/theme.css?v=20261106-home">
+<link rel="stylesheet" href="assets/theme.css?v=20261106-cards">
 <link rel="stylesheet" href="assets/partners.css?v=20260923-info-spacing">
 <link rel="stylesheet" href="assets/geo.css?v=20260923-photon">
 </head>
@@ -93,7 +93,7 @@
 <script src="assets/geo.js?v=20260923-photon"></script>
 <script src="assets/email-guard.js?v=20260926-email"></script><script src="assets/sb.js?v=20261105-staff"></script>
 <script src="assets/app-release.js?v=20261009-rel"></script>
-<script src="assets/app.js?v=20261105-staff"></script>
+<script src="assets/app.js?v=20261106-cards"></script>
 <script src="assets/clicks.js?v=20261001-p4"></script>
 <script src="assets/partners.js?v=20261020-lend"></script>
 <script>
@@ -335,12 +335,24 @@
     return availableCities().filter(function(c){ return has[cityKey(c)] || (F.city && cityMatches(c, F.city)); });
   }
 
+  var FCATS_FIRST = 5;
+  var fcatsOpen = false;
+  try { fcatsOpen = sessionStorage.getItem('iva_fcats_open') === '1'; } catch(e){}
+
   function filtersHTML(){
     var subs = F.cat ? SUBS.filter(function(s){ return s.cat === F.cat && (F.sub === s.key || inCatalog(F.cat, s.key)); }) : [];
 
-    var catList = '<div class="f-item' + (!F.cat ? ' on' : '') + '" data-fcat="">' +
-                    'Все категории<span class="n">' + countFor('') + '</span></div>' +
-      CATS.filter(function(c){ return F.cat === c.key || inCatalog(c.key); }).map(function(c){
+    /* 06.11.2026 (владелец): в списке 5 категорий, остальные раскрывает «Все категории» (повторное нажатие сворачивает).
+       Выбранная категория видна и в свёрнутом списке. */
+    var fc = CATS.filter(function(c){ return F.cat === c.key || inCatalog(c.key); });
+    var fmore = fc.length > FCATS_FIRST;
+    var fshown = (fmore && !fcatsOpen) ? fc.filter(function(c, i){ return i < FCATS_FIRST || F.cat === c.key; }) : fc;
+    var catList = '<div class="f-item' + (!F.cat ? ' on' : '') + (fmore ? ' f-more' + (fcatsOpen ? ' open' : '') : '') + '" data-fcat=""' +
+                    (fmore ? ' data-fmore="1" role="button" tabindex="0" aria-expanded="' + fcatsOpen + '" title="' +
+                      (fcatsOpen ? 'Свернуть список категорий' : 'Показать все категории (ещё ' + (fc.length - FCATS_FIRST) + ')') + '"' : '') + '>' +
+                    'Все категории' + (fmore ? '<svg class="f-chev" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>' : '') +
+                    '<span class="n">' + countFor('') + '</span></div>' +
+      fshown.map(function(c){
         return '<div class="f-item' + (F.cat === c.key ? ' on' : '') + '" data-fcat="' + esc(c.key) + '">' +
                  esc(c.title) + '<span class="n">' + countFor(c.key) + '</span></div>';
       }).join('');
@@ -396,6 +408,11 @@
     root.addEventListener('click', function(e){
       var c = e.target.closest('[data-fcat]');
       if (c){
+        if (c.hasAttribute('data-fmore')){
+          /* «Все категории»: выбрана категория — сброс и список открыт; уже все — открыть / свернуть */
+          fcatsOpen = F.cat ? true : !fcatsOpen;
+          try { sessionStorage.setItem('iva_fcats_open', fcatsOpen ? '1' : '0'); } catch(err){}
+        }
         F.cat = c.getAttribute('data-fcat'); F.sub = '';
         LEVEL = F.cat;              /* плитки идут следом за фильтром */
         renderAll(); return;
@@ -420,6 +437,10 @@
 
     root.addEventListener('keydown', function(e){
       if (e.key === 'Enter' && (e.target.id === 'pFrom' || e.target.id === 'pTo')) e.target.blur();
+      if ((e.key === 'Enter' || e.key === ' ') && e.target.hasAttribute && e.target.hasAttribute('data-fmore')){
+        e.preventDefault(); e.target.click();
+        var t = root.querySelector('[data-fmore]'); if (t) t.focus();
+      }
     });
     root.addEventListener('blur', function(e){
       if (e.target.id === 'pFrom' || e.target.id === 'pTo'){

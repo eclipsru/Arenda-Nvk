@@ -74,7 +74,13 @@ const IvaDistance = (function(){
   function haversine(a,b){
     const r=6371, dLat=(b.lat-a.lat)*Math.PI/180, dLon=(b.lon-a.lon)*Math.PI/180;
     const q=Math.sin(dLat/2)*Math.sin(dLat/2)+Math.cos(a.lat*Math.PI/180)*Math.cos(b.lat*Math.PI/180)*Math.sin(dLon/2)*Math.sin(dLon/2);
-    return Math.max(1,Math.ceil(r*2*Math.atan2(Math.sqrt(q),Math.sqrt(1-q))));
+    return r*2*Math.atan2(Math.sqrt(q),Math.sqrt(1-q));
+  }
+  /* Карточка (06.11.2026, владелец): на фото справа внизу — просто расстояние, «2,1 км»: до 100 км — с десятыми */
+  function short(km){
+    if (!(km >= 0)) return '';
+    if (km < 0.1) km = 0.1;
+    return (km < 100 ? (Math.round(km * 10) / 10).toFixed(1).replace('.', ',').replace(',0', '') : String(Math.round(km))) + ' км';
   }
   function key(ad){ return String(ad&&ad.id||'')+'|'+pickupAddress(ad)+'|'+(ad&&ad.pickup_lat||'')+'|'+(ad&&ad.pickup_lng||'|')+'|'+profileAddress(); }
   function estimate(ad){
@@ -96,8 +102,8 @@ const IvaDistance = (function(){
     ]).then(function(pair){
       if (!pair[0] || !pair[1]) result={ok:false,reason:pair[0]?'destination':'pickup'};
       else {
-        const km=haversine(pair[0],pair[1]), rate=Number(ad.delivery_price)||40;
-        result={ok:true,km:km,rate:rate,cost:ad.delivery?km*rate:0};
+        const exact=haversine(pair[0],pair[1]), km=Math.max(1,Math.ceil(exact)), rate=Number(ad.delivery_price)||40;
+        result={ok:true,km:km,exact:exact,rate:rate,cost:ad.delivery?km*rate:0};
       }
       cache.set('estimate:'+k,result);return result;
     }).catch(function(){result={ok:false,reason:'geocode'};cache.set('estimate:'+k,result);return result;})
@@ -110,20 +116,21 @@ const IvaDistance = (function(){
     if (reason==='pickup') return 'Расстояние — адрес пункта не указан';
     return 'Расстояние — не удалось определить автоматически';
   }
+  /* Карточки: на фото справа внизу — только расстояние («2,1 км»). Не известно (гость, нет адреса в профиле,
+     у пункта нет адреса) — значка нет, без пояснений (владелец, 06.11.2026). */
   function paintCards(root){
     const nodes=$$('[data-distance-ad]',root||document);
     nodes.forEach(function(node){
       const ad=typeof adById==='function'?adById(node.getAttribute('data-distance-ad')):null;
       if (!ad) return;
-      const initial=fallback(typeof A!=='undefined'&&A.tok?(profileAddress()?'geocode':'profile'):'guest');
-      if (node.textContent!==initial && !node.dataset.distanceReady) node.textContent=initial;
       const k=key(ad);
       if (node.dataset.distanceKey===k) return;
-      node.dataset.distanceKey=k;node.dataset.distanceReady='';
+      node.dataset.distanceKey=k;
       estimate(ad).then(function(r){
-        if (node.getAttribute('data-distance-ad')!==String(ad.id)) return;
-        const text=r.ok ? ('Расстояние до пункта: '+r.km+' км') : fallback(r.reason);
-        node.textContent=text;node.dataset.distanceReady='1';
+        if (node.getAttribute('data-distance-ad')!==String(ad.id) || node.dataset.distanceKey!==k) return;
+        const text=r.ok ? short(r.exact!=null?r.exact:r.km) : '';
+        node.textContent=text;node.hidden=!text;
+        if (text) node.title='До пункта выдачи ≈ '+text+' по прямой';
       });
     });
   }
@@ -133,7 +140,7 @@ const IvaDistance = (function(){
     new MutationObserver(run).observe(document.body,{childList:true,subtree:true});
   }
   setTimeout(observe,0);
-  return {estimate:estimate,paintCards:paintCards,fallback:fallback,profileAddress:profileAddress,geocode:geocode,haversine:haversine};
+  return {estimate:estimate,paintCards:paintCards,fallback:fallback,profileAddress:profileAddress,geocode:geocode,haversine:haversine,short:short};
 })();
 
 /* ---------- Тост ---------- */
@@ -296,18 +303,16 @@ function adCard(ad){
     '<a class="ad-ph" href="tool.html?id=' + ad.id + '">' +
       '<img src="' + photoURL(ad, 0) + '" alt="' + esc(ad.name) + '" loading="lazy">' +
       (badges.length ? '<div class="ad-badges">' + badges.join('') + '</div>' : '') +
+      '<span class="ad-km" data-distance-ad="' + esc(ad.id) + '" hidden></span>' +
     '</a>' +
     '<button class="fav' + (favHas(ad.id) ? ' on' : '') + '" data-fav="' + ad.id + '" ' +
             'aria-label="В избранное" title="В избранное">' + IC.heart + '</button>' +
+    /* 06.11.2026 (владелец): сверху — название (на месте цены), цена — в правом нижнем углу карточки */
     '<div class="ad-body">' +
-      '<div class="ad-price">' + rub(ad.price) + ' <span>/ сутки</span></div>' +
       '<a class="ad-name" href="tool.html?id=' + ad.id + '">' + esc(ad.name) + '</a>' +
       '<div class="ad-dep">Залог ' + rub(dep) + '</div>' +
-      '<div class="ad-meta">' +
-        rHTML +
-        '<span>·</span><span>' + esc(ad.city) + '</span>' +
-        '<span class="ad-distance" data-distance-ad="' + esc(ad.id) + '">Расстояние — уточняется</span>' +
-      '</div>' +
+      '<div class="ad-meta">' + rHTML + '<span>·</span><span>' + esc(ad.city) + '</span></div>' +
+      '<div class="ad-foot"><div class="ad-price">' + rub(ad.price) + ' <span>/ сутки</span></div></div>' +
     '</div>' +
   '</article>';
 }

@@ -9,7 +9,7 @@
 <link rel="icon" href="assets/favicon-32.png" type="image/png" sizes="32x32">
 <link rel="icon" href="assets/icon-192.png" type="image/png" sizes="192x192">
 <link rel="apple-touch-icon" href="assets/apple-touch-icon.png">
-<link rel="stylesheet" href="assets/theme.css?v=20261106-home">
+<link rel="stylesheet" href="assets/theme.css?v=20261106-cards">
 <style>
 /* ---------- Шаги ---------- */
 .steps{display:flex;gap:6px;margin:18px 0 22px;flex-wrap:wrap}
@@ -115,7 +115,7 @@ body.emb .emb-done .btn{margin-top:6px}
 <script src="assets/models.js?v=20261020-power"></script>
 <script src="assets/model-form.js?v=20261020-power"></script>
 <script src="assets/app-release.js?v=20261009-rel"></script>
-<script src="assets/app.js?v=20261105-staff"></script>
+<script src="assets/app.js?v=20261106-cards"></script>
 <script>
 (function(){
   /* 05.11.2026: форма внутри «Работы» сотрудника (account.html, левая колонка): new.html?embed=1&point=<пункт>.
@@ -566,10 +566,10 @@ body.emb .emb-done .btn{margin-top:6px}
           (F.delivery ? '<div class="ad-badges"><span class="badge deliv">Доставка</span></div>' : '') +
         '</div>' +
         '<div class="ad-body">' +
-          '<div class="ad-price">' + (F.price ? rub(F.price) : '— ₽') + ' <span>/ сутки</span></div>' +
           '<div class="ad-name">' + esc(F.name || 'Название появится здесь') + '</div>' +
           '<div class="ad-dep">Залог ' + rub(dep) + '</div>' +
           '<div class="ad-meta"><span>' + esc(catTitleDB(F.cat) || 'категория') + '</span></div>' +
+          '<div class="ad-foot"><div class="ad-price">' + (F.price ? rub(F.price) : '— ₽') + ' <span>/ сутки</span></div></div>' +
         '</div>' +
       '</article>' +
       '<div class="box" style="margin-top:14px">' +
