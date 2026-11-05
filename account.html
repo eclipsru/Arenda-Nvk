@@ -10,7 +10,7 @@
 <link rel="icon" href="assets/favicon-32.png" type="image/png" sizes="32x32">
 <link rel="icon" href="assets/icon-192.png" type="image/png" sizes="192x192">
 <link rel="apple-touch-icon" href="assets/apple-touch-icon.png">
-<link rel="stylesheet" href="assets/theme.css?v=20261105-staff">
+<link rel="stylesheet" href="assets/theme.css?v=20261105-work">
 <link rel="stylesheet" href="assets/profile.css?v=20260923-rental-profile">
 <style>
 .tabs{display:flex;gap:4px;border-bottom:1px solid var(--line);margin-bottom:18px;
@@ -1805,7 +1805,7 @@
       h += '<div class="st-g st-g-' + g[0] + '">' + g[1] + ' · ' + rows.length + '</div>' +
         rows.map(function(p){
           const fr = ST_FRESH[p.part_id] && Date.now() - ST_FRESH[p.part_id] < 120000;
-          return '<div class="st-wrap' + (fr ? ' st-fresh' : '') + '">' + staffPartCard(p) + '</div>';
+          return '<div class="st-wrap' + (fr ? ' st-fresh' : '') + '" data-part="' + esc(p.part_id) + '">' + staffPartCard(p) + '</div>';
         }).join('');
     });
     if (!shown){
@@ -1897,11 +1897,22 @@
      по инструменту своих пунктов и чаты пунктов, читает и отвечает от имени проката; «кто отвечает» и «Отвечу я» — как в приложении.
      Функции базы: iva_staff_chats / iva_staff_chat / _read / _send (SQL 10.112), iva_staff_point_chats / iva_staff_point_chat /
      _read / _send (SQL 10.120), iva_chat_mark / iva_chat_who (SQL 10.122). */
+  /* с какого времени в переписке лежит непрочитанное (SQL 20261125); нет функции — красный по времени последнего сообщения */
+  let ST_UNR = null;
   async function stLoadChats(){
     const r = await Promise.allSettled([
       api('/rest/v1/rpc/iva_staff_chats', 'POST', {}),
-      api('/rest/v1/rpc/iva_staff_point_chats', 'POST', {})
+      api('/rest/v1/rpc/iva_staff_point_chats', 'POST', {}),
+      api('/rest/v1/rpc/iva_staff_chat_unread', 'POST', {})
     ]);
+    if (r[2].status === 'fulfilled'){
+      const m = {};
+      (Array.isArray(r[2].value) ? r[2].value : []).forEach(function(x){
+        const t = Date.parse(x && x.first_unread_at);
+        if (x && x.kind && x.key && x.peer && t) m[x.kind + ':' + x.key + ':' + x.peer] = t;
+      });
+      ST_UNR = m;
+    } else if (apiMissing(r[2].reason)) ST_UNR = null;
     if (r[0].status === 'rejected' && r[1].status === 'rejected'){
       if (apiMissing(r[0].reason) && apiMissing(r[1].reason)) STCHATS = null;   // 05.11.2026: сбой связи — прежний список остаётся
       return;
@@ -2161,14 +2172,16 @@
     h += '<div id="stList">' + stListHTML() + '</div>';
     return h;
   }
-  /* ---------- «Работа» сотрудника — раскладка 05.11.2026 (просьба владельца) ----------
-     Как главная страница: слева (ширина «Глобального поиска») — форма добавления инструмента в ВЫБРАННЫЙ пункт,
-     в центре — ФИО и роль, плитки своих пунктов, права, разделы «Инструменты пункта · Заявки · Сообщения · Статистика»,
-     справа — короткий список инструмента выбранного пункта. Личное (мои заявки, избранное, профиль) — в меню «Кабинет».
-     Колонки обновляются по отдельности: форма слева (iframe new.html?embed=1) не перезагружается при автообновлении. */
+  /* ---------- «Работа» сотрудника — раскладка 05.11.2026 (просьба и правки владельца) ----------
+     Слева — заявки выбранного пункта (новые зелёные, в аренде жёлтые, меньше часа до конца или просрочено — красные),
+     справа — чаты (непрочитанные зелёные, без ответа жёлтые, не открыты больше суток — красные); оба окна стоят на месте
+     при прокрутке, верх — на линии ФИО. В центре: ФИО и справа «Пункт выдачи» (выпадающий список названий), ниже по центру
+     выбранный пункт, права, разделы «Инструменты пункта · Заявки · Сообщения · Статистика · Добавить».
+     Форма «Добавить» (iframe new.html?embed=1) живёт вне перерисовки — автообновление её не сбрасывает.
+     Личное (мои заявки, избранное, профиль) — в меню «Кабинет». */
   const ST_PT_KEY = 'iva_st_pt', ST_VIEW_KEY = 'iva_st_view';
-  let ST_STATS = {}, ST_SD = 7, PUBTOOLS = {}, ST_ADD_OPEN = false;
-  try { const v = sessionStorage.getItem(ST_VIEW_KEY); if (/^(tools|orders|chats|stats)$/.test(v || '') && ST_VIEW === 'orders') ST_VIEW = v; } catch(e){}
+  let ST_STATS = {}, ST_SD = 7, PUBTOOLS = {};
+  try { const v = sessionStorage.getItem(ST_VIEW_KEY); if (/^(tools|orders|chats|stats|add)$/.test(v || '') && ST_VIEW === 'orders') ST_VIEW = v; } catch(e){}
   function stWorkMode(){ return !isAdmin() && !!STAFF && STAFF.status === 'active'; }
   function stCanOrd(){ return !!(STAFF && (STAFF.can_issue || STAFF.can_notify)); }
   /* выбранный пункт: всегда конкретный (форма слева и список справа — для одного пункта); запоминается на устройстве */
@@ -2204,28 +2217,43 @@
       '</div>' +
       '</div>';
   }
-  function stTilesHTML(){
+  /* шапка «Работы»: слева фото и ФИО, справа «Пункт выдачи» — выпадающий список только с названиями */
+  function stHeadHTML(){
+    const ad = A.admin || {};
+    const who = esc(A.uname || ad.full_name || 'Сотрудник');
+    const meta = (STAFF.company ? '«' + esc(STAFF.company) + '» · ' : '') + 'сотрудник проката · ' + esc(A.me);
     const pts = stPts();
-    if (!pts.length) return '<div class="empty"><b>Пункт выдачи не назначен</b><p>Попросите владельца проката добавить вас в пункт выдачи.</p></div>';
-    const ord = stCanOrd();
-    return '<div class="st-ptiles" role="group" aria-label="Пункт выдачи">' + pts.map(function(p){
-      const id = String(p.id), on = id === ST_PT;
-      const mine = ord ? SPARTS.filter(function(x){ return String(x.point_id || '') === id; }) : [];
-      const c = stCounts(mine), tl = stPtTools(id), un = STAFF.can_chat ? stUnread((STCHATS || []).filter(function(ch){ return ch.kind === 'p' ? String(ch.point_id) === id : ch.point_name === p.name; })) : 0;
-      const addr = [p.city, p.address].filter(Boolean).join(', ');
-      const n = [];
-      if (ord) n.push('<span class="st-pn' + (c.new ? ' g' : '') + '">Новые <b>' + c.new + '</b></span>');
-      if (ord && c.late) n.push('<span class="st-pn r">Просрочены <b>' + c.late + '</b></span>');
-      if (ord) n.push('<span class="st-pn">В аренде <b>' + c.rented + '</b></span>');
-      if (tl) n.push('<span class="st-pn">Инструмент <b>' + tl.length + '</b></span>');
-      if (un) n.push('<span class="st-pn o">Сообщения <b>' + un + '</b></span>');
-      return '<button type="button" class="st-ptile' + (on ? ' on' : '') + '" data-st-pt="' + esc(id) + '" aria-pressed="' + on + '">' +
-        '<span class="st-ptile-top"><b>' + esc(p.name || 'Пункт') + '</b>' + (on ? '<span class="st-ptile-sel">выбран</span>' : '') + '</span>' +
-        (addr ? '<span class="st-ptile-l">' + esc(addr) + '</span>' : '') +
-        (stOpen(p) || p.tel ? '<span class="st-ptile-l">' + stOpen(p) + (stOpen(p) && p.tel ? ' · ' : '') + (p.tel ? esc(stTel(p.tel)) : '') + '</span>' : '') +
-        (n.length ? '<span class="st-ptile-n">' + n.join('') + '</span>' : '') +
-      '</button>';
-    }).join('') + '</div>';
+    const sel = pts.length ? '<div class="st-ptsel"><label for="stPtSel">Пункт выдачи</label>' +
+      '<select class="inp" id="stPtSel">' + pts.map(function(p){
+        const id = String(p.id);
+        return '<option value="' + esc(id) + '"' + (id === ST_PT ? ' selected' : '') + '>' + esc(p.name || 'Пункт') + '</option>';
+      }).join('') + '</select></div>' : '';
+    return '<div class="sect st-head"><div class="acct-head st-headrow">' +
+        '<span class="ava acct-head-ava" data-ava="' + esc(A.me) + '">' + esc(initials(A.uname || A.me)) + '</span>' +
+        '<div class="acct-head-t"><h2>' + who + '</h2><div class="small muted">' + meta + '</div></div>' + sel +
+      '</div></div>';
+  }
+  /* выбранный пункт — по центру: название, адрес, график, телефон и счётчики */
+  function stPtCardHTML(cur){
+    if (!cur) return '<div class="empty"><b>Пункт выдачи не назначен</b><p>Попросите владельца проката добавить вас в пункт выдачи.</p></div>';
+    const ord = stCanOrd(), c = stCounts(ord ? stScope() : []), tl = stPtTools(cur.id);
+    const addr = [cur.city, cur.address].filter(Boolean).join(', ');
+    const tel = String(cur.tel || '').replace(/\D/g, ''), open = stOpen(cur);
+    const meta = [];
+    if (open) meta.push(open);
+    if (tel) meta.push('<a href="tel:+' + esc(tel) + '">' + esc(stTel(tel)) + '</a>');
+    const st = function(cls, lb, v){ return '<div class="st-pst ' + cls + (v ? ' has' : '') + '"><b>' + v + '</b><span>' + lb + '</span></div>'; };
+    const n = [];
+    if (ord){ n.push(st('g', 'Новые', c.new)); n.push(st('y', 'В аренде', c.rented)); n.push(st('r', 'Просрочены', c.late)); }
+    if (tl) n.push(st('', 'Инструмент', tl.length));
+    if (STAFF.can_chat) n.push(st('o', 'Непрочитано', stUnread(stChatScope())));
+    return '<div class="st-pcard">' +
+      '<div class="st-pcard-k">Пункт выдачи</div>' +
+      '<h3>«' + esc(cur.name || 'Пункт') + '»</h3>' +
+      (addr ? '<div class="st-pcard-a">' + esc(addr) + '</div>' : '') +
+      (meta.length ? '<div class="st-pcard-m">' + meta.join('<span class="st-dot" aria-hidden="true"></span>') + '</div>' : '') +
+      (n.length ? '<div class="st-pcard-n">' + n.join('') + '</div>' : '') +
+    '</div>';
   }
   /* права — у сотрудника они одни на все его пункты (так их хранит база: iva_staff), показываем для выбранного */
   function stRightsHTML(cur){
@@ -2237,10 +2265,8 @@
       [st.can_delete,  'Удаляет инструмент',     'с одобрения владельца'],
       [st.can_chat,    'Отвечает в чате пункта', 'от имени проката']
     ];
-    const tel = String(cur.tel || '').replace(/\D/g, '');
     return '<div class="st-rights">' +
-      '<div class="st-rights-h"><b>Ваши права в пункте «' + esc(cur.name || 'Пункт') + '»</b>' +
-        (tel ? '<a href="tel:+' + esc(tel) + '">' + esc(stTel(tel)) + '</a>' : '') + '</div>' +
+      '<div class="st-rights-h"><b>Ваши права в пункте «' + esc(cur.name || 'Пункт') + '»</b></div>' +
       '<div class="st-rights-l">' + R.map(function(r){
         return '<div class="st-right' + (r[0] ? ' on' : '') + '"><span class="st-right-i" aria-hidden="true">' + (r[0] ? '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12.5 4.5 4.5L19 7"/></svg>' : '<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M6 12h12"/></svg>') + '</span>' +
           '<span><b>' + r[1] + '</b><small>' + (r[0] ? r[2] : 'нет права') + '</small></span></div>';
@@ -2296,69 +2322,118 @@
     PUBTOOLS[id] = res;
     if (TAB === 'staff' && ST_PT === id) stRepaint();
   }
-  /* справа — коротко: фото, название, цена, статус; всё остальное — во вкладке «Инструменты пункта» */
-  function stToolsColHTML(cur){
-    const list = cur ? stPtTools(cur.id) : null;
-    let h = '<div class="cats-head"><h2 id="stToolsTitle">Инструменты пункта</h2>' + (list ? '<span class="crumb">' + list.length + '</span>' : '') + '</div>';
-    h += '<div class="useful-card st-ccard">';
-    if (!cur) return h + '<p class="small muted">Пункт не выбран.</p></div>';
-    h += '<div class="st-cpt small muted">«' + esc(cur.name || 'Пункт') + '»</div>';
-    if (!list){
-      const pb = PUBTOOLS[String(cur.id)];
-      h += STAFF.can_catalog || (pb && pb.err && !pb.busy) ? '<p class="small muted">Список не загрузился. <button type="button" class="st-link" data-staff-reload="1">Обновить</button></p>'
-                                                             : '<p class="small muted">Загружаем…</p>';
-      return h + '</div>';
-    }
-    if (!list.length) return h + '<p class="small muted">Инструмента в этом пункте пока нет.' + (STAFF.can_catalog ? ' Добавьте первый — форма слева.' : '') + '</p></div>';
-    const ord = { wait: 0, rej: 1, on: 2, off: 3 };
-    const rows = list.slice().sort(function(a, b){
-      if (STAFF.can_catalog) return ord[stToolState(a).k] - ord[stToolState(b).k] || String(a.name || '').localeCompare(String(b.name || ''), 'ru');
-      return String(a.name || '').localeCompare(String(b.name || ''), 'ru');
+  /* «осталось 45 мин», «5 ч», «2 дня» */
+  function stLeft(ms){
+    const m = Math.max(1, Math.round(Math.abs(ms) / 60000));
+    if (m < 60) return m + ' мин';
+    const h = Math.floor(m / 60);
+    if (h < 48) return h + ' ч' + (h < 6 && m % 60 ? ' ' + (m % 60) + ' мин' : '');
+    const d = Math.floor(h / 24);
+    return d + ' ' + plural(d, 'день', 'дня', 'дней');
+  }
+  /* слева — заявки выбранного пункта: сначала новые (зелёные), потом в аренде (жёлтые) по сроку возврата;
+     меньше часа до конца аренды или срок прошёл — красные */
+  function stOrdRows(){
+    const now = Date.now();
+    return stScope().map(function(p){
+      const i = stInfo(p);
+      if (i.st !== 'new' && i.st !== 'rented') return null;
+      const hot = i.st === 'rented' && (i.late || (!!i.end && i.end - now <= 3600000));
+      return { p: p, i: i, c: i.st === 'new' ? 'g' : hot ? 'r' : 'y' };
+    }).filter(Boolean).sort(function(a, b){
+      if (a.i.st !== b.i.st) return a.i.st === 'new' ? -1 : 1;
+      if (a.i.st === 'new') return (Date.parse(b.p.created_at) || 0) - (Date.parse(a.p.created_at) || 0);
+      return (a.i.end || 9e15) - (b.i.end || 9e15);
     });
-    h += '<div class="st-clist">' + rows.slice(0, 30).map(function(t){
-      const s = STAFF.can_catalog ? stToolState(t) : { k: 'on', cls: 'act', title: 'В каталоге' };
-      const img = (Array.isArray(t.imgs) && t.imgs[0]) || t.img || '';
-      const inCat = s.k === 'on' || (s.k === 'wait' && t.edit_state && t.review !== 'pending') || (s.k === 'rej' && t.edit_state === 'rejected');
-      const href = inCat ? 'tool.html?id=' + encodeURIComponent(t.id) : (STAFF.can_catalog && t.edit_state !== 'delete' ? 'new.html?edit=' + encodeURIComponent(t.id) : '');
-      const inner = '<span class="st-ct-ph">' + (/^https:\/\//.test(img) ? '<img src="' + esc(img) + '" alt="" loading="lazy">' : '') + '</span>' +
-        '<span class="st-ct-mid"><b>' + esc(t.name || 'Инструмент') + '</b>' +
-          '<small>' + (Number(t.price) ? rub(t.price) + ' / сутки' : 'цена не указана') + '</small>' +
-          '<span class="badge ' + s.cls + '">' + esc(s.title) + '</span></span>';
-      return href ? '<a class="st-ct" href="' + href + '">' + inner + '</a>' : '<div class="st-ct">' + inner + '</div>';
-    }).join('') + '</div>';
-    if (rows.length > 30) h += '<div class="small muted">Показаны 30 из ' + rows.length + '.</div>';
-    h += '<button type="button" class="btn sec wide" data-st-view="tools">' + (STAFF.can_catalog ? 'Все действия' : 'Весь инструмент') + '</button>';
-    return h + '</div>';
   }
-  /* слева — форма добавления (та же, что new.html: шаги, фото, модель, цена) только для выбранного пункта */
-  function stAddColHTML(cur){
-    let h = '<div class="cats-head"><h2 id="stAddTitle">Добавить инструмент</h2></div><div class="filters st-add">';
-    if (!cur) return h + '<p class="small muted">Пункт выдачи не назначен — добавлять инструмент некуда.</p></div>';
-    const addr = [cur.city, cur.address].filter(Boolean).join(', ');
-    h += '<div class="st-add-pt"><span>Пункт выдачи</span><b>«' + esc(cur.name || 'Пункт') + '»</b>' + (addr ? '<small>' + esc(addr) + '</small>' : '') + '</div>';
-    if (!STAFF.can_catalog){
-      return h + '<div class="st-add-no"><b>Добавлять инструмент вам нельзя</b>' +
-        '<p>Право «Добавляет инструмент» включает владелец проката. Когда включит — форма появится здесь.</p></div></div>';
+  function stSideHead(id, title, n, view, label){
+    return '<div class="st-side-h"><h2 id="' + id + '">' + title + '</h2>' + (n != null ? '<span class="st-side-c">' + n + '</span>' : '') +
+      (view ? '<button type="button" class="st-link" data-st-view="' + view + '">' + label + '</button>' : '') + '</div>';
+  }
+  function stOrdColHTML(cur){
+    if (!cur) return '<div class="st-side-card">' + stSideHead('stOrdTitle', 'Заявки') + '<p class="small muted st-side-e">Пункт не выбран.</p></div>';
+    if (!stCanOrd()) return '<div class="st-side-card">' + stSideHead('stOrdTitle', 'Заявки') +
+      '<p class="small muted st-side-e">Заявки вам не показываются: нужно право «Выдача» или «Уведомления о заявках».</p></div>';
+    const rows = stOrdRows(), now = Date.now();
+    const ng = rows.filter(function(r){ return r.c === 'g'; }).length, nr = rows.filter(function(r){ return r.c === 'r'; }).length;
+    let h = '<div class="st-side-card">' + stSideHead('stOrdTitle', 'Заявки', rows.length, 'orders', 'Все') +
+      '<div class="st-side-lg"><span class="g">Новые ' + ng + '</span><span class="y">В аренде ' + (rows.length - ng) + '</span>' +
+        '<span class="r">Меньше часа ' + nr + '</span></div>';
+    if (!rows.length) return h + '<p class="small muted st-side-e">Новых заявок и выданного инструмента нет — список обновляется сам.</p></div>';
+    return h + '<div class="st-slist" id="stOrdList">' + rows.map(function(r){
+      const p = r.p, i = r.i;
+      let sub;
+      if (i.st === 'new') sub = 'новая · ' + stWhen(Date.parse(p.created_at));
+      else if (i.late) sub = 'просрочена на ' + stLeft(now - i.end);
+      else if (r.c === 'r') sub = 'осталось ' + stLeft(i.end - now);
+      else sub = i.end ? 'вернуть ' + stWhen(i.end) : 'в аренде';
+      return '<button type="button" class="st-si c-' + r.c + '" data-st-ord="' + esc(p.part_id) + '">' +
+        '<span class="st-si-t"><b>' + esc(p.tools_text || 'Инструмент') + '</b><small>№' + esc(p.order_id) + '</small></span>' +
+        '<span class="st-si-s">' + (p.client_name ? esc(p.client_name) + ' · ' : '') + '<em>' + esc(sub) + '</em></span>' +
+      '</button>';
+    }).join('') + '</div></div>';
+  }
+  /* справа — чаты: непрочитанные (зелёные), без ответа проката (жёлтые), не открыты больше суток (красные), остальные */
+  function stChatCls(c, now){
+    if (Number(c.unread) > 0){
+      const since = (ST_UNR && ST_UNR[c.kind + ':' + c.key + ':' + c.peer]) || Date.parse(c.last_at) || now;
+      return now - since > 86400000 ? 'r' : 'g';
     }
-    return h + '<button type="button" class="btn wide st-add-open" id="stAddOpen">+ Открыть форму</button>' +
-      '<div class="st-add-frame" id="stAddFrame"></div>' +
-      '<p class="small muted st-add-note">Новый инструмент появится в каталоге после одобрения владельцем проката.</p></div>';
+    return c.last_mine ? 'n' : 'y';
   }
-  function stAddWide(){ return !window.matchMedia || window.matchMedia('(min-width:861px)').matches; }
+  function stChatColHTML(cur){
+    if (!STAFF.can_chat) return '<div class="st-side-card">' + stSideHead('stChatTitle', 'Чаты') +
+      '<p class="small muted st-side-e">Чаты вам не показываются: нужно право «Отвечает в чате пункта».</p></div>';
+    if (!STCHATS) return '<div class="st-side-card">' + stSideHead('stChatTitle', 'Чаты') +
+      '<p class="small muted st-side-e">Чаты не загрузились. <button type="button" class="st-link" data-staff-reload="1">Обновить</button></p></div>';
+    const now = Date.now(), ord = { g: 0, y: 1, r: 2, n: 3 };
+    const rows = (cur ? stChatScope() : []).map(function(c){ return { c: c, k: stChatCls(c, now) }; }).sort(function(a, b){
+      return ord[a.k] - ord[b.k] || (Date.parse(b.c.last_at) || 0) - (Date.parse(a.c.last_at) || 0);
+    });
+    const cnt = function(k){ return rows.filter(function(r){ return r.k === k; }).length; };
+    let h = '<div class="st-side-card">' + stSideHead('stChatTitle', 'Чаты', rows.length, 'chats', 'Все') +
+      '<div class="st-side-lg"><span class="g">Непрочитанные ' + cnt('g') + '</span><span class="y">Без ответа ' + cnt('y') + '</span>' +
+        '<span class="r">Больше суток ' + cnt('r') + '</span></div>';
+    if (!rows.length) return h + '<p class="small muted st-side-e">Переписок нет. Когда клиент напишет про инструмент пункта или в чат пункта, она появится здесь.</p></div>';
+    return h + '<div class="st-slist" id="stChatList">' + rows.slice(0, 60).map(function(r){
+      const c = r.c, n = Number(c.unread) || 0;
+      const what = r.k === 'r' ? 'не открыт больше суток' : r.k === 'y' ? 'ждёт ответа' : r.k === 'g' ? 'непрочитано ' + n : 'отвечено';
+      return '<button type="button" class="st-si c-' + r.k + '" data-st-chat="' + esc(c.kind + ':' + c.key + ':' + c.peer) + '">' +
+        '<span class="st-si-t"><b>' + esc(c.client_name || 'Клиент') + '</b><small>' + esc(stWhen(Date.parse(c.last_at))) + '</small></span>' +
+        '<span class="st-si-s">' + esc(c.kind === 't' ? (c.tool_name || 'Инструмент') : 'Чат пункта') + ' · <em>' + esc(what) + '</em></span>' +
+        '<span class="st-si-l">' + (c.last_mine ? '<i>Прокат:</i> ' : '') + esc(String(c.last_text || '').slice(0, 90)) + '</span>' +
+      '</button>';
+    }).join('') + '</div></div>';
+  }
+  /* вкладка «Добавить»: та же форма, что new.html (шаги, фото, модель, цена), только для выбранного пункта */
+  function stAddPaneHTML(cur){
+    if (!cur) return '';
+    if (!STAFF.can_catalog){
+      return '<div class="empty st-add-no"><b>Добавлять инструмент вам нельзя</b>' +
+        '<p>Право «Добавляет инструмент» включает владелец проката. Когда включит — форма появится здесь.</p></div>';
+    }
+    const addr = [cur.city, cur.address].filter(Boolean).join(', ');
+    return '<div class="st-add-pt"><span>Добавить инструмент в пункт</span><b>«' + esc(cur.name || 'Пункт') + '»</b>' + (addr ? '<small>' + esc(addr) + '</small>' : '') + '</div>' +
+      '<div class="st-add-frame" id="stAddFrame"></div>' +
+      '<p class="small muted st-add-note">Новый инструмент появится в каталоге после одобрения владельцем проката.</p>';
+  }
   function stAddMount(){
     const box = $('stAddFrame');
-    if (!box || box.querySelector('iframe') || !(stAddWide() || ST_ADD_OPEN)) return;
+    if (!box || box.querySelector('iframe') || ST_VIEW !== 'add') return;
     const fr = document.createElement('iframe');
     fr.src = 'new.html?embed=1&point=' + encodeURIComponent(ST_PT);
     fr.title = 'Форма добавления инструмента';
     fr.className = 'st-add-if';
     box.appendChild(fr);
-    const ob = $('stAddOpen'); if (ob) ob.classList.add('hide');
   }
-  if (window.matchMedia){
-    try { window.matchMedia('(min-width:861px)').addEventListener('change', function(){ if (TAB === 'staff') stAddMount(); }); } catch(e){}
-  }
-  /* сообщения от формы слева: высота, «вернуться к началу формы», «инструмент добавлен» */
+  /* смена пункта — выпадающий список в шапке */
+  document.addEventListener('change', function(e){
+    if (!e.target || e.target.id !== 'stPtSel') return;
+    ST_PT = String(e.target.value || '');
+    try { localStorage.setItem(ST_PT_KEY, ST_PT); } catch(x){}
+    const y = window.scrollY; render(); window.scrollTo(0, y);
+  });
+  /* сообщения от формы «Добавить»: высота, «вернуться к началу формы», уведомления, «инструмент добавлен» */
   window.addEventListener('message', function(ev){
     if (ev.origin !== location.origin) return;
     const fr = document.querySelector('#stAddFrame iframe');
@@ -2485,9 +2560,7 @@
     return h;
   }
   function stMainHTML(cur){
-    let h = headHTML();
-    h += '<div class="st-sec-h"><h3>Мои пункты выдачи</h3><span class="small muted">«' + esc(STAFF.company || 'Прокат') + '»</span></div>';
-    h += stTilesHTML();
+    let h = stHeadHTML() + stPtCardHTML(cur);
     if (!cur) return h;
     h += stRightsHTML(cur);
     const ord = stCanOrd();
@@ -2496,32 +2569,54 @@
     const V = [['tools', 'Инструменты пункта', tl ? '<span class="n">' + tl.length + '</span>' : ''],
                ['orders', 'Заявки', nOrd ? '<span class="n">' + nOrd + '</span>' : ''],
                ['chats', 'Сообщения', nCh ? '<span class="n warn">' + nCh + '</span>' : ''],
-               ['stats', 'Статистика', '']];
+               ['stats', 'Статистика', ''],
+               ['add', 'Добавить', '']];
     h += '<div class="tabs st-tabs" role="tablist" aria-label="Раздел работы">' + V.map(function(v){
       const on = ST_VIEW === v[0];
       return '<button type="button" role="tab" data-st-view="' + v[0] + '" aria-selected="' + on + '" class="' + (on ? 'on' : '') + '">' + v[1] + v[2] + '</button>';
     }).join('') + '</div>';
     h += '<div id="stTabBody">';
-    if (ST_VIEW === 'tools') h += stToolsTab(cur);
+    if (ST_VIEW === 'add') h += '';
+    else if (ST_VIEW === 'tools') h += stToolsTab(cur);
     else if (ST_VIEW === 'chats') h += STAFF.can_chat ? stChatsView() : '<div class="empty"><b>Сообщения пункта вам не показываются</b><p>Владелец проката не дал право «Отвечает в чате пункта».</p></div>';
     else if (ST_VIEW === 'stats') h += stStatsView(cur);
     else h += stOrdersView();
     return h + '</div>';
   }
+  /* прокрутка боковых списков не сбрасывается при обновлении */
+  function stSideScroll(){
+    const r = {};
+    ['stOrdList', 'stChatList'].forEach(function(id){ const el = $(id); if (el) r[id] = el.scrollTop; });
+    return r;
+  }
+  function stSidePaint(cur, keep){
+    const o = $('stOrdCol'), c = $('stChatCol');
+    if (!o || !c || !STAFF) return;
+    keep = keep || stSideScroll();
+    if (cur === undefined) cur = stPickPt();
+    o.innerHTML = stOrdColHTML(cur);
+    c.innerHTML = stChatColHTML(cur);
+    Object.keys(keep).forEach(function(id){ const el = $(id); if (el) el.scrollTop = keep[id]; });
+  }
   function stRender(){
     const root = $('root'), cur = stPickPt();
     const key = ST_PT + '|' + (STAFF.can_catalog ? 1 : 0);
+    const keep = stSideScroll();
     root.className = 'wrap catalog-wide';
     if (!$('stLayout') || $('stLayout').getAttribute('data-key') !== key){
       root.innerHTML = '<div class="st-layout" id="stLayout" data-key="' + esc(key) + '">' +
-        '<aside class="st-add-col" id="stAddCol" aria-labelledby="stAddTitle">' + stAddColHTML(cur) + '</aside>' +
-        '<section class="st-main" id="stMain"></section>' +
-        '<aside class="st-tools-col" id="stToolsCol" aria-labelledby="stToolsTitle"></aside>' +
+        '<section class="st-main" id="stMain"><div id="stMainTop"></div>' +
+          '<div class="st-addpane" id="stAddPane">' + stAddPaneHTML(cur) + '</div></section>' +
+        '<div class="st-side" id="stSide">' +
+          '<aside class="st-scol st-ocol" id="stOrdCol" aria-labelledby="stOrdTitle"></aside>' +
+          '<aside class="st-scol st-ccol" id="stChatCol" aria-labelledby="stChatTitle"></aside>' +
+        '</div>' +
       '</div>';
-      stAddMount();
     }
-    $('stMain').innerHTML = stMainHTML(cur);
-    $('stToolsCol').innerHTML = stToolsColHTML(cur);
+    $('stMainTop').innerHTML = stMainHTML(cur);
+    $('stAddPane').classList.toggle('hide', ST_VIEW !== 'add' || !cur);
+    stSidePaint(cur, keep);
+    stAddMount();
     if (cur && !STAFF.can_catalog) stPubLoad(cur);
     if (cur && ST_VIEW === 'stats') stStatsLoad(cur);
   }
@@ -2534,8 +2629,8 @@
   }
   function stRepaint(){
     if (TAB !== 'staff') { render(); return; }
-    if (document.activeElement && document.activeElement.id === 'stQ') { stPaintList(); return; }
-    if (document.activeElement && document.activeElement.id === 'stTq') { const l = $('stTList'); if (l) l.innerHTML = stToolListHTML(); return; }
+    if (document.activeElement && document.activeElement.id === 'stQ') { stPaintList(); stSidePaint(); return; }
+    if (document.activeElement && document.activeElement.id === 'stTq') { const l = $('stTList'); if (l) l.innerHTML = stToolListHTML(); stSidePaint(); return; }
     const y = window.scrollY; render(); window.scrollTo(0, y);
   }
   /* автообновление (24.10.2026): сразу по сигналу базы (IvaLive, SQL 20261119) и раз в 30 секунд — на любой вкладке
@@ -2560,7 +2655,7 @@
       let ok = false;
       try { ok = await loadStaff(); } catch(e){ return; }
       if (sessLost()) return;
-      if (!ok) return;                       // сбой связи — прежние данные на экране, следующий опрос через 30 с
+      if (!ok){ if (TAB === 'staff') stSidePaint(); return; }   // сбой связи — прежние данные на экране (цвета по времени — свежие)
       ST_UPD = Date.now();
       if (!STAFF || STAFF.status !== 'active'){ render(); return; }
       const fresh = SPARTS.filter(function(p){ return !seen[p.part_id] && (p.status || 'new') === 'new'; });
@@ -2568,7 +2663,7 @@
       if (fresh.length && STAFF.can_notify) liveNew(fresh.length, fresh[0].tools_text || '');
       else if (fresh.length) toast(fresh.length === 1 ? 'Новая заявка: ' + (fresh[0].tools_text || '') : 'Новых заявок: ' + fresh.length);
       else if (stUnread(STCHATS) > u0) toast('Новое сообщение от клиента');
-      if (sig() === s0){ const u = $('stUpd'); if (u) u.textContent = stUpdTxt(); return; }
+      if (sig() === s0){ const u = $('stUpd'); if (u) u.textContent = stUpdTxt(); if (TAB === 'staff') stSidePaint(); return; }
       if (TAB === 'staff') stRepaint();
       else {
         const tb = document.querySelector('.tabs button[data-tab="staff"]');
@@ -2903,12 +2998,26 @@
     /* «Работа»: заявки / инструмент, фильтр инструмента, запрос на удаление */
     const stCh = e.target.closest('[data-st-chat]');
     if (stCh){ stOpenChat(stCh.getAttribute('data-st-chat')); return; }
+    /* заявка в списке слева — открыть «Заявки» и показать её карточку */
+    const stO = e.target.closest('[data-st-ord]');
+    if (stO){
+      const pid = stO.getAttribute('data-st-ord');
+      ST_VIEW = 'orders'; ST_F = 'all'; ST_Q = '';
+      try { sessionStorage.setItem(ST_VIEW_KEY, ST_VIEW); } catch(x){}
+      render();
+      const card = Array.prototype.find.call(document.querySelectorAll('#stList .st-wrap[data-part]'), function(x){ return x.getAttribute('data-part') === pid; });
+      if (card){
+        card.scrollIntoView({ block: 'center', behavior: 'smooth' });
+        card.classList.add('st-flash'); setTimeout(function(){ card.classList.remove('st-flash'); }, 2400);
+      }
+      return;
+    }
     const stV = e.target.closest('[data-st-view]');
     if (stV){
       ST_VIEW = stV.getAttribute('data-st-view');
       try { sessionStorage.setItem(ST_VIEW_KEY, ST_VIEW); } catch(x){}
       render();
-      if (stV.closest('#stToolsCol')){ const tb = document.querySelector('.st-tabs'); if (tb) tb.scrollIntoView({ block: 'start', behavior: 'smooth' }); }
+      if (stV.closest('.st-scol')){ const tb = document.querySelector('.st-tabs'); if (tb) tb.scrollIntoView({ block: 'start', behavior: 'smooth' }); }
       return;
     }
     /* «Статистика»: период, повтор; «Инструменты пункта» без права — повтор загрузки */
@@ -2916,11 +3025,12 @@
     if (stSd){ ST_SD = Number(stSd.getAttribute('data-st-sd')) || 7; render(); return; }
     if (e.target.closest('[data-st-sre]')){ stStatsLoad(stPickPt(), true); const b = $('stStats'); if (b) b.innerHTML = '<div class="empty"><b>Считаем…</b></div>'; return; }
     if (e.target.closest('[data-st-pubre]')){ stPubLoad(stPickPt(), true); return; }
-    /* форма слева: на телефоне открывается по кнопке; «+ Добавить инструмент» во вкладке — к форме */
-    if (e.target.closest('#stAddOpen')){ ST_ADD_OPEN = true; stAddMount(); return; }
+    /* «+ Добавить инструмент» во вкладке «Инструменты пункта» — во вкладку «Добавить» */
     if (e.target.closest('[data-st-addgo]')){
-      ST_ADD_OPEN = true; stAddMount();
-      const col = $('stAddCol'); if (col) col.scrollIntoView({ block: 'start', behavior: 'smooth' });
+      ST_VIEW = 'add';
+      try { sessionStorage.setItem(ST_VIEW_KEY, ST_VIEW); } catch(x){}
+      render();
+      const tb = document.querySelector('.st-tabs'); if (tb) tb.scrollIntoView({ block: 'start', behavior: 'smooth' });
       return;
     }
     const stTf = e.target.closest('[data-st-tf]');
@@ -2946,7 +3056,6 @@
     if (stPt){
       ST_PT = stPt.getAttribute('data-st-pt');
       try { if (ST_PT !== 'all') localStorage.setItem(ST_PT_KEY, ST_PT); } catch(x){}
-      ST_ADD_OPEN = false;
       const y = window.scrollY; render(); window.scrollTo(0, y);
       return;
     }

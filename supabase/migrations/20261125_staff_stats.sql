@@ -10,6 +10,10 @@
 --   • Без денег (выручка, комиссия, залог) и без данных клиентов (имя, телефон, почта) — правило владельца.
 --   • Таблицы не меняет; новых данных не собирает: считает по order_parts (issued_by / returned_by — SQL 20261101).
 --
+--   • iva_staff_chat_unread() — для списка чатов справа в «Работе»: с какого времени в каждой переписке лежит
+--     непрочитанное сообщение клиента (красный — не просмотрено больше суток). Те же переписки и те же права,
+--     что у iva_staff_chats / iva_staff_point_chats (право «Отвечает в чате пункта»). Текстов не отдаёт.
+--
 --  Без этого SQL сайт работает как раньше: «Статистика» считает по заявкам, которые уже видны сотруднику
 --  (активные и закрытые за 7 дней), и пишет, что полная статистика — после SQL.
 --
@@ -129,6 +133,47 @@ REVOKE ALL ON FUNCTION public.iva_staff_stats(uuid, int) FROM public, anon;
 GRANT EXECUTE ON FUNCTION public.iva_staff_stats(uuid, int) TO authenticated;
 COMMENT ON FUNCTION public.iva_staff_stats(uuid, int) IS 'Ива, сайт 05.11.2026: «Статистика» сотрудника по своему пункту — только числа, без денег и данных клиентов';
 
+-- Чаты справа в «Работе»: с какого времени не прочитано (05.11.2026, правки владельца).
+-- plpgsql: файл применяется и в базе без чатов пункта (SQL 20261111) — тогда считаются только чаты по инструменту.
+CREATE OR REPLACE FUNCTION public.iva_staff_chat_unread()
+ RETURNS TABLE (kind text, key uuid, peer text, first_unread_at timestamptz)
+ LANGUAGE plpgsql
+ STABLE
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+declare
+  pts boolean := to_regprocedure('public.iva_staff_chat_points()') is not null;
+begin
+  if to_regprocedure('public.iva_staff_chat_me()') is null or to_regprocedure('public.iva_staff_chat_tools()') is null then
+    return;                                                -- чатов сотрудника в базе нет (SQL 20261031)
+  end if;
+  return query
+  with me as (select * from public.iva_staff_chat_me()),
+  m as (
+    select case when x.tool_id is not null then 't' else 'p' end as k,
+           coalesce(x.tool_id, x.point_id) as id,
+           lower(btrim(x.from_email)) as pe,
+           x.created_at as at
+      from me
+      join public.app_messages x on lower(btrim(x.to_email)) = me.owner
+     where x.created_at > now() - interval '90 days'
+       and not coalesce(x.is_read, false)
+       and lower(btrim(coalesce(x.from_email, ''))) not in ('', me.owner, me.email)
+       and ((x.tool_id is not null and x.tool_id in (select t.tool_id from public.iva_staff_chat_tools() t))
+         or (pts and x.tool_id is null and x.point_id is not null
+             and x.point_id in (select p.point_id from public.iva_staff_chat_points() p)))
+  )
+  select m.k, m.id, md5(m.pe), min(m.at)
+    from m
+   group by m.k, m.id, m.pe
+   limit 300;
+end
+$function$;
+REVOKE ALL ON FUNCTION public.iva_staff_chat_unread() FROM public, anon;
+GRANT EXECUTE ON FUNCTION public.iva_staff_chat_unread() TO authenticated;
+COMMENT ON FUNCTION public.iva_staff_chat_unread() IS 'Ива, сайт 05.11.2026: чаты сотрудника — с какого времени не прочитано (без текстов)';
+
 NOTIFY pgrst, 'reload schema';
 
 -- Проверка: все строки должны быть «✅»
@@ -139,6 +184,9 @@ SELECT x.check_name, CASE WHEN x.ok THEN '✅' ELSE '❌' END AS result FROM (VA
      NOT has_function_privilege('anon', 'public.iva_staff_stats(uuid, integer)', 'EXECUTE')),
   ('вошедшим — можно (внутри — только сотрудник и только свой пункт)',
      has_function_privilege('authenticated', 'public.iva_staff_stats(uuid, integer)', 'EXECUTE')),
+  ('чаты сотрудника: «не прочитано с …» — функция есть, без входа нельзя',
+     to_regprocedure('public.iva_staff_chat_unread()') IS NOT NULL
+     AND NOT has_function_privilege('anon', 'public.iva_staff_chat_unread()', 'EXECUTE')),
   ('журнал «кто выдал / кто принял» (SQL 20261101) — для «Мой вклад»',
      EXISTS (SELECT 1 FROM information_schema.columns
               WHERE table_schema = 'public' AND table_name = 'order_parts' AND column_name = 'issued_by'))

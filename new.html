@@ -9,7 +9,7 @@
 <link rel="icon" href="assets/favicon-32.png" type="image/png" sizes="32x32">
 <link rel="icon" href="assets/icon-192.png" type="image/png" sizes="192x192">
 <link rel="apple-touch-icon" href="assets/apple-touch-icon.png">
-<link rel="stylesheet" href="assets/theme.css?v=20261105-staff">
+<link rel="stylesheet" href="assets/theme.css?v=20261105-work">
 <style>
 /* ---------- Шаги ---------- */
 .steps{display:flex;gap:6px;margin:18px 0 22px;flex-wrap:wrap}
@@ -1041,7 +1041,10 @@ body.emb .emb-done .btn{margin-top:6px}
     if (!isAuthed()){ screenAuth('guest'); return; }
     if (!isAdmin()){
       let staff = false;
-      if (!A.admin){
+      /* 05.11.2026: раньше сотрудника не проверяли, если у почты есть строка в admins (бывший или приостановленный
+         арендодатель, active = false) — и форма писала «Размещение приостановлено». База такого человека считает
+         обычным сотрудником (SQL 20261107 / 20261109), значит и сайт проверяет сотрудника у всех, кто не действующий админ. */
+      {
         try { const r = await api('/rest/v1/rpc/iva_staff_me', 'POST', {}); const st = Array.isArray(r) ? r[0] : r;
               staff = !!(st && st.status === 'active');
               if (staff && st.can_catalog && Array.isArray(st.points) && st.points.length) STF = st; }
@@ -1059,12 +1062,12 @@ body.emb .emb-done .btn{margin-top:6px}
       if (STF && EMBED){
         const one = STF.points.filter(function(p){ return String(p.id) === EMB_PT; });
         if (!one.length){
-          $('root').innerHTML = '<div class="empty" style="padding:30px 10px"><b>Пункт не найден</b><p>Выберите пункт плиткой в кабинете.</p></div>';
+          $('root').innerHTML = '<div class="empty" style="padding:30px 10px"><b>Пункт не найден</b><p>Выберите пункт в списке «Пункт выдачи» в кабинете.</p></div>';
           return;
         }
         STF = Object.assign({}, STF, { points: one });
       }
-      if (!STF){ screenAuth(A.admin ? 'paused' : staff ? 'staff' : 'client'); return; }
+      if (!STF){ screenAuth(staff ? 'staff' : A.admin ? 'paused' : 'client'); return; }
       document.title = (EDIT_ID ? 'Изменить инструмент' : 'Добавить инструмент') + ' — ' + (STF.company || 'прокат') + ' — Ива';
     }
 
