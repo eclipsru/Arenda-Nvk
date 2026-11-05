@@ -3764,6 +3764,15 @@ public class IvaPatchTest {
         eq("реклама 10.136: проверка формы — по порядку", e1 + "|" + e2 + "|" + e3 + "|" + e4 + "|" + e5 + "|" + e6 + "|" + e7 + "|" + IvaAdsPatch.formErr(e),
             "Укажите название рекламы (его видите только вы)|Добавьте картинку, заголовок или текст|Укажите ссылку для кнопки, например https://eclipsru.github.io/Arenda-Nvk/"
             + "|Выберите, где показывать|Окончание должно быть позже начала|ИНН — 10 или 12 цифр|Для пометки «Реклама» укажите рекламодателя|");
+        StringBuilder longS = new StringBuilder();
+        for (int i = 0; i < 161; i++) longS.append('я');
+        e.advertiser = longS.toString();
+        String e8 = IvaAdsPatch.formErr(e);
+        e.advertiser = ""; e.erid = longS.substring(0, 81);
+        String e9 = IvaAdsPatch.formErr(e);
+        e.erid = longS.substring(0, 80);
+        eq("реклама 10.137: рекламодатель и erid — не длиннее, чем принимает база", e8 + "|" + e9 + "|" + IvaAdsPatch.formErr(e),
+            "Рекламодатель — не длиннее 160 знаков|erid — не длиннее 80 знаков|");
         IvaAdsPatch.Ad b = new IvaAdsPatch.Ad();
         b.name = " Акция \"май\" "; b.headline = "Скидка"; b.btnAction = "url"; b.btnValue = "x.ru"; b.places.add("login");
         String body = IvaAdsPatch.saveBody(b);

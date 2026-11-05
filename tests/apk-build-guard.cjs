@@ -3156,7 +3156,17 @@ try {
       && /DROP TABLE IF EXISTS public\.iva_ads/.test(rb),
       '10.136: SQL — таблица под RLS, показ только включённой, правка — только создатель; откат есть');
     assert.ok((tp.match(/eq\("реклама 10\.136: /g) || []).length >= 20 && tp.includes('st136();'), 'IvaPatchTest: проверки 10.136');
-    assert.ok(/NEW_NAME: '10\.136'/.test(wf) && /NEW_CODE: '210'/.test(wf), 'сборка 10.136 (210)');
+    assert.ok(Number((/NEW_CODE: '(\d+)'/.exec(wf) || [])[1]) >= 210, 'сборка 10.136 (210) или новее');
+  }
+  // 10.137: «Рекламодатель» и erid — не длиннее, чем принимает база (160 / 80), понятная ошибка в форме вместо отказа базы
+  {
+    const wf = R('.github/workflows/build-apk.yml'), tp = R('android/patches/test/IvaPatchTest.java');
+    const ad = R('android/patches/IvaAdsPatch.java'), sq = R('supabase/migrations/20261124_ads.sql');
+    assert.ok(ad.includes('limit(e.advertiser, 160);') && ad.includes('limit(e.erid, 80);')
+      && sq.includes('CHECK (char_length(advertiser) <= 160)') && sq.includes('CHECK (char_length(erid) <= 80)'),
+      '10.137: ограничения полей формы = ограничениям базы');
+    assert.ok(tp.includes('eq("реклама 10.137: '), 'IvaPatchTest: проверка 10.137');
+    assert.ok(/NEW_NAME: '10\.137'/.test(wf) && /NEW_CODE: '211'/.test(wf), 'сборка 10.137 (211)');
   }
   // 10.75 (просьба владельца 14.10.2026): в «Настройках» — кнопка «Уведомления» (с 10.97 — открывает отдельную страницу);
   // внутри сверху «Открыть настройки уведомлений Android», потом какие присылать, потом расписание, потом всё остальное
