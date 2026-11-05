@@ -10,7 +10,7 @@
 <link rel="icon" href="assets/favicon-32.png" type="image/png" sizes="32x32">
 <link rel="icon" href="assets/icon-192.png" type="image/png" sizes="192x192">
 <link rel="apple-touch-icon" href="assets/apple-touch-icon.png">
-<link rel="stylesheet" href="assets/theme.css?v=20261105-pt">
+<link rel="stylesheet" href="assets/theme.css?v=20261106-rights">
 <link rel="stylesheet" href="assets/profile.css?v=20260923-rental-profile">
 <style>
 .tabs{display:flex;gap:4px;border-bottom:1px solid var(--line);margin-bottom:18px;
@@ -2221,6 +2221,7 @@
   /* шапка «Работы» (стоит на месте при прокрутке): слева фото и ФИО, по центру выбранный пункт (название, адрес, график,
      телефон), справа «Пункт выдачи» — свой выпадающий список размером с кнопку города в шапке сайта, только названия */
   const ST_CHEV = '<svg class="st-dd-ch" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>';
+  const ST_SHIELD = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3 5 6v5c0 4.6 3 8.4 7 10 4-1.6 7-5.4 7-10V6l-7-3Z"/><path d="m9 12 2 2 4-4"/></svg>';
   const ST_TICK = '<svg class="st-dd-tick" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>';
   function stHeadHTML(){
     const ad = A.admin || {};
@@ -2245,9 +2246,10 @@
       const tel = String(cur.tel || '').replace(/\D/g, ''), open = stOpen(cur), m = [];
       if (open) m.push(open);
       if (tel) m.push('<a href="tel:+' + esc(tel) + '">' + esc(stTel(tel)) + '</a>');
+      m.push('<button type="button" class="st-rights-btn" data-st-rights="1" aria-haspopup="dialog">' + ST_SHIELD + 'Ваши права</button>');   // окно с правами
       info = '<div class="st-pinfo"><h3>«' + esc(cur.name || 'Пункт') + '»</h3>' +
         (addr ? '<div class="st-pinfo-a" title="' + esc(addr) + '">' + esc(addr) + '</div>' : '') +
-        (m.length ? '<div class="st-pinfo-m">' + m.join('<span class="st-dot" aria-hidden="true"></span>') + '</div>' : '') + '</div>';
+        '<div class="st-pinfo-m">' + m.map(function(x){ return '<span class="st-pinfo-i">' + x + '</span>'; }).join('') + '</div></div>';
     }
     return '<div class="acct-head st-headrow">' +
         '<div class="st-who"><span class="ava acct-head-ava" data-ava="' + esc(A.me) + '">' + esc(initials(A.uname || A.me)) + '</span>' +
@@ -2267,6 +2269,18 @@
     return n.length ? '<div class="st-pcard" aria-label="Пункт «' + esc(cur.name || 'Пункт') + '» — сейчас"><div class="st-pcard-n">' + n.join('') + '</div></div>' : '';
   }
   /* права — у сотрудника они одни на все его пункты (так их хранит база: iva_staff), показываем для выбранного */
+  /* права — в окне «Ваши права» (кнопка в шапке рядом с телефоном пункта); закрыть — крестик, клик мимо или Esc */
+  function stOpenRights(){
+    const cur = stPickPt();
+    if (!cur || !STAFF) return;
+    openSheet('Ваши права в пункте «' + (cur.name || 'Пункт') + '»', stRightsHTML(cur));
+    const sh = $('sheet');
+    if (!sh) return;
+    sh.classList.add('st-rsheet');
+    sh.setAttribute('role', 'dialog'); sh.setAttribute('aria-modal', 'true');
+    sh.setAttribute('aria-label', 'Ваши права в пункте «' + (cur.name || 'Пункт') + '»');
+    const x = sh.querySelector('.x'); if (x) x.focus();
+  }
   function stRightsHTML(cur){
     const st = STAFF;
     const R = [
@@ -2277,7 +2291,6 @@
       [st.can_chat,    'Отвечает в чате пункта', 'от имени проката']
     ];
     return '<div class="st-rights">' +
-      '<div class="st-rights-h"><b>Ваши права в пункте «' + esc(cur.name || 'Пункт') + '»</b></div>' +
       '<div class="st-rights-l">' + R.map(function(r){
         return '<div class="st-right' + (r[0] ? ' on' : '') + '"><span class="st-right-i" aria-hidden="true">' + (r[0] ? '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12.5 4.5 4.5L19 7"/></svg>' : '<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M6 12h12"/></svg>') + '</span>' +
           '<span><b>' + r[1] + '</b><small>' + (r[0] ? r[2] : 'нет права') + '</small></span></div>';
@@ -2476,10 +2489,16 @@
     if (!t) return;
     const o = t.closest('[data-st-pt]');
     if (o){ stPickPoint(o.getAttribute('data-st-pt')); return; }
+    if (t.closest('[data-st-rights]')){ stDdSet(false); stOpenRights(); return; }
     if (t.closest('#stPtSel')){ stDdSet(!ST_DD, e.detail === 0); return; }
     if (ST_DD && !t.closest('#stPtDd')) stDdSet(false);
   });
   document.addEventListener('keydown', function(e){
+    if (e.key === 'Escape' && document.querySelector('#sheet.st-rsheet')){   // окно «Ваши права» — Esc закрывает
+      e.preventDefault(); closeSheet();
+      const b = document.querySelector('[data-st-rights]'); if (b) b.focus();
+      return;
+    }
     const dd = $('stPtDd');
     if (!dd || !dd.contains(document.activeElement)) return;
     const opts = Array.prototype.slice.call(dd.querySelectorAll('.st-dd-o'));
@@ -2624,7 +2643,6 @@
   function stMainHTML(cur){
     let h = stPtCardHTML(cur);
     if (!cur) return h;
-    h += stRightsHTML(cur);
     const ord = stCanOrd();
     const nOrd = ord ? stScope().filter(function(p){ const s = p.status || 'new'; return s === 'new' || s === 'rented'; }).length : 0;
     const tl = stPtTools(cur.id), nCh = STAFF.can_chat ? stUnread(stChatScope()) : 0;

@@ -72,6 +72,20 @@ const cls=async(pg,sel)=>pg.locator(sel).evaluateAll(a=>a.map(x=>(x.className.ma
   const hy=await hp.evaluate(()=>['#globalSearchTitle','#filters','#usefulInfoTitle','.useful-card'].map(s=>document.querySelector(s).getBoundingClientRect().y));await hp.close();
   const sy=[await pg.locator('#stOrdTitle').boundingBox(),oc,await pg.locator('#stChatTitle').boundingBox(),cc].map(b=>b.y);
   sy.forEach((y,i)=>assert(Math.abs(y-hy[i])<=2,'линии как на главной: «Работа» '+sy+' / главная '+hy));}
+ // главная: окна «Глобальный поиск» и «Полезная информация» стоят на месте при прокрутке, как в «Работе»; длинный фильтр — прокрутка внутри
+ {const hp=await c.newPage();await hp.setViewportSize({width:1600,height:700});await hp.goto(BASE+'/index.html',{waitUntil:'domcontentloaded'});await hp.waitForSelector('#filters .f-grp');await hp.waitForTimeout(300);
+  const yy=()=>hp.evaluate(()=>['#globalSearchTitle','#filters','#usefulInfoTitle','.useful-card'].map(s=>Math.round(document.querySelector(s).getBoundingClientRect().y)));
+  // прокрутка — в пределах раздела (дальше окна уходят вместе с концом раздела, к подвалу — как любое липкое окно)
+  const room=await hp.evaluate(()=>{const L=document.querySelector('.layout.home');return Math.floor(L.getBoundingClientRect().bottom-parseFloat(getComputedStyle(L).paddingBottom)-document.querySelector('.home-filter-column').getBoundingClientRect().bottom);});
+  const sc=Math.min(250,room-2);assert(sc>=20,'есть куда прокрутить: '+room);
+  const y0=await yy();await hp.evaluate(t=>window.scrollTo({top:t,behavior:'instant'}),sc);await hp.waitForTimeout(200);const y1=await yy();
+  assert.equal(await hp.evaluate(()=>window.scrollY),sc,'главная прокрутилась');assert.deepEqual(y1,y0,'окна главной — на месте: '+y0+' → '+y1);
+  const fs=await hp.evaluate(()=>{const f=document.querySelector('#filters'),r=f.getBoundingClientRect();return [getComputedStyle(f).overflowY,r.bottom<=innerHeight+1];});
+  assert.deepEqual(fs,['auto',true],'фильтр целиком на экране, прокрутка — внутри');
+  await hp.setViewportSize({width:1280,height:700});await hp.evaluate(()=>window.scrollTo({top:0,behavior:'instant'}));await hp.waitForTimeout(200);
+  const f0=await hp.evaluate(()=>document.querySelector('#filters').getBoundingClientRect().y);await hp.evaluate(()=>window.scrollTo({top:60,behavior:'instant'}));await hp.waitForTimeout(200);
+  assert.equal(await hp.evaluate(()=>document.querySelector('#filters').getBoundingClientRect().y),f0,'1280px: фильтр — на месте');
+  await hp.close();}
  // «Пункт выдачи» — свой выпадающий список только с названиями, справа от ФИО, в той же строке; подпись крупная и белая
  const sel=await box('#stPtSel'),h2=await box('.st-head h2');assert(sel.x>h2.x+h2.width&&Math.abs((sel.y+sel.height/2)-(fio.y+fio.height/2))<30,'список пунктов — напротив ФИО');
  assert.equal(await pg.locator('#stPtSel .st-dd-v').textContent(),'Маресьева');
@@ -97,15 +111,31 @@ const cls=async(pg,sel)=>pg.locator(sel).evaluateAll(a=>a.map(x=>(x.className.ma
  // ниже по центру — выбранный пункт; ниже права; ниже разделы
  // выбранный пункт (название, адрес, телефон) — в шапке по центру, между ФИО и «Пункт выдачи»; под шапкой — счётчики во всю ширину
  assert.equal(await pg.locator('.st-head .st-pinfo h3').textContent(),'«Маресьева»');
- const pcH=await box('.st-pinfo h3'),hrB=await box('.st-headrow');assert(Math.abs((pcH.x+pcH.width/2)-(hrB.x+hrB.width/2))<3,'название пункта — по центру шапки');
+ const pcH=await box('.st-pinfo h3'),hrB=await box('.st-headrow');
  const whoB=await box('.st-who'),psB=await box('.st-ptsel'),piB=await box('.st-pinfo');assert(whoB.x+whoB.width<=piB.x&&piB.x+piB.width<=psB.x,'ФИО — пункт — «Пункт выдачи» в одной строке');
+ const gapMid=(whoB.x+whoB.width+psB.x)/2;assert(Math.abs((pcH.x+pcH.width/2)-gapMid)<3,'пункт — ровно посередине между ФИО и «Пункт выдачи»: '+[pcH.x+pcH.width/2,gapMid]);
  assert(Math.abs((piB.y+piB.height/2)-(fio.y+(fio.height-12)/2))<14,'пункт — на уровне ФИО');
  assert.match(await pg.locator('.st-pinfo').textContent(),/ул\. Маресьева, 36/);assert.match(await pg.locator('.st-pinfo').textContent(),/\+7 \(908\)/);
  assert.equal(await pg.locator('.st-pcard h3, .st-pcard-k').count(),0,'в полосе под шапкой — только счётчики');
  const pc=await box('.st-pcard');assert(Math.abs(pc.width-hrB.width)<=2,'счётчики — во всю ширину');
  assert.deepEqual(await pg.locator('.st-pcard .st-pst span').allInnerTexts(),['Новые','В аренде','Просрочены','Инструмент','Непрочитано']);
  const ys=await pg.locator('.st-pcard .st-pst').evaluateAll(a=>a.map(x=>Math.round(x.getBoundingClientRect().y)));assert(ys.every(y=>y===ys[0]),'счётчики — в одну строку');
- const yP=(await box('.st-pcard')).y,yR=(await box('.st-rights')).y,yT=(await box('.st-tabs')).y;assert(fio.y<yP&&yP<yR&&yR<yT,'ФИО → пункт → права → разделы');
+ const yP=(await box('.st-pcard')).y,yT=(await box('.st-tabs')).y;assert(fio.y<yP&&yP<yT,'ФИО → счётчики → разделы');
+ // «Ваши права» — рядом с телефоном пункта; окно с правами и крестиком (ещё закрывается кликом мимо и Esc); на странице блока прав нет
+ assert.equal(await pg.locator('.st-main .st-rights').count(),0,'блока прав на странице нет — он в окне');
+ const tl=await box('.st-pinfo-m a[href^="tel:"]'),rb=await box('[data-st-rights]');assert(Math.abs(rb.y-tl.y)<30&&Math.abs((rb.x+rb.width/2)-(tl.x+tl.width/2))<200,'«Ваши права» — рядом с телефоном');
+ assert.equal((await pg.locator('[data-st-rights]').innerText()).trim(),'Ваши права');
+ await pg.click('[data-st-rights]');await pg.waitForSelector('#sheet.st-rsheet.open');await pg.waitForTimeout(300);
+ assert.match(await pg.locator('#sheet .sheet-h b').textContent(),/Ваши права в пункте «Маресьева»/);
+ assert.deepEqual(await pg.locator('#sheet .st-right b').allInnerTexts(),['Выдача и приём','Уведомления о заявках','Добавляет инструмент','Удаляет инструмент','Отвечает в чате пункта']);
+ assert.deepEqual(await pg.locator('#sheet .st-right').evaluateAll(a=>a.map(x=>x.classList.contains('on'))),[true,true,true,false,true]);
+ assert.match(await pg.locator('#sheet').textContent(),/Права одни на все ваши пункты/);
+ const shB=await box('#sheet');assert(Math.abs((shB.x+shB.width/2)-800)<3&&shB.width<=560&&shB.y>40,'окошко по центру экрана: '+JSON.stringify(shB));
+ assert.equal(await pg.evaluate(()=>document.activeElement.getAttribute('aria-label')),'Закрыть','фокус — на крестике');
+ await pg.click('#sheet .x');await pg.waitForSelector('#sheet',{state:'detached'});
+ await pg.click('[data-st-rights]');await pg.waitForSelector('#sheet.st-rsheet.open');await pg.keyboard.press('Escape');await pg.waitForSelector('#sheet',{state:'detached'});
+ assert.equal(await pg.evaluate(()=>document.activeElement.getAttribute('data-st-rights')),'1','после Esc фокус — на «Ваши права»');
+ await pg.click('[data-st-rights]');await pg.waitForSelector('#sheet.st-rsheet.open');await pg.waitForTimeout(300);await pg.mouse.click(60,600);await pg.waitForSelector('#sheet',{state:'detached'});
  assert.deepEqual(await pg.locator('.st-tabs button').evaluateAll(a=>a.map(x=>x.getAttribute('data-st-view'))),['tools','orders','chats','stats','add'],'разделы слева направо');
  // заявки: сначала новые (зелёные), потом в аренде по сроку; просрочено и меньше часа — красные
  assert.deepEqual(await cls(pg,'#stOrdList .st-si'),['g','r','r','y'],'порядок и цвета заявок');
