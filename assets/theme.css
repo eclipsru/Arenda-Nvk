@@ -386,6 +386,35 @@ select.inp{cursor:pointer;appearance:none;
   background:var(--or);color:#fff;border-radius:8px;font-size:10px;font-weight:700;
   display:flex;align-items:center;justify-content:center}
 @media (max-width:760px){ .work-mob:not(.hide){display:flex !important} }
+/* «Сменить» и кружок «Владелец» (06.11.2026): видны, только когда база знает прокат (классы на <html> ставит IvaSwitch) */
+.own-link,.own-mob,.sw-btn,.acct-menu .acct-sw{display:none !important}
+html.iva-sw .sw-btn{display:inline-flex !important}
+html.iva-sw .acct-menu .acct-sw{display:flex !important}
+html.iva-sw-own .own-link{display:flex !important}
+@media (max-width:760px){
+  html.iva-sw-own .own-mob{display:flex !important}
+  /* телефон: «Владелец» встаёт рядом с «Работой» в первой строке — подпись логотипа сжимается (многоточие), а не переносится */
+  html.iva-sw-own .head-in > .logo{flex:1 1 0}
+}
+.own-ini{background:var(--field);color:var(--gr);box-shadow:0 0 0 1.5px var(--line-2)}
+.own-link:hover .own-ini,.own-mob:hover .own-ini{color:var(--or);box-shadow:0 0 0 1.5px var(--or)}
+.own-mob{position:relative;flex-shrink:0;width:36px;height:36px;align-items:center;justify-content:center}
+.own-mob .acct-ini{width:34px;height:34px}
+.acct-menu .acct-sw{align-items:center;width:100%;padding:9px 10px;border-radius:9px;font-size:14px;color:var(--tx);text-align:left}
+.acct-menu .acct-sw:hover,.acct-menu .acct-sw:focus-visible{background:var(--field)}
+.btn.sw-btn{padding:5px 11px;font-size:12.5px;font-weight:600;border-radius:9px;flex:0 0 auto;color:var(--tx)}
+.btn.sw-btn:hover{border-color:var(--or);color:var(--or)}
+.sw-row{display:flex;align-items:center;gap:10px;min-width:0}
+.sw-row h2{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sw-note{color:var(--g2);font-size:13.5px;line-height:1.5;margin:0 0 14px}
+.sw-fld{margin-bottom:14px}
+.sw-l{display:block;font-size:13px;font-weight:600;margin-bottom:6px}
+.sw-mail{display:flex;align-items:center;color:var(--g2);user-select:none}
+.sw-err{display:none;background:rgba(255,138,128,.12);border:1px solid rgba(255,138,128,.3);color:var(--red);
+  padding:10px 13px;border-radius:var(--r-s);font-size:13.5px;margin-bottom:14px}
+.sw-err.show{display:block}
+.sheet.sw-sheet .sheet-b{padding-bottom:18px}
+@media (min-width:760px){ .sheet.st-rsheet.sw-sheet{width:min(420px,calc(100vw - 32px))} }
 /* планшет и узкий ноутбук: в шапке только значки (подписи остаются для экранного чтеца), поиску — место */
 @media (min-width:761px) and (max-width:1100px){
   .hlinks{gap:2px}

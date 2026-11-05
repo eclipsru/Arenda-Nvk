@@ -160,7 +160,8 @@ moneyStats = () => ({ rent:0, fee:0, paid:0, owed:0, byAdmin:{} });
       assert.ok((await page.locator('.apk-public a.btn').getAttribute('href')).endsWith(APK));
       await page.locator('#apkConfirm').click();
       await page.getByText(/выпущена для всех/).waitFor({ timeout: 5000 });
-      const posts = await page.evaluate(() => window.__posts);
+      // 06.11.2026: у владельца шапка ещё спрашивает iva_switch_info («Сменить») — это не выпуск, его не считаем
+      const posts = (await page.evaluate(() => window.__posts)).filter(x => !/\/rpc\/iva_switch_info$/.test(x.p));
       assert.equal(posts.length, 1); assert.equal(posts[0].p, '/rest/v1/app_releases');
       assert.equal(posts[0].b.version_code, Number(FEED_J.versionCode));
       assert.equal(posts[0].b.apk_url, NEW_APK, 'файл уже на сайте — ссылка на сайт, а не на GitHub');

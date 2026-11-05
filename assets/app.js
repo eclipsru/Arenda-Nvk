@@ -438,6 +438,7 @@ function buildSuggest(input, box, onPick){
 }
 
 /* ---------- Шапка и нижнее меню ---------- */
+function IvaSwitchLock(){ return '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>'; }
 function headerHTML(active, q){
   return '' +
   '<header class="head"><div class="wrap wide head-in">' +
@@ -450,6 +451,9 @@ function headerHTML(active, q){
     '</button>' +
     '<a class="work-mob hide" id="workMob" href="account.html" aria-label="Работа">' +
       '<span class="acct-ini work-ini">П</span><span class="work-mob-dot work-count" style="display:none">0</span></a>' +
+    /* «Владелец» у сотрудника (06.11.2026): вход в кабинет владельца проката по его паролю — см. IvaSwitch */
+    '<a class="own-mob" id="ownMob" href="account.html" data-iva-owner="1" aria-label="Владелец" title="Владелец">' +
+      '<span class="acct-ini own-ini">' + IvaSwitchLock() + '</span></a>' +
     '<div class="search">' +
       '<svg class="s-ic" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>' +
       '<input id="q" type="search" placeholder="Поиск инструмента" ' +
@@ -481,6 +485,9 @@ function headerHTML(active, q){
           '<span class="acct-ic">' + IC.user + '</span><span>Кабинет</span></a>' +
         '<div class="acct-menu hide" id="acctMenu" role="menu" aria-label="Меню аккаунта"></div>' +
       '</div>' +
+      /* кружок «Владелец» справа от «Профиля» — только у сотрудника, если прокат известен (SQL 20261126) */
+      '<a class="hlink own-link" id="ownLink" href="account.html" data-iva-owner="1" aria-label="Владелец">' +
+        '<span class="acct-ic"><span class="acct-ini own-ini">' + IvaSwitchLock() + '</span></span><span>Владелец</span></a>' +
       /* Пункт «Управление» дорисовывается после проверки роли — см. paintChiefLink */
       '<a class="hlink chief-link hide' + (active === 'chief' ? ' on' : '') + '" href="chief.html">' +
         IC.chief + '<span>Управление</span></a>' +
@@ -1082,7 +1089,7 @@ async function paintWork(){
   const els = [$('workLink'), $('workMob')].filter(Boolean);
   if (!els.length) return;
   const hide = function(){ els.forEach(function(el){ el.classList.add('hide'); }); };
-  if (typeof isAuthed !== 'function' || !isAuthed()) return hide();
+  if (typeof isAuthed !== 'function' || !isAuthed()){ IvaSwitch.sync(null); return hide(); }
   let kind, name, attr, link;
   if (typeof isAdmin === 'function' && isAdmin()){
     const ad = A.admin || {};
@@ -1090,7 +1097,8 @@ async function paintWork(){
     link = (Number(sessionStorage.getItem('iva_live_new')) || 0) > 0 ? 'account.html#orders' : 'account.html#home';
   } else {
     const w = await workGet();
-    if (!w || !w.on) return hide();
+    paintCabLabel();
+    if (!w || !w.on){ IvaSwitch.sync(null); return hide(); }
     kind = 'Работа'; name = w.c || 'Прокат'; attr = w.p ? ['data-ava-point', w.p] : null; link = 'account.html#staff';
   }
   els.forEach(function(el){
@@ -1115,6 +1123,200 @@ async function paintWork(){
     }
   });
   IvaLive.paintDot();
+  IvaSwitch.sync(kind);
+}
+
+/* Быстрая смена аккаунта в «Работе» (просьба владельца 06.11.2026, SQL 20261126_staff_switch).
+   «Сменить» (рядом с ФИО сотрудника, в кабинете владельца и в меню аккаунта) — почта и пароль; кружок «Владелец» справа
+   от «Профиля» у сотрудника — только пароль владельца (почту подставляем сами, показываем скрытой: e***@mail.ru).
+   Войти можно, только если новый аккаунт работает в ЭТОМ же прокате — сотрудник любого его пункта или владелец
+   (iva_switch_info: ключ проката = md5 почты владельца). Иначе — «Вы не работаете в этом прокате», прежний вход остаётся.
+   Пароль спрашиваем всегда; после входа весь сайт работает от нового аккаунта, прежняя сессия закрывается
+   (вернуться — снова через «Сменить» с паролем). Нет SQL — кнопок нет. */
+const IvaSwitch = (function(){
+  const SKEY = 'iva_switch_v1';
+  let loading = null;
+  function me(){ return String((typeof A !== 'undefined' && A.me) || '').toLowerCase(); }
+  function cached(){
+    try {
+      const c = JSON.parse(sessionStorage.getItem(SKEY) || 'null');
+      if (c && c.me === me() && Date.now() - c.at < 300000) return c;
+    } catch(e){}
+    return null;
+  }
+  function put(j, who){ try { sessionStorage.setItem(SKEY, JSON.stringify({ me: who || me(), at: Date.now(), j: j })); } catch(e){} }
+  function list(j){ return j && Array.isArray(j.prokats) ? j.prokats : []; }
+  function cur(){ const c = cached(); return c ? c.j : null; }
+  function staffOf(j){ return list(j).find(function(p){ return p.role === 'staff' && p.owner; }) || null; }
+  async function load(){
+    const c = cached();
+    if (c) return c.j;
+    if (loading) return loading;
+    loading = (async function(){
+      try {
+        const j = await api('/rest/v1/rpc/iva_switch_info', 'POST', {});
+        put(j && typeof j === 'object' ? j : { prokats: [] });
+      } catch(e){
+        if (typeof apiMissing === 'function' && apiMissing(e)) put(null);   // нет SQL — кнопок нет (спросим через 5 минут)
+        else return null;                                                     // сбой связи — спросим при следующей отрисовке
+      }
+      return cur();
+    })();
+    try { return await loading; } finally { loading = null; }
+  }
+  /* e***@mail.ru — почта владельца в окне «Владелец» */
+  function mask(email){
+    const s = String(email || ''), i = s.indexOf('@');
+    return i > 0 ? s.charAt(0) + '***' + s.slice(i) : '***';
+  }
+  function revoke(tok){
+    if (!tok) return;
+    try {
+      fetch(SB + '/auth/v1/logout?scope=local', { method: 'POST', keepalive: true,
+        headers: { apikey: KEY, 'Content-Type': 'application/json', Authorization: 'Bearer ' + tok } }).catch(function(){});
+    } catch(e){}
+  }
+  async function infoWith(tok){
+    let r;
+    try {
+      r = await fetch(SB + '/rest/v1/rpc/iva_switch_info', { method: 'POST', body: '{}',
+        headers: { apikey: KEY, 'Content-Type': 'application/json', Authorization: 'Bearer ' + tok } });
+    } catch(e){ const ne = new Error('Нет связи с сервером'); ne.status = 0; throw ne; }
+    const t = await r.text();
+    if (!r.ok){ const e = new Error(sbErr(t)); e.status = r.status; throw e; }
+    try { return JSON.parse(t); } catch(e){ return null; }
+  }
+  /* кружок «Владелец», «Сменить», «Профиль» вместо «Кабинета» — по классам на <html>, чтобы не зависеть от перерисовок */
+  async function sync(kind){
+    const root = document.documentElement;
+    if (!kind){ root.classList.remove('iva-sw', 'iva-sw-own'); return; }
+    const j = await load();
+    const ps = list(j), own = kind === 'Работа' ? staffOf(j) : null;
+    root.classList.toggle('iva-sw', ps.length > 0);
+    root.classList.toggle('iva-sw-own', !!own);
+    if (own) $$('[data-iva-owner]').forEach(function(el){
+      const t = 'Владелец · вход в кабинет проката «' + (own.company || 'Прокат') + '» по паролю владельца';
+      el.setAttribute('title', t); el.setAttribute('aria-label', t);
+    });
+  }
+  function errMsg(m){
+    if (/invalid login/i.test(m)) return 'Неверная почта или пароль';
+    if (/email not confirmed/i.test(m)) return typeof IvaEmailGuard === 'undefined' ? 'Почта не подтверждена — проверьте письмо' : IvaEmailGuard.NOT_CONFIRMED_MSG;
+    return m || 'Не удалось войти';
+  }
+  /* вход: проверяем пароль и прокат на временном ключе; сессию меняем, только если прокат тот же */
+  async function enter(email, pass){
+    email = String(email || '').trim().toLowerCase();
+    if (!email || !pass) throw new Error('Введите почту и пароль');
+    if (email === me()) throw new Error('Вы уже вошли как ' + email);
+    const keys = list(cur()).map(function(p){ return p.key; });
+    if (!keys.length) throw new Error('Не удалось проверить прокат — обновите страницу');
+    let r;
+    try {
+      r = await fetch(SB + '/auth/v1/token?grant_type=password', { method: 'POST',
+        headers: { apikey: KEY, 'Content-Type': 'application/json' }, body: JSON.stringify({ email: email, password: pass }) });
+    } catch(e){ throw new Error('Нет связи с сервером'); }
+    const txt = await r.text();
+    if (!r.ok) throw new Error(errMsg(sbErr(txt)));
+    let s = null; try { s = JSON.parse(txt); } catch(e){}
+    if (!s || !s.access_token) throw new Error('Не удалось войти');
+    if (s.user && typeof IvaEmailGuard !== 'undefined' && !IvaEmailGuard.isConfirmed(s.user)){ revoke(s.access_token); throw new Error(IvaEmailGuard.NOT_CONFIRMED_MSG); }
+    let info;
+    try { info = await infoWith(s.access_token); }
+    catch(e){ revoke(s.access_token); throw new Error(e.status === 0 ? 'Нет связи с сервером' : 'Не удалось проверить прокат — попробуйте ещё раз'); }
+    const hit = list(info).filter(function(p){ return keys.indexOf(p.key) >= 0; });
+    if (!hit.length){ revoke(s.access_token); throw new Error('Вы не работаете в этом прокате'); }
+    const old = A.tok;
+    A.tok = s.access_token; A.rtok = s.refresh_token || null;
+    A.admin = null; A.uname = ''; A.uid = null; A.userMeta = {}; A.customerProfile = {}; A.profileCity = '';
+    applyAuthUser(s.user || { email: email });
+    saveSess();
+    /* подсказки прежней роли — чтобы шапка не мигала чужим меню */
+    try {
+      localStorage.removeItem('iva_staff_hint'); localStorage.removeItem(LORD_HINT_KEY);
+      sessionStorage.removeItem(WORK_KEY); sessionStorage.removeItem('iva_live_new');
+    } catch(e){}
+    put(info, A.me);
+    revoke(old);
+    const owner = hit.some(function(p){ return p.role === 'owner'; });
+    if (owner){ try { localStorage.setItem(MODE_KEY, 'lend'); } catch(e){} }
+    return owner ? 'account.html#home' : 'account.html#staff';
+  }
+  function go(dest){
+    const u = new URL(dest, location.href);
+    if (u.pathname === location.pathname){ history.replaceState(null, '', u.href); location.reload(); }
+    else location.href = u.href;
+  }
+  /* окно: mode 'any' — почта и пароль; 'owner' — только пароль владельца */
+  function open(mode){
+    const j = cur(), ps = list(j), own = staffOf(j);
+    if (!ps.length){ toast('Смена аккаунта пока недоступна — обновите страницу'); return; }
+    if (mode === 'owner' && !own) return;
+    const comp = esc(((own || ps[0]).company) || 'Прокат');
+    const title = mode === 'owner' ? 'Владелец' : 'Сменить аккаунт';
+    const body = '<form class="sw-f" id="swForm" novalidate>' +
+      '<p class="sw-note">' + (mode === 'owner'
+        ? 'Кабинет владельца проката «' + comp + '». Нужен пароль владельца.'
+        : 'Войти может сотрудник любого пункта или владелец проката «' + comp + '». Нужен пароль.') + '</p>' +
+      '<div class="sw-err" id="swErr" role="alert"></div>' +
+      (mode === 'owner'
+        ? '<div class="sw-fld"><span class="sw-l">Почта владельца</span><div class="inp sw-mail" id="swMail">' + esc(mask(own.owner)) + '</div></div>'
+        : '<div class="sw-fld"><label class="sw-l" for="swEmail">Email</label><input class="inp" id="swEmail" type="email" autocomplete="username" placeholder="you@mail.ru"></div>') +
+      '<div class="sw-fld"><label class="sw-l" for="swPass">Пароль</label><input class="inp" id="swPass" type="password" autocomplete="current-password" placeholder="••••••••"></div>' +
+      '<button class="btn wide" id="swGo" type="submit">Войти</button>' +
+    '</form>';
+    openSheet(title, body);
+    const sh = $('sheet');
+    if (!sh) return;
+    sh.classList.add('st-rsheet', 'sw-sheet');
+    sh.setAttribute('role', 'dialog'); sh.setAttribute('aria-modal', 'true'); sh.setAttribute('aria-label', title);
+    const f = $('swForm'), err = $('swErr'), btn = $('swGo');
+    setTimeout(function(){ const i = $(mode === 'owner' ? 'swPass' : 'swEmail'); if (i) i.focus(); }, 60);
+    f.addEventListener('submit', async function(e){
+      e.preventDefault();
+      if (btn.disabled) return;
+      err.classList.remove('show'); err.textContent = '';
+      btn.disabled = true; btn.textContent = 'Проверяем…';
+      try {
+        const dest = await enter(mode === 'owner' ? own.owner : ($('swEmail') || {}).value, $('swPass').value);
+        btn.textContent = 'Входим…';
+        go(dest);
+      } catch(x){
+        err.textContent = x.message || 'Не удалось войти'; err.classList.add('show');
+        btn.disabled = false; btn.textContent = 'Войти';
+        const p = $('swPass'); if (p){ p.value = ''; p.focus(); }
+      }
+    });
+  }
+  document.addEventListener('click', function(e){
+    const t = e.target.closest ? e.target.closest('[data-iva-switch],[data-iva-owner]') : null;
+    if (!t) return;
+    e.preventDefault();
+    if (typeof closeAcct === 'function') closeAcct();
+    open(t.hasAttribute('data-iva-owner') ? 'owner' : 'any');
+  });
+  document.addEventListener('keydown', function(e){
+    if (e.key === 'Escape' && document.querySelector('#sheet.sw-sheet')) closeSheet();
+  });
+  function btnHTML(){ return '<button type="button" class="btn ghost sm sw-btn" data-iva-switch="1" title="Войти другим аккаунтом этого проката">Сменить</button>'; }
+  return { load: load, sync: sync, open: open, enter: enter, mask: mask, btnHTML: btnHTML, info: cur };
+})();
+/* сотрудник (не владелец): «Профиль» вместо «Кабинета» — в шапке и в нижнем меню (просьба владельца 06.11.2026) */
+function staffNow(){
+  if (typeof isAuthed !== 'function' || !isAuthed()) return false;
+  if (typeof isAdmin === 'function' && isAdmin()) return false;
+  try {
+    const w = JSON.parse(sessionStorage.getItem(WORK_KEY) || 'null');
+    if (w && w.me === String(A.me || '').toLowerCase()) return !!w.on;
+    return localStorage.getItem('iva_staff_hint') === '1';
+  } catch(e){ return false; }
+}
+function paintCabLabel(){
+  const lb = staffNow() ? 'Профиль' : 'Кабинет';
+  const b = $('acctBtn');
+  if (b && typeof isAuthed === 'function' && isAuthed() && b.lastChild) b.lastChild.textContent = lb;
+  const s = document.querySelector('#bnav a[href="account.html"] > span:not(.bnav-ava):not(.dot):last-of-type');
+  if (s) s.textContent = lb;
 }
 
 /* ---------- Меню аккаунта в шапке ---------- */
@@ -1147,6 +1349,8 @@ function acctMenuHTML(){
        a(lord ? 'account.html#prof' : 'profile.html', 'Профиль и настройки');
   if (chief) h += '<div class="acct-sep"></div>' + a('chief.html', 'Управление площадкой');
   if (!lord && !staff) h += '<div class="acct-sep"></div>' + a(lendChatHref(), 'Хочу сдавать инструмент');
+  /* «Сменить аккаунт» — владельцу проката и сотруднику (06.11.2026); видно, когда база знает прокат (html.iva-sw) */
+  if (lord || staff) h += '<button type="button" role="menuitem" class="acct-sw" data-iva-switch="1">Сменить аккаунт</button>';
   h += '<div class="acct-sep"></div><button type="button" role="menuitem" class="acct-out" id="acctOut">Выйти</button>';
   return h;
 }
@@ -1193,7 +1397,8 @@ function paintAcct(){
   }
   btn.setAttribute('aria-haspopup', 'menu');
   if (!btn.hasAttribute('aria-expanded')) btn.setAttribute('aria-expanded', 'false');
-  btn.lastChild.textContent = 'Кабинет';
+  btn.lastChild.textContent = staffNow() ? 'Профиль' : 'Кабинет';
+  paintCabLabel();
   if (ic){
     /* аватарка (21.10.2026): кружок не перерисовываем, если в нём уже фото этого же аккаунта */
     const cur = ic.querySelector('.acct-ini');

@@ -212,6 +212,12 @@ function sessFromStore(){
 try {
   window.addEventListener('storage', function(ev){
     if (ev.key !== TOK_KEY || !A.rtok) return;
+    /* 06.11.2026: в другой вкладке сменили аккаунт («Сменить» / «Владелец» в «Работе») — эта вкладка тоже
+       переходит на новый аккаунт (иначе она работала бы от прежнего, уже закрытого входа) */
+    try {
+      const n = JSON.parse(ev.newValue || 'null');
+      if (n && n.me && A.me && String(n.me).toLowerCase() !== String(A.me).toLowerCase()){ location.reload(); return; }
+    } catch(e){}
     const s = sessFromStore();
     if (s){ A.tok = s.tok; A.rtok = s.rtok; }
   });
