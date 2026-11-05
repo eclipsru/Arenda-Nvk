@@ -256,6 +256,9 @@ select.inp{cursor:pointer;appearance:none;
 .f-grp h4{font-size:13px;font-weight:700;margin-bottom:9px;color:var(--gr);
   text-transform:uppercase;letter-spacing:.4px}
 .f-row{display:flex;gap:8px}
+/* 06.11.2026 (владелец): поля цены «от / до» — высотой с кнопку города в шапке (41px, на телефоне 37px) */
+.f-price .inp{height:41px;padding:0 12px;font-size:14px}
+@media (max-width:760px){ .f-price .inp{height:37px} }
 .f-list{display:flex;flex-direction:column;gap:2px;max-height:230px;overflow-y:auto}
 .f-item{display:flex;align-items:center;gap:9px;padding:7px 8px;border-radius:8px;
   cursor:pointer;font-size:14px;transition:.12s}
@@ -925,6 +928,16 @@ select.inp{cursor:pointer;appearance:none;
   .cat.back b{color:var(--gr)}
   .cat.on .ico,.cat.pop.on img{border-color:var(--or);background:var(--or-soft)}
   .cat.on b,.cat.pop.on b{color:var(--or)}
+}
+/* 06.11.2026 (владелец): плитка «Все категории» — первая; за ней 6 категорий, остальные открывает она.
+   Компьютер: значок сетки слева, как предмет на соседних плитках, подпись справа внизу и «ещё N» / «свернуть».
+   Телефон: квадрат со значком и подпись под ним, как остальные плитки (5 в ряд). */
+.cat.pop.all-cats .ico{position:absolute;left:16px;top:16px;width:46px;height:46px;color:var(--or)}
+.cat.pop.all-cats .ico svg{stroke-width:1.6}
+.cat.pop.all-cats b small{display:block;margin-top:3px;font-size:12px;font-weight:500;color:var(--g2);text-shadow:none}
+@media (max-width:760px){
+  .cat.pop.all-cats .ico{position:static;width:100%;height:auto}
+  .cat.pop.all-cats b small{display:none}
 }
 @media (max-width:380px){ .cat b,.cat.pop b{font-size:10px;letter-spacing:-.1px} }
 @media (min-width:480px) and (max-width:760px){
