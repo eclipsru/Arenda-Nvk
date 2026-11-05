@@ -10,7 +10,7 @@
 <link rel="icon" href="assets/favicon-32.png" type="image/png" sizes="32x32">
 <link rel="icon" href="assets/icon-192.png" type="image/png" sizes="192x192">
 <link rel="apple-touch-icon" href="assets/apple-touch-icon.png">
-<link rel="stylesheet" href="assets/theme.css?v=20261105-hdr">
+<link rel="stylesheet" href="assets/theme.css?v=20261105-pt">
 <link rel="stylesheet" href="assets/profile.css?v=20260923-rental-profile">
 <style>
 .tabs{display:flex;gap:4px;border-bottom:1px solid var(--line);margin-bottom:18px;
@@ -2218,54 +2218,53 @@
       '</div>' +
       '</div>';
   }
-  /* шапка «Работы» (стоит на месте при прокрутке): слева фото и ФИО, справа «Пункт выдачи» — свой выпадающий список
-     в стиле сайта (тёмная карточка, оранжевый выбранный пункт), только названия */
+  /* шапка «Работы» (стоит на месте при прокрутке): слева фото и ФИО, по центру выбранный пункт (название, адрес, график,
+     телефон), справа «Пункт выдачи» — свой выпадающий список размером с кнопку города в шапке сайта, только названия */
   const ST_CHEV = '<svg class="st-dd-ch" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>';
   const ST_TICK = '<svg class="st-dd-tick" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>';
   function stHeadHTML(){
     const ad = A.admin || {};
     const who = esc(A.uname || ad.full_name || 'Сотрудник');
     const meta = (STAFF.company ? '«' + esc(STAFF.company) + '» · ' : '') + 'сотрудник проката · ' + esc(A.me);
-    const pts = stPts(), many = pts.length > 1;
+    const pts = stPts();
     const cur = pts.find(function(p){ return String(p.id) === ST_PT; }) || pts[0];
-    if (!many) ST_DD = false;
     const sel = pts.length ? '<div class="st-ptsel"><span class="st-ptsel-l" id="stPtSelL">Пункт выдачи</span>' +
-      '<div class="st-dd' + (ST_DD ? ' open' : '') + (many ? '' : ' one') + '" id="stPtDd">' +
+      '<div class="st-dd' + (ST_DD ? ' open' : '') + '" id="stPtDd">' +
         '<button type="button" class="st-dd-btn" id="stPtSel" aria-haspopup="listbox" aria-controls="stPtMenu" aria-expanded="' + ST_DD + '"' +
-          ' aria-labelledby="stPtSelL stPtSel"' + (many ? '' : ' disabled') + '>' +
-          '<span class="st-dd-v">' + esc((cur && cur.name) || 'Пункт') + '</span>' + (many ? ST_CHEV : '') + '</button>' +
+          ' aria-labelledby="stPtSelL stPtSel">' +
+          '<span class="st-dd-v">' + esc((cur && cur.name) || 'Пункт') + '</span>' + ST_CHEV + '</button>' +
         '<div class="st-dd-menu" id="stPtMenu" role="listbox" aria-labelledby="stPtSelL"' + (ST_DD ? '' : ' hidden') + '>' + pts.map(function(p){
           const id = String(p.id), on = cur && id === String(cur.id);
           return '<button type="button" role="option" tabindex="-1" class="st-dd-o' + (on ? ' on' : '') + '" aria-selected="' + !!on + '" data-st-pt="' + esc(id) + '">' +
             '<span>' + esc(p.name || 'Пункт') + '</span>' + (on ? ST_TICK : '') + '</button>';
         }).join('') + '</div>' +
       '</div></div>' : '';
+    let info = '<div class="st-pinfo"></div>';
+    if (cur){
+      const addr = [cur.city, cur.address].filter(Boolean).join(', ');
+      const tel = String(cur.tel || '').replace(/\D/g, ''), open = stOpen(cur), m = [];
+      if (open) m.push(open);
+      if (tel) m.push('<a href="tel:+' + esc(tel) + '">' + esc(stTel(tel)) + '</a>');
+      info = '<div class="st-pinfo"><h3>«' + esc(cur.name || 'Пункт') + '»</h3>' +
+        (addr ? '<div class="st-pinfo-a" title="' + esc(addr) + '">' + esc(addr) + '</div>' : '') +
+        (m.length ? '<div class="st-pinfo-m">' + m.join('<span class="st-dot" aria-hidden="true"></span>') + '</div>' : '') + '</div>';
+    }
     return '<div class="acct-head st-headrow">' +
-        '<span class="ava acct-head-ava" data-ava="' + esc(A.me) + '">' + esc(initials(A.uname || A.me)) + '</span>' +
-        '<div class="acct-head-t"><h2>' + who + '</h2><div class="small muted">' + meta + '</div></div>' + sel +
+        '<div class="st-who"><span class="ava acct-head-ava" data-ava="' + esc(A.me) + '">' + esc(initials(A.uname || A.me)) + '</span>' +
+        '<div class="acct-head-t"><h2>' + who + '</h2><div class="small muted">' + meta + '</div></div></div>' + info + sel +
       '</div>';
   }
   /* выбранный пункт — по центру: название, адрес, график, телефон и счётчики */
+  /* под шапкой — счётчики выбранного пункта во всю ширину (название, адрес и телефон — в шапке по центру) */
   function stPtCardHTML(cur){
     if (!cur) return '<div class="empty"><b>Пункт выдачи не назначен</b><p>Попросите владельца проката добавить вас в пункт выдачи.</p></div>';
     const ord = stCanOrd(), c = stCounts(ord ? stScope() : []), tl = stPtTools(cur.id);
-    const addr = [cur.city, cur.address].filter(Boolean).join(', ');
-    const tel = String(cur.tel || '').replace(/\D/g, ''), open = stOpen(cur);
-    const meta = [];
-    if (open) meta.push(open);
-    if (tel) meta.push('<a href="tel:+' + esc(tel) + '">' + esc(stTel(tel)) + '</a>');
     const st = function(cls, lb, v){ return '<div class="st-pst ' + cls + (v ? ' has' : '') + '"><b>' + v + '</b><span>' + lb + '</span></div>'; };
     const n = [];
     if (ord){ n.push(st('g', 'Новые', c.new)); n.push(st('y', 'В аренде', c.rented)); n.push(st('r', 'Просрочены', c.late)); }
     if (tl) n.push(st('', 'Инструмент', tl.length));
     if (STAFF.can_chat) n.push(st('o', 'Непрочитано', stUnread(stChatScope())));
-    return '<div class="st-pcard">' +
-      '<div class="st-pcard-k">Пункт выдачи</div>' +
-      '<h3>«' + esc(cur.name || 'Пункт') + '»</h3>' +
-      (addr ? '<div class="st-pcard-a">' + esc(addr) + '</div>' : '') +
-      (meta.length ? '<div class="st-pcard-m">' + meta.join('<span class="st-dot" aria-hidden="true"></span>') + '</div>' : '') +
-      (n.length ? '<div class="st-pcard-n">' + n.join('') + '</div>' : '') +
-    '</div>';
+    return n.length ? '<div class="st-pcard" aria-label="Пункт «' + esc(cur.name || 'Пункт') + '» — сейчас"><div class="st-pcard-n">' + n.join('') + '</div></div>' : '';
   }
   /* права — у сотрудника они одни на все его пункты (так их хранит база: iva_staff), показываем для выбранного */
   function stRightsHTML(cur){
@@ -2456,7 +2455,7 @@
   /* «Пункт выдачи» — свой выпадающий список: клик, стрелки, Enter, Esc, клик мимо — закрыть */
   function stDdSet(open, focusSel){
     const dd = $('stPtDd'), btn = $('stPtSel'), menu = $('stPtMenu');
-    ST_DD = !!open && !!dd && !dd.classList.contains('one');
+    ST_DD = !!open && !!dd;
     if (!dd) return;
     dd.classList.toggle('open', ST_DD);
     btn.setAttribute('aria-expanded', String(ST_DD));

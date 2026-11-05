@@ -77,7 +77,10 @@ const cls=async(pg,sel)=>pg.locator(sel).evaluateAll(a=>a.map(x=>(x.className.ma
  assert.equal(await pg.locator('#stPtSel .st-dd-v').textContent(),'Маресьева');
  assert.equal(await pg.locator('#stPtMenu').isVisible(),false,'список закрыт');
  const lab=await pg.locator('.st-ptsel-l').evaluate(e=>{const c=getComputedStyle(e),b=getComputedStyle(document.querySelector('#stPtSel'));return {t:e.textContent,fs:parseFloat(c.fontSize),bfs:parseFloat(b.fontSize),col:c.color};});
- assert.equal(lab.t,'Пункт выдачи');assert(lab.fs>=lab.bfs&&lab.fs>=16,'подпись — как текст списка: '+JSON.stringify(lab));assert.equal(lab.col,'rgb(242, 244, 248)','подпись — белая');
+ assert.equal(lab.t,'Пункт выдачи');assert(lab.fs<lab.bfs&&lab.fs<=13.5,'подпись — мельче текста списка: '+JSON.stringify(lab));assert.equal(lab.col,'rgb(154, 161, 176)','подпись — серая');
+ // список — размером и видом как кнопка города в шапке сайта
+ const cb=await box('#cityBtn'),sb=await box('#stPtSel');assert(Math.abs(cb.height-sb.height)<=2,'высота — как у кнопки города: '+[cb.height,sb.height]);
+ assert.deepEqual(await pg.evaluate(()=>{const a=getComputedStyle(document.querySelector('#cityBtn')),b=getComputedStyle(document.querySelector('#stPtSel'));return [a.fontSize===b.fontSize,a.borderRadius===b.borderRadius,a.backgroundColor===b.backgroundColor];}),[true,true,true],'шрифт, скругление и фон — как у кнопки города');
  await pg.click('#stPtSel');await pg.waitForSelector('#stPtMenu',{state:'visible'});
  assert.equal(await pg.locator('#stPtSel').getAttribute('aria-expanded'),'true');
  assert.deepEqual(await pg.locator('#stPtMenu [role=option]').evaluateAll(a=>a.map(x=>[x.getAttribute('data-st-pt'),x.innerText.trim(),x.getAttribute('aria-selected')])),
@@ -92,9 +95,16 @@ const cls=async(pg,sel)=>pg.locator(sel).evaluateAll(a=>a.map(x=>(x.className.ma
  assert.equal(await pg.evaluate(()=>document.activeElement.id),'stPtSel','Esc — закрыть, фокус на списке');
  assert.equal(await pg.locator('.st-ptile').count(),0,'плиток пунктов больше нет');
  // ниже по центру — выбранный пункт; ниже права; ниже разделы
- assert.equal(await pg.locator('.st-pcard h3').textContent(),'«Маресьева»');
- const pcH=await box('.st-pcard h3'),pcB=await box('.st-pcard');assert(Math.abs((pcH.x+pcH.width/2)-(pcB.x+pcB.width/2))<2,'название пункта — по центру');
- assert.match(await pg.locator('.st-pcard').textContent(),/ул\. Маресьева, 36/);assert.match(await pg.locator('.st-pcard').textContent(),/\+7 \(908\)/);
+ // выбранный пункт (название, адрес, телефон) — в шапке по центру, между ФИО и «Пункт выдачи»; под шапкой — счётчики во всю ширину
+ assert.equal(await pg.locator('.st-head .st-pinfo h3').textContent(),'«Маресьева»');
+ const pcH=await box('.st-pinfo h3'),hrB=await box('.st-headrow');assert(Math.abs((pcH.x+pcH.width/2)-(hrB.x+hrB.width/2))<3,'название пункта — по центру шапки');
+ const whoB=await box('.st-who'),psB=await box('.st-ptsel'),piB=await box('.st-pinfo');assert(whoB.x+whoB.width<=piB.x&&piB.x+piB.width<=psB.x,'ФИО — пункт — «Пункт выдачи» в одной строке');
+ assert(Math.abs((piB.y+piB.height/2)-(fio.y+(fio.height-12)/2))<14,'пункт — на уровне ФИО');
+ assert.match(await pg.locator('.st-pinfo').textContent(),/ул\. Маресьева, 36/);assert.match(await pg.locator('.st-pinfo').textContent(),/\+7 \(908\)/);
+ assert.equal(await pg.locator('.st-pcard h3, .st-pcard-k').count(),0,'в полосе под шапкой — только счётчики');
+ const pc=await box('.st-pcard');assert(Math.abs(pc.width-hrB.width)<=2,'счётчики — во всю ширину');
+ assert.deepEqual(await pg.locator('.st-pcard .st-pst span').allInnerTexts(),['Новые','В аренде','Просрочены','Инструмент','Непрочитано']);
+ const ys=await pg.locator('.st-pcard .st-pst').evaluateAll(a=>a.map(x=>Math.round(x.getBoundingClientRect().y)));assert(ys.every(y=>y===ys[0]),'счётчики — в одну строку');
  const yP=(await box('.st-pcard')).y,yR=(await box('.st-rights')).y,yT=(await box('.st-tabs')).y;assert(fio.y<yP&&yP<yR&&yR<yT,'ФИО → пункт → права → разделы');
  assert.deepEqual(await pg.locator('.st-tabs button').evaluateAll(a=>a.map(x=>x.getAttribute('data-st-view'))),['tools','orders','chats','stats','add'],'разделы слева направо');
  // заявки: сначала новые (зелёные), потом в аренде по сроку; просрочено и меньше часа — красные
@@ -135,7 +145,7 @@ const cls=async(pg,sel)=>pg.locator(sel).evaluateAll(a=>a.map(x=>(x.className.ma
  await pg.click('#stPtSel');await pg.click('#stPtMenu [data-st-pt="'+P2+'"]');await pg.waitForTimeout(250);
  assert.equal(await pg.locator('#stPtSel .st-dd-v').textContent(),'Центр');assert.equal(await pg.locator('#stPtMenu').isVisible(),false);
  assert.match(await pg.locator('#stAddFrame iframe').getAttribute('src'),new RegExp('point='+P2));
- assert.equal(await pg.locator('.st-pcard h3').textContent(),'«Центр»');
+ assert.equal(await pg.locator('.st-pinfo h3').textContent(),'«Центр»');
  assert.deepEqual(await cls(pg,'#stOrdList .st-si'),['g']);
  assert.equal(await pg.evaluate(()=>localStorage.getItem('iva_st_pt')),P2);
  assert.equal(await pg.locator('.tabs button[data-tab=orders]').count(),0,'личных вкладок в «Работе» нет — они в меню «Кабинет»');
@@ -217,7 +227,7 @@ const cls=async(pg,sel)=>pg.locator(sel).evaluateAll(a=>a.map(x=>(x.className.ma
  const m=await pg.locator('#stMain').boundingBox(),sd=await pg.locator('#stSide').boundingBox();
  assert(m.y+m.height<=sd.y+1,'на телефоне основное — выше заявок и чатов');
  const sl=await pg.locator('#stPtSel').boundingBox(),lb=await pg.locator('.st-ptsel-l').boundingBox(),hr=await pg.locator('.st-headrow').boundingBox();
- assert(sl.width>180&&Math.abs(sl.x+sl.width-(hr.x+hr.width))<=2&&Math.abs((lb.y+lb.height/2)-(sl.y+sl.height/2))<4,'список — рядом с подписью, до края: '+JSON.stringify([sl,lb]));
+ assert(sl.width>=160&&Math.abs(sl.x+sl.width-(hr.x+hr.width))<=2&&Math.abs((lb.y+lb.height/2)-(sl.y+sl.height/2))<4,'список — рядом с подписью, до края: '+JSON.stringify([sl,lb]));
  await pg.evaluate(()=>window.scrollTo({top:1200,behavior:'instant'}));await pg.waitForTimeout(150);
  const hy=(await pg.locator('.st-head .acct-head').boundingBox()).y;assert(hy>=0&&hy<=30,'шапка на месте на телефоне: '+hy);
  await pg.click('#stPtSel');await pg.waitForSelector('#stPtMenu',{state:'visible'});
@@ -239,11 +249,14 @@ const cls=async(pg,sel)=>pg.locator(sel).evaluateAll(a=>a.map(x=>(x.className.ma
  await pg.waitForFunction(()=>/Размещение приостановлено/.test(document.body.innerText));
  assert.deepEqual(errors,[]);await c.close();}
 
-// 9. Один пункт: в шапке его название без стрелки, список не открывается
+// 9. Один пункт (как у владельца на скриншоте 05.11 — «На дому»): список тоже открывается, в нём этот пункт с галочкой
 {const o={staff:Object.assign({},staff,{points:[staff.points[0]]})};const {c,pg,errors}=await ctx(o);
  await pg.goto(BASE+'/account.html#staff',{waitUntil:'domcontentloaded'});await pg.waitForSelector('#stLayout #stPtSel');
- assert.equal(await pg.locator('#stPtSel .st-dd-v').textContent(),'Маресьева');assert(await pg.locator('#stPtSel').isDisabled());
- assert.equal(await pg.locator('#stPtSel .st-dd-ch').count(),0,'без стрелки');assert.equal(await pg.locator('#stPtMenu').isVisible(),false);
+ assert.equal(await pg.locator('#stPtSel .st-dd-v').textContent(),'Маресьева');assert(!(await pg.locator('#stPtSel').isDisabled()));
+ assert.equal(await pg.locator('#stPtSel .st-dd-ch').count(),1,'со стрелкой');
+ await pg.click('#stPtSel');await pg.waitForSelector('#stPtMenu',{state:'visible'});
+ assert.deepEqual(await pg.locator('#stPtMenu [role=option]').evaluateAll(a=>a.map(x=>[x.innerText.trim(),x.getAttribute('aria-selected')])),[['Маресьева','true']]);
+ await pg.click('#stPtMenu [role=option]');await pg.waitForSelector('#stPtMenu',{state:'hidden'});
  assert.deepEqual(errors,[]);await c.close();}
 
 await b.close();console.log('staff-work-browser: OK');})().catch(e=>{console.error(e);process.exit(1);});
