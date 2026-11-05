@@ -195,6 +195,7 @@ public final class IvaAdminsPatch {
         Object f = IvaClientPatch.get(a, "chiefEmail");
         if (f instanceof View) ((View) f).setVisibility(View.GONE);
         hideNativeAdd(box);
+        try { IvaAdsPatch.panelButton(a, box); } catch (Throwable ignore) {}   // 10.136: «Рекламный кабинет →»
     }
 
     static void hideNativeAdd(ViewGroup g) {
