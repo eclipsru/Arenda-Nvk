@@ -2090,7 +2090,7 @@ public class IvaPatchTest {
                     + "," + cz2Form.contains("saveBlocked = IvaCensorPatch.stopTree(a, form);")
                     + "," + cz2Cl.contains("IvaCensorPatch.stopFields(a, IvaCensorPatch.asName(edits[SURNAME])")
                     + "," + cz2Ed.contains("if (IvaCensorPatch.stopFields(a, why)) return;")
-                    + "," + cz2St.contains("e = IvaCensorPatch.nameError(fName.getText().toString());")
+                    + "," + (!cz2St.contains("fName") && !cz2St.contains("label(a, \"ФИО\""))   // 10.138: ФИО сотрудника — из его профиля (там и цензура), поля в форме нет
                     + "," + cz2Sh.contains("IvaCensorPatch.asName(copyField(a, fio, labels[i]))")
                     + "," + cz2Md.contains("IvaCensorPatch.level(q) == 2"),
                 "true,true,true,true,true,true,true,true,true");
@@ -2611,6 +2611,7 @@ public class IvaPatchTest {
         prokat120();                                                  // 10.120: страница проката, чат пункта, «На одобрении»
         v121();                                                       // 10.121: первый пункт, правки на одобрение, заявки целиком
         v122();                                                       // 10.122: удаление сотрудником, «Мой инструмент», чат, отмена заявки
+        v138();                                                       // 10.138: ФИО из профиля, комиссия из базы
         v123();                                                       // 10.123: доставка по наибольшей цене, «обратно» за каждым сроком, карточки
         v124();                                                       // 10.124: подсветка карточек заявок
         v125();                                                       // 10.125: телефон пункта в карточке, другой пункт проката
@@ -2622,6 +2623,7 @@ public class IvaPatchTest {
         st133();                                                      // 10.133: оплата комиссии через ЮKassa
         st134();                                                      // 10.134: «К оплате» / «Переплата», окно суммы, лимит 5 000 ₽
         st135();                                                      // 10.135: «Оплатить через СБП» + «Другой способ»
+        st136();                                                      // 10.136: «Рекламный кабинет»
         if (fail > 0) { System.out.println("ошибок: " + fail); System.exit(1); }
         System.out.println("все проверки IvaPatch пройдены");
     }
@@ -3472,6 +3474,29 @@ public class IvaPatchTest {
         eq("10.121: адрес функции заявок", IvaOrderViewPatch.RPC, "/rest/v1/rpc/iva_order_cards");
     }
 
+    /** 10.138 (просьба владельца №11): ФИО сотрудника — из профиля; комиссия — из базы (iva_fee_balance), как на сайте. */
+    static void v138() {
+        boolean[] ok = {true, false, false, false};
+        eq("10.138: форма без ФИО — имя не проверяется",
+            IvaStaffPatch.formErr(true, "ivan@mail.ru", "me@mail.ru", null, "", 1, ok) + "|" + IvaStaffPatch.formErr(false, "", "me@mail.ru", null, "", 1, ok), "|");
+        eq("10.138: новый сотрудник — p_name null", IvaStaffPatch.saveBody(null, "a@b.ru", null, "", null, ok, false, false).contains("\"p_name\":null,"), true);
+        eq("10.138: при правке — прежнее имя", IvaStaffPatch.saveBody(null, "a@b.ru", " Иван  Петров ", "", null, ok, false, false).contains("\"p_name\":\"Иван Петров\""), true);
+        eq("10.138: имя для старой базы", IvaStaffPatch.fallbackName(null, " Ivan.P@Mail.ru ") + "|" + IvaStaffPatch.fallbackName("Иван", "x@y.ru") + "|" + IvaStaffPatch.fallbackName("  ", "olga@x.ru"),
+            "ivan.p|Иван|olga");
+        eq("10.138: «Укажите имя» — повтор", IvaStaffPatch.needName(IvaStaffPatch.dbError("400", "{\"message\":\"Укажите имя сотрудника (до 80 символов)\"}")) + "|" + IvaStaffPatch.needName("Отметьте хотя бы одно право"), "true|false");
+        IvaStaffPatch.Staff s = new IvaStaffPatch.Staff();
+        s.email = "olga@x.ru"; s.name = "";
+        String w1 = IvaStaffPatch.who(s);
+        s.name = "Ольга Смирнова";
+        eq("10.138: без имени — почта", w1 + "|" + IvaStaffPatch.who(s), "olga@x.ru|Ольга Смирнова");
+        double[] k = IvaAccessPatch.feeRpcParse("{\"email\":\"e@x.ru\",\"pct\":1,\"fee\":7,\"paid\":100,\"pending\":0,\"debt\":0,\"over\":93}");
+        eq("10.138: iva_fee_balance → начислено, оплачено, процент", k == null ? "null" : k[0] + "|" + k[1] + "|" + k[2], "7.0|100.0|1.0");
+        double[] k2 = IvaAccessPatch.feeRpcParse("{\"iva_fee_balance\":{\"fee\":12.5,\"paid\":0}}");
+        eq("10.138: обёрнутый ответ, процент по умолчанию 5", k2 == null ? "null" : k2[0] + "|" + k2[1] + "|" + k2[2], "12.5|0.0|5.0");
+        eq("10.138: плохой ответ — прежний расчёт", String.valueOf(IvaAccessPatch.feeRpcParse("[]")) + "|" + IvaAccessPatch.feeRpcParse("{\"code\":\"PGRST202\"}") + "|" + IvaAccessPatch.feeRpcParse(null), "null|null|null");
+        eq("10.138: переплата как в приложении", IvaAccessPatch.feeTexts(7, 100, 1)[1].contains("93"), true);
+    }
+
     static void v122() {
         String u1 = "11111111-2222-3333-4444-555555555555", u2 = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee";
         // право «Удаляет инструмент»
@@ -3660,6 +3685,143 @@ public class IvaPatchTest {
         eq("стрелка 10.131: справа от значка, но внутри раздела",
             IvaArrowPatch.placeLeft(40, 2, 20, 100, 2) + "," + IvaArrowPatch.placeLeft(90, 2, 20, 100, 2) + "," + IvaArrowPatch.placeLeft(0, 0, 200, 100, 2), "42,78,0");
         eq("стрелка 10.131: заголовок пункта настроек", IvaArrowPatch.TITLE, "Стрелка оповещений");
+    }
+
+    static void st136() {
+        // кому, где, когда, как часто — правила показа рекламы
+        eq("реклама 10.136: часы показа — день, через полночь, весь день",
+            IvaAdsPatch.inHours(9, 18, 9) + "|" + IvaAdsPatch.inHours(9, 18, 18) + "|" + IvaAdsPatch.inHours(22, 6, 23) + "|"
+            + IvaAdsPatch.inHours(22, 6, 5) + "|" + IvaAdsPatch.inHours(22, 6, 12) + "|" + IvaAdsPatch.inHours(0, 24, 3),
+            "true|false|true|true|false|true");
+        eq("реклама 10.136: дни недели — маска Пн=1 … Вс=64; воскресенье Calendar → 7",
+            IvaAdsPatch.dayOk(31, 1) + "|" + IvaAdsPatch.dayOk(31, 6) + "|" + IvaAdsPatch.dayOk(96, 7) + "|" + IvaAdsPatch.dowOf(java.util.Calendar.SUNDAY)
+            + "|" + IvaAdsPatch.dowOf(java.util.Calendar.MONDAY), "true|false|true|7|1");
+        eq("реклама 10.136: начало и конец показа",
+            IvaAdsPatch.dateOk(0, 0, 5) + "|" + IvaAdsPatch.dateOk(10, 0, 5) + "|" + IvaAdsPatch.dateOk(0, 10, 10) + "|" + IvaAdsPatch.dateOk(3, 10, 5),
+            "true|false|false|true");
+        long H = IvaAdsPatch.HOUR_MS;
+        eq("реклама 10.136: частота — один раз, раз в день, каждый раз",
+            IvaAdsPatch.freqOk(1, 0, 0, 0, 100) + "|" + IvaAdsPatch.freqOk(1, 0, 1, 50, 100) + "|" + IvaAdsPatch.freqOk(0, 24, 5, 1000, 1000 + 23 * H)
+            + "|" + IvaAdsPatch.freqOk(0, 24, 5, 1000, 1000 + 24 * H) + "|" + IvaAdsPatch.freqOk(0, 0, 99, 99, 100),
+            "true|false|false|true|true");
+        eq("реклама 10.136: частота — пресеты и обратно",
+            IvaAdsPatch.freqPreset(1, 0) + "|" + IvaAdsPatch.freqPreset(0, 24) + "|" + IvaAdsPatch.freqPreset(0, 0) + "|" + IvaAdsPatch.freqPreset(3, 24)
+            + "|" + java.util.Arrays.toString(IvaAdsPatch.freqOf(1)) + "|" + IvaAdsPatch.freqOf(3), "0|1|2|3|[0, 24]|null");
+        java.util.Set<String> aud = new java.util.HashSet<String>(java.util.Arrays.asList("guest", "client"));
+        long D = IvaAdsPatch.DAY_MS;
+        eq("реклама 10.136: кому — роль и «недавно установившим»",
+            IvaAdsPatch.audOk(aud, "guest", 0, 0, 5) + "|" + IvaAdsPatch.audOk(aud, "admin", 0, 0, 5) + "|" + IvaAdsPatch.audOk(aud, "client", 3, 1000, 1000 + 3 * D)
+            + "|" + IvaAdsPatch.audOk(aud, "client", 3, 1000, 1000 + 3 * D + 1),
+            "true|false|true|false");
+        eq("реклама 10.136: роль — гость, владелец проката, сотрудник, клиент",
+            IvaAdsPatch.roleOf(false, true, true) + "|" + IvaAdsPatch.roleOf(true, true, true) + "|" + IvaAdsPatch.roleOf(true, false, true)
+            + "|" + IvaAdsPatch.roleOf(true, false, false), "guest|admin|staff|client");
+        eq("реклама 10.136: где — экран входа, «Заявка отправлена», разделы; шторка и переписка — нет",
+            IvaAdsPatch.placeOf(true, false, false, "home", false, false) + "|" + IvaAdsPatch.placeOf(false, true, true, "home", false, false) + "|"
+            + IvaAdsPatch.placeOf(false, false, true, "home", false, false) + "|" + IvaAdsPatch.placeOf(false, false, true, "home", true, false) + "|"
+            + IvaAdsPatch.placeOf(false, false, true, "admhub", false, false) + "|" + IvaAdsPatch.placeOf(false, false, true, "chat", false, true) + "|"
+            + IvaAdsPatch.placeOf(false, false, true, "chat", false, false) + "|" + IvaAdsPatch.placeOf(false, false, true, "addtool", false, false) + "|"
+            + IvaAdsPatch.placeOf(false, false, false, "home", false, false),
+            "login|success|home||profile|chat|||");
+        IvaAdsPatch.Ad ad = new IvaAdsPatch.Ad();
+        ad.id = "a1"; ad.active = true; ad.audience = new java.util.LinkedHashSet<String>(java.util.Arrays.asList("client"));
+        ad.places = new java.util.LinkedHashSet<String>(java.util.Arrays.asList("home", "profile"));
+        boolean f1 = IvaAdsPatch.fits(ad, "home", "client", false, 0, 100, 12, 3), f2 = IvaAdsPatch.fits(ad, "orders", "client", false, 0, 100, 12, 3),
+            f3 = IvaAdsPatch.fits(ad, "home", "guest", false, 0, 100, 12, 3);
+        ad.active = false;
+        boolean f4 = IvaAdsPatch.fits(ad, "home", "client", false, 0, 100, 12, 3);
+        ad.active = true; ad.testOnly = true;
+        boolean f5 = IvaAdsPatch.fits(ad, "home", "guest", true, 0, 100, 12, 3), f6 = IvaAdsPatch.fits(ad, "home", "client", false, 0, 100, 12, 3);
+        ad.testOnly = false; ad.hourFrom = 9; ad.hourTo = 18;
+        boolean f7 = IvaAdsPatch.fits(ad, "home", "client", false, 0, 100, 20, 3);
+        ad.hourFrom = 0; ad.hourTo = 24; ad.days = 31;
+        boolean f8 = IvaAdsPatch.fits(ad, "home", "client", false, 0, 100, 12, 7);
+        eq("реклама 10.136: показ — только включённая, только где и кому; пробная — только создателю; часы и дни",
+            f1 + "|" + f2 + "|" + f3 + "|" + f4 + "|" + f5 + "|" + f6 + "|" + f7 + "|" + f8, "true|false|false|false|true|false|false|false");
+        // время, тексты карточки, форма, запрос
+        eq("реклама 10.136: время Supabase → мс и обратно",
+            IvaAdsPatch.isoMs("2026-11-05T10:00:00+00:00") + "|" + IvaAdsPatch.isoMs("2026-11-05T13:00:00.123456+03:00") + "|"
+            + IvaAdsPatch.isoMs("2026-11-05T10:00:00Z") + "|" + IvaAdsPatch.isoMs("") + "|" + IvaAdsPatch.isoMs(null) + "|"
+            + IvaAdsPatch.isoOf(1793872800000L) + "|" + IvaAdsPatch.isoOf(0),
+            "1793872800000|1793872800000|1793872800000|0|0|2026-11-05T10:00:00Z|");
+        IvaAdsPatch.Ad s = new IvaAdsPatch.Ad();
+        s.active = true; s.endAt = 200;
+        String st1 = IvaAdsPatch.stateText(s, 100, java.util.TimeZone.getTimeZone("UTC")) + "|" + IvaAdsPatch.stateText(s, 200, null);
+        s.endAt = 0; s.testOnly = true;
+        String st2 = IvaAdsPatch.stateText(s, 100, null);
+        s.active = false;
+        String st3 = IvaAdsPatch.stateText(s, 100, null);
+        s.active = true; s.testOnly = false; s.startAt = 1793872800000L;
+        String st4 = IvaAdsPatch.stateText(s, 100, java.util.TimeZone.getTimeZone("Europe/Moscow"));
+        eq("реклама 10.136: состояние в кабинете", st1 + "|" + st2 + "|" + st3 + "|" + st4,
+            "Показывается|Закончилась|Пробная — видите только вы|Скрыта|Начнётся 05.11.2026 13:00");
+        IvaAdsPatch.Ad w = new IvaAdsPatch.Ad();
+        w.format = "modal"; w.places = new java.util.LinkedHashSet<String>(java.util.Arrays.asList("profile", "login"));
+        w.shows = 12; w.clicks = 3; w.closes = 1;
+        eq("реклама 10.136: подпись карточки и счётчики (только числа)", IvaAdsPatch.whereText(w) + "|" + IvaAdsPatch.statsText(w),
+            "Окно по центру · Вход и регистрация, Кабинет|Показы 12 · нажали 3 · закрыли 1");
+        w.adLabel = true; w.advertiser = " ИП Иванов "; w.inn = "1234567890"; w.erid = "2Vtzqx";
+        String l1 = IvaAdsPatch.labelText(w);
+        w.inn = ""; w.erid = "";
+        eq("реклама 10.136: пометка «Реклама»", l1 + "|" + IvaAdsPatch.labelText(w), "Реклама · ИП Иванов · ИНН 1234567890 · erid: 2Vtzqx|Реклама · ИП Иванов");
+        eq("реклама 10.136: ссылка кнопки — только http(s), без схемы — https",
+            IvaAdsPatch.normUrl("eclipsru.github.io/Arenda-Nvk/") + "|" + IvaAdsPatch.normUrl("http://x.ru") + "|" + IvaAdsPatch.normUrl("javascript:alert(1)")
+            + "|" + IvaAdsPatch.normUrl("intent://x.ru") + "|" + IvaAdsPatch.normUrl("нет") + "|" + IvaAdsPatch.normUrl("a b.ru"),
+            "https://eclipsru.github.io/Arenda-Nvk/|http://x.ru||||");
+        eq("реклама 10.136: телефон кнопки", IvaAdsPatch.phoneDigits("+7 (900) 000-00-00") + "|" + IvaAdsPatch.phoneDigits("12") + "|" + IvaAdsPatch.phoneDigits("8 863 123 45 67"),
+            "+79000000000||88631234567");
+        IvaAdsPatch.Ad e = new IvaAdsPatch.Ad();
+        String e1 = IvaAdsPatch.formErr(e);
+        e.name = "Скидка";
+        String e2 = IvaAdsPatch.formErr(e);
+        e.headline = "−20%"; e.btnText = "Подробнее"; e.btnAction = "url"; e.btnValue = "javascript:x";
+        String e3 = IvaAdsPatch.formErr(e);
+        e.btnValue = "x.ru"; e.places.clear();
+        String e4 = IvaAdsPatch.formErr(e);
+        e.places.add("home"); e.startAt = 10; e.endAt = 5;
+        String e5 = IvaAdsPatch.formErr(e);
+        e.endAt = 0; e.inn = "123";
+        String e6 = IvaAdsPatch.formErr(e);
+        e.inn = ""; e.adLabel = true;
+        String e7 = IvaAdsPatch.formErr(e);
+        e.adLabel = false;
+        eq("реклама 10.136: проверка формы — по порядку", e1 + "|" + e2 + "|" + e3 + "|" + e4 + "|" + e5 + "|" + e6 + "|" + e7 + "|" + IvaAdsPatch.formErr(e),
+            "Укажите название рекламы (его видите только вы)|Добавьте картинку, заголовок или текст|Укажите ссылку для кнопки, например https://eclipsru.github.io/Arenda-Nvk/"
+            + "|Выберите, где показывать|Окончание должно быть позже начала|ИНН — 10 или 12 цифр|Для пометки «Реклама» укажите рекламодателя|");
+        StringBuilder longS = new StringBuilder();
+        for (int i = 0; i < 161; i++) longS.append('я');
+        e.advertiser = longS.toString();
+        String e8 = IvaAdsPatch.formErr(e);
+        e.advertiser = ""; e.erid = longS.substring(0, 81);
+        String e9 = IvaAdsPatch.formErr(e);
+        e.erid = longS.substring(0, 80);
+        eq("реклама 10.137: рекламодатель и erid — не длиннее, чем принимает база", e8 + "|" + e9 + "|" + IvaAdsPatch.formErr(e),
+            "Рекламодатель — не длиннее 160 знаков|erid — не длиннее 80 знаков|");
+        IvaAdsPatch.Ad b = new IvaAdsPatch.Ad();
+        b.name = " Акция \"май\" "; b.headline = "Скидка"; b.btnAction = "url"; b.btnValue = "x.ru"; b.places.add("login");
+        String body = IvaAdsPatch.saveBody(b);
+        eq("реклама 10.136: сохранение — новая без id, ссылка https, пустые даты, порядок списков",
+            body.startsWith("{\"p\":{\"section\":\"promo\",\"name\":\"Акция \\\"май\\\"\",") + "|" + body.contains("\"btn_value\":\"https://x.ru\"")
+            + "|" + body.contains("\"audience\":[\"guest\",\"client\",\"admin\",\"staff\"]") + "|" + body.contains("\"places\":[\"login\",\"home\"]")
+            + "|" + body.contains("\"start_at\":\"\",\"end_at\":\"\"") + "|" + body.endsWith("\"erid\":\"\"}}"),
+            "true|true|true|true|true|true");
+        b.id = "11111111-2222-3333-4444-555555555555";
+        eq("реклама 10.136: сохранение — правка с id; счётчик — id и вид",
+            IvaAdsPatch.saveBody(b).startsWith("{\"p\":{\"id\":\"11111111-2222-3333-4444-555555555555\",") + "|" + IvaAdsPatch.hitBody("a1", "click"),
+            "true|{\"p_id\":\"a1\",\"p_kind\":\"click\"}");
+        String jm = IvaAdsPatch.joinMsg(""), jt = IvaAdsPatch.joinMsg("tok");
+        eq("реклама 10.136: Realtime — отметка iva_ads_ping; гость без ключа",
+            jm.contains("\"table\":\"iva_ads_ping\"") + "|" + jm.contains("access_token") + "|" + jt.contains("\"access_token\":\"tok\"") + "|" + jm.contains("\"topic\":\"realtime:iva_ads\""),
+            "true|false|true|true");
+        eq("реклама 10.136: нет SQL — кабинет скажет",
+            IvaAdsPatch.noDb("404", "") + "|" + IvaAdsPatch.noDb("400", "{\"code\":\"PGRST202\"}") + "|" + IvaAdsPatch.noDb("401", "{}"), "true|true|false");
+        IvaAdsPatch.Ad p1 = new IvaAdsPatch.Ad(), p2 = new IvaAdsPatch.Ad(), p3 = new IvaAdsPatch.Ad();
+        p1.id = "1"; p1.updated = "2026-11-01"; p2.id = "2"; p2.updated = "2026-11-03"; p3.id = "3"; p3.updated = "2026-10-01"; p3.priority = 1;
+        StringBuilder ord = new StringBuilder();
+        for (IvaAdsPatch.Ad x : IvaAdsPatch.sorted(java.util.Arrays.asList(p1, p2, p3))) ord.append(x.id);
+        eq("реклама 10.136: порядок — сначала важные, потом свежие; окна — modal/top/full",
+            ord + "|" + IvaAdsPatch.popupFormat("banner") + IvaAdsPatch.popupFormat("modal") + IvaAdsPatch.popupFormat("top") + IvaAdsPatch.popupFormat("full"),
+            "321|falsetruetruetrue");
     }
 
     static void st135() {

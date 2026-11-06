@@ -284,10 +284,12 @@ const assert = require('assert');
 
   const tabs = await page.locator('.tabs button').allTextContents();
   console.log('Account tabs:', tabs);
-  assert(tabs.some(t => t.includes('Мои объявления')), 'Should have "Мои объявления" tab');
-  assert(tabs.some(t => t.includes('Заявки')), 'Should have "Заявки" tab');
-  assert(tabs.some(t => t.includes('Комиссия и оплата')), 'Should have "Комиссия и оплата" tab');
-  assert(tabs.some(t => t.includes('Профиль')), 'Should have "Профиль" tab');
+  // 06.11.2026 (просьба владельца №11): Прокат · Заявки · Пункт выдачи · Инструмент · Сотрудники · Отзывы · Комиссия и оплата;
+  // «Профиль» и «Сообщения» — в шапке и меню «Кабинет» (страница #prof по-прежнему открывается)
+  for (const t of ['Прокат', 'Заявки', 'Пункт выдачи', 'Инструмент', 'Сотрудники', 'Отзывы', 'Комиссия и оплата'])
+    assert(tabs.some(x => x.includes(t)), 'Should have "' + t + '" tab');
+  assert(!tabs.some(t => /Мои объявления|Арендую|Сдаю/.test(t)), 'no old tabs / mode switch');
+  assert(await page.locator('#root').innerText().then(t => /Профиль|профил/i.test(t)), '#prof still renders the profile');
 
   await browser.close();
   console.log('ALL TESTS PASSED SUCCESSFULLY!');

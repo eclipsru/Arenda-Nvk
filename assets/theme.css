@@ -103,6 +103,10 @@ select.inp{cursor:pointer;appearance:none;
   position:sticky;top:0;z-index:40;background:rgba(16,18,23,.96);
   backdrop-filter:blur(10px);border-bottom:1px solid var(--line);
 }
+/* 05.11.2026 (владелец): шапка сайта стоит на месте при прокрутке — на компьютере и планшете (от 769px — там нет баннера приложения), на всех страницах.
+   Шапка лежит в #hdr, поэтому на месте стоит сам #hdr (раньше «sticky» у .head не срабатывал — родитель той же высоты).
+   На телефоне — как было: там у шапки две строки и баннер приложения, а у каталога своя липкая строка «Фильтры». */
+@media (min-width:769px){ #hdr{position:sticky;top:0;z-index:40} }
 /* На всю ширину окна; свободное место получает только поиск. */
 .head > .wrap{max-width:none}
 .head-in > .city{flex-shrink:0}
@@ -176,14 +180,20 @@ select.inp{cursor:pointer;appearance:none;
 .ad-body{padding:11px 13px 13px;display:flex;flex-direction:column;gap:5px;flex:1}
 .ad-price{font-size:17px;font-weight:800;color:var(--tx)}
 .ad-price span{font-size:12.5px;font-weight:600;color:var(--g2)}
-.ad-name{font-size:14px;line-height:1.35;color:var(--tx);
+.ad-name{font-size:15px;font-weight:700;line-height:1.3;color:var(--tx);
   display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
 .ad-dep{font-size:12px;color:var(--g2)}
 .ad-meta{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--g2);
   margin-top:auto;padding-top:6px;flex-wrap:wrap}
 .ad-owner{display:flex;align-items:center;gap:5px;font-size:12px;color:var(--gr)}
 .ad-owner .star{color:var(--or);font-size:11px}
-.ad-distance{display:block;width:100%;font-size:11.5px;color:var(--g2);line-height:1.25}
+/* 06.11.2026 (владелец): название — сверху, на месте цены; цена — в правом нижнем углу; расстояние — на фото справа внизу */
+.ad-foot{display:flex;justify-content:flex-end;padding-top:2px}
+.ad-foot .ad-price{white-space:nowrap;line-height:1.15;text-align:right}
+.ad-km{position:absolute;right:8px;bottom:8px;z-index:2;padding:3px 9px;border-radius:999px;
+  background:rgba(11,13,17,.72);backdrop-filter:blur(4px);color:#fff;font-size:12.5px;font-weight:700;line-height:1.35;white-space:nowrap}
+.ad-km[hidden]{display:none}
+.ad-ph:has(.ad-km:not([hidden])) .ad-badges{right:76px}
 
 /* Сердечко */
 .fav{position:absolute;top:8px;right:8px;width:34px;height:34px;border-radius:50%;
@@ -231,6 +241,19 @@ select.inp{cursor:pointer;appearance:none;
 /* Высокая панель прокручивается вместе со страницей: все пункты доступны. */
 .home-filter-column .filters{position:static}
 .home-filter-column .f-list{max-height:none;overflow:visible}
+/* 06.11.2026 (владелец): окна «Глобальный поиск» и «Полезная информация» стоят на месте при прокрутке — как в «Работе».
+   Колонка (название + окно) прилипает под шапкой сайта и занимает экран по высоте; длинное окно прокручивается внутри,
+   все пункты фильтра доступны. «Полезная информация» сбоку — только от 1500px (уже — она под объявлениями, как было). */
+@media (min-width:861px){
+  .layout.home > .home-filter-column{position:sticky;top:calc(var(--head-h) + 1px);align-self:start;display:flex;flex-direction:column;
+    height:calc(100vh - var(--head-h) - 1px);min-height:420px;padding-bottom:14px}
+  .layout.home > .home-filter-column .filters{flex:1 1 auto;min-height:0;overflow-y:auto;overscroll-behavior:contain}
+}
+@media (min-width:1500px){
+  .layout.home > .useful-info{position:sticky;top:calc(var(--head-h) + 1px);align-self:start;display:flex;flex-direction:column;
+    height:calc(100vh - var(--head-h) - 1px);min-height:420px;padding-bottom:14px}
+  .layout.home > .useful-info .useful-card{flex:1 1 auto;min-height:0;overflow-y:auto;overscroll-behavior:contain}
+}
 .filters{background:var(--card);border:1px solid var(--line);border-radius:var(--r);
   padding:16px;position:sticky;top:calc(var(--head-h) + 14px)}
 .f-grp{padding:13px 0;border-bottom:1px solid var(--line)}
@@ -239,10 +262,16 @@ select.inp{cursor:pointer;appearance:none;
 .f-grp h4{font-size:13px;font-weight:700;margin-bottom:9px;color:var(--gr);
   text-transform:uppercase;letter-spacing:.4px}
 .f-row{display:flex;gap:8px}
+/* 06.11.2026 (владелец): поля цены «от / до» — высотой с кнопку города в шапке (41px, на телефоне 37px) */
+.f-price .inp{height:41px;padding:0 12px;font-size:14px}
+@media (max-width:760px){ .f-price .inp{height:37px} }
 .f-list{display:flex;flex-direction:column;gap:2px;max-height:230px;overflow-y:auto}
 .f-item{display:flex;align-items:center;gap:9px;padding:7px 8px;border-radius:8px;
   cursor:pointer;font-size:14px;transition:.12s}
 .f-item:hover{background:var(--field)}
+/* 06.11.2026: «Все категории» раскрывает список — стрелка рядом с названием */
+.f-item .f-chev{width:15px;height:15px;flex-shrink:0;fill:none;stroke:currentColor;stroke-width:2;margin-left:-3px;transition:transform .15s}
+.f-item.f-more.open .f-chev{transform:rotate(180deg)}
 .f-item.on{background:var(--or-soft);color:var(--or);font-weight:600}
 .f-item .n{margin-left:auto;font-size:12px;color:var(--g2)}
 .f-item.on .n{color:var(--or)}
@@ -357,6 +386,39 @@ select.inp{cursor:pointer;appearance:none;
   background:var(--or);color:#fff;border-radius:8px;font-size:10px;font-weight:700;
   display:flex;align-items:center;justify-content:center}
 @media (max-width:760px){ .work-mob:not(.hide){display:flex !important} }
+/* у владельца проката (06.11.2026): «Работа» и справа «Прокат»; на телефоне подпись логотипа сжимается, строка не переносится */
+.prok-link .acct-ini,.prok-mob .acct-ini{box-shadow:0 0 0 1.5px var(--line-2)}
+.prok-link.on .acct-ini,.prok-mob.on .acct-ini{box-shadow:0 0 0 2px var(--or)}
+@media (max-width:760px){ html.iva-prok .head-in > .logo{flex:1 1 0} }
+/* «Сменить» и кружок «Владелец» (06.11.2026): видны, только когда база знает прокат (классы на <html> ставит IvaSwitch) */
+.own-link,.own-mob,.sw-btn,.acct-menu .acct-sw{display:none !important}
+html.iva-sw .sw-btn{display:inline-flex !important}
+html.iva-sw .acct-menu .acct-sw{display:flex !important}
+html.iva-sw-own .own-link{display:flex !important}
+@media (max-width:760px){
+  html.iva-sw-own .own-mob{display:flex !important}
+  /* телефон: «Владелец» встаёт рядом с «Работой» в первой строке — подпись логотипа сжимается (многоточие), а не переносится */
+  html.iva-sw-own .head-in > .logo{flex:1 1 0}
+}
+.own-ini{background:var(--field);color:var(--gr);box-shadow:0 0 0 1.5px var(--line-2)}
+.own-link:hover .own-ini,.own-mob:hover .own-ini{color:var(--or);box-shadow:0 0 0 1.5px var(--or)}
+.own-mob{position:relative;flex-shrink:0;width:36px;height:36px;align-items:center;justify-content:center}
+.own-mob .acct-ini{width:34px;height:34px}
+.acct-menu .acct-sw{align-items:center;width:100%;padding:9px 10px;border-radius:9px;font-size:14px;color:var(--tx);text-align:left}
+.acct-menu .acct-sw:hover,.acct-menu .acct-sw:focus-visible{background:var(--field)}
+.btn.sw-btn{padding:5px 11px;font-size:12.5px;font-weight:600;border-radius:9px;flex:0 0 auto;color:var(--tx)}
+.btn.sw-btn:hover{border-color:var(--or);color:var(--or)}
+.sw-row{display:flex;align-items:center;gap:10px;min-width:0}
+.sw-row h2{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sw-note{color:var(--g2);font-size:13.5px;line-height:1.5;margin:0 0 14px}
+.sw-fld{margin-bottom:14px}
+.sw-l{display:block;font-size:13px;font-weight:600;margin-bottom:6px}
+.sw-mail{display:flex;align-items:center;color:var(--g2);user-select:none}
+.sw-err{display:none;background:rgba(255,138,128,.12);border:1px solid rgba(255,138,128,.3);color:var(--red);
+  padding:10px 13px;border-radius:var(--r-s);font-size:13.5px;margin-bottom:14px}
+.sw-err.show{display:block}
+.sheet.sw-sheet .sheet-b{padding-bottom:18px}
+@media (min-width:760px){ .sheet.st-rsheet.sw-sheet{width:min(420px,calc(100vw - 32px))} }
 /* планшет и узкий ноутбук: в шапке только значки (подписи остаются для экранного чтеца), поиску — место */
 @media (min-width:761px) and (max-width:1100px){
   .hlinks{gap:2px}
@@ -687,7 +749,7 @@ select.inp{cursor:pointer;appearance:none;
   .cat .ico{width:28px;height:28px}
   .cat b{font-size:13px}
   .ad-price{font-size:15.5px}
-  .ad-name{font-size:13px}
+  .ad-name{font-size:14px}
   .t-title{font-size:20px}
   .price-big{font-size:26px}
   .box{padding:15px}
@@ -908,6 +970,16 @@ select.inp{cursor:pointer;appearance:none;
   .cat.back b{color:var(--gr)}
   .cat.on .ico,.cat.pop.on img{border-color:var(--or);background:var(--or-soft)}
   .cat.on b,.cat.pop.on b{color:var(--or)}
+}
+/* 06.11.2026 (владелец): плитка «Все категории» — первая; за ней 6 категорий, остальные открывает она.
+   Компьютер: значок сетки слева, как предмет на соседних плитках, подпись справа внизу и «ещё N» / «свернуть».
+   Телефон: квадрат со значком и подпись под ним, как остальные плитки (5 в ряд). */
+.cat.pop.all-cats .ico{position:absolute;left:16px;top:16px;width:46px;height:46px;color:var(--or)}
+.cat.pop.all-cats .ico svg{stroke-width:1.6}
+.cat.pop.all-cats b small{display:block;margin-top:3px;font-size:12px;font-weight:500;color:var(--g2);text-shadow:none}
+@media (max-width:760px){
+  .cat.pop.all-cats .ico{position:static;width:100%;height:auto}
+  .cat.pop.all-cats b small{display:none}
 }
 @media (max-width:380px){ .cat b,.cat.pop b{font-size:10px;letter-spacing:-.1px} }
 @media (min-width:480px) and (max-width:760px){
@@ -1258,3 +1330,334 @@ textarea.inp.st-ch-inp{height:46px;padding:12px 14px}
 .pick button[data-spt] small{display:block;font-weight:400;color:var(--g2);font-size:12px;line-height:1.35}
 .st-tadd{display:flex;gap:10px;align-items:center;justify-content:space-between;flex-wrap:wrap;margin:6px 2px 4px}
 @media (max-width:640px){.form-grid .nav-btns{flex-wrap:wrap}.form-grid .nav-btns .btn{min-width:0;flex:1 1 30%}}
+/* «Работа» сотрудника — раскладка 05.11.2026 (просьба и правки владельца): слева заявки, справа чаты (ширина
+   «Глобального поиска» — 306px). Как на главной: названия «Заявки» / «Чаты» — над окнами на уровне «Глобальный поиск» /
+   «Полезная информация», окна — сразу под ними (на уровне окон фильтра и информации). Шапка сайта, шапка «Работы»
+   (ФИО + «Пункт выдачи») и оба окна стоят на месте при прокрутке. 861–1499px: заявки и чаты одной колонкой слева
+   (по половине); телефон — одна колонка, окна под основным, на месте — только шапка «Работы».
+   --st-top — высота шапки сайта, если она стоит на месте (ставит account.html), --st-hr — высота строки ФИО. */
+.st-layout{--st-hr:72px;display:grid;grid-template-columns:306px minmax(0,1fr);grid-template-areas:"side main";gap:0 20px;align-items:start;padding-bottom:40px}
+.st-layout > aside,.st-layout > section,.st-side{min-width:0}
+.st-main{grid-area:main}
+.st-side{grid-area:side;position:sticky;top:var(--st-top,var(--head-h));padding:20px 0 14px;height:calc(100vh - var(--st-top,var(--head-h)));min-height:460px;display:flex;flex-direction:column;gap:12px}
+.st-scol{display:flex;flex-direction:column;min-height:0}
+.st-side .st-scol{flex:1 1 0}
+@media (min-width:1500px){
+  .st-layout{grid-template-columns:306px minmax(0,1fr) 306px;grid-template-areas:"ord main chat"}
+  .st-side{display:contents}
+  .st-ocol{grid-area:ord}
+  .st-ccol{grid-area:chat}
+  .st-layout .st-scol{position:sticky;top:var(--st-top,var(--head-h));padding:20px 0 14px;height:calc(100vh - var(--st-top,var(--head-h)));min-height:460px}
+}
+@media (max-width:1024px){ .st-layout{grid-template-columns:260px minmax(0,1fr);gap:0 14px} }
+@media (max-width:860px){
+  .st-layout{grid-template-columns:minmax(0,1fr);grid-template-areas:"main" "side"}
+  .st-side{position:static;height:auto;min-height:0;padding:0;margin-top:22px;gap:22px}
+  .st-side .st-scol{flex:none}
+  .st-slist{max-height:420px}
+}
+/* окна заявок и чатов */
+.st-side-card{flex:1 1 auto;display:flex;flex-direction:column;width:100%;min-height:0;background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:12px 12px 10px}
+/* названия «Заявки» / «Чаты» — как «Глобальный поиск» и «Полезная информация» на главной (.cats-head): над окном, окно — сразу под ним */
+.cats-head.st-side-h{flex:0 0 auto;align-items:center;flex-wrap:nowrap}
+.st-side-h h2{margin:0}
+.st-side-c{font-size:12.5px;font-weight:700;color:var(--gr);background:var(--field);border:1px solid var(--line);border-radius:20px;padding:1px 9px}
+.cats-head.st-side-h .st-link{margin-left:auto;font-size:14px;font-weight:600}
+@media (max-width:860px){ .st-side-card{flex:none} }
+.st-side-lg{display:flex;flex-wrap:wrap;gap:4px 10px;padding:0 2px 10px;margin-bottom:8px;border-bottom:1px solid var(--line)}
+.st-side-lg span{display:inline-flex;align-items:center;gap:5px;font-size:11.5px;color:var(--gr)}
+.st-side-lg span::before{content:"";width:8px;height:8px;border-radius:50%;background:var(--g2)}
+.st-side-lg .g::before{background:var(--grn)}
+.st-side-lg .y::before{background:var(--yel)}
+.st-side-lg .r::before{background:var(--red)}
+.st-side-e{padding:6px 2px;line-height:1.5}
+.st-slist{flex:1;min-height:0;overflow-y:auto;overscroll-behavior:contain;display:flex;flex-direction:column;gap:6px;padding:2px;margin:0 -2px}
+.st-si{display:flex;flex-direction:column;gap:3px;width:100%;text-align:left;background:var(--field);border:1px solid var(--line);border-left:3px solid var(--line-2);border-radius:var(--r-s);padding:8px 10px;color:var(--tx);font:inherit;cursor:pointer;transition:background .15s}
+.st-si:hover{border-top-color:var(--line-2);border-right-color:var(--line-2);border-bottom-color:var(--line-2)}
+.st-si.c-g{border-left-color:var(--grn);background:rgba(76,175,80,.08)}
+.st-si.c-y{border-left-color:var(--yel);background:rgba(255,183,77,.07)}
+.st-si.c-r{border-left-color:var(--red);background:rgba(255,138,128,.11)}
+.st-si-t{display:flex;align-items:baseline;gap:8px;min-width:0}
+.st-si-t b{flex:1;min-width:0;font-size:13.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.st-si-t small{flex:0 0 auto;font-size:11.5px;color:var(--g2);white-space:nowrap}
+.st-si-s,.st-si-l{font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.st-si-s{color:var(--gr)}
+.st-si-s em{font-style:normal;font-weight:600}
+.st-si.c-g .st-si-s em{color:var(--grn)}
+.st-si.c-y .st-si-s em{color:var(--yel)}
+.st-si.c-r .st-si-s em{color:var(--red)}
+.st-si-l{color:var(--g2)}
+.st-si-l i{font-style:normal;color:var(--gr)}
+.st-wrap.st-flash > *{box-shadow:0 0 0 2px var(--or);transition:box-shadow .3s}
+/* шапка «Работы» — стоит на месте при прокрутке (фон страницы, содержимое уходит под неё). Три части: слева фото и ФИО,
+   справа «Пункт выдачи» и список, а выбранный пункт (название, адрес, график, телефон, «Ваши права») — ровно посередине
+   между ними (flex: пункт занимает всё место между ФИО и списком). Узкая шапка (<820px, container query) — пункт отдельной
+   строкой по центру; телефон — три строки. */
+.st-main .st-head{position:sticky;top:var(--st-top,var(--head-h));z-index:30;background:var(--bg);padding:20px 0 0;margin:0;container:sthead / inline-size}
+.st-head .st-headrow{display:flex;flex-wrap:nowrap;align-items:center;gap:10px 18px;min-height:var(--st-hr);padding:0 0 12px;margin:0;border-bottom:1px solid var(--line)}
+.st-who{order:1;flex:0 1 auto;max-width:34%;display:flex;align-items:center;gap:14px;min-width:0}
+.st-head .acct-head-t{min-width:0;flex:1}
+.st-head .acct-head-t h2{font-size:20px;line-height:1.22;margin:0 0 3px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;word-break:break-word}
+.st-head .acct-head-t .small{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.st-pinfo{order:2;flex:1 1 0;display:flex;flex-direction:column;align-items:center;gap:2px;text-align:center;min-width:0}
+.st-pinfo h3{margin:0;font-size:18px;font-weight:800;line-height:1.25;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.st-pinfo-a{font-size:13px;color:var(--gr);line-height:1.4;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.st-pinfo-m{display:flex;align-items:center;justify-content:center;flex-wrap:wrap;gap:2px 14px;font-size:12.5px}
+.st-pinfo-i{display:inline-flex;align-items:center;white-space:nowrap}
+.st-pinfo-m a{color:var(--or)}
+/* «Ваши права» — рядом с телефоном пункта; открывает окно с правами */
+.st-rights-btn{display:inline-flex;align-items:center;gap:5px;padding:0;background:none;border:0;color:var(--tx);font:inherit;font-size:inherit;font-weight:600;
+  cursor:pointer;text-decoration:underline;text-decoration-color:var(--line-2);text-underline-offset:3px}
+.st-rights-btn svg{color:var(--grn);flex:0 0 auto}
+.st-rights-btn:hover,.st-rights-btn:focus-visible{outline:none;color:var(--or);text-decoration-color:var(--or)}
+.st-dot{width:4px;height:4px;border-radius:50%;background:var(--g2)}
+.st-main .st-tabs,.st-main .st-wrap,.st-main .st-addpane{scroll-margin-top:calc(var(--st-top,var(--head-h)) + var(--st-hh,100px) + 12px)}
+.st-ptsel{order:3;flex:0 0 auto;display:flex;align-items:center;gap:10px;min-width:0}
+.st-ptsel-l{font-size:13px;font-weight:600;color:var(--gr);white-space:nowrap}
+/* выпадающий список — размером и видом как кнопка города в шапке сайта (.city); меню — карточка как меню «Кабинет»,
+   выбранный — оранжевый с галочкой */
+.st-dd{position:relative;min-width:0}
+.st-dd-btn{display:flex;align-items:center;gap:8px;min-width:150px;max-width:240px;padding:9px 12px;background:var(--card);border:1px solid var(--line);
+  border-radius:var(--r-s);color:var(--tx);font:inherit;font-size:14px;line-height:1.45;text-align:left;white-space:nowrap;cursor:pointer;transition:border-color .15s}
+.st-dd-btn:hover{border-color:var(--line-2)}
+.st-dd-btn:focus-visible,.st-dd.open .st-dd-btn{outline:none;border-color:var(--or)}
+.st-dd-v{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis}
+.st-dd-ch{flex:0 0 16px;width:16px;height:16px;color:var(--gr);transition:transform .18s,color .15s}
+.st-dd.open .st-dd-ch{transform:rotate(180deg);color:var(--or)}
+.st-dd-menu{position:absolute;right:0;min-width:max(100%,220px);width:max-content;max-width:min(360px,calc(100vw - 32px));top:calc(100% + 8px);z-index:60;
+  display:flex;flex-direction:column;gap:2px;padding:6px;max-height:min(340px,60vh);overflow-y:auto;overscroll-behavior:contain;
+  background:var(--card);border:1px solid var(--line);border-radius:var(--r);box-shadow:0 18px 40px rgba(0,0,0,.45);animation:stDdIn .14s ease-out}
+.st-dd-menu[hidden]{display:none}
+@keyframes stDdIn{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}
+.st-dd-o{display:flex;align-items:center;gap:10px;width:100%;padding:10px 12px;border-radius:9px;background:none;border:0;color:var(--tx);
+  font:inherit;font-size:14px;font-weight:600;text-align:left;cursor:pointer}
+.st-dd-o span{flex:1;min-width:0;line-height:1.3;overflow-wrap:anywhere}
+.st-dd-o:hover,.st-dd-o:focus-visible{outline:none;background:var(--field)}
+.st-dd-o.on{color:var(--or);background:var(--or-soft)}
+.st-dd-tick{flex:0 0 18px;width:18px;height:18px}
+@container sthead (max-width:820px){
+  .st-head .st-headrow{flex-wrap:wrap}
+  .st-who{flex:1 1 0;max-width:none}
+  .st-pinfo{order:4;flex:1 1 100%}
+}
+@container sthead (max-width:560px){
+  .st-head .st-headrow{gap:8px}
+  .st-who{flex-basis:100%}
+  .st-pinfo{order:2}
+  .st-ptsel{order:3;flex:1 1 100%;justify-content:space-between}
+  .st-dd-btn{max-width:none;min-width:170px}
+}
+@media (max-width:640px){
+  .st-main .st-head{padding-top:12px}
+  .st-head .st-headrow{padding-bottom:10px}
+  .st-head .acct-head-ava{width:44px;height:44px;flex-basis:44px;font-size:16px}
+  .st-head .acct-head-t h2{font-size:18px}
+  .st-pinfo{flex-direction:row;flex-wrap:wrap;justify-content:center;gap:0 8px}
+  .st-pinfo h3{font-size:15px}
+  .st-pinfo-a{font-size:12.5px}
+  .st-pinfo-m{width:100%;font-size:12px}
+  .st-dd-menu{left:auto}
+}
+/* под шапкой — счётчики выбранного пункта во всю ширину */
+.st-pcard{background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:10px;margin-top:14px}
+.st-pcard-n{display:flex;gap:8px;width:100%}
+.st-pst{flex:1 1 0;min-width:0;display:flex;flex-direction:column;align-items:center;gap:1px;background:var(--field);border:1px solid var(--line);border-radius:var(--r-s);padding:7px 8px}
+.st-pst b{font-size:19px;font-weight:800;color:var(--gr);line-height:1.2}
+.st-pst span{font-size:11.5px;color:var(--g2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
+.st-pst.has b{color:var(--tx)}
+.st-pst.g.has b{color:var(--grn)}
+.st-pst.y.has b{color:var(--yel)}
+.st-pst.r.has b{color:var(--red)}
+.st-pst.o.has b{color:var(--or)}
+@media (max-width:640px){ .st-pcard{padding:8px} .st-pcard-n{flex-wrap:wrap;gap:6px} .st-pst{flex:1 1 calc(33% - 6px)} }
+.st-addpane{margin-top:2px}
+.st-add-pt{display:flex;flex-direction:column;gap:2px;padding:10px 12px;border-radius:var(--r-s);background:var(--or-soft);border:1px solid rgba(255,143,31,.35);margin-bottom:12px}
+.st-add-pt span{font-size:11px;letter-spacing:.6px;text-transform:uppercase;color:var(--or);font-weight:700}
+.st-add-pt b{font-size:15px;line-height:1.35}
+.st-add-pt small{font-size:12.5px;color:var(--gr);line-height:1.4}
+.st-add-if{display:block;width:100%;height:760px;border:0;background:transparent;color-scheme:dark}
+.st-add-no b{display:block;margin-bottom:6px;font-size:14.5px}
+.st-add-no p{font-size:13.5px;color:var(--gr);line-height:1.55}
+.st-add-note{margin-top:10px;line-height:1.5}
+/* окно «Ваши права» (openSheet + .st-rsheet): на компьютере — окошко по центру с крестиком, на телефоне — шторка снизу */
+.st-rights-l{display:flex;flex-direction:column;gap:12px}
+.st-right{display:flex;gap:11px;align-items:flex-start;font-size:14px;color:var(--g2);padding:10px 12px;background:var(--card);border:1px solid var(--line);border-radius:var(--r-s)}
+.st-right b{display:block;color:var(--gr);font-weight:600}
+.st-right small{display:block;font-size:12.5px;line-height:1.45;margin-top:1px}
+.st-right-i{flex:0 0 24px;height:24px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:var(--field);border:1px solid var(--line);font-size:12px;font-weight:800;color:var(--g2)}
+.st-right.on b{color:var(--tx)}
+.st-right.on .st-right-i{background:rgba(76,175,80,.14);border-color:rgba(76,175,80,.5);color:var(--grn)}
+.st-rights-note{margin-top:14px;line-height:1.5}
+@media (min-width:760px){
+  .sheet.st-rsheet{left:50%;right:auto;top:50%;bottom:auto;width:min(520px,calc(100vw - 32px));max-height:min(640px,86vh);border:1px solid var(--line-2);
+    border-radius:18px;box-shadow:0 24px 60px rgba(0,0,0,.55);opacity:0;transform:translate(-50%,-46%);transition:transform .2s ease,opacity .2s ease}
+  .sheet.st-rsheet.open{opacity:1;transform:translate(-50%,-50%)}
+  .sheet.st-rsheet .grabber{display:none}
+}
+.tabs.st-tabs{margin-top:14px}
+/* «Статистика» сотрудника: только числа по пункту (без денег и данных клиентов) */
+.st-sd{margin-bottom:6px}
+.st-sh{margin:16px 2px 8px;font-size:12.5px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--g2)}
+.kpis.st-skpis{grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px;margin-bottom:4px}
+.st-skpis .kpi{padding:13px 14px}
+.st-skpis .kpi .vl{font-size:22px}
+.st-skpis .st-k-late .vl{color:var(--red)}
+.st-note{background:var(--or-soft);border:1px solid rgba(255,143,31,.3);border-radius:var(--r-s);padding:10px 12px;font-size:13px;color:var(--gr);line-height:1.55;margin:4px 0 8px}
+.st-chart{display:flex;align-items:flex-end;gap:3px;height:150px;background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:12px 10px 6px}
+.st-col{flex:1;min-width:0;height:100%;display:flex;flex-direction:column;align-items:center;gap:4px}
+.st-bars{flex:1;width:100%;display:flex;align-items:flex-end;justify-content:center;gap:2px}
+.st-bars i{display:block;width:40%;max-width:12px;min-height:2px;border-radius:3px 3px 0 0}
+.st-chart .b-n,.st-legend .b-n{background:var(--or)}
+.st-chart .b-i,.st-legend .b-i{background:var(--grn)}
+.st-col small{font-size:10px;color:var(--g2);white-space:nowrap}
+.st-chart.many .st-col small{visibility:hidden}
+.st-chart.many .st-col:nth-child(5n+1) small{visibility:visible}
+.st-legend{display:flex;gap:14px;margin:6px 2px 0;font-size:12px;color:var(--gr)}
+.st-legend span{display:flex;align-items:center;gap:6px}
+.st-legend i{width:10px;height:10px;border-radius:3px;display:inline-block}
+.st-top{display:flex;flex-direction:column;gap:9px;background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:12px 14px}
+.st-top-r{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,1fr) auto;gap:10px;align-items:center;font-size:13.5px}
+.st-top-n{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.st-top-b{height:8px;background:var(--field);border-radius:4px;overflow:hidden}
+.st-top-b i{display:block;height:100%;background:var(--or);border-radius:4px}
+/* форма добавления внутри «Работы» (new.html?embed=1): без шапки и подвала, одна колонка */
+body.emb{background:transparent}
+body.emb .page{padding:0;min-height:0}
+body.emb #root.wrap{max-width:none;padding:0}
+/* 06.11.2026: кабинет владельца проката — окна «Сотрудники» и «Пункты выдачи» на странице «Прокат» (раскладка «Работы»)
+   и окна правки сотрудника и пункта (openSheet + .st-rsheet: на компьютере — окошко по центру, на телефоне — шторка) */
+.pr-layout .pr-main > .sect:first-child{padding-top:20px}
+.cats-head.st-side-h .pr-add{margin-left:auto}
+.btn.sm.pr-add{padding:5px 10px;font-size:12.5px;white-space:nowrap;flex:0 0 auto}
+.pr-layout .st-side-h{gap:6px}
+.pr-layout .st-side-h h2{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;font-size:18px}
+@media (min-width:861px) and (max-width:1024px){ .pr-layout .st-side-h .st-side-c{display:none} }   /* колонка 260px: без счётчика заголовок помещается */
+.pr-layout .st-si-t b{flex:0 1 auto}
+.pr-layout .st-si-t small{flex:1 1 0;min-width:0;text-align:right;overflow:hidden;text-overflow:ellipsis}
+.st-si .ow-tag{font-size:12px}
+@media (min-width:760px){
+  .sheet.st-rsheet.ow-sheet{width:min(560px,calc(100vw - 32px));max-height:min(760px,90vh)}
+  .sheet.st-rsheet.ow-sheet.ow-wide{width:min(640px,calc(100vw - 32px))}
+}
+.ow-form{display:flex;flex-direction:column}
+.ow-form .chk{align-items:flex-start}
+.ow-form .chk input{margin-top:2px;flex:0 0 auto}
+.ow-chk span{display:flex;flex-direction:column;gap:2px;min-width:0}
+.ow-chk b{font-weight:600;color:var(--tx)}
+.ow-chk small,.ow-form .chk small{font-size:12.5px;line-height:1.45;color:var(--g2)}
+.ow-chk.dis{cursor:default}
+.ow-chk.dis b{color:var(--g2)}
+.ow-chk.dis input{cursor:default}
+.ow-sets{margin:0 0 6px}
+.chip.on{background:rgba(255,143,31,.14);border-color:var(--or);color:var(--or)}
+.ow-hint{font-size:12.5px;line-height:1.45;color:var(--g2);margin-top:6px}
+.ow-gap{margin-top:14px}
+.ow-who{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:14px}
+.ow-st{font-size:12px;font-weight:700;padding:3px 9px;border-radius:999px;border:1px solid var(--line);color:var(--g2);background:var(--field)}
+.ow-st-active{color:var(--grn);border-color:rgba(76,175,80,.5);background:rgba(76,175,80,.12)}
+.ow-st-invited{color:var(--yel);border-color:rgba(255,193,7,.45);background:rgba(255,193,7,.1)}
+.ow-st-declined{color:var(--red);border-color:rgba(255,107,107,.45);background:rgba(255,107,107,.1)}
+.ow-hours{display:flex;flex-direction:column;gap:6px;margin-bottom:4px}
+.ow-hr{display:grid;grid-template-columns:30px minmax(0,1fr) 12px minmax(0,1fr) auto;align-items:center;gap:8px}
+.ow-hr b{font-size:13px}
+.ow-hr .inp{padding:8px 10px;min-width:0;color-scheme:dark}
+.ow-hr .chk{padding:0;font-size:13px;white-space:nowrap}
+.ow-hr.off b,.ow-hr.off .inp{opacity:.45}
+.ow-pstaff{display:flex;flex-direction:column;gap:8px}
+.ow-ps{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:9px 11px;background:var(--card);border:1px solid var(--line);border-radius:var(--r-s)}
+.ow-ps > span{display:flex;flex-direction:column;min-width:0}
+.ow-ps b{font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ow-ps small{font-size:12px;color:var(--g2);line-height:1.4}
+.ow-ps .btn{flex:0 0 auto}
+@media (max-width:480px){
+  .ow-hr{grid-template-columns:26px minmax(0,1fr) 10px minmax(0,1fr);row-gap:4px}
+  .ow-hr .chk{grid-column:2 / -1}
+  .ow-ps{flex-direction:column;align-items:stretch}
+}
+
+/* 06.11.2026 (просьба владельца №11): кабинет «Прокат» — шапка как у «Работы» (фото и ФИО, выбранный пункт, «Пункт выдачи»),
+   вкладки «Пункт выдачи» и «Сотрудники» (зелёный — пункт работает, красный — нет сотрудника или инструмента),
+   окна справа — по высоте содержимого, «Комиссия и оплата» — «Внести платёж», «Платные ресурсы», окно оплаты (QR-код и карта) */
+.pr-main .st-head.pr-head{padding-top:20px}
+.pr-layout .pr-main > .sect.pr-head:first-child{padding-top:20px}
+.pr-tabs{margin-top:14px;gap:0}
+.tabs.pr-tabs button{padding:11px 10px}
+.tabs.pr-tabs button .n{margin-left:5px}
+@media (min-width:861px) and (max-width:1180px){ .tabs.pr-tabs button{padding:10px 8px;font-size:13.5px} }
+.st-rights-btn.pr-bad-btn{color:var(--red);border-color:rgba(255,138,128,.45);background:rgba(255,138,128,.1)}
+.sect-h.pr-sh{align-items:flex-start;justify-content:space-between}
+.sect-h.pr-sh > div{min-width:0}
+.sect-h.pr-sh p{margin:4px 0 0}
+.pr-kpis{grid-template-columns:repeat(auto-fit,minmax(150px,1fr))}
+.pr-kpis .kpi.warn .vl{color:var(--red)}
+.pr-cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:12px;margin-bottom:18px}
+.pr-card{display:flex;flex-direction:column;gap:6px;min-width:0;background:var(--card);border:1px solid var(--line);border-left:4px solid var(--line-2);border-radius:var(--r);padding:14px 16px}
+.pr-card.c-g{border-left-color:var(--grn)}
+.pr-card.c-r{border-left-color:var(--red);background:linear-gradient(90deg,rgba(255,138,128,.08),transparent 60%),var(--card)}
+.pr-card.c-y{border-left-color:var(--yel)}
+.pr-card.c-n{border-left-color:var(--line-2)}
+.pr-card-h{display:flex;align-items:center;justify-content:space-between;gap:10px;min-width:0}
+.pr-card-h b{font-size:16px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pr-card .small a{color:var(--or)}
+.pr-card .acts{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
+.pr-badge{flex:0 0 auto;font-size:12px;font-weight:700;padding:3px 9px;border-radius:999px;border:1px solid var(--line);color:var(--g2);background:var(--field);white-space:nowrap}
+.pr-badge.g{color:var(--grn);border-color:rgba(76,175,80,.5);background:rgba(76,175,80,.12)}
+.pr-badge.r{color:var(--red);border-color:rgba(255,107,107,.45);background:rgba(255,107,107,.1)}
+.pr-badge.y{color:var(--yel);border-color:rgba(255,193,7,.45);background:rgba(255,193,7,.1)}
+.pr-why{font-size:13px;font-weight:600;color:var(--red);line-height:1.4}
+.pr-nums{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px;margin-top:6px}
+.pr-num{display:flex;flex-direction:column;gap:1px;background:var(--field);border:1px solid var(--line);border-radius:var(--r-s);padding:7px 8px;min-width:0}
+.pr-num b{font-size:17px;line-height:1.2}
+.pr-num b small{font-size:12px;font-weight:600;color:var(--yel)}
+.pr-num span{font-size:11.5px;color:var(--g2);line-height:1.3}
+.pr-num.r{border-color:rgba(255,138,128,.45)}
+.pr-num.r b{color:var(--red)}
+.pr-staff{line-height:1.45;overflow-wrap:anywhere}
+@media (max-width:560px){ .pr-nums{grid-template-columns:repeat(2,minmax(0,1fr))} .pr-cards{grid-template-columns:minmax(0,1fr)} }
+/* окна «Сотрудники» и «Пункты выдачи» — по высоте содержимого (не тянутся до низа экрана), длинный список прокручивается */
+@media (min-width:861px){
+  .pr-layout .st-side{height:auto;max-height:calc(100vh - var(--st-top,var(--head-h)));min-height:0}
+  .pr-layout .st-side .st-scol{flex:0 1 auto}
+  .pr-layout .st-side-card{flex:0 1 auto}
+  .pr-layout .st-slist{flex:0 1 auto}
+}
+@media (min-width:1500px){
+  .pr-layout .st-scol{height:auto;max-height:calc(100vh - var(--st-top,var(--head-h)));min-height:0;align-self:start}
+}
+/* «Комиссия и оплата» */
+.fee-over{color:var(--grn)}
+.fee-line{margin-top:6px;font-size:13px;color:var(--gr);line-height:1.5}
+.fee-line b{color:var(--tx)}
+.fee-res{display:flex;flex-direction:column;gap:8px;margin-bottom:18px}
+.fee-res-row{display:flex;align-items:center;gap:14px;width:100%;text-align:left;background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:12px 16px;color:var(--tx);font:inherit;cursor:pointer;transition:border-color .15s,background .15s}
+.fee-res-row:hover,.fee-res-row:focus-visible{outline:none;border-color:var(--or);background:rgba(255,143,31,.05)}
+.fee-res-t{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+.fee-res-t b{font-size:15px}
+.fee-res-t small,.fee-res-t > span{font-size:12.5px;color:var(--g2);line-height:1.4}
+.fee-res-v{flex:0 0 auto;text-align:right;display:flex;flex-direction:column;gap:2px}
+.fee-res-v b{font-size:16px}
+.fee-res-v small{font-size:12px;color:var(--g2)}
+.fee-res-go{flex:0 0 auto;color:var(--or);font-size:13px;font-weight:600;white-space:nowrap}
+.kpis.fee-res-k{grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:8px;margin-bottom:14px}
+.fee-res-k .kpi{padding:10px 12px}
+.fee-res-k .kpi .vl{font-size:18px}
+.fee-res-tbl td.num,.fee-res-tbl th.num{text-align:right;white-space:nowrap}
+@media (max-width:560px){ .fee-res-go{display:none} .fee-res-row{padding:12px} }
+/* окно «Внести платёж» */
+.pay-win{display:flex;flex-direction:column}
+.pay-sum{font-size:20px;font-weight:800;margin-bottom:14px;display:flex;flex-direction:column;gap:2px}
+.pay-sum.due{color:var(--or)}
+.pay-sum.ok{color:var(--grn)}
+.pay-sum small{font-size:12.5px;font-weight:500;color:var(--g2)}
+.pay-btns{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:4px}
+.pay-btns .btn{width:100%;justify-content:center}
+.pay-qr{display:flex;flex-direction:column;align-items:center;gap:10px;margin-top:14px;padding:14px;background:var(--field);border:1px solid var(--line);border-radius:var(--r)}
+.pay-qr[hidden]{display:none}
+.pay-qr-img{background:#fff;border-radius:10px;padding:10px;line-height:0}
+.pay-qr-img svg,.pay-qr-img img{display:block;width:220px;height:220px;max-width:100%}
+.pay-qr-t{display:flex;flex-direction:column;align-items:center;gap:4px;font-size:13px;color:var(--gr);text-align:center;line-height:1.45}
+.pay-qr-t b{font-size:18px;color:var(--tx)}
+.pay-qr-t a{color:var(--or);font-weight:600}
+.pay-manual{margin-top:12px;font-size:12.5px;color:var(--g2);line-height:1.45}
+.pay-manual a,.pay-manual button.linkish{color:var(--or)}
+@media (max-width:420px){ .pay-btns{grid-template-columns:1fr} }

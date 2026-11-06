@@ -328,7 +328,7 @@ else
   done
   if [ "$READY" = "1" ]; then
     ok "локальный сервер поднят: http://127.0.0.1:$PORT"
-    for t in photon rental-profile new-tool-prefill order-and-fee owner-orders-browser order-journal-browser live-orders-browser app-page-browser order-consent-browser reviews-system app-banner chief-and-apk empty-states-browser kind-guess-browser model-form-browser model-stage4-browser spec-filter-browser power-src-browser; do
+    for t in photon staff-work-browser account-switch-browser owner-work-browser owner-cabinet-browser home-filters-browser rental-profile new-tool-prefill order-and-fee owner-orders-browser order-journal-browser live-orders-browser app-page-browser order-consent-browser reviews-system app-banner chief-and-apk empty-states-browser kind-guess-browser model-form-browser model-stage4-browser spec-filter-browser power-src-browser; do
       if SITE_BASE_URL="http://127.0.0.1:$PORT" node "tests/$t.cjs" >"/tmp/iva-test-$t.log" 2>&1; then ok "tests/$t.cjs"
       else bad "tests/$t.cjs"; tail -6 "/tmp/iva-test-$t.log" | sed 's/^/      /'; fi
     done
@@ -589,6 +589,28 @@ if "$PG_PY" -c "import pgserver" >/dev/null 2>&1; then
   fi
 else
   skip "стенд 10.126: нет pgserver (PG_PY=<python с pgserver> bash tools/check.sh)"
+fi
+
+head_ "4.5.31. Стенд «Сменить / Владелец» в «Работе»: в каких прокатах работает вошедший (локальный PostgreSQL, SQL 20261126)"
+if "$PG_PY" -c "import pgserver" >/dev/null 2>&1; then
+  if "$PG_PY" tools/staff-switch-stand.py >/tmp/iva-test-staff-switch.log 2>&1; then
+    ok "смена аккаунта: $(grep -c '✔' /tmp/iva-test-staff-switch.log) проверок SQL на PostgreSQL (владелец и сотрудники — ключ своего проката, другой прокат — другой, не принявший / убранный / клиент — пусто, выключенный прокат, чужие почты не уходят, гость, откат)"
+  else
+    bad "стенд «Сменить / Владелец»"; grep -E '✘|Error|ERROR' /tmp/iva-test-staff-switch.log | head -8 | sed 's/^/      /'
+  fi
+else
+  skip "стенд «Сменить / Владелец»: нет pgserver (PG_PY=<python с pgserver> bash tools/check.sh)"
+fi
+
+head_ "4.5.32. Стенд «Кабинет владельца»: сотрудник без ФИО и одна формула комиссии (локальный PostgreSQL, SQL 20261127)"
+if "$PG_PY" -c "import pgserver" >/dev/null 2>&1; then
+  if "$PG_PY" tools/owner-cabinet-stand.py >/tmp/iva-test-owner-cabinet.log 2>&1; then
+    ok "кабинет владельца: $(grep -c '✔' /tmp/iva-test-owner-cabinet.log) проверок SQL на PostgreSQL (приглашение без имени, имя из профиля при «Принять», правка не стирает имя, старое приложение, комиссия = формула приложения, переплата, чужое не видно, владелец площадки, откат)"
+  else
+    bad "стенд «Кабинет владельца»"; grep -E '✘|Error|ERROR' /tmp/iva-test-owner-cabinet.log | head -8 | sed 's/^/      /'
+  fi
+else
+  skip "стенд «Кабинет владельца»: нет pgserver (PG_PY=<python с pgserver> bash tools/check.sh)"
 fi
 
 head_ "Итог"

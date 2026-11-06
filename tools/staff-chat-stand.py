@@ -243,8 +243,9 @@ IV = chats(srv, 'ivan@x.ru')
 check('Иван видит переписки своего пункта: Анна и клиент без профиля (голосовое), непрочитанные',
       IV == 'Дрель Makita|Клиент|Склад|🎤 Голосовое сообщение|false|1 ; Дрель Makita|Анна|Склад|Да, свободна|true|1', IV)
 raw = uval(srv, 'ivan@x.ru', "select string_agg(to_jsonb(x)::text, ' ') from public.iva_staff_chats() x")
-check('в ответе нет почты, телефона, фамилии и паспорта клиента', '@' not in raw and '7999' not in raw and 'Клиентова' not in raw
-      and '1234' not in raw and md5('client@x.ru') in raw, raw[:300])
+# 06.11.2026: телефон ищем целиком — короткий кусок «7999» случайно встречался в uuid / md5 ответа (ложная ошибка); паспорт — тоже целиком
+check('в ответе нет почты, телефона, фамилии и паспорта клиента', '@' not in raw and '9991112233' not in raw and 'Клиентова' not in raw
+      and '1234 567890' not in raw and md5('client@x.ru') in raw, raw[:300])
 check('нет: общего чата, чужого пункта, чужого проката, где клиент не писал, старше 90 дней',
       'Общий' not in IV and 'Пила' not in IV and 'Владелец написал' not in IV and 'Старое' not in IV)
 check('Ольга (Бердск) — только пила', chats(srv, 'olga@x.ru') == 'Пила|Анна|Бердск|А пила?|false|1')

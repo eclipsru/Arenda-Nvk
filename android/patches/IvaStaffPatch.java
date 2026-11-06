@@ -43,7 +43,7 @@ public class IvaStaffPatch {
         REMOVE_RPC = "/rest/v1/rpc/iva_staff_remove", ME_RPC = "/rest/v1/rpc/iva_staff_me", ANSWER_RPC = "/rest/v1/rpc/iva_staff_answer";
     /** 10.115: сотрудник — в пункт / из пункта (SQL 20261106; без него — через iva_staff_save, как раньше). */
     static final String LINK_RPC = "/rest/v1/rpc/iva_staff_link";
-    static final String ALL_SUB = "ФИО, телефон, почта, пункты и права";
+    static final String ALL_SUB = "Телефон, почта, пункты и права";   // 10.138: ФИО — из профиля сотрудника
     static final String ALL_HEAD = "Все сотрудники проката. Нажмите на карточку — изменить данные, права и пункты выдачи. "
         + "Клиенты имён и телефонов сотрудников не видят.";
     static final String NO_POINTS = "Сначала добавьте пункт выдачи: «Настройка проката» → «Пункты выдачи»";
@@ -132,8 +132,9 @@ public class IvaStaffPatch {
             if (!IvaPickupPatch.emailOk(e)) return "Похоже, в email ошибка (пример: ivan@mail.ru)";
             if (me != null && e.equals(me.trim().toLowerCase(Locale.ROOT))) return "Это ваша почта — владельца проката добавлять не нужно";
         }
-        String n = name == null ? "" : name.trim().replaceAll("\\s+", " ");
-        if (n.isEmpty()) return "Введите ФИО сотрудника";                 // 10.115: «Имя» → «ФИО» (решение владельца)
+        String n = name == null ? null : name.trim().replaceAll("\\s+", " ");
+        if (n != null && n.isEmpty()) return "Введите ФИО сотрудника";   // 10.138: форма передаёт null — ФИО в ней нет
+        if (n == null) n = "";                 // 10.115: «Имя» → «ФИО» (решение владельца)
         if (n.length() > 80) return "ФИО — не длиннее 80 символов";
         String t = IvaPickupPatch.telErr(tel);
         if (!t.isEmpty()) return t;
@@ -154,7 +155,7 @@ public class IvaStaffPatch {
         boolean[] x = r != null && r.length == 4 ? r : new boolean[4];
         return "{\"p_id\":" + (IvaToolPointPatch.uuid(id) ? jsonStr(id.toLowerCase(Locale.ROOT)) : "null")
             + ",\"p_email\":" + jsonStr(email == null ? "" : email.trim().toLowerCase(Locale.ROOT))
-            + ",\"p_name\":" + jsonStr(name == null ? "" : name.trim().replaceAll("\\s+", " "))
+            + ",\"p_name\":" + (name == null ? "null" : jsonStr(name.trim().replaceAll("\\s+", " ")))   // 10.138: null — имя из профиля
             + ",\"p_tel\":" + jsonStr(tel == null ? "" : tel.trim())
             + ",\"p_points\":[" + ps + "]"
             + ",\"p_issue\":" + x[0] + ",\"p_catalog\":" + x[1] + ",\"p_chat\":" + x[2] + ",\"p_notify\":" + x[3]
@@ -167,6 +168,9 @@ public class IvaStaffPatch {
         boolean cat = r != null && r.length == 4 && r[1];
         return b.substring(0, b.length() - 1) + ",\"p_delete\":" + (del && cat) + "}";
     }
+
+    /** 10.138: база до SQL 20261127 требует имя сотрудника. */
+    static boolean needName(String e) { return e != null && e.contains("Укажите имя"); }
 
     static String idBody(String id) { return IvaToolPointPatch.uuid(id) ? "{\"p_id\":" + jsonStr(id.toLowerCase(Locale.ROOT)) + "}" : null; }
 
@@ -322,8 +326,8 @@ public class IvaStaffPatch {
             String old = null;
             for (Staff o : was) if (o.id.equals(s.id)) old = o.status;
             if (old == null || old.equals(s.status)) continue;
-            if ("active".equals(s.status)) parts.add("«" + s.name + "» принял приглашение");
-            else if ("declined".equals(s.status)) parts.add("«" + s.name + "» отказался от приглашения");
+            if ("active".equals(s.status)) parts.add("«" + who(s) + "» принял приглашение");
+            else if ("declined".equals(s.status)) parts.add("«" + who(s) + "» отказался от приглашения");
         }
         return join(parts, ". ");
     }
@@ -502,14 +506,31 @@ public class IvaStaffPatch {
         return t;
     }
 
-    /** Карточка сотрудника: ФИО и состояние, телефон, почта, пункты, права. */
+    /** 10.138 (просьба владельца №11): ФИО сотрудника — из его профиля после «Принять»; до того — почта. */
+    static String who(Staff s) {
+        if (s == null) return "";
+        String n = s.name == null ? "" : s.name.trim();
+        return n.isEmpty() ? (s.email == null ? "" : s.email) : n;
+    }
+
+    /** Имя для базы до SQL 20261127 (она требует имя): прежнее, а новому — часть почты до «@». */
+    static String fallbackName(String old, String email) {
+        String o = old == null ? "" : old.trim();
+        if (!o.isEmpty()) return o.length() > 80 ? o.substring(0, 80) : o;
+        String e = email == null ? "" : email.trim().toLowerCase(Locale.ROOT);
+        int at = e.indexOf('@');
+        String n = at > 0 ? e.substring(0, at) : e;
+        return n.length() > 80 ? n.substring(0, 80) : n;
+    }
+
+    /** Карточка сотрудника: ФИО (или почта) и состояние, телефон, почта, пункты, права. */
     static LinearLayout staffCard(Ui u, Staff s, boolean pointsLine) {
         Activity a = u.a;
         LinearLayout c = IvaChiefPatch.card(a);
         LinearLayout top = new LinearLayout(a);
         top.setOrientation(LinearLayout.HORIZONTAL);
         top.setGravity(Gravity.CENTER_VERTICAL);
-        top.addView(IvaChiefPatch.text(a, s.name, 16f, u.cText, true), new LinearLayout.LayoutParams(0, -2, 1f));
+        top.addView(IvaChiefPatch.text(a, who(s), 16f, u.cText, true), new LinearLayout.LayoutParams(0, -2, 1f));
         int sc = "active".equals(s.status) ? u.cText : "declined".equals(s.status) ? u.cGray : u.cOrange;
         top.addView(IvaChiefPatch.text(a, statusText(s.status), 12f, sc, "invited".equals(s.status)));
         c.addView(top);
@@ -556,12 +577,12 @@ public class IvaStaffPatch {
 
     static void askUnlink(final Ui u, final Staff s, final TextView btn) {
         final boolean last = lastPoint(s.points, u.point.id);
-        IvaClientPatch.styledChoice(u.a, "Убрать «" + s.name + "» из пункта «" + u.point.name + "»?",
-            unlinkText(s.name, pointNames(u.all, s.points, u.point.id), last), new String[]{"Убрать"},
+        IvaClientPatch.styledChoice(u.a, "Убрать «" + who(s) + "» из пункта «" + u.point.name + "»?",
+            unlinkText(who(s), pointNames(u.all, s.points, u.point.id), last), new String[]{"Убрать"},
             new IvaClientPatch.Choice() {
                 @Override public void pick(int i) {
-                    if (i == 0) link(u, s, false, btn, null, last ? "«" + s.name + "» больше не сотрудник"
-                        : "«" + s.name + "» убран из пункта «" + u.point.name + "»");
+                    if (i == 0) link(u, s, false, btn, null, last ? "«" + who(s) + "» больше не сотрудник"
+                        : "«" + who(s) + "» убран из пункта «" + u.point.name + "»");
                 }
             });
     }
@@ -583,7 +604,7 @@ public class IvaStaffPatch {
             c.setClickable(true);
             c.setOnClickListener(new View.OnClickListener() {
                 @Override public void onClick(final View v) {
-                    link(u, s, true, v, pg, "«" + s.name + "» теперь и в пункте «" + u.point.name + "»");
+                    link(u, s, true, v, pg, "«" + who(s) + "» теперь и в пункте «" + u.point.name + "»");
                 }
             });
             LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2);
@@ -734,7 +755,7 @@ public class IvaStaffPatch {
         else {
             copyInto(s, old);                                           // 10.129: вместе с «Удаляет инструмент»
         }
-        final IvaChiefPatch.Page pg = IvaChiefPatch.page(a, isNew ? "Новый сотрудник" : old.name,
+        final IvaChiefPatch.Page pg = IvaChiefPatch.page(a, isNew ? "Новый сотрудник" : who(old),
             isNew ? "Сотрудник увидит приглашение в приложении, когда войдёт под этой почтой: «Профиль» → «Принять»."
                   : old.email + " · " + statusText(old.status), false);
         try { pg.d.getWindow().setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE); } catch (Throwable ignore) {}
@@ -746,10 +767,7 @@ public class IvaStaffPatch {
             fEmail.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_EMAIL_ADDRESS);
             box.addView(fEmail, new LinearLayout.LayoutParams(-1, -2));
         } else fEmail = null;
-        box.addView(label(a, "ФИО", u.cGray));
-        final EditText fName = field(a, "Например: Иванов Иван Иванович", s.name, u.cText);
-        fName.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_CAP_WORDS);
-        box.addView(fName, new LinearLayout.LayoutParams(-1, -2));
+        /* 10.138 (просьба владельца №11): поля «ФИО» нет — имя приходит из профиля сотрудника после «Принять» */
         box.addView(label(a, "Телефон (необязательно, клиенты его не видят)", u.cGray));
         final EditText fTel = field(a, "+7 900 123-45-67", s.tel, u.cText);
         fTel.setInputType(InputType.TYPE_CLASS_PHONE);
@@ -852,13 +870,14 @@ public class IvaStaffPatch {
             @Override public void onClick(View v) {
                 IvaPickupPatch.hideKb(a, v);
                 String em = fEmail == null ? s.email : fEmail.getText().toString();
-                String e = formErr(isNew, em, IvaPickupPatch.me(a), fName.getText().toString(), fTel.getText().toString(), s.points.size(), s.r);
-                if (e.isEmpty()) try { e = IvaCensorPatch.nameError(fName.getText().toString()); } catch (Throwable ignore) {}   // 24.10.2026: мат в ФИО
+                String e = formErr(isNew, em, IvaPickupPatch.me(a), null, fTel.getText().toString(), s.points.size(), s.r);
                 IvaPickupPatch.setErr(err, e);
                 if (!e.isEmpty()) return;
-                final String body = saveBody(isNew ? null : s.id, em, fName.getText().toString(), fTel.getText().toString(), s.points, s.r, fSelf.isChecked(), fDel.isChecked());
-                final String who = fName.getText().toString().trim();
-                write(u, pg, err, save, SAVE_RPC, body, isNew ? "Приглашение готово: пусть «" + who + "» войдёт в приложение под этой почтой" : "Сохранено");
+                final String nm = isNew ? null : (s.name == null || s.name.trim().isEmpty() ? null : s.name);   // при правке — прежнее имя
+                final String body = saveBody(isNew ? null : s.id, em, nm, fTel.getText().toString(), s.points, s.r, fSelf.isChecked(), fDel.isChecked());
+                final String body2 = saveBody(isNew ? null : s.id, em, fallbackName(nm, em), fTel.getText().toString(), s.points, s.r, fSelf.isChecked(), fDel.isChecked());
+                final String mail = em == null ? "" : em.trim().toLowerCase(Locale.ROOT);
+                write(u, pg, err, save, SAVE_RPC, body, body2, isNew ? "Приглашение готово: пусть " + mail + " войдёт в приложение под этой почтой" : "Сохранено");
             }
         });
         if (!isNew) {
@@ -870,10 +889,10 @@ public class IvaStaffPatch {
             box.addView(rm, rl);
             rm.setOnClickListener(new View.OnClickListener() {
                 @Override public void onClick(View v) {
-                    IvaClientPatch.styledChoice(a, "Убрать «" + s.name + "» из сотрудников?",
+                    IvaClientPatch.styledChoice(a, "Убрать «" + who(s) + "» из сотрудников?",
                         "Доступ к пунктам пропадёт сразу. Пригласить снова можно в любой момент.", new String[]{"Убрать"},
                         new IvaClientPatch.Choice() {
-                            @Override public void pick(int i) { if (i == 0) write(u, pg, err, save, REMOVE_RPC, idBody(s.id), "«" + s.name + "» больше не сотрудник"); }
+                            @Override public void pick(int i) { if (i == 0) write(u, pg, err, save, REMOVE_RPC, idBody(s.id), "«" + who(s) + "» больше не сотрудник"); }
                         });
                 }
             });
@@ -881,7 +900,11 @@ public class IvaStaffPatch {
     }
 
     static void write(final Ui u, final IvaChiefPatch.Page pg, final TextView err, final TextView btn, final String path,
-                      final String body, final String done) {
+                      final String body, final String done) { write(u, pg, err, btn, path, body, null, done); }
+
+    /** 10.138: body2 — повтор, если база до SQL 20261127 ответила «Укажите имя» (имя — прежнее или часть почты). */
+    static void write(final Ui u, final IvaChiefPatch.Page pg, final TextView err, final TextView btn, final String path,
+                      final String body, final String body2, final String done) {
         if (body == null) return;
         btn.setEnabled(false);
         btn.setAlpha(0.6f);
@@ -891,6 +914,10 @@ public class IvaStaffPatch {
                 try {
                     String[] r = IvaClientPatch.apiCall(u.a, path, "POST", body, true);
                     e = r == null ? dbError("", "") : dbError(r[0], r.length > 1 ? r[1] : "");
+                    if (body2 != null && needName(e)) {
+                        r = IvaClientPatch.apiCall(u.a, path, "POST", body2, true);
+                        e = r == null ? dbError("", "") : dbError(r[0], r.length > 1 ? r[1] : "");
+                    }
                 } catch (Throwable x) { e = dbError("", ""); }
                 final String fe = e;
                 u.a.runOnUiThread(new Runnable() {

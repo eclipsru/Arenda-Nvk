@@ -74,7 +74,13 @@ const IvaDistance = (function(){
   function haversine(a,b){
     const r=6371, dLat=(b.lat-a.lat)*Math.PI/180, dLon=(b.lon-a.lon)*Math.PI/180;
     const q=Math.sin(dLat/2)*Math.sin(dLat/2)+Math.cos(a.lat*Math.PI/180)*Math.cos(b.lat*Math.PI/180)*Math.sin(dLon/2)*Math.sin(dLon/2);
-    return Math.max(1,Math.ceil(r*2*Math.atan2(Math.sqrt(q),Math.sqrt(1-q))));
+    return r*2*Math.atan2(Math.sqrt(q),Math.sqrt(1-q));
+  }
+  /* Карточка (06.11.2026, владелец): на фото справа внизу — просто расстояние, «2,1 км»: до 100 км — с десятыми */
+  function short(km){
+    if (!(km >= 0)) return '';
+    if (km < 0.1) km = 0.1;
+    return (km < 100 ? (Math.round(km * 10) / 10).toFixed(1).replace('.', ',').replace(',0', '') : String(Math.round(km))) + ' км';
   }
   function key(ad){ return String(ad&&ad.id||'')+'|'+pickupAddress(ad)+'|'+(ad&&ad.pickup_lat||'')+'|'+(ad&&ad.pickup_lng||'|')+'|'+profileAddress(); }
   function estimate(ad){
@@ -96,8 +102,8 @@ const IvaDistance = (function(){
     ]).then(function(pair){
       if (!pair[0] || !pair[1]) result={ok:false,reason:pair[0]?'destination':'pickup'};
       else {
-        const km=haversine(pair[0],pair[1]), rate=Number(ad.delivery_price)||40;
-        result={ok:true,km:km,rate:rate,cost:ad.delivery?km*rate:0};
+        const exact=haversine(pair[0],pair[1]), km=Math.max(1,Math.ceil(exact)), rate=Number(ad.delivery_price)||40;
+        result={ok:true,km:km,exact:exact,rate:rate,cost:ad.delivery?km*rate:0};
       }
       cache.set('estimate:'+k,result);return result;
     }).catch(function(){result={ok:false,reason:'geocode'};cache.set('estimate:'+k,result);return result;})
@@ -110,20 +116,21 @@ const IvaDistance = (function(){
     if (reason==='pickup') return 'Расстояние — адрес пункта не указан';
     return 'Расстояние — не удалось определить автоматически';
   }
+  /* Карточки: на фото справа внизу — только расстояние («2,1 км»). Не известно (гость, нет адреса в профиле,
+     у пункта нет адреса) — значка нет, без пояснений (владелец, 06.11.2026). */
   function paintCards(root){
     const nodes=$$('[data-distance-ad]',root||document);
     nodes.forEach(function(node){
       const ad=typeof adById==='function'?adById(node.getAttribute('data-distance-ad')):null;
       if (!ad) return;
-      const initial=fallback(typeof A!=='undefined'&&A.tok?(profileAddress()?'geocode':'profile'):'guest');
-      if (node.textContent!==initial && !node.dataset.distanceReady) node.textContent=initial;
       const k=key(ad);
       if (node.dataset.distanceKey===k) return;
-      node.dataset.distanceKey=k;node.dataset.distanceReady='';
+      node.dataset.distanceKey=k;
       estimate(ad).then(function(r){
-        if (node.getAttribute('data-distance-ad')!==String(ad.id)) return;
-        const text=r.ok ? ('Расстояние до пункта: '+r.km+' км') : fallback(r.reason);
-        node.textContent=text;node.dataset.distanceReady='1';
+        if (node.getAttribute('data-distance-ad')!==String(ad.id) || node.dataset.distanceKey!==k) return;
+        const text=r.ok ? short(r.exact!=null?r.exact:r.km) : '';
+        node.textContent=text;node.hidden=!text;
+        if (text) node.title='До пункта выдачи ≈ '+text+' по прямой';
       });
     });
   }
@@ -133,7 +140,7 @@ const IvaDistance = (function(){
     new MutationObserver(run).observe(document.body,{childList:true,subtree:true});
   }
   setTimeout(observe,0);
-  return {estimate:estimate,paintCards:paintCards,fallback:fallback,profileAddress:profileAddress,geocode:geocode,haversine:haversine};
+  return {estimate:estimate,paintCards:paintCards,fallback:fallback,profileAddress:profileAddress,geocode:geocode,haversine:haversine,short:short};
 })();
 
 /* ---------- Тост ---------- */
@@ -296,18 +303,16 @@ function adCard(ad){
     '<a class="ad-ph" href="tool.html?id=' + ad.id + '">' +
       '<img src="' + photoURL(ad, 0) + '" alt="' + esc(ad.name) + '" loading="lazy">' +
       (badges.length ? '<div class="ad-badges">' + badges.join('') + '</div>' : '') +
+      '<span class="ad-km" data-distance-ad="' + esc(ad.id) + '" hidden></span>' +
     '</a>' +
     '<button class="fav' + (favHas(ad.id) ? ' on' : '') + '" data-fav="' + ad.id + '" ' +
             'aria-label="В избранное" title="В избранное">' + IC.heart + '</button>' +
+    /* 06.11.2026 (владелец): сверху — название (на месте цены), цена — в правом нижнем углу карточки */
     '<div class="ad-body">' +
-      '<div class="ad-price">' + rub(ad.price) + ' <span>/ сутки</span></div>' +
       '<a class="ad-name" href="tool.html?id=' + ad.id + '">' + esc(ad.name) + '</a>' +
       '<div class="ad-dep">Залог ' + rub(dep) + '</div>' +
-      '<div class="ad-meta">' +
-        rHTML +
-        '<span>·</span><span>' + esc(ad.city) + '</span>' +
-        '<span class="ad-distance" data-distance-ad="' + esc(ad.id) + '">Расстояние — уточняется</span>' +
-      '</div>' +
+      '<div class="ad-meta">' + rHTML + '<span>·</span><span>' + esc(ad.city) + '</span></div>' +
+      '<div class="ad-foot"><div class="ad-price">' + rub(ad.price) + ' <span>/ сутки</span></div></div>' +
     '</div>' +
   '</article>';
 }
@@ -433,6 +438,7 @@ function buildSuggest(input, box, onPick){
 }
 
 /* ---------- Шапка и нижнее меню ---------- */
+function IvaSwitchLock(){ return '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>'; }
 function headerHTML(active, q){
   return '' +
   '<header class="head"><div class="wrap wide head-in">' +
@@ -445,6 +451,12 @@ function headerHTML(active, q){
     '</button>' +
     '<a class="work-mob hide" id="workMob" href="account.html" aria-label="Работа">' +
       '<span class="acct-ini work-ini">П</span><span class="work-mob-dot work-count" style="display:none">0</span></a>' +
+    /* «Прокат» у владельца проката (06.11.2026): справа от его «Работы» — кабинет проката (сводка, заявки, сотрудники, пункты) */
+    '<a class="work-mob prok-mob hide" id="prokMob" href="account.html#home" aria-label="Прокат">' +
+      '<span class="acct-ini prok-ini">П</span><span class="work-mob-dot work-count" style="display:none">0</span></a>' +
+    /* «Владелец» у сотрудника (06.11.2026): вход в кабинет владельца проката по его паролю — см. IvaSwitch */
+    '<a class="own-mob" id="ownMob" href="account.html" data-iva-owner="1" aria-label="Владелец" title="Владелец">' +
+      '<span class="acct-ini own-ini">' + IvaSwitchLock() + '</span></a>' +
     '<div class="search">' +
       '<svg class="s-ic" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>' +
       '<input id="q" type="search" placeholder="Поиск инструмента" ' +
@@ -454,6 +466,9 @@ function headerHTML(active, q){
       '<div class="sug hide" id="sug"></div>' +
     '</div>' +
     '<nav class="hlinks">' +
+      /* «Главная» справа от поиска (просьба владельца 05.11.2026) */
+      '<a class="hlink home-link' + (active === 'home' ? ' on' : '') + '" href="index.html">' +
+        IC.home + '<span>Главная</span></a>' +
       '<a class="hlink' + (active === 'fav' ? ' on' : '') + '" href="favorites.html">' +
         IC.heart + '<span>Избранное</span>' +
         '<span class="dot fav-count" style="display:none">0</span>' +
@@ -468,17 +483,23 @@ function headerHTML(active, q){
       '<a class="hlink work-link hide" id="workLink" href="account.html">' +
         '<span class="acct-ic"><span class="acct-ini work-ini">П</span></span><span class="work-t">Работа</span>' +
         '<span class="dot work-count" style="display:none">0</span></a>' +
+      /* 06.11.2026: у владельца проката — «Работа» (как у сотрудника, все его пункты) и справа «Прокат» (кабинет проката) */
+      '<a class="hlink work-link prok-link hide" id="prokLink" href="account.html#home">' +
+        '<span class="acct-ic"><span class="acct-ini prok-ini">П</span></span><span>Прокат</span>' +
+        '<span class="dot work-count" style="display:none">0</span></a>' +
       '<div class="acct" id="acct">' +
         '<a class="hlink' + (active === 'cab' ? ' on' : '') + '" id="acctBtn" href="account.html">' +
           '<span class="acct-ic">' + IC.user + '</span><span>Кабинет</span></a>' +
         '<div class="acct-menu hide" id="acctMenu" role="menu" aria-label="Меню аккаунта"></div>' +
       '</div>' +
+      /* кружок «Владелец» справа от «Профиля» — только у сотрудника, если прокат известен (SQL 20261126) */
+      '<a class="hlink own-link" id="ownLink" href="account.html" data-iva-owner="1" aria-label="Владелец">' +
+        '<span class="acct-ic"><span class="acct-ini own-ini">' + IvaSwitchLock() + '</span></span><span>Владелец</span></a>' +
       /* Пункт «Управление» дорисовывается после проверки роли — см. paintChiefLink */
       '<a class="hlink chief-link hide' + (active === 'chief' ? ' on' : '') + '" href="chief.html">' +
         IC.chief + '<span>Управление</span></a>' +
-      /* 20.10.2026 (решение владельца): размещать могут только арендодатели, которых добавил владелец.
-         Клиенту и гостю кнопки нет вовсе; у арендодателя она появляется после проверки роли — см. paintChiefLink */
-      '<a class="btn sm lord-only' + (lordHint() && ivaMode() === 'lend' ? '' : ' hide') + '" href="new.html" style="margin-left:6px">+ Добавить</a>' +
+      /* «+ Добавить» справа в шапке убран (просьба владельца 06.11.2026): добавляют из «Работы» (вкладка «Добавить»),
+         из «Сводки» проката и оранжевым «+» нижнего меню на телефоне */
     '</nav>' +
   '</div></header>';
 }
@@ -896,7 +917,9 @@ function paintLordChrome(lord){
    (каталог, избранное), в режиме «Сдаю» — меню арендодателя (заявки, «+ Добавить»).
    Это только вид меню: права по-прежнему проверяет база. Клиенту переключатель не показывается. */
 const MODE_KEY = 'iva_mode';
-function ivaMode(){ try { return localStorage.getItem(MODE_KEY) === 'rent' ? 'rent' : 'lend'; } catch(e){ return 'lend'; } }
+/* 06.11.2026 (просьба владельца №11): у владельца проката только «Сдаю» — переключателя больше нет, режим всегда «Сдаю».
+   Функции оставлены, чтобы старые вызовы не ломались. */
+function ivaMode(){ return 'lend'; }
 function setIvaMode(m, go){
   try { localStorage.setItem(MODE_KEY, m === 'rent' ? 'rent' : 'lend'); } catch(e){}
   paintLordChrome(lordHint());
@@ -918,13 +941,7 @@ function ivaTabsFade(tb){
   if (!tb._ivaFade){ tb._ivaFade = true; tb.addEventListener('scroll', upd, { passive: true }); window.addEventListener('resize', upd); }
   upd();
 }
-function modeSwitchHTML(){
-  const m = ivaMode();
-  return '<div class="acct-mode" role="group" aria-label="Режим">' +
-    '<button type="button" data-mode="rent" class="' + (m === 'rent' ? 'on' : '') + '" aria-pressed="' + (m === 'rent') + '">Арендую</button>' +
-    '<button type="button" data-mode="lend" class="' + (m === 'lend' ? 'on' : '') + '" aria-pressed="' + (m === 'lend') + '">Сдаю</button>' +
-  '</div>';
-}
+function modeSwitchHTML(){ return ''; }   // 06.11.2026: без «Арендую / Сдаю»
 document.addEventListener('click', function(e){
   const mb = e.target.closest ? e.target.closest('[data-mode]') : null;
   if (!mb || mb.classList.contains('on')) return;
@@ -952,7 +969,12 @@ const IvaLive = (function(){
   }
   function paintDot(){
     const n = count();
-    $$('.work-count').forEach(function(el){ el.textContent = n > 9 ? '9+' : String(n); el.style.display = n ? '' : 'none'; });
+    /* 06.11.2026: у владельца два кружка — число новых заявок только на «Прокат» (там «Заявки»), на «Работе» без дубля */
+    const own = lord();
+    $$('.work-count').forEach(function(el){
+      const skip = own && !(el.closest && el.closest('#prokLink, #prokMob'));
+      el.textContent = n > 9 ? '9+' : String(n); el.style.display = n && !skip ? '' : 'none';
+    });
   }
   function start(){
     if (typeof subscribeTable !== 'function' || typeof isAuthed !== 'function' || !isAuthed()) return;
@@ -1060,23 +1082,55 @@ async function workGet(){
   try {
     const r = await api('/rest/v1/rpc/iva_staff_me', 'POST', {});
     workPut((Array.isArray(r) ? r[0] : r) || null);
-  } catch(e){ workPut(null); }
+  } catch(e){
+    /* 05.11.2026: нет функции в базе — точно не сотрудник; сбой связи — оставляем прежний ответ и спросим через минуту
+       (раньше один сбой прятал «Работу» на 30 минут) */
+    if (typeof apiMissing === 'function' && apiMissing(e)) workPut(null);
+    else if (w && w.me === me){ try { w.at = Date.now() - (w.on ? 240000 : 1740000); sessionStorage.setItem(WORK_KEY, JSON.stringify(w)); } catch(x){} return w; }
+    else return null;
+  }
   try { w = JSON.parse(sessionStorage.getItem(WORK_KEY) || 'null'); } catch(e){ w = null; }
   return w;
+}
+/* 06.11.2026 (просьба владельца): у владельца проката два кружка — «Работа» (та же страница, что у сотрудника, со всеми его
+   пунктами и всеми правами) и справа «Прокат» (кабинет проката: сводка, заявки, сотрудники и пункты выдачи) */
+function paintProk(on){
+  const els = [$('prokLink'), $('prokMob')].filter(Boolean);
+  try { document.documentElement.classList.toggle('iva-prok', !!on); } catch(e){}
+  els.forEach(function(el){
+    el.classList.toggle('hide', !on);
+    if (!on) return;
+    const ad = A.admin || {}, name = ad.company || ad.full_name || 'Прокат';
+    el.setAttribute('href', (Number(sessionStorage.getItem('iva_live_new')) || 0) > 0 ? 'account.html#orders' : 'account.html#home');
+    el.setAttribute('title', 'Прокат · ' + name);
+    el.setAttribute('aria-label', 'Прокат · ' + name);
+    el.classList.toggle('on', /(^|\/)account\.html$/.test(location.pathname) && location.hash !== '#staff' &&
+      !/^#(sent|fav|msg|prof)/.test(location.hash));
+    const ini = el.querySelector('.prok-ini');
+    if (ini && ini.getAttribute('data-work') !== 'org'){
+      ini.textContent = initials(name);
+      ini.setAttribute('data-ava-org', '1');
+      ini.setAttribute('data-work', 'org');
+    }
+    if (typeof IvaAva !== 'undefined') IvaAva.paint(el);
+  });
 }
 async function paintWork(){
   const els = [$('workLink'), $('workMob')].filter(Boolean);
   if (!els.length) return;
   const hide = function(){ els.forEach(function(el){ el.classList.add('hide'); }); };
-  if (typeof isAuthed !== 'function' || !isAuthed()) return hide();
+  if (typeof isAuthed !== 'function' || !isAuthed()){ paintProk(false); IvaSwitch.sync(null); return hide(); }
   let kind, name, attr, link;
   if (typeof isAdmin === 'function' && isAdmin()){
     const ad = A.admin || {};
-    kind = 'Прокат'; name = ad.company || ad.full_name || 'Прокат'; attr = ['data-ava-org', '1'];
-    link = (Number(sessionStorage.getItem('iva_live_new')) || 0) > 0 ? 'account.html#orders' : 'account.html#home';
+    kind = 'Работа'; name = ad.company || ad.full_name || 'Прокат'; attr = ['data-ava-org', '1'];
+    link = 'account.html#staff';
+    paintProk(true);
   } else {
+    paintProk(false);
     const w = await workGet();
-    if (!w || !w.on) return hide();
+    paintCabLabel();
+    if (!w || !w.on){ IvaSwitch.sync(null); return hide(); }
     kind = 'Работа'; name = w.c || 'Прокат'; attr = w.p ? ['data-ava-point', w.p] : null; link = 'account.html#staff';
   }
   els.forEach(function(el){
@@ -1084,8 +1138,7 @@ async function paintWork(){
     el.setAttribute('href', link);
     el.setAttribute('title', kind + ' · ' + name);
     el.setAttribute('aria-label', kind + ' · ' + name);
-    el.classList.toggle('on', /(^|\/)account\.html$/.test(location.pathname) &&
-      (location.hash === '#staff' || (kind === 'Прокат' && /^#(home|orders)?$/.test(location.hash))));
+    el.classList.toggle('on', /(^|\/)account\.html$/.test(location.pathname) && location.hash === '#staff');
     const t = el.querySelector('.work-t'); if (t) t.textContent = kind;
     const ini = el.querySelector('.work-ini');
     if (ini){
@@ -1101,6 +1154,200 @@ async function paintWork(){
     }
   });
   IvaLive.paintDot();
+  IvaSwitch.sync(isAdmin() ? 'Прокат' : kind);
+}
+
+/* Быстрая смена аккаунта в «Работе» (просьба владельца 06.11.2026, SQL 20261126_staff_switch).
+   «Сменить» (рядом с ФИО сотрудника, в кабинете владельца и в меню аккаунта) — почта и пароль; кружок «Владелец» справа
+   от «Профиля» у сотрудника — только пароль владельца (почту подставляем сами, показываем скрытой: e***@mail.ru).
+   Войти можно, только если новый аккаунт работает в ЭТОМ же прокате — сотрудник любого его пункта или владелец
+   (iva_switch_info: ключ проката = md5 почты владельца). Иначе — «Вы не работаете в этом прокате», прежний вход остаётся.
+   Пароль спрашиваем всегда; после входа весь сайт работает от нового аккаунта, прежняя сессия закрывается
+   (вернуться — снова через «Сменить» с паролем). Нет SQL — кнопок нет. */
+const IvaSwitch = (function(){
+  const SKEY = 'iva_switch_v1';
+  let loading = null;
+  function me(){ return String((typeof A !== 'undefined' && A.me) || '').toLowerCase(); }
+  function cached(){
+    try {
+      const c = JSON.parse(sessionStorage.getItem(SKEY) || 'null');
+      if (c && c.me === me() && Date.now() - c.at < 300000) return c;
+    } catch(e){}
+    return null;
+  }
+  function put(j, who){ try { sessionStorage.setItem(SKEY, JSON.stringify({ me: who || me(), at: Date.now(), j: j })); } catch(e){} }
+  function list(j){ return j && Array.isArray(j.prokats) ? j.prokats : []; }
+  function cur(){ const c = cached(); return c ? c.j : null; }
+  function staffOf(j){ return list(j).find(function(p){ return p.role === 'staff' && p.owner; }) || null; }
+  async function load(){
+    const c = cached();
+    if (c) return c.j;
+    if (loading) return loading;
+    loading = (async function(){
+      try {
+        const j = await api('/rest/v1/rpc/iva_switch_info', 'POST', {});
+        put(j && typeof j === 'object' ? j : { prokats: [] });
+      } catch(e){
+        if (typeof apiMissing === 'function' && apiMissing(e)) put(null);   // нет SQL — кнопок нет (спросим через 5 минут)
+        else return null;                                                     // сбой связи — спросим при следующей отрисовке
+      }
+      return cur();
+    })();
+    try { return await loading; } finally { loading = null; }
+  }
+  /* e***@mail.ru — почта владельца в окне «Владелец» */
+  function mask(email){
+    const s = String(email || ''), i = s.indexOf('@');
+    return i > 0 ? s.charAt(0) + '***' + s.slice(i) : '***';
+  }
+  function revoke(tok){
+    if (!tok) return;
+    try {
+      fetch(SB + '/auth/v1/logout?scope=local', { method: 'POST', keepalive: true,
+        headers: { apikey: KEY, 'Content-Type': 'application/json', Authorization: 'Bearer ' + tok } }).catch(function(){});
+    } catch(e){}
+  }
+  async function infoWith(tok){
+    let r;
+    try {
+      r = await fetch(SB + '/rest/v1/rpc/iva_switch_info', { method: 'POST', body: '{}',
+        headers: { apikey: KEY, 'Content-Type': 'application/json', Authorization: 'Bearer ' + tok } });
+    } catch(e){ const ne = new Error('Нет связи с сервером'); ne.status = 0; throw ne; }
+    const t = await r.text();
+    if (!r.ok){ const e = new Error(sbErr(t)); e.status = r.status; throw e; }
+    try { return JSON.parse(t); } catch(e){ return null; }
+  }
+  /* кружок «Владелец», «Сменить», «Профиль» вместо «Кабинета» — по классам на <html>, чтобы не зависеть от перерисовок */
+  async function sync(kind){
+    const root = document.documentElement;
+    if (!kind){ root.classList.remove('iva-sw', 'iva-sw-own'); return; }
+    const j = await load();
+    const ps = list(j), own = kind === 'Работа' ? staffOf(j) : null;
+    root.classList.toggle('iva-sw', ps.length > 0);
+    root.classList.toggle('iva-sw-own', !!own);
+    if (own) $$('[data-iva-owner]').forEach(function(el){
+      const t = 'Владелец · вход в кабинет проката «' + (own.company || 'Прокат') + '» по паролю владельца';
+      el.setAttribute('title', t); el.setAttribute('aria-label', t);
+    });
+  }
+  function errMsg(m){
+    if (/invalid login/i.test(m)) return 'Неверная почта или пароль';
+    if (/email not confirmed/i.test(m)) return typeof IvaEmailGuard === 'undefined' ? 'Почта не подтверждена — проверьте письмо' : IvaEmailGuard.NOT_CONFIRMED_MSG;
+    return m || 'Не удалось войти';
+  }
+  /* вход: проверяем пароль и прокат на временном ключе; сессию меняем, только если прокат тот же */
+  async function enter(email, pass){
+    email = String(email || '').trim().toLowerCase();
+    if (!email || !pass) throw new Error('Введите почту и пароль');
+    if (email === me()) throw new Error('Вы уже вошли как ' + email);
+    const keys = list(cur()).map(function(p){ return p.key; });
+    if (!keys.length) throw new Error('Не удалось проверить прокат — обновите страницу');
+    let r;
+    try {
+      r = await fetch(SB + '/auth/v1/token?grant_type=password', { method: 'POST',
+        headers: { apikey: KEY, 'Content-Type': 'application/json' }, body: JSON.stringify({ email: email, password: pass }) });
+    } catch(e){ throw new Error('Нет связи с сервером'); }
+    const txt = await r.text();
+    if (!r.ok) throw new Error(errMsg(sbErr(txt)));
+    let s = null; try { s = JSON.parse(txt); } catch(e){}
+    if (!s || !s.access_token) throw new Error('Не удалось войти');
+    if (s.user && typeof IvaEmailGuard !== 'undefined' && !IvaEmailGuard.isConfirmed(s.user)){ revoke(s.access_token); throw new Error(IvaEmailGuard.NOT_CONFIRMED_MSG); }
+    let info;
+    try { info = await infoWith(s.access_token); }
+    catch(e){ revoke(s.access_token); throw new Error(e.status === 0 ? 'Нет связи с сервером' : 'Не удалось проверить прокат — попробуйте ещё раз'); }
+    const hit = list(info).filter(function(p){ return keys.indexOf(p.key) >= 0; });
+    if (!hit.length){ revoke(s.access_token); throw new Error('Вы не работаете в этом прокате'); }
+    const old = A.tok;
+    A.tok = s.access_token; A.rtok = s.refresh_token || null;
+    A.admin = null; A.uname = ''; A.uid = null; A.userMeta = {}; A.customerProfile = {}; A.profileCity = '';
+    applyAuthUser(s.user || { email: email });
+    saveSess();
+    /* подсказки прежней роли — чтобы шапка не мигала чужим меню */
+    try {
+      localStorage.removeItem('iva_staff_hint'); localStorage.removeItem(LORD_HINT_KEY);
+      sessionStorage.removeItem(WORK_KEY); sessionStorage.removeItem('iva_live_new');
+    } catch(e){}
+    put(info, A.me);
+    revoke(old);
+    const owner = hit.some(function(p){ return p.role === 'owner'; });
+    if (owner){ try { localStorage.setItem(MODE_KEY, 'lend'); } catch(e){} }
+    return owner ? 'account.html#home' : 'account.html#staff';
+  }
+  function go(dest){
+    const u = new URL(dest, location.href);
+    if (u.pathname === location.pathname){ history.replaceState(null, '', u.href); location.reload(); }
+    else location.href = u.href;
+  }
+  /* окно: mode 'any' — почта и пароль; 'owner' — только пароль владельца */
+  function open(mode){
+    const j = cur(), ps = list(j), own = staffOf(j);
+    if (!ps.length){ toast('Смена аккаунта пока недоступна — обновите страницу'); return; }
+    if (mode === 'owner' && !own) return;
+    const comp = esc(((own || ps[0]).company) || 'Прокат');
+    const title = mode === 'owner' ? 'Владелец' : 'Сменить аккаунт';
+    const body = '<form class="sw-f" id="swForm" novalidate>' +
+      '<p class="sw-note">' + (mode === 'owner'
+        ? 'Кабинет владельца проката «' + comp + '». Нужен пароль владельца.'
+        : 'Войти может сотрудник любого пункта или владелец проката «' + comp + '». Нужен пароль.') + '</p>' +
+      '<div class="sw-err" id="swErr" role="alert"></div>' +
+      (mode === 'owner'
+        ? '<div class="sw-fld"><span class="sw-l">Почта владельца</span><div class="inp sw-mail" id="swMail">' + esc(mask(own.owner)) + '</div></div>'
+        : '<div class="sw-fld"><label class="sw-l" for="swEmail">Email</label><input class="inp" id="swEmail" type="email" autocomplete="username" placeholder="you@mail.ru"></div>') +
+      '<div class="sw-fld"><label class="sw-l" for="swPass">Пароль</label><input class="inp" id="swPass" type="password" autocomplete="current-password" placeholder="••••••••"></div>' +
+      '<button class="btn wide" id="swGo" type="submit">Войти</button>' +
+    '</form>';
+    openSheet(title, body);
+    const sh = $('sheet');
+    if (!sh) return;
+    sh.classList.add('st-rsheet', 'sw-sheet');
+    sh.setAttribute('role', 'dialog'); sh.setAttribute('aria-modal', 'true'); sh.setAttribute('aria-label', title);
+    const f = $('swForm'), err = $('swErr'), btn = $('swGo');
+    setTimeout(function(){ const i = $(mode === 'owner' ? 'swPass' : 'swEmail'); if (i) i.focus(); }, 60);
+    f.addEventListener('submit', async function(e){
+      e.preventDefault();
+      if (btn.disabled) return;
+      err.classList.remove('show'); err.textContent = '';
+      btn.disabled = true; btn.textContent = 'Проверяем…';
+      try {
+        const dest = await enter(mode === 'owner' ? own.owner : ($('swEmail') || {}).value, $('swPass').value);
+        btn.textContent = 'Входим…';
+        go(dest);
+      } catch(x){
+        err.textContent = x.message || 'Не удалось войти'; err.classList.add('show');
+        btn.disabled = false; btn.textContent = 'Войти';
+        const p = $('swPass'); if (p){ p.value = ''; p.focus(); }
+      }
+    });
+  }
+  document.addEventListener('click', function(e){
+    const t = e.target.closest ? e.target.closest('[data-iva-switch],[data-iva-owner]') : null;
+    if (!t) return;
+    e.preventDefault();
+    if (typeof closeAcct === 'function') closeAcct();
+    open(t.hasAttribute('data-iva-owner') ? 'owner' : 'any');
+  });
+  document.addEventListener('keydown', function(e){
+    if (e.key === 'Escape' && document.querySelector('#sheet.sw-sheet')) closeSheet();
+  });
+  function btnHTML(){ return '<button type="button" class="btn ghost sm sw-btn" data-iva-switch="1" title="Войти другим аккаунтом этого проката">Сменить</button>'; }
+  return { load: load, sync: sync, open: open, enter: enter, mask: mask, btnHTML: btnHTML, info: cur };
+})();
+/* сотрудник (не владелец): «Профиль» вместо «Кабинета» — в шапке и в нижнем меню (просьба владельца 06.11.2026) */
+function staffNow(){
+  if (typeof isAuthed !== 'function' || !isAuthed()) return false;
+  if (typeof isAdmin === 'function' && isAdmin()) return false;
+  try {
+    const w = JSON.parse(sessionStorage.getItem(WORK_KEY) || 'null');
+    if (w && w.me === String(A.me || '').toLowerCase()) return !!w.on;
+    return localStorage.getItem('iva_staff_hint') === '1';
+  } catch(e){ return false; }
+}
+function paintCabLabel(){
+  const lb = staffNow() ? 'Профиль' : 'Кабинет';
+  const b = $('acctBtn');
+  if (b && typeof isAuthed === 'function' && isAuthed() && b.lastChild) b.lastChild.textContent = lb;
+  const s = document.querySelector('#bnav a[href="account.html"] > span:not(.bnav-ava):not(.dot):last-of-type');
+  if (s) s.textContent = lb;
 }
 
 /* ---------- Меню аккаунта в шапке ---------- */
@@ -1117,7 +1364,6 @@ function acctMenuHTML(){
   let h = '<div class="acct-head"><span class="acct-ava" data-ava="' + esc(me) + '">' + esc(initials(name)) + '</span>' +
     '<span style="min-width:0"><b>' + esc(name) + '</b><small>' + esc(me) + '</small>' +
     '<span class="acct-role">' + role + '</span></span></div>';
-  if (lord) h += modeSwitchHTML();
   if (lend){
     h += a('account.html#home', 'Сводка') + a('account.html#orders', 'Заявки на мой инструмент') + a('account.html#ads', 'Мои объявления') +
          a('account.html#fee', 'Комиссия и оплата') + a('account.html#reviews', 'Отзывы') +
@@ -1133,6 +1379,8 @@ function acctMenuHTML(){
        a(lord ? 'account.html#prof' : 'profile.html', 'Профиль и настройки');
   if (chief) h += '<div class="acct-sep"></div>' + a('chief.html', 'Управление площадкой');
   if (!lord && !staff) h += '<div class="acct-sep"></div>' + a(lendChatHref(), 'Хочу сдавать инструмент');
+  /* «Сменить аккаунт» — владельцу проката и сотруднику (06.11.2026); видно, когда база знает прокат (html.iva-sw) */
+  if (lord || staff) h += '<button type="button" role="menuitem" class="acct-sw" data-iva-switch="1">Сменить аккаунт</button>';
   h += '<div class="acct-sep"></div><button type="button" role="menuitem" class="acct-out" id="acctOut">Выйти</button>';
   return h;
 }
@@ -1179,7 +1427,8 @@ function paintAcct(){
   }
   btn.setAttribute('aria-haspopup', 'menu');
   if (!btn.hasAttribute('aria-expanded')) btn.setAttribute('aria-expanded', 'false');
-  btn.lastChild.textContent = 'Кабинет';
+  btn.lastChild.textContent = staffNow() ? 'Профиль' : 'Кабинет';
+  paintCabLabel();
   if (ic){
     /* аватарка (21.10.2026): кружок не перерисовываем, если в нём уже фото этого же аккаунта */
     const cur = ic.querySelector('.acct-ini');

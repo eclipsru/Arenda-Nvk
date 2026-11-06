@@ -9,7 +9,7 @@
 <link rel="icon" href="assets/favicon-32.png" type="image/png" sizes="32x32">
 <link rel="icon" href="assets/icon-192.png" type="image/png" sizes="192x192">
 <link rel="apple-touch-icon" href="assets/apple-touch-icon.png">
-<link rel="stylesheet" href="assets/theme.css?v=20261102-tiles">
+<link rel="stylesheet" href="assets/theme.css?v=20261106-cabinet">
 <style>
 /* ---------- Шаги ---------- */
 .steps{display:flex;gap:6px;margin:18px 0 22px;flex-wrap:wrap}
@@ -74,6 +74,18 @@ textarea.inp{resize:vertical;min-height:110px;font-family:inherit;line-height:1.
 .sum-row span{color:var(--g2)}
 .sum-row b{text-align:right;max-width:60%}
 
+/* форма внутри «Работы» сотрудника (embed=1): узкая колонка 306px */
+body.emb .form-grid{grid-template-columns:1fr;gap:0;padding-bottom:4px}
+body.emb .steps{margin:2px 0 16px}
+body.emb .step-i{min-width:0}
+body.emb .step-i .lb{display:none}
+body.emb .pick{grid-template-columns:1fr 1fr}
+body.emb .photos{grid-template-columns:repeat(3,1fr)}
+body.emb .nav-btns .btn{min-width:0;flex:1}
+body.emb .emb-done{padding:30px 6px}
+body.emb .emb-done .btn{margin-top:6px}
+.emb-pt{display:flex;flex-direction:column;gap:2px;padding:10px 12px;border:1px solid var(--line);border-radius:var(--r-s);background:var(--field)}
+.emb-pt small{font-size:12.5px;color:var(--gr)}
 @media (max-width:900px){
   .form-grid{grid-template-columns:1fr}
   .prev{position:static;order:-1}
@@ -98,17 +110,32 @@ textarea.inp{resize:vertical;min-height:110px;font-family:inherit;line-height:1.
 
 <script src="assets/data.js"></script>
 <script src="assets/geo.js?v=20260923-photon"></script>
-<script src="assets/sb.js?v=20261024-live"></script>
+<script src="assets/sb.js?v=20261106-cabinet"></script>
 <script src="assets/kind-guess.js?v=20261016-kind"></script>
 <script src="assets/models.js?v=20261020-power"></script>
 <script src="assets/model-form.js?v=20261020-power"></script>
 <script src="assets/app-release.js?v=20261009-rel"></script>
-<script src="assets/app.js?v=20261102-play"></script>
+<script src="assets/app.js?v=20261106-cabinet"></script>
 <script>
 (function(){
-  mountChrome('new', '');
+  /* 05.11.2026: форма внутри «Работы» сотрудника (account.html, левая колонка): new.html?embed=1&point=<пункт>.
+     Без шапки и подвала, одна колонка, пункт выдачи — только выбранный в кабинете; высоту, «к началу формы»,
+     сообщения и «инструмент добавлен» форма передаёт странице кабинета (postMessage, только этот же сайт). */
+  const QS = new URLSearchParams(location.search);
+  const EMBED = QS.get('embed') === '1' && window.parent !== window;
+  const EMB_PT = EMBED ? String(QS.get('point') || '') : '';
+  const embSend = function(msg){ try { window.parent.postMessage(msg, location.origin); } catch(e){} };
+  if (EMBED){
+    document.body.classList.add('emb');
+    const bt = document.createElement('base'); bt.target = '_top'; document.head.appendChild(bt);   // ссылки — во всё окно
+    window.toast = function(m){ embSend({ iva: 'emb-toast', m: String(m || '') }); };
+    const embH = function(){ const r = $('root'); if (r) embSend({ iva: 'emb-h', h: Math.ceil(r.offsetTop + r.offsetHeight + 8) }); };
+    if (typeof ResizeObserver !== 'undefined') new ResizeObserver(embH).observe(document.body);
+    window.addEventListener('load', embH);
+    setInterval(embH, 1500);
+  } else mountChrome('new', '');
 
-  const DRAFT = 'iva_draft_ad';
+  const DRAFT = EMBED ? 'iva_draft_ad_emb' : 'iva_draft_ad';
   const EDIT_ID = new URLSearchParams(location.search).get('edit');
   let EDIT_SOURCE = null, editDirty = false;
   let uploadsInFlight = 0;
@@ -508,6 +535,12 @@ textarea.inp{resize:vertical;min-height:110px;font-family:inherit;line-height:1.
   }
   function stfPointsHTML(){
     const pts = (STF && Array.isArray(STF.points)) ? STF.points : [];
+    if (EMBED && pts.length === 1){
+      F.point_id = String(pts[0].id);
+      return '<div class="fld" id="fPt" style="margin-bottom:0"><label>Пункт выдачи</label>' +
+        '<div class="emb-pt"><b>«' + esc(pts[0].name || 'Пункт') + '»</b>' + (pts[0].address ? '<small>' + esc([pts[0].city, pts[0].address].filter(Boolean).join(', ')) + '</small>' : '') + '</div>' +
+        '<div class="hint">Адрес выдачи в объявлении — адрес пункта. Другой пункт выбирается плиткой в кабинете.</div></div>';
+    }
     if (pts.length === 1 && !F.point_id) F.point_id = String(pts[0].id);
     return '<div class="fld" id="fPt" style="margin-bottom:0"><label>Пункт выдачи</label>' +
       '<div class="pick">' + pts.map(function(p){
@@ -533,10 +566,10 @@ textarea.inp{resize:vertical;min-height:110px;font-family:inherit;line-height:1.
           (F.delivery ? '<div class="ad-badges"><span class="badge deliv">Доставка</span></div>' : '') +
         '</div>' +
         '<div class="ad-body">' +
-          '<div class="ad-price">' + (F.price ? rub(F.price) : '— ₽') + ' <span>/ сутки</span></div>' +
           '<div class="ad-name">' + esc(F.name || 'Название появится здесь') + '</div>' +
           '<div class="ad-dep">Залог ' + rub(dep) + '</div>' +
           '<div class="ad-meta"><span>' + esc(catTitleDB(F.cat) || 'категория') + '</span></div>' +
+          '<div class="ad-foot"><div class="ad-price">' + (F.price ? rub(F.price) : '— ₽') + ' <span>/ сутки</span></div></div>' +
         '</div>' +
       '</article>' +
       '<div class="box" style="margin-top:14px">' +
@@ -563,8 +596,24 @@ textarea.inp{resize:vertical;min-height:110px;font-family:inherit;line-height:1.
   }
 
   /* ---------- Полный рендер ---------- */
+  let EMB_STEP = 0;
   function render(){
     const bodies = [body1, body2, body3, body4, body5];
+    if (EMBED){
+      $('root').innerHTML = stepsHTML() +
+        '<div class="form-grid"><div>' + bodies[step - 1]() +
+          '<div class="nav-btns">' +
+            (step > 1 ? '<button class="btn sec" id="bBack">Назад</button>' : '') +
+            (step < TOTAL ? '<button class="btn" id="bNext">Далее</button>' : '<button class="btn" id="bSave">Опубликовать</button>') +
+          '</div></div></div>';
+      bindStep();
+      if (step === 2) paintPhotos();
+      if (step === 3) countDescr();
+      if (step === 4) paintPriceHint();
+      if (EMB_STEP && EMB_STEP !== step) embSend({ iva: 'emb-top' });
+      EMB_STEP = step;
+      return;
+    }
     $('root').innerHTML =
       '<div class="sect" style="padding-bottom:0"><div class="sect-h">' +
         '<h2>' + (STF ? (EDIT_ID ? 'Изменить инструмент' : 'Добавить инструмент') : (EDIT_ID ? 'Редактировать объявление' : 'Разместить объявление')) + '</h2>' +
@@ -929,6 +978,21 @@ textarea.inp{resize:vertical;min-height:110px;font-family:inherit;line-height:1.
         }
       }
       dropDraft();
+      if (EMBED){
+        const wait = !!(t && t.review === 'pending') || verdict.status === 'moderation';
+        const own = !!(STF && STF.owner);       // владелец: ждёт не одобрения, а автопроверки площадки
+        embSend({ iva: 'emb-added', id: t && t.id ? String(t.id) : '' });
+        $('root').innerHTML = '<div class="empty emb-done">' +
+          (wait ? '<svg viewBox="0 0 24 24" style="stroke:var(--yel)"><circle cx="12" cy="12" r="10"/><path d="M12 7v6l3 2"/></svg>'
+                : '<svg viewBox="0 0 24 24" style="stroke:var(--grn)"><circle cx="12" cy="12" r="10"/><path d="m8 12 3 3 5-6"/></svg>') +
+          '<b>' + (wait ? (own ? 'Отправлено на проверку' : 'Отправлено владельцу на одобрение') : 'Инструмент добавлен') + '</b>' +
+          '<p>«' + esc(F.name) + '» ' + (wait ? (own ? 'появится в каталоге после проверки. Статус — в списке инструмента пункта.'
+            : 'появится в каталоге, когда владелец проката одобрит. Статус — в списке инструмента пункта.') : 'уже в каталоге.') + '</p>' +
+          '<button type="button" class="btn wide" id="embMore">Добавить ещё</button></div>';
+        $('embMore').onclick = function(){ location.reload(); };
+        embSend({ iva: 'emb-top' });
+        return;
+      }
       if (STF && t && t.review === 'pending'){
         $('root').innerHTML = '<div class="empty" style="padding:70px 20px">' +
           '<svg viewBox="0 0 24 24" style="stroke:var(--yel)"><circle cx="12" cy="12" r="10"/><path d="M12 7v6l3 2"/></svg>' +
@@ -979,13 +1043,48 @@ textarea.inp{resize:vertical;min-height:110px;font-family:inherit;line-height:1.
     if (!isAuthed()){ screenAuth('guest'); return; }
     if (!isAdmin()){
       let staff = false;
-      if (!A.admin){
+      /* 05.11.2026: раньше сотрудника не проверяли, если у почты есть строка в admins (бывший или приостановленный
+         арендодатель, active = false) — и форма писала «Размещение приостановлено». База такого человека считает
+         обычным сотрудником (SQL 20261107 / 20261109), значит и сайт проверяет сотрудника у всех, кто не действующий админ. */
+      {
         try { const r = await api('/rest/v1/rpc/iva_staff_me', 'POST', {}); const st = Array.isArray(r) ? r[0] : r;
               staff = !!(st && st.status === 'active');
-              if (staff && st.can_catalog && Array.isArray(st.points) && st.points.length) STF = st; } catch(e){}
+              if (staff && st.can_catalog && Array.isArray(st.points) && st.points.length) STF = st; }
+        catch(e){
+          /* 05.11.2026: сбой связи — не «вы не арендодатель», а «нет связи — повторить» */
+          if (!(typeof apiMissing === 'function' && apiMissing(e))){
+            $('root').innerHTML = '<div class="empty" style="padding:' + (EMBED ? '30px 10px' : '70px 20px') + '"><b>Нет связи с сервером</b>' +
+              '<p>Форма не загрузилась. Проверьте интернет и нажмите «Повторить».</p>' +
+              '<button type="button" class="btn" id="bRetry">Повторить</button></div>';
+            $('bRetry').onclick = function(){ location.reload(); };
+            return;
+          }
+        }
       }
-      if (!STF){ screenAuth(A.admin ? 'paused' : staff ? 'staff' : 'client'); return; }
+      if (STF && EMBED){
+        const one = STF.points.filter(function(p){ return String(p.id) === EMB_PT; });
+        if (!one.length){
+          $('root').innerHTML = '<div class="empty" style="padding:30px 10px"><b>Пункт не найден</b><p>Выберите пункт в списке «Пункт выдачи» в кабинете.</p></div>';
+          return;
+        }
+        STF = Object.assign({}, STF, { points: one });
+      }
+      if (!STF){ screenAuth(staff ? 'staff' : A.admin ? 'paused' : 'client'); return; }
       document.title = (EDIT_ID ? 'Изменить инструмент' : 'Добавить инструмент') + ' — ' + (STF.company || 'прокат') + ' — Ива';
+    } else if (EMBED && EMB_PT && !EDIT_ID){
+      /* 06.11.2026: «Работа» владельца проката — форма для выбранного пункта; адрес, город и координаты база берёт из пункта
+         (триггер trg_iva_tool_point, SQL 10.97), одобрение не нужно — это сам владелец */
+      let pt = null, bad = false;
+      try { const r = await api('/rest/v1/iva_pickup_points?select=id,name,address,city&id=eq.' + encodeURIComponent(EMB_PT)); pt = Array.isArray(r) ? r[0] : null; }
+      catch(e){ bad = !(typeof apiMissing === 'function' && apiMissing(e)); }
+      if (!pt){
+        $('root').innerHTML = '<div class="empty" style="padding:30px 10px">' + (bad
+          ? '<b>Нет связи с сервером</b><p>Форма не загрузилась. Проверьте интернет и нажмите «Повторить».</p><button type="button" class="btn" id="bRetry">Повторить</button>'
+          : '<b>Пункт не найден</b><p>Выберите пункт в списке «Пункт выдачи» в кабинете.</p>') + '</div>';
+        if ($('bRetry')) $('bRetry').onclick = function(){ location.reload(); };
+        return;
+      }
+      STF = { owner: true, status: 'active', can_catalog: true, company: (A.admin && (A.admin.company || A.admin.full_name)) || 'Прокат', points: [pt] };
     }
 
     try {

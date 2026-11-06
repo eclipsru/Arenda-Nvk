@@ -10,7 +10,7 @@
 <link rel="icon" href="assets/favicon-32.png" type="image/png" sizes="32x32">
 <link rel="icon" href="assets/icon-192.png" type="image/png" sizes="192x192">
 <link rel="apple-touch-icon" href="assets/apple-touch-icon.png">
-<link rel="stylesheet" href="assets/theme.css?v=20261102-tiles">
+<link rel="stylesheet" href="assets/theme.css?v=20261106-cabinet">
 <link rel="stylesheet" href="assets/partners.css?v=20260923-info-spacing">
 <link rel="stylesheet" href="assets/geo.css?v=20260923-photon">
 </head>
@@ -91,9 +91,9 @@
 
 <script src="assets/data.js"></script>
 <script src="assets/geo.js?v=20260923-photon"></script>
-<script src="assets/email-guard.js?v=20260926-email"></script><script src="assets/sb.js?v=20261024-live"></script>
+<script src="assets/email-guard.js?v=20260926-email"></script><script src="assets/sb.js?v=20261106-cabinet"></script>
 <script src="assets/app-release.js?v=20261009-rel"></script>
-<script src="assets/app.js?v=20261102-play"></script>
+<script src="assets/app.js?v=20261106-cabinet"></script>
 <script src="assets/clicks.js?v=20261001-p4"></script>
 <script src="assets/partners.js?v=20261020-lend"></script>
 <script>
@@ -178,6 +178,22 @@
     return '<img src="assets/cat/' + path + '-cut.webp?v=20261021" width="' + art[0] + '" height="' + art[1] + '" alt="" decoding="async" loading="lazy">';
   }
 
+  /* 06.11.2026 (владелец): первая плитка — «Все категории», за ней 6 первых категорий; остальные открываются
+     нажатием на «Все категории» (повторное нажатие сворачивает). Открыто/свёрнуто — помним до закрытия вкладки. */
+  var CATS_FIRST = 6;
+  var catsOpen = false;
+  try { catsOpen = sessionStorage.getItem('iva_cats_open') === '1'; } catch(e){}
+  var ALL_ICO = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round">' +
+    '<rect x="3.5" y="3.5" width="7" height="7" rx="1.6"/><rect x="13.5" y="3.5" width="7" height="7" rx="1.6"/>' +
+    '<rect x="3.5" y="13.5" width="7" height="7" rx="1.6"/><rect x="13.5" y="13.5" width="7" height="7" rx="1.6"/></svg>';
+  function allCatsTile(rest){
+    return '<button type="button" class="cat pop all-cats' + (catsOpen ? ' on' : '') + '" data-allcats="1" aria-expanded="' + catsOpen + '"' +
+             ' title="' + (catsOpen ? 'Свернуть категории' : 'Показать все категории') + '">' +
+             '<span class="ico">' + ALL_ICO + '</span>' +
+             '<b>Все категории<small>' + (catsOpen ? 'свернуть' : 'ещё ' + rest) + '</small></b>' +
+           '</button>';
+  }
+
   function renderCats(){
     var box = $('cats');
     var h = '';
@@ -188,7 +204,9 @@
       $('catsTitle').textContent = 'Категории';
       $('catsCrumb').textContent = '';
 
-      h = CATS.map(function(c){
+      var more = CATS.length > CATS_FIRST;
+      var shown = (more && !catsOpen) ? CATS.slice(0, CATS_FIRST) : CATS;
+      h = (more ? allCatsTile(CATS.length - CATS_FIRST) : '') + shown.map(function(c){
         var n = ADS.filter(function(a){
           return a.status === 'active' && (!F.city || cityMatches(a.city,F.city)) && a.cat === c.key;
         }).length;
@@ -270,6 +288,13 @@
 
   /* Клики по плиткам */
   $('cats').addEventListener('click', function(e){
+    if (e.target.closest('[data-allcats]')){
+      catsOpen = !catsOpen;
+      try { sessionStorage.setItem('iva_cats_open', catsOpen ? '1' : '0'); } catch(err){}
+      renderCats();
+      var t = $('cats').querySelector('[data-allcats]'); if (t) t.focus();
+      return;
+    }
     var bk = e.target.closest('[data-back]');
     if (bk){
       LEVEL = ''; F.cat = ''; F.sub = '';
@@ -296,12 +321,38 @@
     return applyFilters(ADS, probe).length;
   }
 
-  function filtersHTML(){
-    var subs = F.cat ? SUBS.filter(function(s){ return s.cat === F.cat; }) : [];
+  /* 06.11.2026 (владелец): в «Глобальном поиске» — только категории (и подкатегории), которые есть в каталоге:
+     хотя бы одно активное объявление в выбранном городе. Выбранная остаётся в списке, даже если опустела. */
+  function inCatalog(cat, sub){
+    return ADS.some(function(a){
+      return a.status === 'active' && (!F.city || cityMatches(a.city,F.city)) && a.cat === cat && (!sub || a.sub === sub);
+    });
+  }
+  /* 06.11.2026 (владелец): в списке городов — только города, где есть инструмент; выбранный город остаётся. */
+  function toolCities(){
+    var has = {};
+    ADS.forEach(function(a){ if (a.status === 'active' && a.city) has[cityKey(a.city)] = 1; });
+    return availableCities().filter(function(c){ return has[cityKey(c)] || (F.city && cityMatches(c, F.city)); });
+  }
 
-    var catList = '<div class="f-item' + (!F.cat ? ' on' : '') + '" data-fcat="">' +
-                    'Все категории<span class="n">' + countFor('') + '</span></div>' +
-      CATS.map(function(c){
+  var FCATS_FIRST = 5;
+  var fcatsOpen = false;
+  try { fcatsOpen = sessionStorage.getItem('iva_fcats_open') === '1'; } catch(e){}
+
+  function filtersHTML(){
+    var subs = F.cat ? SUBS.filter(function(s){ return s.cat === F.cat && (F.sub === s.key || inCatalog(F.cat, s.key)); }) : [];
+
+    /* 06.11.2026 (владелец): в списке 5 категорий, остальные раскрывает «Все категории» (повторное нажатие сворачивает).
+       Выбранная категория видна и в свёрнутом списке. */
+    var fc = CATS.filter(function(c){ return F.cat === c.key || inCatalog(c.key); });
+    var fmore = fc.length > FCATS_FIRST;
+    var fshown = (fmore && !fcatsOpen) ? fc.filter(function(c, i){ return i < FCATS_FIRST || F.cat === c.key; }) : fc;
+    var catList = '<div class="f-item' + (!F.cat ? ' on' : '') + (fmore ? ' f-more' + (fcatsOpen ? ' open' : '') : '') + '" data-fcat=""' +
+                    (fmore ? ' data-fmore="1" role="button" tabindex="0" aria-expanded="' + fcatsOpen + '" title="' +
+                      (fcatsOpen ? 'Свернуть список категорий' : 'Показать все категории (ещё ' + (fc.length - FCATS_FIRST) + ')') + '"' : '') + '>' +
+                    'Все категории' + (fmore ? '<svg class="f-chev" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>' : '') +
+                    '<span class="n">' + countFor('') + '</span></div>' +
+      fshown.map(function(c){
         return '<div class="f-item' + (F.cat === c.key ? ' on' : '') + '" data-fcat="' + esc(c.key) + '">' +
                  esc(c.title) + '<span class="n">' + countFor(c.key) + '</span></div>';
       }).join('');
@@ -319,19 +370,14 @@
       '</div></div>' : '';
 
     return '' +
-    '<div class="f-grp"><h4>Цена за сутки, ₽</h4>' +
-      '<div class="f-row">' +
-        '<input class="inp" id="pFrom" type="number" min="0" placeholder="от" value="' + (F.priceFrom || '') + '">' +
-        '<input class="inp" id="pTo" type="number" min="0" placeholder="до" value="' + (F.priceTo || '') + '">' +
-      '</div></div>' +
-
     '<div class="f-grp"><h4>Категория</h4><div class="f-list">' + catList + '</div></div>' +
     subBlock +
 
     '<div class="f-grp"><h4>Город</h4>' +
-      '<select class="inp" id="fCity">' +
+      /* data-geo-filter-bound: поле «Найти другой город…» под списком не добавляем (владелец, 06.11.2026) */
+      '<select class="inp" id="fCity" data-geo-filter-bound="1">' +
         '<option value="">Все города</option>' +
-        availableCities().map(function(c){
+        toolCities().map(function(c){
           return '<option value="' + esc(c) + '"' + (F.city === c ? ' selected' : '') + '>' + esc(c) + '</option>';
         }).join('') +
       '</select></div>' +
@@ -347,6 +393,13 @@
       '<label class="chk"><input type="checkbox" id="fDeliv"' + (F.delivery ? ' checked' : '') + '>' +
         'Только с доставкой</label></div>' +
 
+    /* 06.11.2026 (владелец): цена — внизу, над «Сбросить фильтры»; поля высотой с кнопку города в шапке */
+    '<div class="f-grp f-price"><h4>Цена за сутки, ₽</h4>' +
+      '<div class="f-row">' +
+        '<input class="inp" id="pFrom" type="number" min="0" inputmode="numeric" placeholder="от" aria-label="Цена за сутки от, ₽" value="' + (F.priceFrom || '') + '">' +
+        '<input class="inp" id="pTo" type="number" min="0" inputmode="numeric" placeholder="до" aria-label="Цена за сутки до, ₽" value="' + (F.priceTo || '') + '">' +
+      '</div></div>' +
+
     '<div class="f-grp">' +
       '<button class="btn sec wide sm" id="fReset">Сбросить фильтры</button></div>';
   }
@@ -355,6 +408,11 @@
     root.addEventListener('click', function(e){
       var c = e.target.closest('[data-fcat]');
       if (c){
+        if (c.hasAttribute('data-fmore')){
+          /* «Все категории»: выбрана категория — сброс и список открыт; уже все — открыть / свернуть */
+          fcatsOpen = F.cat ? true : !fcatsOpen;
+          try { sessionStorage.setItem('iva_fcats_open', fcatsOpen ? '1' : '0'); } catch(err){}
+        }
         F.cat = c.getAttribute('data-fcat'); F.sub = '';
         LEVEL = F.cat;              /* плитки идут следом за фильтром */
         renderAll(); return;
@@ -379,6 +437,10 @@
 
     root.addEventListener('keydown', function(e){
       if (e.key === 'Enter' && (e.target.id === 'pFrom' || e.target.id === 'pTo')) e.target.blur();
+      if ((e.key === 'Enter' || e.key === ' ') && e.target.hasAttribute && e.target.hasAttribute('data-fmore')){
+        e.preventDefault(); e.target.click();
+        var t = root.querySelector('[data-fmore]'); if (t) t.focus();
+      }
     });
     root.addEventListener('blur', function(e){
       if (e.target.id === 'pFrom' || e.target.id === 'pTo'){

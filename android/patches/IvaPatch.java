@@ -402,6 +402,7 @@ public final class IvaPatch {
         try { IvaClientPatch.authEmailFix(a); } catch (Throwable ignore) {}   // 10.119: почта — из ключа
         try { IvaCensorPatch.guardStock(a); } catch (Throwable ignore) {}   // 24.10.2026: мат — имя при регистрации, «Мои данные»
         try { IvaLogoPatch.header(a); } catch (Throwable ignore) {}   // 10.130: надпись v15 в шапке вместо текста
+        try { IvaAdsPatch.onCreated(a); } catch (Throwable ignore) {}   // 10.136: реклама из «Рекламного кабинета»
         reloadProfile(a);
     }
 

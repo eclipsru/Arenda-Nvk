@@ -141,33 +141,43 @@ function sbErr(txt){
 }
 
 /* ---------- Базовый запрос к REST ---------- */
+/* 05.11.2026 (стабильность): у ошибки есть код ответа (e.status; нет ответа — 0), ключ входа обновляется заранее
+   (за минуту до конца часа), а при 401 — один раз и общий для всех запросов страницы. */
 async function api(path, method, body, extraHeaders){
+  if (A.tok && A.rtok && sessExpSoon(60000)) await refreshToken();
   const h = {
     apikey: KEY,
     'Content-Type': 'application/json'
   };
+  const usedTok = A.tok;
   if (A.tok) h.Authorization = 'Bearer ' + A.tok;
   if (extraHeaders) for (const k in extraHeaders) h[k] = extraHeaders[k];
 
   const opt = { method: method || 'GET', headers: h };
   if (body !== undefined && body !== null) opt.body = JSON.stringify(body);
 
-  const r = await fetch(SB + path, opt);
+  let r;
+  try { r = await fetch(SB + path, opt); }
+  catch(e){ const ne = new Error('Нет связи с сервером'); ne.status = 0; ne.net = true; throw ne; }
 
   /* Токен протух — пробуем обновить один раз */
-  if (r.status === 401 && A.rtok && !opt.__retry){
-    const ok = await refreshToken();
+  if (r.status === 401 && A.rtok && !(extraHeaders && extraHeaders.__retry)){
+    /* ответ пришёл на старый ключ, а его уже обновил другой запрос — просто повторяем с новым */
+    const ok = (A.tok && A.tok !== usedTok) ? true : await refreshToken();
     if (ok){
-      opt.__retry = true;
-      return api(path, method, body, extraHeaders);
+      const eh = {}; if (extraHeaders) for (const k in extraHeaders) eh[k] = extraHeaders[k];
+      Object.defineProperty(eh, '__retry', { value: true, enumerable: false });
+      return api(path, method, body, eh);
     }
   }
 
   const txt = await r.text();
-  if (!r.ok) throw new Error(sbErr(txt));
+  if (!r.ok){ const e = new Error(sbErr(txt)); e.status = r.status; throw e; }
   if (!txt) return null;
   try { return JSON.parse(txt); } catch(e){ return txt; }
 }
+/* «Функции нет в базе» (SQL не применён): 404 / PGRST202 — это ответ, а не сбой связи */
+function apiMissing(e){ return !!(e && (e.status === 404 || /PGRST202|Could not find the function/i.test(String(e.message || '')))); }
 
 /* ---------- Сохранение сессии ---------- */
 function saveSess(){
@@ -183,18 +193,70 @@ function clearSess(){
   A.uid=null; A.userMeta={}; A.customerProfile={}; A.profileCity='';
   try { localStorage.removeItem(TOK_KEY); localStorage.removeItem('iva_auth'); } catch(e){}
 }
+/* срок ключа входа — из самого ключа (exp), без запроса */
+function sessExpSoon(ms){
+  try {
+    const p = JSON.parse(atob(String(A.tok || '').split('.')[1].replace(/-/g, '+').replace(/_/g, '/')));
+    return !!p.exp && p.exp * 1000 - Date.now() < ms;
+  } catch(e){ return false; }
+}
+/* ключи, которые уже обновила другая вкладка этого же человека */
+function sessFromStore(){
+  try {
+    const s = JSON.parse(localStorage.getItem(TOK_KEY) || 'null');
+    if (s && s.tok && s.rtok && s.rtok !== A.rtok && (!A.me || !s.me || String(s.me).toLowerCase() === String(A.me).toLowerCase())) return s;
+  } catch(e){}
+  return null;
+}
+/* другая вкладка обновила ключ — берём его сразу, иначе наш одноразовый refresh_token уже недействителен */
+try {
+  window.addEventListener('storage', function(ev){
+    if (ev.key !== TOK_KEY || !A.rtok) return;
+    /* 06.11.2026: в другой вкладке сменили аккаунт («Сменить» / «Владелец» в «Работе») — эта вкладка тоже
+       переходит на новый аккаунт (иначе она работала бы от прежнего, уже закрытого входа) */
+    try {
+      const n = JSON.parse(ev.newValue || 'null');
+      if (n && n.me && A.me && String(n.me).toLowerCase() !== String(A.me).toLowerCase()){ location.reload(); return; }
+    } catch(e){}
+    const s = sessFromStore();
+    if (s){ A.tok = s.tok; A.rtok = s.rtok; }
+  });
+} catch(e){}
 
-/* ---------- Обновление токена ---------- */
+/* ---------- Обновление токена ----------
+   05.11.2026: раньше несколько запросов одновременно меняли один и тот же одноразовый refresh_token — второй получал
+   отказ, и сессия стиралась («пропадает раздел» через час работы). Теперь: одно обновление на всю страницу;
+   если другая вкладка уже обновила — берём её ключи; выходим только при настоящем отказе (400/401/403),
+   а при сбое сети или сервера (0, 5xx, 429) оставляем сессию и пробуем позже. */
+let _refreshPending = null;
 async function refreshToken(){
   if (!A.rtok) return false;
+  if (_refreshPending) return _refreshPending;
+  _refreshPending = refreshTokenOnce();
+  try { return await _refreshPending; }
+  finally { _refreshPending = null; }
+}
+async function refreshTokenOnce(){
+  const other = sessFromStore();
+  if (other){ A.tok = other.tok; A.rtok = other.rtok; return true; }
+  const used = A.rtok;
+  let r;
   try {
-    const r = await fetch(SB + '/auth/v1/token?grant_type=refresh_token', {
+    r = await fetch(SB + '/auth/v1/token?grant_type=refresh_token', {
       method:'POST',
       headers:{ apikey:KEY, 'Content-Type':'application/json' },
-      body: JSON.stringify({ refresh_token: A.rtok })
+      body: JSON.stringify({ refresh_token: used })
     });
-    if (!r.ok) { clearSess(); return false; }
+  } catch(e){ return false; }
+  if (!r.ok){
+    const again = sessFromStore();               // пока ждали ответ, другая вкладка успела обновить
+    if (again){ A.tok = again.tok; A.rtok = again.rtok; return true; }
+    if (r.status === 400 || r.status === 401 || r.status === 403) clearSess();
+    return false;
+  }
+  try {
     const j = await r.json();
+    if (!j || !j.access_token) return false;
     A.tok  = j.access_token;
     A.rtok = j.refresh_token || A.rtok;
     applyAuthUser(j.user);
@@ -266,23 +328,28 @@ async function restoreSessOnce(){
   A.tok = s.tok; A.rtok = s.rtok; A.me = s.me || ''; A.uname = s.uname || '';
 
   /* Проверяем токен; если протух — обновляем. Без подтверждённой
-     почты сессию не восстанавливаем: пусть человек подтвердит ящик. */
+     почты сессию не восстанавливаем: пусть человек подтвердит ящик.
+     05.11.2026: сбой сети или сервера — не выход: сессию оставляем, роль всё равно загружаем (loadAdmin). */
   try {
     let r = await fetch(SB + '/auth/v1/user', {
       headers:{ apikey:KEY, Authorization:'Bearer ' + A.tok }
     });
-    if (!r.ok){
+    if (!r.ok && r.status < 500 && r.status !== 429){
       const ok = await refreshToken();
-      if (!ok) return false;
+      if (!ok){
+        if (!A.rtok) return false;                 // сервер отказал — сессии нет
+        await loadAdmin(); return true;            // сбой связи при обновлении — работаем с тем, что есть
+      }
       r = await fetch(SB + '/auth/v1/user', {
         headers:{ apikey:KEY, Authorization:'Bearer ' + A.tok }
       });
-      if (!r.ok) return false;
     }
-    const u = await r.json();
-    if (typeof IvaEmailGuard !== 'undefined' && !IvaEmailGuard.isConfirmed(u)){ clearSess(); return false; }
-    applyAuthUser(u);
-  } catch(e){ return false; }
+    if (r.ok){
+      const u = await r.json();
+      if (typeof IvaEmailGuard !== 'undefined' && !IvaEmailGuard.isConfirmed(u)){ clearSess(); return false; }
+      applyAuthUser(u);
+    }
+  } catch(e){ if (!A.tok) return false; }
 
   await loadAdmin();
   return true;
@@ -297,7 +364,8 @@ async function loadAdmin(){
     const arr = await api('/rest/v1/admins?select=email,role,active,fee_pct,debt_limit,full_name,company,phone,address,work_hours' +
                           '&email=eq.' + encodeURIComponent(A.me));
     A.admin = (arr && arr.length) ? arr[0] : null;
-  } catch(e){ A.admin = null; }
+    A.adminFail = false;
+  } catch(e){ A.adminFail = true; }   /* 05.11.2026: сбой связи — роль не сбрасываем (иначе арендодатель на минуту «становится клиентом») */
   await loadCustomerProfile();
   await loadProfileCity();
   return A.admin;

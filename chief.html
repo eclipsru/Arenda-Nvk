@@ -9,7 +9,7 @@
 <link rel="icon" href="assets/favicon-32.png" type="image/png" sizes="32x32">
 <link rel="icon" href="assets/icon-192.png" type="image/png" sizes="192x192">
 <link rel="apple-touch-icon" href="assets/apple-touch-icon.png">
-<link rel="stylesheet" href="assets/theme.css?v=20261102-tiles">
+<link rel="stylesheet" href="assets/theme.css?v=20261106-cabinet">
 <style>
 .kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:12px;margin-bottom:22px}
 .kpi{background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:16px}
@@ -113,9 +113,9 @@
 
 <script src="assets/data.js"></script>
 <script src="assets/geo.js?v=20260923-photon"></script>
-<script src="assets/email-guard.js?v=20260926-email"></script><script src="assets/sb.js?v=20261024-live"></script>
+<script src="assets/email-guard.js?v=20260926-email"></script><script src="assets/sb.js?v=20261106-cabinet"></script>
 <script src="assets/app-release.js?v=20261009-rel"></script>
-<script src="assets/app.js?v=20261102-play"></script>
+<script src="assets/app.js?v=20261106-cabinet"></script>
 <script src="assets/partners.js?v=20261020-lend"></script>
 <script src="assets/model-proposals.js?v=20261018-stage4"></script>
 <script>
@@ -426,6 +426,32 @@
     }
   }
 
+  /* 06.11.2026 (просьба владельца №11): комиссия, оплачено и долг / переплата — из базы (iva_fee_balances, SQL 20261127),
+     той же формулой, что у сайта и приложения владельца проката: все строки заявок, без лимита 500. Нет SQL — как раньше. */
+  let FEE_DB = null;
+  async function loadFeeDb(){
+    try {
+      const r = await api('/rest/v1/rpc/iva_fee_balances', 'POST', {});
+      const j = r && r.iva_fee_balances ? r.iva_fee_balances : r;
+      FEE_DB = Array.isArray(j) ? j : null;
+    } catch(e){ FEE_DB = null; }
+    return FEE_DB;
+  }
+  function chiefStats(){
+    const st = moneyStats(D.parts, D.fees);
+    if (!FEE_DB) return st;
+    st.fee = 0; st.paid = 0;
+    FEE_DB.forEach(function(b){
+      const em = String(b.email || '').toLowerCase(); if (!em) return;
+      const a = st.byAdmin[em] || (st.byAdmin[em] = { rent:0, fee:0, paid:0, orders:0 });
+      a.fee = Number(b.fee) || 0; a.paid = Number(b.paid) || 0; a.debt = a.fee - a.paid; a.db = true;
+    });
+    for (const k in st.byAdmin){ st.fee += st.byAdmin[k].fee; st.paid += st.byAdmin[k].paid; }
+    st.owed = st.fee - st.paid;
+    return st;
+  }
+  function chiefFeeAgain(){ loadFeeDb().then(function(){ D.stats = chiefStats(); render(); }); }
+
   function admTable(short){
     const rows = D.admins.map(function(a){
       const em = (a.email || '').toLowerCase();
@@ -445,6 +471,7 @@
         '<td class="num">' + m(st.paid) + '</td>' +
         '<td class="num ' + (st.debt > 0 ? 'neg' : 'pos') + '">' +
           m(st.debt > 0 ? st.debt : 0) +
+          (st.debt < 0 ? '<div class="small" style="color:var(--grn)">переплата ' + m(-st.debt) + '</div>' : '') +
           (blocked ? '<div class="small" style="color:var(--red)">лимит превышен</div>' : '') + '</td>' +
         (short ? '' :
           '<td><div class="acts">' +
@@ -1324,8 +1351,8 @@
         await confirmFee(id);
         const f = D.fees.find(function(x){ return String(x.id) === String(id); });
         if (f){ f.status = 'confirmed'; f.confirmed_at = new Date().toISOString(); }
-        D.stats = moneyStats(D.parts, D.fees);
-        render(); toast('Выплата подтверждена');
+        D.stats = chiefStats();
+        render(); toast('Выплата подтверждена'); chiefFeeAgain();
       } catch(err){ fa.disabled = false; toast('Не удалось: ' + err.message); }
       return;
     }
@@ -1400,8 +1427,8 @@
           confirmed_by: A.me
         });
         if (row) D.fees.unshift(row);
-        D.stats = moneyStats(D.parts, D.fees);
-        closeSheet(); render(); toast('Выплата записана');
+        D.stats = chiefStats();
+        closeSheet(); render(); toast('Выплата записана'); chiefFeeAgain();
       } catch(err){ closeSheet(); toast('Не удалось: ' + err.message); }
     });
   }
@@ -1432,6 +1459,7 @@
     ivaPaintReleaseLinks($('root'));
 
     try {
+      const feeDbP = loadFeeDb();   // 06.11.2026: комиссия из базы — параллельно
       const r = await Promise.all([
         loadOrders(), loadParts(), loadAdmins(), loadFees(), loadAllTools(), loadAllCats()
       ]);
@@ -1442,7 +1470,8 @@
       D.fees = r[3];   D.tools = r[4];
       D.cats = r[5].cats; D.subs = r[5].subs;
       if (D.cats.length) CATS = D.cats;
-      D.stats = moneyStats(D.parts, D.fees);
+      await feeDbP;
+      D.stats = chiefStats();
       try { D.unread = await unreadCount(); } catch(e){ D.unread = 0; }
       // Обращения со страниц городов (счётчик звонков). Если таблица ещё не создана —
       // кабинет работает как обычно, в сводке будет прочерк.

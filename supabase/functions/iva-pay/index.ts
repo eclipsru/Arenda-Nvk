@@ -143,7 +143,30 @@ async function settle(ykId: string, auth: string): Promise<any> {
 const json = (o: unknown, status = 200) =>
   new Response(JSON.stringify(o), { status, headers: { "Content-Type": "application/json", "Cache-Control": "no-store" } });
 
+/** Сайт (06.11.2026, просьба владельца №11): «Внести платёж» в кабинете — браузер зовёт функцию с другого адреса.
+ *  Разрешены только адреса сайта и предпросмотра; вход по-прежнему проверяется ключом пользователя (whoAmI). */
+const ORIGINS = [/^https:\/\/eclipsru\.github\.io$/, /^https:\/\/raw\.githack\.com$/, /^http:\/\/(localhost|127\.0\.0\.1)(:\d{2,5})?$/];
+export function corsHeaders(req: Request): Record<string, string> {
+  const o = req.headers.get("origin") ?? "";
+  if (!ORIGINS.some((r) => r.test(o))) return {};
+  return {
+    "Access-Control-Allow-Origin": o,
+    "Access-Control-Allow-Headers": "authorization, apikey, content-type, x-client-info",
+    "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+    "Access-Control-Max-Age": "600",
+    Vary: "Origin",
+  };
+}
+
 export async function handle(req: Request): Promise<Response> {
+  if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: corsHeaders(req) });
+  const r = await route(req);
+  const h = corsHeaders(req);
+  for (const k of Object.keys(h)) r.headers.set(k, h[k]);
+  return r;
+}
+
+async function route(req: Request): Promise<Response> {
   const auth = ykAuth();
   if (req.method === "GET") return json({ ok: true, ready: !!auth && !!dbKey(), test: !!auth && ykTest() });
   if (req.method !== "POST") return json({ error: "method" }, 405);
@@ -230,5 +253,8 @@ export async function handle(req: Request): Promise<Response> {
 const D = (globalThis as any).Deno;
 if (D?.serve) D.serve((req: Request) => handle(req).catch((e) => {
   console.error("iva-pay: сбой: " + String((e as Error)?.message ?? e).slice(0, 200));
-  return json({ error: "internal" }, 500);
+  const r = json({ error: "internal" }, 500);
+  const h = corsHeaders(req);
+  for (const k of Object.keys(h)) r.headers.set(k, h[k]);
+  return r;
 }));
