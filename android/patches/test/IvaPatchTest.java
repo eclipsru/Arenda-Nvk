@@ -2611,6 +2611,7 @@ public class IvaPatchTest {
         prokat120();                                                  // 10.120: страница проката, чат пункта, «На одобрении»
         v121();                                                       // 10.121: первый пункт, правки на одобрение, заявки целиком
         v122();                                                       // 10.122: удаление сотрудником, «Мой инструмент», чат, отмена заявки
+        v138();                                                       // 10.138: ФИО из профиля, комиссия из базы
         v123();                                                       // 10.123: доставка по наибольшей цене, «обратно» за каждым сроком, карточки
         v124();                                                       // 10.124: подсветка карточек заявок
         v125();                                                       // 10.125: телефон пункта в карточке, другой пункт проката
@@ -3471,6 +3472,29 @@ public class IvaPatchTest {
         eq("10.121: число из базы", IvaOrderViewPatch.intOf("3", 0) + "|" + IvaOrderViewPatch.intOf(null, 7) + "|" + IvaOrderViewPatch.intOf("x", 1) + "|"
             + IvaOrderViewPatch.intOf(2.6, 0), "3|7|1|3");
         eq("10.121: адрес функции заявок", IvaOrderViewPatch.RPC, "/rest/v1/rpc/iva_order_cards");
+    }
+
+    /** 10.138 (просьба владельца №11): ФИО сотрудника — из профиля; комиссия — из базы (iva_fee_balance), как на сайте. */
+    static void v138() {
+        boolean[] ok = {true, false, false, false};
+        eq("10.138: форма без ФИО — имя не проверяется",
+            IvaStaffPatch.formErr(true, "ivan@mail.ru", "me@mail.ru", null, "", 1, ok) + "|" + IvaStaffPatch.formErr(false, "", "me@mail.ru", null, "", 1, ok), "|");
+        eq("10.138: новый сотрудник — p_name null", IvaStaffPatch.saveBody(null, "a@b.ru", null, "", null, ok, false, false).contains("\"p_name\":null,"), true);
+        eq("10.138: при правке — прежнее имя", IvaStaffPatch.saveBody(null, "a@b.ru", " Иван  Петров ", "", null, ok, false, false).contains("\"p_name\":\"Иван Петров\""), true);
+        eq("10.138: имя для старой базы", IvaStaffPatch.fallbackName(null, " Ivan.P@Mail.ru ") + "|" + IvaStaffPatch.fallbackName("Иван", "x@y.ru") + "|" + IvaStaffPatch.fallbackName("  ", "olga@x.ru"),
+            "ivan.p|Иван|olga");
+        eq("10.138: «Укажите имя» — повтор", IvaStaffPatch.needName(IvaStaffPatch.dbError("400", "{\"message\":\"Укажите имя сотрудника (до 80 символов)\"}")) + "|" + IvaStaffPatch.needName("Отметьте хотя бы одно право"), "true|false");
+        IvaStaffPatch.Staff s = new IvaStaffPatch.Staff();
+        s.email = "olga@x.ru"; s.name = "";
+        String w1 = IvaStaffPatch.who(s);
+        s.name = "Ольга Смирнова";
+        eq("10.138: без имени — почта", w1 + "|" + IvaStaffPatch.who(s), "olga@x.ru|Ольга Смирнова");
+        double[] k = IvaAccessPatch.feeRpcParse("{\"email\":\"e@x.ru\",\"pct\":1,\"fee\":7,\"paid\":100,\"pending\":0,\"debt\":0,\"over\":93}");
+        eq("10.138: iva_fee_balance → начислено, оплачено, процент", k == null ? "null" : k[0] + "|" + k[1] + "|" + k[2], "7.0|100.0|1.0");
+        double[] k2 = IvaAccessPatch.feeRpcParse("{\"iva_fee_balance\":{\"fee\":12.5,\"paid\":0}}");
+        eq("10.138: обёрнутый ответ, процент по умолчанию 5", k2 == null ? "null" : k2[0] + "|" + k2[1] + "|" + k2[2], "12.5|0.0|5.0");
+        eq("10.138: плохой ответ — прежний расчёт", String.valueOf(IvaAccessPatch.feeRpcParse("[]")) + "|" + IvaAccessPatch.feeRpcParse("{\"code\":\"PGRST202\"}") + "|" + IvaAccessPatch.feeRpcParse(null), "null|null|null");
+        eq("10.138: переплата как в приложении", IvaAccessPatch.feeTexts(7, 100, 1)[1].contains("93"), true);
     }
 
     static void v122() {

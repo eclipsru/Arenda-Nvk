@@ -583,6 +583,8 @@ public final class IvaAccessPatch {
     // карточки (свои строки order_parts, подтверждённые fee_payments, свой процент) — новых данных нет.
     static final String FEE_PARTS = "/rest/v1/order_parts?select=fee&owner_email=eq.";
     static final String FEE_PAID = "/rest/v1/fee_payments?select=amount&status=eq.confirmed&admin_email=eq.";
+    /** 10.138 (просьба владельца №11): баланс комиссии из базы — одна формула с сайтом (SQL 20261127); нет функции — считаем, как раньше. */
+    static final String FEE_RPC = "/rest/v1/rpc/iva_fee_balance";
     static final String FEE_PCT = "/rest/v1/admins?select=fee_pct&email=eq.";
     static final String FEE_TAG = "iva_fee_";
     static final String[] FEE_NATIVE = {"feePctTxt", "feeSum", "feeSub"};
@@ -693,6 +695,13 @@ public final class IvaAccessPatch {
 
     /** {начислено, оплачено, процент} — только если все три ответа 2xx и разобраны; иначе null. */
     static double[] feeFetch(Activity a, String me) throws Exception {
+        try {
+            String[] b = IvaClientPatch.apiCall(a, FEE_RPC, "POST", "{}", true);
+            if (b != null && b.length > 1 && b[0].startsWith("2")) {
+                double[] k = feeRpcParse(b[1]);
+                if (k != null) return k;
+            }
+        } catch (Throwable ignore) {}   // нет функции (404 / PGRST202) или нет связи — прежний расчёт
         String q = IvaReviewPatch.enc(me);
         String[] p = IvaClientPatch.apiCall(a, FEE_PARTS + q, "GET", null, true);
         if (p == null || !p[0].startsWith("2") || p.length < 2) return null;
@@ -707,6 +716,21 @@ public final class IvaAccessPatch {
         Double pct = feePctField(t[1]);
         if (pct == null) return null;
         return new double[]{fee, paid, pct};
+    }
+
+    /** Ответ iva_fee_balance: {"fee":7,"paid":100,"pct":1,...} (или обёрнутый в "iva_fee_balance") → {начислено, оплачено, процент}; иначе null. */
+    static double[] feeRpcParse(String body) {
+        try {
+            String t = body == null ? "" : body.trim();
+            if (!t.startsWith("{")) return null;
+            org.json.JSONObject o = new org.json.JSONObject(t);
+            if (o.has("iva_fee_balance") && o.optJSONObject("iva_fee_balance") != null) o = o.optJSONObject("iva_fee_balance");
+            if (!o.has("fee") || !o.has("paid") || o.isNull("fee") || o.isNull("paid")) return null;
+            double fee = o.getDouble("fee"), paid = o.getDouble("paid");
+            double pct = o.has("pct") && !o.isNull("pct") ? o.getDouble("pct") : 5;
+            if (Double.isNaN(fee) || Double.isNaN(paid) || Double.isNaN(pct) || Double.isInfinite(fee) || Double.isInfinite(paid)) return null;
+            return new double[]{fee, paid, pct};
+        } catch (Throwable e) { return null; }
     }
 
     static void feePost(final Activity a, final String me, final double[] k, final String note) {

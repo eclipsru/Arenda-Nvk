@@ -1844,7 +1844,8 @@ try {
       'сотрудники 10.103: подключение — страница пунктов (список в её потоке, «Сотрудники · N», предупреждение при удалении) и кабинет');
     assert.ok(!/customer_profiles|passport|phone|surname|select=|"PATCH"|"DELETE"|"GET"|\/rest\/v1\/iva_staff/.test(code)
       /* 10.115: + iva_staff_link (запасной путь — iva_staff_save / iva_staff_remove) и перечитать список по отметке */
-      && (code.match(/IvaClientPatch\.apiCall\(/g) || []).length === 9 && (code.match(/"POST"/g) || []).length === 9
+      /* 10.138: + повтор iva_staff_save с именем, если база до SQL 20261127 ответила «Укажите имя» */
+      && (code.match(/IvaClientPatch\.apiCall\(/g) || []).length === 10 && (code.match(/"POST"/g) || []).length === 10
       && (code.match(/new Thread\(new Runnable\(\)/g) || []).length === 5
       && code.includes('boolean want = IvaNotifyPatch.loggedIn(a) && !me.isEmpty() && !IvaNotifyPatch.isAdmin(a);'),
       'сотрудники 10.103: только функции базы iva_staff_* (таблицы напрямую — нет), сеть — в потоках, владельцу проката приглашений не показываем');
@@ -2142,7 +2143,8 @@ try {
       && /runOnUiThread/.test(fn('check')) && /runOnUiThread/.test(fn('checkStaff')),
       'доступ 10.110: запросы — в фоне, экран меняется в главном потоке');
     assert.ok(ac.includes('ADMIN_PATH = "/rest/v1/admins?select=email,removed_at&email=ilike."') && !/select=\*|customer_profiles|passport|phone|surname/.test(code)
-      && (code.match(/"POST"/g) || []).length === 1 && !/"PATCH"|"DELETE"/.test(code) && fn('checkStaff').includes('IvaStaffPatch.ME_RPC, "POST", "{}"'),
+      /* 10.138: второй POST — чтение своего баланса комиссии (iva_fee_balance), без персональных данных */
+      && (code.match(/"POST"/g) || []).length === 2 && code.includes('FEE_RPC, "POST", "{}"') && !/"PATCH"|"DELETE"/.test(code) && fn('checkStaff').includes('IvaStaffPatch.ME_RPC, "POST", "{}"'),
       'доступ 10.110: только чтение своей строки admins и iva_staff_me, персональных данных нет');
     // снятие: selfAdmin = false, страницы закрыты, со страниц админа — в профиль, сообщение; возврат — так же
     const aa = fn('applyAdmin');
@@ -2376,7 +2378,7 @@ try {
       && fn(strip(rt), 'ensure').includes('boolean want = IvaNotifyPatch.loggedIn(a);'),
       'доступ 10.115: по отметке — тариф админа и ответы сотрудников владельцу (и создателю: роль его не трогается)');
     assert.ok(ac.includes('FEE_PATH = "/rest/v1/admins?select=fee_pct,debt_limit&email=ilike."') && fn(acc, 'checkFee').includes('feeHint(was, key)')
-      && fn(acc, 'checkFee').includes('a.runOnUiThread(') && (acc.match(/"POST"/g) || []).length === 1,
+      && fn(acc, 'checkFee').includes('a.runOnUiThread(') && (acc.match(/"POST"/g) || []).length === 2 && acc.includes('FEE_RPC, "POST", "{}"'),   // 10.138: + iva_fee_balance
       'доступ 10.115: тариф — чтение своей строки admins в фоне, подсказка в главном потоке');
     const op = fn(spc, 'ownerPoke');
     assert.ok(op.includes('if (was == null || ownerBusy) return;') && op.includes('final String hint = ownerHint(was, now);') && op.includes('draw(u, now);')
@@ -2392,8 +2394,8 @@ try {
       && card.indexOf('pointsLine(') < card.indexOf('rightsText(s.r)'),
       'сотрудники 10.115: карточка — ФИО, телефон, почта, пункт выдачи, права');
     assert.ok(/if \(whole\) \{\s*c\.setClickable\(true\);\s*c\.setOnClickListener\(new View\.OnClickListener\(\) \{ @Override public void onClick\(View v\) \{ openStaff\(u, s\); \} \}\);\s*\} else \{/.test(dr)
-      && (dr.match(/openStaff\(/g) || []).length === 1 && dr.includes('askUnlink(u, s, rm);') && sp.includes('label(a, "ФИО", u.cGray)'),
-      'сотрудники 10.115: правка — только со страницы «Сотрудники»; у пункта карточки не нажимаются, только «Убрать из пункта»; поле «ФИО»');
+      && (dr.match(/openStaff\(/g) || []).length === 1 && dr.includes('askUnlink(u, s, rm);') && !sp.includes('label(a, "ФИО", u.cGray)'),
+      'сотрудники 10.115: правка — только со страницы «Сотрудники»; у пункта карточки не нажимаются, только «Убрать из пункта»; поля «ФИО» нет (10.138: имя из профиля)');
     // 3. у пункта: добавить своего или нового, убрать только из этого пункта
     const oa = fn(spc, 'openAdd'), ln = fn(spc, 'link');
     assert.ok(oa.includes('if (!s.points.contains(u.point.id.toLowerCase(Locale.ROOT))) free.add(s);') && oa.includes('link(u, s, true, v, pg,')
@@ -2509,7 +2511,7 @@ try {
       'комиссия 10.117: штатные строки скрыты, наши — рядом (штатные не переносим), пишутся в главном потоке');
     assert.ok(ac.includes('FEE_PARTS = "/rest/v1/order_parts?select=fee&owner_email=eq."') && ac.includes('FEE_PAID = "/rest/v1/fee_payments?select=amount&status=eq.confirmed&admin_email=eq."')
       && ac.includes('FEE_PCT = "/rest/v1/admins?select=fee_pct&email=eq."') && !/customer_profiles|passport|phone|surname|select=\*/.test(acc)
-      && (acc.match(/"POST"/g) || []).length === 1,
+      && (acc.match(/"POST"/g) || []).length === 2 && acc.includes('IvaClientPatch.apiCall(a, FEE_RPC, "POST", "{}", true)'),   // 10.138: + iva_fee_balance
       'комиссия 10.117: те же данные, что у штатной карточки; новых данных нет; POST по-прежнему один');
     // 2. роль: по прошлому ответу базы в обе стороны; без ключа ответ базы не считается
     const op = fn(acc, 'onProfile'), aa = fn(acc, 'askAdmin');
@@ -3166,7 +3168,21 @@ try {
       && sq.includes('CHECK (char_length(advertiser) <= 160)') && sq.includes('CHECK (char_length(erid) <= 80)'),
       '10.137: ограничения полей формы = ограничениям базы');
     assert.ok(tp.includes('eq("реклама 10.137: '), 'IvaPatchTest: проверка 10.137');
-    assert.ok(/NEW_NAME: '10\.137'/.test(wf) && /NEW_CODE: '211'/.test(wf), 'сборка 10.137 (211)');
+    assert.ok(Number((/NEW_CODE: '(\d+)'/.exec(wf) || [])[1]) >= 211, 'сборка 10.137 (211) или новее');
+  }
+  // 10.138 (просьба владельца №11, 06.11.2026): в окне сотрудника нет «ФИО» — имя из профиля сотрудника после «Принять» (SQL 20261127),
+  // до того — почта; комиссия — из базы (iva_fee_balance, та же формула, что на сайте), без функции — прежний расчёт
+  {
+    const wf = R('.github/workflows/build-apk.yml'), tp = R('android/patches/test/IvaPatchTest.java');
+    const sp = R('android/patches/IvaStaffPatch.java'), ac = R('android/patches/IvaAccessPatch.java'), sq = R('supabase/migrations/20261127_owner_cabinet.sql');
+    assert.ok(!sp.includes('fName') && !sp.includes('IvaCensorPatch.nameError') && sp.includes('formErr(isNew, em, IvaPickupPatch.me(a), null,')
+      && sp.includes('static String who(Staff s)') && sp.includes('static String fallbackName(') && sp.includes('if (body2 != null && needName(e))'),
+      '10.138: окно сотрудника без «ФИО»; новый — p_name null, при правке — прежнее имя; старая база («Укажите имя») — повтор с прежним именем или почтой до «@»');
+    assert.ok(ac.includes('FEE_RPC = "/rest/v1/rpc/iva_fee_balance"') && ac.indexOf('FEE_RPC, "POST"') < ac.indexOf('FEE_PARTS + q') && ac.includes('static double[] feeRpcParse(')
+      && sq.includes('CREATE OR REPLACE FUNCTION public.iva_fee_balance()'),
+      '10.138: комиссия сначала из iva_fee_balance (SQL 20261127), потом — прежние три запроса');
+    assert.ok((tp.match(/eq\("10\.138: /g) || []).length >= 9 && tp.includes('v138();'), 'IvaPatchTest: проверки 10.138');
+    assert.ok(/NEW_NAME: '10\.138'/.test(wf) && /NEW_CODE: '212'/.test(wf), 'сборка 10.138 (212)');
   }
   // 10.75 (просьба владельца 14.10.2026): в «Настройках» — кнопка «Уведомления» (с 10.97 — открывает отдельную страницу);
   // внутри сверху «Открыть настройки уведомлений Android», потом какие присылать, потом расписание, потом всё остальное
