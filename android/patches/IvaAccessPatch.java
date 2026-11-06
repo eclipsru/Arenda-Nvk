@@ -720,17 +720,20 @@ public final class IvaAccessPatch {
 
     /** Ответ iva_fee_balance: {"fee":7,"paid":100,"pct":1,...} (или обёрнутый в "iva_fee_balance") → {начислено, оплачено, процент}; иначе null. */
     static double[] feeRpcParse(String body) {
-        try {
-            String t = body == null ? "" : body.trim();
-            if (!t.startsWith("{")) return null;
-            org.json.JSONObject o = new org.json.JSONObject(t);
-            if (o.has("iva_fee_balance") && o.optJSONObject("iva_fee_balance") != null) o = o.optJSONObject("iva_fee_balance");
-            if (!o.has("fee") || !o.has("paid") || o.isNull("fee") || o.isNull("paid")) return null;
-            double fee = o.getDouble("fee"), paid = o.getDouble("paid");
-            double pct = o.has("pct") && !o.isNull("pct") ? o.getDouble("pct") : 5;
-            if (Double.isNaN(fee) || Double.isNaN(paid) || Double.isNaN(pct) || Double.isInfinite(fee) || Double.isInfinite(paid)) return null;
-            return new double[]{fee, paid, pct};
-        } catch (Throwable e) { return null; }
+        String t = body == null ? "" : body.trim();
+        if (!t.startsWith("{") || !t.endsWith("}")) return null;   // без org.json: разбор, как у feeSumField
+        Double fee = feeKey(t, "fee"), paid = feeKey(t, "paid"), pct = feeKey(t, "pct");
+        if (fee == null || paid == null) return null;
+        return new double[]{fee, paid, pct == null ? 5 : pct};
+    }
+
+    /** Число по ключу объекта («"fee":7», «"fee":"7.5"»); нет ключа или null — null. */
+    static Double feeKey(String t, String key) {
+        java.util.regex.Matcher m = java.util.regex.Pattern.compile("\"" + java.util.regex.Pattern.quote(key)
+            + "\"\\s*:\\s*\"?(null|-?[0-9]+(?:\\.[0-9]+)?(?:[eE][-+]?[0-9]+)?)").matcher(t);
+        if (!m.find() || "null".equals(m.group(1))) return null;
+        try { double d = Double.parseDouble(m.group(1)); return Double.isNaN(d) || Double.isInfinite(d) ? null : Double.valueOf(d); }
+        catch (NumberFormatException e) { return null; }
     }
 
     static void feePost(final Activity a, final String me, final double[] k, final String note) {

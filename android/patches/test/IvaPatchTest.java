@@ -2090,7 +2090,7 @@ public class IvaPatchTest {
                     + "," + cz2Form.contains("saveBlocked = IvaCensorPatch.stopTree(a, form);")
                     + "," + cz2Cl.contains("IvaCensorPatch.stopFields(a, IvaCensorPatch.asName(edits[SURNAME])")
                     + "," + cz2Ed.contains("if (IvaCensorPatch.stopFields(a, why)) return;")
-                    + "," + cz2St.contains("e = IvaCensorPatch.nameError(fName.getText().toString());")
+                    + "," + (!cz2St.contains("fName") && !cz2St.contains("label(a, \"ФИО\""))   // 10.138: ФИО сотрудника — из его профиля (там и цензура), поля в форме нет
                     + "," + cz2Sh.contains("IvaCensorPatch.asName(copyField(a, fio, labels[i]))")
                     + "," + cz2Md.contains("IvaCensorPatch.level(q) == 2"),
                 "true,true,true,true,true,true,true,true,true");
