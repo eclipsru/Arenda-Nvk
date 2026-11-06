@@ -602,6 +602,17 @@ else
   skip "стенд «Сменить / Владелец»: нет pgserver (PG_PY=<python с pgserver> bash tools/check.sh)"
 fi
 
+head_ "4.5.32. Стенд «Кабинет владельца»: сотрудник без ФИО и одна формула комиссии (локальный PostgreSQL, SQL 20261127)"
+if "$PG_PY" -c "import pgserver" >/dev/null 2>&1; then
+  if "$PG_PY" tools/owner-cabinet-stand.py >/tmp/iva-test-owner-cabinet.log 2>&1; then
+    ok "кабинет владельца: $(grep -c '✔' /tmp/iva-test-owner-cabinet.log) проверок SQL на PostgreSQL (приглашение без имени, имя из профиля при «Принять», правка не стирает имя, старое приложение, комиссия = формула приложения, переплата, чужое не видно, владелец площадки, откат)"
+  else
+    bad "стенд «Кабинет владельца»"; grep -E '✘|Error|ERROR' /tmp/iva-test-owner-cabinet.log | head -8 | sed 's/^/      /'
+  fi
+else
+  skip "стенд «Кабинет владельца»: нет pgserver (PG_PY=<python с pgserver> bash tools/check.sh)"
+fi
+
 head_ "Итог"
 printf '  пройдено: %s, ошибок: %s, пропущено: %s\n' "$PASS" "$FAIL" "$SKIP"
 if [ "$FAIL" -eq 0 ]; then echo "  Можно продолжать."; exit 0; else echo "  Сначала исправляем замечания выше."; exit 1; fi
