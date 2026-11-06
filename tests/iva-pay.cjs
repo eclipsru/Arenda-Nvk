@@ -171,6 +171,15 @@ try {
     out.getLive = await run('GET');
     envs = {};
     out.noteNoKeys = await run('POST', { type: 'notification', event: 'payment.succeeded', object: { id: PID } });
+    // сайт (06.11.2026): «Внести платёж» в кабинете — CORS только для адресов сайта
+    const oreq = (method, origin) => new Request('https://x.supabase.co/functions/v1/iva-pay', { method,
+      headers: Object.assign({ 'Access-Control-Request-Method': 'POST', 'Access-Control-Request-Headers': 'authorization, apikey, content-type' }, origin ? { Origin: origin } : {}) });
+    const hs = (r) => ({ s: r.status, o: r.headers.get('access-control-allow-origin'), h: r.headers.get('access-control-allow-headers'), m: r.headers.get('access-control-allow-methods') });
+    out.corsPre = hs(await m.handle(oreq('OPTIONS', 'https://eclipsru.github.io')));
+    out.corsPreGh = hs(await m.handle(oreq('OPTIONS', 'https://raw.githack.com')));
+    out.corsPreBad = hs(await m.handle(oreq('OPTIONS', 'https://evil.example')));
+    out.corsGet = hs(await m.handle(oreq('GET', 'https://eclipsru.github.io')));
+    out.corsGetBad = hs(await m.handle(oreq('GET', 'https://eclipsru.github.io.evil.example')));
     out.put = await run('PUT', {});
     console.log(JSON.stringify(out));
   `;
@@ -228,6 +237,11 @@ try {
   ok(o.legacyHeaders.apikey === 'eyJlegacy' && o.legacyHeaders.Authorization === 'Bearer eyJlegacy', 'прежний ключ базы (JWT) — в apikey и Bearer');
   eq(o.getLive, { s: 200, j: { ok: true, ready: true, test: false } }, 'боевые ключи — не тестовый режим');
   eq(o.noteNoKeys, { s: 503, j: { error: 'not_ready' } }, 'уведомление без ключей — 503 (ЮKassa повторит позже)');
+  eq(o.corsPre, { s: 204, o: 'https://eclipsru.github.io', h: 'authorization, apikey, content-type, x-client-info', m: 'GET, POST, OPTIONS' }, 'сайт: предварительный запрос браузера — 204 с разрешением для адреса сайта');
+  eq(o.corsPreGh.o, 'https://raw.githack.com', 'предпросмотр владельца (raw.githack.com) — тоже можно');
+  ok(o.corsPreBad.s === 204 && o.corsPreBad.o === null, 'чужой адрес — без разрешения (браузер не пустит)');
+  ok(o.corsGet.s === 200 && o.corsGet.o === 'https://eclipsru.github.io', 'обычный ответ сайту — с разрешением');
+  eq(o.corsGetBad.o, null, 'похожий чужой адрес (…github.io.evil.example) — без разрешения');
   eq(o.put.s, 405, 'другие методы — 405');
   console.log(`Оплата ЮKassa: ${n} проверок функции iva-pay пройдено, SQL и выкладка — на месте`);
 } catch (e) { console.error('✘ ' + e.message); process.exit(1); }

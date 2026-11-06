@@ -10,7 +10,7 @@
 <link rel="icon" href="assets/favicon-32.png" type="image/png" sizes="32x32">
 <link rel="icon" href="assets/icon-192.png" type="image/png" sizes="192x192">
 <link rel="apple-touch-icon" href="assets/apple-touch-icon.png">
-<link rel="stylesheet" href="assets/theme.css?v=20261106-owner">
+<link rel="stylesheet" href="assets/theme.css?v=20261106-cabinet">
 <link rel="stylesheet" href="assets/profile.css?v=20260923-rental-profile">
 <style>
 .tabs{display:flex;gap:4px;border-bottom:1px solid var(--line);margin-bottom:18px;
@@ -149,9 +149,9 @@
 
 <script src="assets/data.js"></script>
 <script src="assets/geo.js?v=20260923-photon"></script>
-<script src="assets/email-guard.js?v=20260926-email"></script><script src="assets/sb.js?v=20261106-owner"></script>
+<script src="assets/email-guard.js?v=20260926-email"></script><script src="assets/sb.js?v=20261106-cabinet"></script>
 <script src="assets/app-release.js?v=20261009-rel"></script>
-<script src="assets/app.js?v=20261106-owner"></script>
+<script src="assets/app.js?v=20261106-cabinet"></script>
 <script src="assets/profile.js?v=20261022-a"></script>
 <script>
 (function(){
@@ -349,7 +349,10 @@
   /* ---------- Расчёт статистики по комиссии ---------- */
   function computeFeeStats(){
     const a = A.admin || {};
-    const feePct = a.fee_pct != null ? a.fee_pct : 3;
+    /* 06.11.2026: сумма к оплате и переплата — из базы (iva_fee_balance) или по формуле приложения (loadFeeBal),
+       а процент по умолчанию — 5, как в приложении. Доход по периодам — по загруженным заявкам, как раньше. */
+    const B = FEE_BAL;
+    const feePct = B ? B.pct : (a.fee_pct != null ? a.fee_pct : 5);
     const debtLimit = Number(a.debt_limit) || 0;
 
     const closed = ORDERS.filter(function(p){ return p.status === 'closed'; });
@@ -361,7 +364,8 @@
     const pendingPaid = FEES.filter(function(f){ return f.status === 'pending'; })
                             .reduce(function(acc, f){ return acc + (Number(f.amount) || 0); }, 0);
 
-    const debt = Math.max(0, feeAll - paidAll);
+    const debt = B ? B.debt : Math.max(0, feeAll - paidAll);
+    const over = B ? B.over : Math.max(0, paidAll - feeAll);
     const isBlocked = debtLimit > 0 && debt > debtLimit;
 
     // Сводка по периодам
@@ -385,11 +389,13 @@
     return {
       feePct: feePct,
       debtLimit: debtLimit,
-      feeAll: feeAll,
+      feeAll: B ? B.fee : feeAll,
       rentAll: rentAll,
-      paidAll: paidAll,
-      pendingPaid: pendingPaid,
+      paidAll: B ? B.paid : paidAll,
+      pendingPaid: B ? B.pending : pendingPaid,
       debt: debt,
+      over: over,
+      src: B ? B.src : 'page',
       isBlocked: isBlocked,
       closedCount: closed.length,
       per: per
@@ -408,24 +414,32 @@
     return typeof ivaMode === 'function' ? ivaMode() : 'lend';
   }
   function homeTodo(){
-    const live = ORDERS.filter(function(p){ return !p.archived; });
+    const live = (isAdmin() ? oScope() : ORDERS).filter(function(p){ return !p.archived; });   // 06.11.2026: по пункту из шапки
     const nNew = live.filter(function(p){ return (p.status || 'new') === 'new'; }).length;
     const nLate = LCARDS ? live.filter(function(p){ const k = LCARDS[String(p.id)]; return k && lcLate(k); }).length : 0;
     const nChange = LCARDS ? live.filter(function(p){ const k = LCARDS[String(p.id)]; return k && k.p.change && k.p.change.state === 'pending'; }).length : 0;
-    const nMod = MY.filter(function(t){ return t.status === 'moderation'; }).length;
+    const nMod = (isAdmin() ? prMy() : MY).filter(function(t){ return t.status === 'moderation'; }).length;
     const fs = computeFeeStats();
     const out = [];
+    const cur = isAdmin() ? prCurPt() : null;
+    const bad = isAdmin() && OW_PTS ? prBadPts().filter(function(p){ return !cur || String(p.id) === String(cur.id); }) : [];
     if (nLate)   out.push({ c: 'red', n: nLate, t: plural(nLate, 'Просрочен возврат', 'Просрочены возвраты', 'Просрочены возвраты'), s: 'Свяжитесь с клиентом или отметьте «Вернули»', go: 'orders', sub: 'late', b: 'Открыть' });
     if (nChange) out.push({ c: 'or', n: nChange, t: 'Клиент просит изменить заявку', s: 'Примите или отклоните — пока действует прежний вариант', go: 'orders', sub: 'change', b: 'Решить' });
     if (nNew)    out.push({ c: 'grn', n: nNew, t: plural(nNew, 'Новая заявка', 'Новые заявки', 'Новых заявок'), s: 'Когда отдадите инструмент — нажмите «Выдал инструмент»', go: 'orders', sub: 'new', b: 'Открыть' });
     if (fs.debt > 0) out.push({ c: fs.isBlocked ? 'red' : 'or', n: rub(fs.debt), t: 'Комиссия к оплате', s: fs.isBlocked ? 'Превышен лимит задолженности — оплатите комиссию' : 'Оплатите удобным способом во вкладке «Комиссия и оплата»', go: 'fee', b: 'Оплатить' });
+    if (bad.length) out.push({ c: 'red', n: bad.length, t: bad.length === 1 ? 'Пункт «' + (bad[0].name || 'Пункт') + '» не работает' : plural(bad.length, 'Пункт не работает', 'Пункта не работают', 'Пунктов не работают'),
+      s: bad.length === 1 ? prPtHealth(bad[0]).why.join(', ').replace(/^./, function(c){ return c.toUpperCase(); }) : 'Не хватает сотрудника или инструмента', go: 'points', b: 'Открыть' });
     if (nMod)    out.push({ c: 'gr', n: nMod, t: plural(nMod, 'Объявление на модерации', 'Объявления на модерации', 'Объявлений на модерации'), s: 'Обычно проверка занимает немного времени', go: 'ads', st: 'moderation', b: 'Смотреть' });
     return { list: out, fs: fs };
   }
   function viewHome(){
     const td = homeTodo(), fs = td.fs;
-    const rented = ORDERS.filter(function(p){ return !p.archived && p.status === 'rented'; }).length;
-    const active = MY.filter(function(t){ return (t.status || 'active') === 'active'; }).length;
+    const scope = isAdmin() ? oScope() : ORDERS, myL = isAdmin() ? prMy() : MY;
+    const rented = scope.filter(function(p){ return !p.archived && p.status === 'rented'; }).length;
+    const active = myL.filter(function(t){ return (t.status || 'active') === 'active'; }).length;
+    const m0 = new Date(new Date().getFullYear(), new Date().getMonth(), 1).getTime();
+    const monthRent = scope.filter(function(p){ return p.status === 'closed' && Date.parse(String(p.created_at).replace(' ', 'T')) >= m0; })
+      .reduce(function(a, p){ return [a[0] + (Number(p.rent_sum) || 0), a[1] + (Number(p.fee) || 0)]; }, [0, 0]);
     const pub = REVIEWS.filter(function(r){ return r.status === 'published'; });
     const avg = pub.length ? (pub.reduce(function(a, r){ return a + (Number(r.rating) || 0); }, 0) / pub.length) : 0;
     let h = '<div class="home-sec"><h3>Что сделать сейчас</h3>';
@@ -443,14 +457,15 @@
     h += '</div>';
     h += '<div class="home-sec"><h3>Коротко о прокате</h3><div class="kpis">' +
       '<button type="button" class="kpi home-kpi" data-go-tab="orders" data-go-sub="rented"><div class="lb">В аренде сейчас</div><div class="vl">' + rented + '</div><div class="sub">' + plural(rented, 'заявка', 'заявки', 'заявок') + '</div></button>' +
-      '<button type="button" class="kpi home-kpi" data-go-tab="ads" data-go-st="active"><div class="lb">Объявлений в каталоге</div><div class="vl">' + active + '</div><div class="sub">всего ' + MY.length + '</div></button>' +
-      '<button type="button" class="kpi home-kpi" data-go-tab="fee"><div class="lb">Выручка за месяц</div><div class="vl">' + rub(fs.per.mo[0]) + '</div><div class="sub">комиссия ' + rub(fs.per.mo[1]) + '</div></button>' +
+      '<button type="button" class="kpi home-kpi" data-go-tab="ads" data-go-st="active"><div class="lb">Объявлений в каталоге</div><div class="vl">' + active + '</div><div class="sub">всего ' + myL.length + '</div></button>' +
+      '<button type="button" class="kpi home-kpi" data-go-tab="fee"><div class="lb">Выручка за месяц</div><div class="vl">' + rub(monthRent[0]) + '</div><div class="sub">комиссия ' + rub(monthRent[1]) + '</div></button>' +
       '<button type="button" class="kpi home-kpi" data-go-tab="reviews"><div class="lb">Рейтинг</div><div class="vl">' + (pub.length ? '★ ' + avg.toFixed(1) : '—') + '</div><div class="sub">' + pub.length + ' ' + plural(pub.length, 'отзыв', 'отзыва', 'отзывов') + '</div></button>' +
     '</div></div>';
     h += '<div class="home-sec"><h3>Быстрые действия</h3><div class="home-quick">' +
       '<a class="btn" href="new.html">+ Добавить инструмент</a>' +
       '<a class="btn sec" href="chat.html">Сообщения</a>' +
       '<button type="button" class="btn sec" data-go-tab="prof">Профиль проката</button>' +
+      (isAdmin() && OW_PTS && OW_PTS.length < 20 && OW_PT_ERR !== 'nodb' ? '<button type="button" class="btn sec" data-ow-pt="new">+ Пункт выдачи</button>' : '') +
     '</div></div>';
     return h;
   }
@@ -471,22 +486,26 @@
 
     const fStat = isAdmin() ? computeFeeStats() : { debt: 0 };
 
-    /* Этап 2 кабинетов: у арендодателя вкладки зависят от режима «Сдаю» / «Арендую» (как у Airbnb) */
+    /* вкладки: у владельца проката — свои (только «Сдаю», 06.11.2026), у сотрудника и клиента — свои */
     const tbtn = function(t, label, badge){ return '<button data-tab="' + t + '" class="' + (TAB === t ? 'on' : '') + '">' + label + (badge || '') + '</button>'; };
     const profBtn = '<button data-tab="prof" class="' + (TAB === 'prof' ? 'on' : '') + '">Профиль</button>';
-    const nTodo = isAdmin() && lordMode() === 'lend' ? homeTodo().list.length : 0;
+    const nTodo = isAdmin() ? homeTodo().list.length : 0;
     let tabsHtml;
-    if (isAdmin() && lordMode() === 'lend'){
-      tabsHtml = tbtn('home', 'Сводка', nTodo ? '<span class="n warn">' + nTodo + '</span>' : '') +
-        tbtn('orders', 'Заявки', activeOrdersCnt ? '<span class="n">' + activeOrdersCnt + '</span>' : '') +
-        tbtn('ads', 'Мои объявления', '<span class="n">' + cnt.all + '</span>') +
-        tbtn('fee', 'Комиссия и оплата', fStat.debt > 0 ? '<span class="n warn">!</span>' : '') +
+    if (isAdmin()){
+      /* 06.11.2026 (просьба владельца №11): только «Сдаю», без переключателя; вкладки слева направо —
+         Прокат · Заявки · Пункт выдачи · Инструмент · Сотрудники · Отзывы · Комиссия и оплата.
+         «Сообщения» и «Профиль» — в шапке сайта и в меню «Кабинет». */
+      const nBad = OW_PTS ? prBadPts().length : 0;
+      const pm = prMy(), pc = prCurPt();
+      const nTeam = OW_STAFF ? (pc ? prStaffOf(pc.id) : OW_STAFF).length : 0;
+      const nOrd = oScope().filter(function(o){ const st = o.status || 'new'; return !o.archived && (st === 'new' || st === 'rented'); }).length;
+      tabsHtml = tbtn('home', 'Прокат', nTodo ? '<span class="n warn">' + nTodo + '</span>' : '') +
+        tbtn('orders', 'Заявки', nOrd ? '<span class="n">' + nOrd + '</span>' : '') +
+        tbtn('points', 'Пункт выдачи', nBad ? '<span class="n warn">' + nBad + '</span>' : (OW_PTS ? '<span class="n">' + (pc ? 1 : OW_PTS.length) + '</span>' : '')) +
+        tbtn('ads', 'Инструмент', '<span class="n">' + pm.length + '</span>') +
+        tbtn('team', 'Сотрудники', nTeam ? '<span class="n">' + nTeam + '</span>' : '') +
         tbtn('reviews', 'Отзывы', REVIEWS.length ? '<span class="n">' + REVIEWS.length + '</span>' : '') +
-        tbtn('msg', 'Сообщения') + profBtn;
-    } else if (isAdmin()){
-      tabsHtml = tbtn('sent', 'Я арендую', SENT.length ? '<span class="n">' + SENT.length + '</span>' : '') +
-        tbtn('fav', 'Избранное', '<span class="n fav-n">' + favList().length + '</span>') +
-        tbtn('msg', 'Сообщения') + profBtn;
+        tbtn('fee', 'Комиссия и оплата', fStat.debt > 0 ? '<span class="n warn">!</span>' : '');
     } else if (stWorkMode()){
       /* 05.11.2026: у сотрудника вкладки — внутри «Работы»; личное (мои заявки, избранное, сообщения) открывается
          из меню «Кабинет» в шапке — здесь только путь назад */
@@ -500,6 +519,8 @@
         tbtn('msg', 'Сообщения') + profBtn;
     }
 
+    if (isAdmin()) return '<div class="sect st-head pr-head" id="prHead">' + prHeadHTML() + '</div>' +
+      '<div class="tabs pr-tabs">' + tabsHtml + '</div>' + inner;
     return headHTML() +
       '<div class="tabs">' + tabsHtml + '</div>' + inner + (isAdmin() || STAFF ? '' : lendCardHTML());
   }
@@ -514,16 +535,32 @@
 
   /* ---------- Мои объявления ---------- */
   function viewAds(){
-    const f = SUB_TAB === 'all' ? MY : MY.filter(function(t){
+    /* 06.11.2026 (просьба владельца №11): «Инструмент» — сводка по выбранному в шапке пункту */
+    const L = isAdmin() ? prMy() : MY, cur = isAdmin() ? prCurPt() : null;
+    const f = SUB_TAB === 'all' ? L : L.filter(function(t){
       return (t.status || 'active') === SUB_TAB;
     });
 
     const cnt = function(s){
-      return s === 'all' ? MY.length
-        : MY.filter(function(t){ return (t.status||'active') === s; }).length;
+      return s === 'all' ? L.length
+        : L.filter(function(t){ return (t.status||'active') === s; }).length;
     };
 
-    let h = '<div class="chips" style="margin-bottom:16px">' +
+    let h = '';
+    if (isAdmin()){
+      const noPt = OW_TOOLS && !cur ? OW_TOOLS.filter(function(t){ return !t.point_id && (t.status || 'active') !== 'archived'; }).length : 0;
+      h += '<div class="sect-h pr-sh"><div><h2>Инструмент' + (cur ? ' пункта «' + esc(cur.name || 'Пункт') + '»' : '') + '</h2>' +
+          '<p class="small muted">' + (cur ? 'Показан инструмент выбранного пункта — «Все пункты» в шапке покажет весь.' : 'Весь инструмент проката — пункт выбирается в шапке.') + '</p></div>' +
+          '<a class="btn sm" href="new.html">+ Добавить инструмент</a></div>' +
+        '<div class="kpis pr-kpis">' +
+          '<div class="kpi"><div class="lb">Всего</div><div class="vl">' + L.length + '</div><div class="sub">' + plural(L.length, 'объявление', 'объявления', 'объявлений') + '</div></div>' +
+          '<div class="kpi good"><div class="lb">В каталоге</div><div class="vl">' + cnt('active') + '</div><div class="sub">видят клиенты</div></div>' +
+          '<div class="kpi"><div class="lb">На модерации</div><div class="vl">' + cnt('moderation') + '</div><div class="sub">ждут проверки</div></div>' +
+          '<div class="kpi"><div class="lb">Снято</div><div class="vl">' + cnt('archived') + '</div><div class="sub">не в каталоге</div></div>' +
+        '</div>' +
+        (noPt ? '<p class="small muted" style="margin:-4px 0 12px">Без пункта выдачи: ' + noPt + ' — выберите пункт в «Редактировать».</p>' : '');
+    }
+    h += '<div class="chips" style="margin-bottom:16px">' +
       [['all','Все'],['active','Активные'],['moderation','На модерации'],['archived','Снятые']]
         .map(function(p){
           return '<button class="chip" data-st="' + p[0] + '"' +
@@ -535,8 +572,8 @@
     if (!f.length){
       h += '<div class="empty">' +
         '<svg viewBox="0 0 24 24"><path d="M21 8 12 3 3 8v8l9 5 9-5z"/><path d="M3 8l9 5 9-5M12 13v8"/></svg>' +
-        '<b>' + (MY.length ? 'В этой вкладке пусто' : 'Объявлений пока нет') + '</b>' +
-        '<p>' + (MY.length
+        '<b>' + (L.length ? 'В этой вкладке пусто' : cur ? 'В этом пункте инструмента нет' : 'Объявлений пока нет') + '</b>' +
+        '<p>' + (L.length
           ? 'Переключитесь на другую вкладку.'
           : 'Разместите первый инструмент — он появится в каталоге сразу после публикации.') + '</p>' +
         '<a class="btn" href="new.html">Разместить объявление</a></div>';
@@ -624,6 +661,24 @@
     if (!who) return '';
     const t = Date.parse(at || '');
     return '<div class="hint lc-who">' + lb + ': <b style="color:var(--tx)">' + esc(who) + '</b>' + (t ? ' · ' + esc(coWhen(t, tz)) : '') + '</div>';
+  }
+
+  /* 06.11.2026 (просьба владельца №11): у владельца в выданной и закрытой заявке всегда видно, кто выдал и кто принял,
+     и когда. Журнала нет (SQL 20261118 не применён) — время из заявки, имя «—». */
+  function ljWhoLine(lb, who, at, tz){
+    const t = Date.parse(at || '');
+    return '<div class="hint lc-who">' + lb + ': <b style="color:var(--tx)">' + esc(who || '—') + '</b> · ' + (t ? esc(coWhen(t, tz)) : '—') + '</div>';
+  }
+  function lcWhoHTML(st, jr, p, items, tz, perItem){
+    if (st !== 'rented' && st !== 'closed') return '';
+    if (st === 'closed' && !p.rented_at && !(jr && jr.issued_who)) return ljWhoLine('Закрыл', jr && jr.returned_who, jr && jr.returned_at, tz);
+    let h = ljWhoLine('Выдал', jr && jr.issued_who, (jr && jr.issued_at) || p.rented_at, tz);
+    if (st === 'closed' && !perItem){
+      let last = jr && jr.returned_at;
+      if (!last) (items || []).forEach(function(it){ if (it && it.returned_at && (!last || Date.parse(it.returned_at) > Date.parse(last))) last = it.returned_at; });
+      h += ljWhoLine('Принял', jr && jr.returned_who, last, tz);
+    }
+    return h;
   }
 
   /* сроки выданной части: { дни: конец срока } — только у ещё не возвращённых инструментов */
@@ -770,10 +825,11 @@
         (tel ? ' · <a href="tel:' + esc(tel) + '" style="color:var(--or);font-weight:600">' + esc(cTel) + '</a>' : '') + '</div>' : '') +
       (ptLine ? '<div class="hint">Пункт: ' + ptLine + '</div>' : (staff && row.point_name ? '<div class="hint">Пункт: ' + esc(row.point_name) + '</div>' : '')) +
       (c.get_method ? '<div class="hint">Получение: ' + esc(c.get_method) + (c.address ? ' — ' + esc(c.address) : '') + '</div>' : '') +
+      (!staff ? lcWhoHTML(st, jr, p, items, tz, jPerItem) :
       (jr && jr.issued_who && (st === 'rented' || st === 'closed')
         ? ljLine('Выдал', jr.issued_who, jr.issued_at || p.rented_at, tz)
         : (st === 'rented' && p.rented_at ? '<div class="hint">Выдан ' + esc(coWhen(Date.parse(p.rented_at), tz)) + '</div>' : '')) +
-      (jr && st === 'closed' && !jPerItem ? ljLine(p.rented_at ? 'Принял' : 'Закрыл', jr.returned_who, jr.returned_at, tz) : '') +
+      (jr && st === 'closed' && !jPerItem ? ljLine(p.rented_at ? 'Принял' : 'Закрыл', jr.returned_who, jr.returned_at, tz) : '')) +
       termsHTML +
       (list ? '<div class="co-items">' + list + '</div>' : (p.tools_text || row.tools_text ? '<div class="title" style="margin-top:8px">' + esc(p.tools_text || row.tools_text) + '</div>' : '')) +
       (!staff && total && st !== 'cancelled' ? '<div class="co-sum"><span>' + (st === 'closed' ? 'Итого за аренду' : 'Аренда по заявке') + '</span><b>' + rub(total) + '</b></div>' : '') +
@@ -934,9 +990,12 @@
   function viewAdminOrders(){
     if (!O_UPD) O_UPD = Date.now();
     const pts = oPts();
-    if (O_PT !== 'all' && !pts.some(function(x){ return x.id === O_PT; })) O_PT = 'all';
+    /* 06.11.2026: пункт выбирается в шапке («Пункт выдачи») — он же фильтрует заявки; кнопки пунктов здесь — только
+       если список пунктов не загрузился */
+    const hdrPt = !!(OW_PTS && OW_PTS.length);
+    if (!hdrPt && O_PT !== 'all' && !pts.some(function(x){ return x.id === O_PT; })) O_PT = 'all';
     let h = '';
-    if (pts.length > 1) h += '<div class="chips st-pts" id="ordPts" role="group" aria-label="Пункт выдачи">' + oPtsHTML(pts) + '</div>';
+    if (!hdrPt && pts.length > 1) h += '<div class="chips st-pts" id="ordPts" role="group" aria-label="Пункт выдачи">' + oPtsHTML(pts) + '</div>';
     h += '<div class="kpis st-kpis" id="ordKpis">' + oKpisHTML() + '</div>';
     h += '<div class="st-bar">' +
         '<label for="ordQ" class="sr-lbl">Поиск по заявкам</label>' +
@@ -972,7 +1031,7 @@
     const y = window.scrollY; render(); window.scrollTo(0, y);
   }
   async function oReload(){
-    const r = await Promise.allSettled([loadMyOrderParts(), loadLordCards()]);
+    const r = await Promise.allSettled([loadMyOrderParts(), loadLordCards(), isAdmin() ? loadFeeBal() : null]);   // комиссия меняется при «Вернули»
     if (r[0].status !== 'fulfilled') throw r[0].reason;
     const seen = {}; ORDERS.forEach(function(p){ seen[p.id] = 1; });
     const had = ORDERS.length > 0 || O_UPD > 0;
@@ -1403,44 +1462,64 @@
     if (!isAdmin()){
       return '<div class="empty"><b>Раздел доступен арендодателям</b><p>Здесь отображаются начисления комиссии и история оплат.</p></div>';
     }
-
+    /* 06.11.2026 (просьба владельца №11): сверху «К оплате» или «Переплата» — те же числа, что в приложении, и справа
+       «Внести платёж»; под ней «Платные ресурсы» (пока одна строка — комиссия с аренды; нажать — все начисления),
+       ниже — история оплат и доход по периодам. */
     const s = computeFeeStats();
     const td = function(l, v, cls, st){ return '<td data-l="' + l + '"' + (cls ? ' class="' + cls + '"' : '') + (st ? ' style="' + st + '"' : '') + '>' + v + '</td>'; };
-    let h = '';
-
-    h += '<div class="sect-h" style="margin-bottom:12px"><div>' +
+    let h = '<div class="sect-h" style="margin-bottom:12px"><div>' +
         '<h2>Комиссия и оплата</h2>' +
-        '<p class="small muted" style="margin-top:2px">Взаиморасчёты с площадкой «Ива» и статистика доходов</p>' +
+        '<p class="small muted" style="margin-top:2px">Взаиморасчёты с площадкой «Ива» — те же суммы, что в приложении</p>' +
       '</div></div>';
 
-    // Главное: сколько оплатить и куда
+    const over = s.over > 0 && s.debt <= 0;
     const sub = s.debt > 0
-      ? (s.pendingPaid > 0 ? 'На проверке ' + rub(s.pendingPaid) + ' — площадка подтвердит перевод' : 'Комиссия с закрытых заказов')
-      : (s.pendingPaid > 0 ? 'На проверке ' + rub(s.pendingPaid) : 'Задолженности нет');
-    h += '<div class="box fee-hero' + (s.isBlocked ? ' bad' : s.debt > 0 ? ' due' : ' ok') + '">' +
+      ? (s.pendingPaid > 0 ? 'Ждёт подтверждения ' + rub(s.pendingPaid) + ' — площадка подтвердит перевод' : 'Комиссия с закрытых аренд')
+      : over ? 'Комиссия с новых аренд спишется из переплаты' + (s.pendingPaid > 0 ? ' · ждёт подтверждения ' + rub(s.pendingPaid) : '')
+      : (s.pendingPaid > 0 ? 'Ждёт подтверждения ' + rub(s.pendingPaid) : 'Задолженности нет');
+    h += '<div class="box fee-hero' + (s.isBlocked ? ' bad' : s.debt > 0 ? ' due' : ' ok') + '" id="feeHero">' +
         '<div class="fee-top">' +
-          '<div><div class="small muted">К оплате</div>' +
-            '<div class="fee-amt">' + rub(s.debt) + '</div>' +
+          '<div><div class="small muted">' + (over ? 'Переплата' : 'К оплате') + '</div>' +
+            '<div class="fee-amt' + (over ? ' fee-over' : '') + '">' + rub(over ? s.over : s.debt) + '</div>' +
             '<div class="small fee-sub">' + esc(sub) + '</div></div>' +
-          '<button class="btn' + (s.debt > 0 ? '' : ' sec') + '" id="btnPayFeeTop">' + (s.debt > 0 ? 'Оплатить комиссию' : 'Внести платёж') + '</button>' +
+          '<button class="btn' + (s.debt > 0 ? '' : ' sec') + '" id="btnPayFeeTop" aria-haspopup="dialog">Внести платёж</button>' +
         '</div>' +
+        '<div class="fee-line small muted">Начислено ' + rub(s.feeAll) + ' · оплачено ' + rub(s.paidAll) + ' · ставка ' + s.feePct + '% от аренды</div>' +
         (s.isBlocked
           ? '<div class="fee-warn">Долг больше лимита (' + rub(s.debtLimit) + '), который установил владелец площадки. Оплатите комиссию.</div>'
           : (s.debtLimit > 0 ? '<div class="small muted" style="margin-top:8px">Лимит долга: ' + rub(s.debtLimit) + '</div>' : '')) +
-        '<div class="fee-req">' +
-          '<div><span>Перевод по СБП на телефон</span>' +
-            '<b>+7 (908) 173-14-10 <button type="button" class="mini-btn" id="btnCopyPhone">Копировать</button></b></div>' +
-          '<div><span>Получатель</span><b>Илья Игоревич Г. (Т-Банк / Сбербанк)</b></div>' +
-          '<div><span>Назначение</span><b>Комиссия Ива (' + esc(A.me) + ')</b></div>' +
-        '</div>' +
-        '<p class="small muted" style="margin-top:10px">После перевода нажмите «' + (s.debt > 0 ? 'Оплатить комиссию' : 'Внести платёж') + '» и укажите сумму — платёж уйдёт на подтверждение.</p>' +
       '</div>';
 
-    h += '<div class="kpis">' +
-        '<div class="kpi"><div class="lb">Ставка комиссии</div><div class="vl">' + s.feePct + ' %</div><div class="sub">от стоимости аренды</div></div>' +
-        '<div class="kpi"><div class="lb">Начислено всего</div><div class="vl">' + rub(s.feeAll) + '</div><div class="sub">из ' + rub(s.rentAll) + ' выручки</div></div>' +
-        '<div class="kpi good"><div class="lb">Оплачено комиссии</div><div class="vl">' + rub(s.paidAll) + '</div><div class="sub">подтверждено площадкой</div></div>' +
-      '</div>';
+    /* платные ресурсы площадки — прайс; нажать — полная сводка начислений */
+    h += '<div class="home-sec"><h3>Платные ресурсы</h3><div class="fee-res">' +
+      '<button type="button" class="fee-res-row" data-fee-res="rent" aria-haspopup="dialog">' +
+        '<span class="fee-res-t"><b>Комиссия с аренды</b><span>' + s.feePct + '% от суммы каждой закрытой аренды — начисляется сама при «Вернули»</span></span>' +
+        '<span class="fee-res-v"><b>' + rub(s.feeAll) + '</b><small>начислено всего' + (FEE_BAL && FEE_BAL.orders ? ' · ' + FEE_BAL.orders + ' ' + plural(FEE_BAL.orders, 'аренда', 'аренды', 'аренд') : '') + '</small></span>' +
+        '<span class="fee-res-go">Подробнее →</span>' +
+      '</button></div></div>';
+
+    // История оплат комиссии
+    h += '<div class="home-sec"><h3>История оплат' + (FEES.length ? ' · ' + FEES.length : '') + '</h3>';
+    if (!FEES.length){
+      h += '<div class="empty" style="padding:24px 20px"><b>Платежей по комиссии пока нет</b>' +
+        '<p>«Внести платёж» — QR-код СБП, оплата картой онлайн или перевод по номеру.</p></div>';
+    } else {
+      const stl = { confirmed: ['b-closed', 'Подтверждено'], pending: ['b-mod', 'На проверке'], rejected: ['b-cancelled', 'Отклонено'] };
+      h += '<div class="tbl-wrap tcw"><table class="tbl tc"><thead><tr>' +
+        '<th>Сумма</th><th>Дата</th><th>Статус</th><th>Примечание</th>' +
+        '</tr></thead><tbody>' +
+        FEES.map(function(f){
+          const x = stl[f.status] || stl.pending;
+          return '<tr>' +
+            '<td class="' + (f.status === 'confirmed' ? 'pos' : '') + '" style="font-weight:700">' + rub(f.amount) + '</td>' +
+            td('Дата', niceDate(f.created_at), 'small muted') +
+            td('Статус', '<span class="badge ' + x[0] + '">' + x[1] + '</span>') +
+            td('Примечание', esc(f.note || 'Оплата комиссии'), 'small') +
+          '</tr>';
+        }).join('') +
+        '</tbody></table></div>';
+    }
+    h += '</div>';
 
     // Доход по периодам (закрытые заказы, по дате заявки)
     const per = [['Сегодня', s.per.d], ['За 7 дней', s.per.w], ['Этот месяц', s.per.mo], ['За всё время', s.per.a]];
@@ -1449,129 +1528,8 @@
         return '<div class="fee-pc"><div class="small muted">' + x[0] + '</div><b>' + rub(x[1][0]) + '</b>' +
           '<div class="small">комиссия ' + rub(x[1][1]) + '</div><div class="small">чистыми ' + rub(x[1][2]) + '</div></div>';
       }).join('') + '</div>' +
-      '<p class="small muted" style="margin-top:6px">Считаются закрытые заказы, по дате заявки.</p></div>';
-
-    // История оплат комиссии
-    h += '<div class="home-sec"><h3>История оплат комиссии</h3>';
-    if (!FEES.length){
-      h += '<div class="empty" style="padding:24px 20px"><b>Платежей по комиссии пока нет</b>' +
-        '<p>После перевода нажмите «' + (s.debt > 0 ? 'Оплатить комиссию' : 'Внести платёж') + '», чтобы зафиксировать оплату.</p></div>';
-    } else {
-      h += '<div class="tbl-wrap tcw"><table class="tbl tc"><thead><tr>' +
-        '<th>Сумма</th><th>Дата</th><th>Статус</th><th>Примечание</th>' +
-        '</tr></thead><tbody>' +
-        FEES.map(function(f){
-          const isOk = f.status === 'confirmed';
-          return '<tr>' +
-            '<td class="' + (isOk ? 'pos' : '') + '" style="font-weight:700">' + rub(f.amount) + '</td>' +
-            td('Дата', niceDate(f.created_at), 'small muted') +
-            td('Статус', '<span class="badge ' + (isOk ? 'b-closed' : 'b-mod') + '">' + (isOk ? 'Подтверждено' : 'На проверке') + '</span>') +
-            td('Примечание', esc(f.note || 'Оплата комиссии'), 'small') +
-          '</tr>';
-        }).join('') +
-        '</tbody></table></div>';
-    }
-    h += '</div>';
-
-    // Начисления по закрытым заказам
-    const closed = ORDERS.filter(function(p){ return p.status === 'closed'; });
-    h += '<div class="home-sec"><h3>Начисления по закрытым заказам' + (closed.length ? ' · ' + closed.length : '') + '</h3>';
-    if (!closed.length){
-      h += '<div class="empty" style="padding:24px 20px"><b>Начислений пока нет</b>' +
-        '<p>Комиссия начисляется автоматически при завершении аренды в разделе «Заявки».</p></div>';
-    } else {
-      h += '<div class="tbl-wrap tcw"><table class="tbl tc"><thead><tr>' +
-        '<th>Инструмент</th><th>Дата</th><th>Клиент</th><th class="num">Аренда</th><th class="num">Ставка</th><th class="num">Комиссия</th>' +
-        '</tr></thead><tbody>' +
-        closed.map(function(p){
-          const o = p.orders || {};
-          return '<tr>' +
-            '<td><b>' + esc(p.tools_text || 'Инструмент') + '</b></td>' +
-            td('Дата', niceDate(p.created_at), 'small muted') +
-            td('Клиент', esc(o.name || 'Клиент') + (o.phone ? (' · ' + esc(o.phone)) : ''), 'small') +
-            td('Аренда', rub(p.rent_sum || 0), 'num') +
-            td('Ставка', (p.fee_pct != null ? p.fee_pct : s.feePct) + '%', 'num') +
-            td('Комиссия', rub(p.fee || 0), 'num', 'color:var(--or);font-weight:700') +
-          '</tr>';
-        }).join('') +
-        '</tbody></table></div>';
-    }
-    h += '</div>';
-
+      '<p class="small muted" style="margin-top:6px">Считаются закрытые заказы последних 150 заявок, по дате заявки.</p></div>';
     return h;
-  }
-
-  /* ---------- Модалка оплаты комиссии ---------- */
-  function openPayModal(){
-    const s = computeFeeStats();
-    const defaultSum = s.debt > 0 ? s.debt : 100;
-
-    const body =
-      '<div style="display:flex;flex-direction:column;gap:14px">' +
-        '<p class="small muted" style="line-height:1.5">' +
-          'Переведите сумму комиссии через Систему быстрых платежей (СБП) по номеру телефона ' +
-          'на имя <b>Илья Игоревич Г.</b> (Т-Банк / Сбербанк), затем отправьте подтверждение ниже.' +
-        '</p>' +
-        '<div style="background:var(--field);padding:12px;border-radius:10px">' +
-          '<div class="small muted">Телефон получателя:</div>' +
-          '<div style="font-size:17px;font-weight:700;margin:3px 0 6px">+7 (908) 173-14-10</div>' +
-          '<div class="small muted">Назначение перевода: <b>Комиссия Ива (' + esc(A.me) + ')</b></div>' +
-        '</div>' +
-        '<div class="fld">' +
-          '<label style="display:block;font-size:13px;font-weight:600;margin-bottom:6px">Сумма перевода, ₽ *</label>' +
-          '<input class="inp" id="payModalAmount" type="number" min="1" step="1" value="' + defaultSum + '" required>' +
-        '</div>' +
-        '<div class="fld">' +
-          '<label style="display:block;font-size:13px;font-weight:600;margin-bottom:6px">Примечание (необязательно)</label>' +
-          '<input class="inp" id="payModalNote" placeholder="Например: СБП Т-Банк, последние 4 цифры или ФИО">' +
-        '</div>' +
-        '<div id="payModalErr" style="color:var(--red);font-size:13px;display:none"></div>' +
-      '</div>';
-
-    const foot =
-      '<button class="btn sec" id="payModalCancel" style="flex:1">Отмена</button>' +
-      '<button class="btn" id="payModalSubmit" style="flex:2">Я оплатил — отправить</button>';
-
-    openSheet('Оплата комиссии', body, foot);
-
-    $('payModalCancel').onclick = closeSheet;
-
-    $('payModalSubmit').onclick = async function(){
-      const amtInput = $('payModalAmount');
-      const noteInput = $('payModalNote');
-      const errEl = $('payModalErr');
-      errEl.style.display = 'none';
-
-      const amt = Number(amtInput.value) || 0;
-      if (amt <= 0){
-        errEl.textContent = 'Укажите положительную сумму перевода';
-        errEl.style.display = 'block';
-        return;
-      }
-
-      const btn = $('payModalSubmit');
-      btn.disabled = true;
-      btn.textContent = 'Отправляем…';
-
-      try {
-        await addFee({
-          admin_email: A.me,
-          amount: amt,
-          status: 'pending',
-          note: noteInput.value.trim() || ('Оплата комиссии от ' + A.me)
-        });
-
-        closeSheet();
-        toast('Платёж зафиксирован и отправлен на подтверждение');
-        FEES = await loadMyFeePayments();
-        render();
-      } catch(err){
-        btn.disabled = false;
-        btn.textContent = 'Я оплатил — отправить';
-        errEl.textContent = 'Не удалось зафиксировать платёж: ' + err.message;
-        errEl.style.display = 'block';
-      }
-    };
   }
 
   /* ---------- Отзывы ---------- */
@@ -2274,7 +2232,6 @@
         '<div class="acct-head-t">' + (isAdmin() && typeof IvaSwitch !== 'undefined'
           ? '<div class="sw-row"><h2>' + who + '</h2>' + IvaSwitch.btnHTML() + '</div>'      // «Сменить» у владельца (06.11.2026)
           : '<h2>' + who + '</h2>') + '<div class="small muted">' + meta + '</div></div>' +
-        (isAdmin() && typeof modeSwitchHTML === 'function' ? '<div class="acct-head-mode">' + modeSwitchHTML() + '</div>' : '') +
       '</div>' +
       '</div>';
   }
@@ -2531,7 +2488,7 @@
         par.getBoundingClientRect().bottom - hd.getBoundingClientRect().bottom > 40))) top = hd.offsetHeight;   // на месте стоит сама шапка
       lay.style.setProperty('--st-top', top + 'px');
     }
-    const sh = $('stHead'); if (sh && lay) lay.style.setProperty('--st-hh', sh.offsetHeight + 'px');
+    const sh = $('stHead') || $('prHead'); if (sh && lay) lay.style.setProperty('--st-hh', sh.offsetHeight + 'px');
   }
   window.addEventListener('resize', function(){ if ($('stLayout')) stTopVar(); });
   /* «Пункт выдачи» — свой выпадающий список: клик, стрелки, Enter, Esc, клик мимо — закрыть */
@@ -3150,10 +3107,11 @@
     (OW_STAFF || []).forEach(function(s){ (s.point_ids || []).forEach(function(id){ sc[id] = (sc[id] || 0) + 1; }); });
     (OW_TOOLS || []).forEach(function(t){ if (t.point_id) tc[t.point_id] = (tc[t.point_id] || 0) + 1; });
     return h + '<div class="st-slist" id="prPtList">' + list.map(function(p, i){
-      const op = owOpenTxt(p), c = /^открыт/.test(op) ? 'g' : 'n';
+      /* 06.11.2026 (просьба владельца №11): зелёный — есть работающий сотрудник и инструмент, красный — чего-то нет */
+      const op = owOpenTxt(p), hl = prPtHealth(p), c = hl.ok ? 'g' : 'r';
       const tel = String(p.tel || '').replace(/\D/g, '');
       return '<button type="button" class="st-si c-' + c + '" data-ow-pt="' + esc(p.id) + '">' +
-        '<span class="st-si-t"><b>' + esc(p.name || 'Пункт') + '</b><small>' + esc(i === 0 && list.length > 1 ? 'первый · ' + op : op) + '</small></span>' +
+        '<span class="st-si-t"><b>' + esc(p.name || 'Пункт') + '</b><small>' + esc(hl.ok ? (i === 0 && list.length > 1 ? 'первый · ' + op : op) : hl.why.join(', ')) + '</small></span>' +
         '<span class="st-si-s">' + esc([p.city && String(p.address || '').indexOf(p.city) < 0 ? p.city : '', p.address].filter(Boolean).join(', ')) + '</span>' +
         '<span class="st-si-l">' + esc([tel ? stTel(tel) : 'телефон не указан', 'сотрудников ' + (sc[p.id] || 0), 'инструмента ' + (tc[p.id] || 0)].join(' · ')) + '</span>' +
       '</button>';
@@ -3166,6 +3124,471 @@
     a.innerHTML = prStaffColHTML();
     b.innerHTML = prPtColHTML();
     Object.keys(keep).forEach(function(id){ const el = $(id); if (el) el.scrollTop = keep[id]; });
+  }
+  /* ════════ 06.11.2026, просьба владельца №11: кабинет «Прокат» ════════
+     Шапка как у «Работы»: слева фото, ФИО и «Сменить», по центру выбранный пункт, справа «Пункт выдачи» («Все пункты»
+     или один пункт) — он фильтрует сводку, заявки, инструмент и сотрудников. Вкладки: Прокат · Заявки · Пункт выдачи ·
+     Инструмент · Сотрудники · Отзывы · Комиссия и оплата. Пункт «зелёный», когда в нём есть работающий сотрудник и
+     инструмент; иначе «красный» с причиной. */
+  const PR_PT_KEY = 'iva_pr_pt';
+  let PR_DD = false;
+  try { const v0 = localStorage.getItem(PR_PT_KEY); if (v0) O_PT = v0; } catch(e){}
+
+  function prPts(){ return OW_PTS || []; }
+  function prCurPt(){
+    if (O_PT === 'all') return null;
+    return prPts().find(function(p){ return String(p.id) === O_PT; }) || null;
+  }
+  function prPtFix(){ if (O_PT !== 'all' && OW_PTS && OW_PTS.length && !prCurPt()) O_PT = 'all'; }   // пунктов нет — работают старые кнопки над заявками
+  function prToolPts(){
+    const m = {};
+    (OW_TOOLS || []).forEach(function(t){ m[String(t.id)] = t.point_id ? String(t.point_id) : ''; });
+    return m;
+  }
+  /* инструмент выбранного пункта (вкладка «Инструмент» и сводка); пункт не выбран или список пунктов не загрузился — весь */
+  function prMy(){
+    if (O_PT === 'all' || !OW_TOOLS) return MY;
+    const m = prToolPts();
+    return MY.filter(function(t){ return m[String(t.id)] === O_PT; });
+  }
+  function prStaffOf(id){
+    id = String(id);
+    return (OW_STAFF || []).filter(function(s){ return (s.point_ids || []).map(String).indexOf(id) >= 0; });
+  }
+  /* пункт работает: есть сотрудник, принявший приглашение, и инструмент (не в архиве) */
+  function prPtHealth(p){
+    const id = String(p.id), st = prStaffOf(id);
+    const act = st.filter(function(s){ return s.status === 'active'; }).length;
+    const inv = st.filter(function(s){ return s.status === 'invited'; }).length;
+    const tools = (OW_TOOLS || []).filter(function(t){ return String(t.point_id || '') === id && (t.status || 'active') !== 'archived'; }).length;
+    const why = [];
+    if (OW_STAFF && !act) why.push(inv ? 'сотрудник ещё не принял приглашение' : 'нет сотрудника');
+    if (OW_TOOLS && !tools) why.push('нет инструмента');
+    return { ok: !why.length, act: act, inv: inv, tools: tools, why: why };
+  }
+  function prBadPts(){ return prPts().filter(function(p){ return !prPtHealth(p).ok; }); }
+  function prOrdOf(id){
+    return ORDERS.filter(function(p){ const k = oCard(p); return !!(k && k.p.point && String(k.p.point.id) === String(id)); });
+  }
+
+  function prHeadHTML(){
+    const ad = A.admin || {};
+    const who = esc(A.uname || ad.full_name || 'Кабинет');
+    const meta = (ad.company ? '«' + esc(ad.company) + '» · ' : '') + (isCreator() ? 'создатель · ' : 'владелец проката · ') + esc(A.me);
+    const pts = prPts(), cur = prCurPt(), curId = cur ? String(cur.id) : 'all';
+    const opts = [{ id: 'all', name: 'Все пункты' }].concat(pts.map(function(p){ return { id: String(p.id), name: p.name || 'Пункт' }; }));
+    const sel = pts.length ? '<div class="st-ptsel"><span class="st-ptsel-l" id="prPtSelL">Пункт выдачи</span>' +
+      '<div class="st-dd' + (PR_DD ? ' open' : '') + '" id="prPtDd">' +
+        '<button type="button" class="st-dd-btn" id="prPtSel" aria-haspopup="listbox" aria-controls="prPtMenu" aria-expanded="' + PR_DD + '"' +
+          ' aria-labelledby="prPtSelL prPtSel"><span class="st-dd-v">' + esc(cur ? (cur.name || 'Пункт') : 'Все пункты') + '</span>' + ST_CHEV + '</button>' +
+        '<div class="st-dd-menu" id="prPtMenu" role="listbox" aria-labelledby="prPtSelL"' + (PR_DD ? '' : ' hidden') + '>' + opts.map(function(o){
+          const on = o.id === curId;
+          return '<button type="button" role="option" tabindex="-1" class="st-dd-o' + (on ? ' on' : '') + '" aria-selected="' + on + '" data-pr-pt="' + esc(o.id) + '">' +
+            '<span>' + esc(o.name) + '</span>' + (on ? ST_TICK : '') + '</button>';
+        }).join('') + '</div>' +
+      '</div></div>' : '';
+    let info = '<div class="st-pinfo"></div>';
+    if (cur){
+      const addr = [cur.city && String(cur.address || '').indexOf(cur.city) < 0 ? cur.city : '', cur.address].filter(Boolean).join(', ');
+      const tel = String(cur.tel || '').replace(/\D/g, ''), open = owOpenTxt(cur), m = [];
+      if (open) m.push(esc(open));
+      if (tel) m.push('<a href="tel:+' + esc(tel) + '">' + esc(stTel(tel)) + '</a>');
+      m.push('<button type="button" class="st-rights-btn" data-ow-pt="' + esc(cur.id) + '" aria-haspopup="dialog">' + ST_SHIELD + 'Изменить пункт</button>');
+      info = '<div class="st-pinfo"><h3>«' + esc(cur.name || 'Пункт') + '»</h3>' +
+        (addr ? '<div class="st-pinfo-a" title="' + esc(addr) + '">' + esc(addr) + '</div>' : '') +
+        '<div class="st-pinfo-m">' + m.map(function(x){ return '<span class="st-pinfo-i">' + x + '</span>'; }).join('') + '</div></div>';
+    } else if (pts.length){
+      const bad = prBadPts().length;
+      const nAct = (OW_STAFF || []).filter(function(s){ return s.status === 'active'; }).length;
+      info = '<div class="st-pinfo"><h3>' + (pts.length === 1 ? 'Один пункт выдачи' : 'Все пункты · ' + pts.length) + '</h3>' +
+        '<div class="st-pinfo-a">' + (bad ? '<button type="button" class="st-rights-btn pr-bad-btn" data-go-tab="points">Требуют внимания: ' + bad + ' из ' + pts.length + '</button>' : 'Все пункты работают') + '</div>' +
+        '<div class="st-pinfo-m"><span class="st-pinfo-i">сотрудников ' + nAct + '</span><span class="st-pinfo-i">инструмента ' + MY.length + '</span></div></div>';
+    }
+    return '<div class="acct-head st-headrow pr-headrow">' +
+        '<div class="st-who"><span class="ava acct-head-ava" data-ava="' + esc(A.me) + '">' + esc(initials(A.uname || A.me)) + '</span>' +
+        '<div class="acct-head-t"><div class="sw-row"><h2>' + who + '</h2>' + (typeof IvaSwitch !== 'undefined' ? IvaSwitch.btnHTML() : '') + '</div>' +
+        '<div class="small muted">' + meta + '</div></div></div>' + info + sel +
+      '</div>';
+  }
+  function prDdSet(open, focusSel){
+    const dd = $('prPtDd'), btn = $('prPtSel'), menu = $('prPtMenu');
+    PR_DD = !!open && !!dd;
+    if (!dd) return;
+    dd.classList.toggle('open', PR_DD);
+    btn.setAttribute('aria-expanded', String(PR_DD));
+    if (PR_DD) menu.removeAttribute('hidden'); else menu.setAttribute('hidden', '');
+    if (PR_DD && focusSel){ const o = menu.querySelector('.st-dd-o.on') || menu.querySelector('.st-dd-o'); if (o) o.focus(); }
+  }
+  function prPick(id, tab){
+    PR_DD = false;
+    O_PT = String(id || 'all');
+    try { localStorage.setItem(PR_PT_KEY, O_PT); } catch(x){}
+    if (tab){ TAB = tab; history.replaceState(null, '', '#' + TAB); }
+    const y = window.scrollY; render(); if (!tab) window.scrollTo(0, y); else window.scrollTo(0, 0);
+    const b = $('prPtSel'); if (b && !tab) b.focus();
+  }
+  document.addEventListener('click', function(e){
+    const t = e.target && e.target.closest ? e.target : null;
+    if (!t) return;
+    const o = t.closest('[data-pr-pt]');
+    if (o){ prPick(o.getAttribute('data-pr-pt')); return; }
+    const go = t.closest('[data-pr-open]');
+    if (go){ prPick(go.getAttribute('data-pid'), go.getAttribute('data-pr-open')); return; }
+    if (t.closest('#prPtSel')){ prDdSet(!PR_DD, e.detail === 0); return; }
+    if (PR_DD && !t.closest('#prPtDd')) prDdSet(false);
+    const res = t.closest('[data-fee-res]');
+    if (res){ feeResSheet(); return; }
+  });
+  document.addEventListener('keydown', function(e){
+    const dd = $('prPtDd');
+    if (!dd || !dd.contains(document.activeElement)) return;
+    const opts = Array.prototype.slice.call(dd.querySelectorAll('.st-dd-o'));
+    const i = opts.indexOf(document.activeElement);
+    if (e.key === 'Escape' && PR_DD){ e.preventDefault(); prDdSet(false); $('prPtSel').focus(); return; }
+    if (e.key === 'Tab' && PR_DD){ prDdSet(false); return; }
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp'){
+      e.preventDefault();
+      if (!PR_DD){ prDdSet(true, true); return; }
+      const n = i < 0 ? 0 : (i + (e.key === 'ArrowDown' ? 1 : -1) + opts.length) % opts.length;
+      if (opts[n]) opts[n].focus();
+    }
+  });
+
+  /* ---- вкладка «Пункт выдачи»: сводка по пунктам ---- */
+  function prEmpty(b, p, btn){ return '<div class="empty"><b>' + b + '</b><p>' + p + '</p>' + (btn || '') + '</div>'; }
+  function viewPoints(){
+    const nodb = OW_PT_ERR === 'nodb', cur = prCurPt();
+    let h = '<div class="sect-h pr-sh"><div><h2>' + (cur ? 'Пункт «' + esc(cur.name || 'Пункт') + '»' : 'Пункты выдачи') + '</h2>' +
+      '<p class="small muted">Зелёный — пункт работает: есть сотрудник и инструмент. Красный — чего-то не хватает.</p></div>' +
+      (!nodb && OW_PTS && OW_PTS.length < 20 ? '<button type="button" class="btn sm" data-ow-pt="new">+ Добавить пункт</button>' : '') + '</div>';
+    if (nodb) return h + prEmpty('Пунктов выдачи пока нет', 'Пункты выдачи заработают после обновления базы (SQL 10.95).');
+    if (!OW_PTS) return h + (OW_PT_ERR ? prEmpty('Нет связи с сервером', 'Пункты выдачи не загрузились.', '<button type="button" class="btn sec sm" data-ow-reload="1">Повторить</button>')
+      : '<div class="empty"><b>Загрузка…</b></div>');
+    if (!OW_PTS.length) return h + prEmpty('Пунктов выдачи пока нет', 'Добавьте первый пункт: название, адрес, телефон и график — заявки, инструмент и сотрудники распределяются по пунктам.',
+      '<button type="button" class="btn" data-ow-pt="new">+ Добавить пункт выдачи</button>');
+    const all = OW_PTS.map(function(p){ return { p: p, h: prPtHealth(p) }; });
+    const ok = all.filter(function(x){ return x.h.ok; }).length;
+    if (!cur) h += '<div class="kpis pr-kpis">' +
+      '<div class="kpi"><div class="lb">Пунктов</div><div class="vl">' + all.length + '</div><div class="sub">из 20 возможных</div></div>' +
+      '<div class="kpi good"><div class="lb">Работают</div><div class="vl">' + ok + '</div><div class="sub">есть сотрудник и инструмент</div></div>' +
+      '<div class="kpi' + (all.length - ok ? ' bad' : '') + '"><div class="lb">Требуют внимания</div><div class="vl">' + (all.length - ok) + '</div><div class="sub">не хватает сотрудника или инструмента</div></div>' +
+    '</div>';
+    const list = cur ? all.filter(function(x){ return String(x.p.id) === String(cur.id); }) : all.slice().sort(function(a, b){ return (a.h.ok ? 1 : 0) - (b.h.ok ? 1 : 0); });
+    return h + '<div class="pr-cards">' + list.map(function(x){ return prPtCardHTML(x.p, x.h); }).join('') + '</div>';
+  }
+  function prPtCardHTML(p, hl){
+    const addr = [p.city && String(p.address || '').indexOf(p.city) < 0 ? p.city : '', p.address].filter(Boolean).join(', ');
+    const tel = String(p.tel || '').replace(/\D/g, ''), hours = owHoursTxt(p.open_min, p.close_min), open = owOpenTxt(p);
+    const ords = prOrdOf(p.id).filter(function(o){ const i = oInfo(o); return !i.arc && (i.st === 'new' || i.st === 'rented'); });
+    const late = ords.filter(function(o){ return oInfo(o).late; }).length;
+    const num = function(v, lb, cls){ return '<div class="pr-num' + (cls ? ' ' + cls : '') + '"><b>' + v + '</b><span>' + lb + '</span></div>'; };
+    const staff = prStaffOf(p.id);
+    return '<div class="pr-card c-' + (hl.ok ? 'g' : 'r') + '">' +
+      '<div class="pr-card-h"><b>' + esc(p.name || 'Пункт') + '</b><span class="pr-badge ' + (hl.ok ? 'g' : 'r') + '">' + (hl.ok ? 'Работает' : 'Не работает') + '</span></div>' +
+      (hl.ok ? '' : '<div class="pr-why">' + esc(hl.why.map(function(w, i){ return i ? w : w.charAt(0).toUpperCase() + w.slice(1); }).join(' · ')) + '</div>') +
+      (addr ? '<div class="small muted">' + esc(addr) + '</div>' : '') +
+      '<div class="small">' + esc([open, hours].filter(Boolean).join(' · ') || 'график не указан') + '</div>' +
+      '<div class="small">' + (tel ? '<a href="tel:+' + esc(tel) + '">' + esc(stTel(tel)) + '</a>' : '<span class="muted">телефон не указан — звонки идут владельцу</span>') + '</div>' +
+      '<div class="pr-nums">' +
+        num(hl.act + (hl.inv ? '<small> +' + hl.inv + '</small>' : ''), plural(hl.act, 'сотрудник', 'сотрудника', 'сотрудников') + (hl.inv ? ' · ждут ответа ' + hl.inv : ''), hl.act ? '' : 'r') +
+        num(hl.tools, 'инструмента', hl.tools ? '' : 'r') +
+        num(ords.length, 'заявок в работе') +
+        num(late, 'просрочено', late ? 'r' : '') +
+      '</div>' +
+      (staff.length ? '<div class="small muted pr-staff">' + esc(staff.map(function(s){ return (s.name || s.email) + (s.status === 'active' ? '' : ' (' + owStaffSt(s).toLowerCase() + ')'); }).join(', ')) + '</div>' : '') +
+      '<div class="acts">' +
+        '<button type="button" class="btn sm" data-ow-pt="' + esc(p.id) + '">Изменить пункт</button>' +
+        '<button type="button" class="btn sm sec" data-pr-open="orders" data-pid="' + esc(p.id) + '">Заявки</button>' +
+        '<button type="button" class="btn sm sec" data-pr-open="ads" data-pid="' + esc(p.id) + '">Инструмент</button>' +
+        '<button type="button" class="btn sm sec" data-pr-open="team" data-pid="' + esc(p.id) + '">Сотрудники</button>' +
+      '</div></div>';
+  }
+
+  /* ---- вкладка «Сотрудники»: сводка ---- */
+  function viewTeam(){
+    const nodb = OW_STAFF_ERR === 'nodb' || OW_PT_ERR === 'nodb', cur = prCurPt();
+    let h = '<div class="sect-h pr-sh"><div><h2>Сотрудники' + (cur ? ' пункта «' + esc(cur.name || 'Пункт') + '»' : '') + '</h2>' +
+      '<p class="small muted">Имя появляется из профиля сотрудника, когда он примет приглашение. Клиенты имён и телефонов сотрудников не видят.</p></div>' +
+      (!nodb && OW_STAFF && OW_PTS && OW_PTS.length ? '<button type="button" class="btn sm" data-ow-staff="new">+ Добавить сотрудника</button>' : '') + '</div>';
+    if (nodb) return h + prEmpty('Сотрудников пока нет', 'Сотрудники заработают после обновления базы (SQL 10.103).');
+    if (!OW_STAFF) return h + (OW_STAFF_ERR ? prEmpty('Нет связи с сервером', 'Список сотрудников не загрузился.', '<button type="button" class="btn sec sm" data-ow-reload="1">Повторить</button>')
+      : '<div class="empty"><b>Загрузка…</b></div>');
+    if (OW_PTS && !OW_PTS.length) return h + prEmpty('Сначала добавьте пункт выдачи', 'Сотрудник работает в пункте выдачи — добавьте первый пункт.', '<button type="button" class="btn" data-ow-pt="new">+ Добавить пункт выдачи</button>');
+    const list = cur ? prStaffOf(cur.id) : OW_STAFF.slice();
+    const n = function(st){ return list.filter(function(s){ return s.status === st; }).length; };
+    h += '<div class="kpis pr-kpis">' +
+      '<div class="kpi good"><div class="lb">Работают</div><div class="vl">' + n('active') + '</div><div class="sub">приняли приглашение</div></div>' +
+      '<div class="kpi"><div class="lb">Ждут ответа</div><div class="vl">' + n('invited') + '</div><div class="sub">увидят приглашение в «Иве»</div></div>' +
+      '<div class="kpi"><div class="lb">Отказались</div><div class="vl">' + n('declined') + '</div><div class="sub">можно пригласить снова</div></div>' +
+    '</div>';
+    if (!list.length) return h + prEmpty(cur ? 'В этом пункте сотрудников нет' : 'Сотрудников пока нет',
+      '«+ Добавить сотрудника» — почта, права и пункты; человек увидит приглашение, когда войдёт в «Иву» под этой почтой.');
+    const ord = { active: 0, invited: 1, declined: 2 };
+    return h + '<div class="pr-cards">' + list.sort(function(a, b){
+      return (ord[a.status] || 0) - (ord[b.status] || 0) || String(a.name || a.email).localeCompare(String(b.name || b.email), 'ru');
+    }).map(function(s){
+      const c = s.status === 'active' ? 'g' : s.status === 'invited' ? 'y' : 'n';
+      const pts = (s.point_ids || []).map(owPtName).filter(Boolean);
+      const tel = String(s.tel || '').replace(/\D/g, '');
+      const r = OW_RIGHTS.filter(function(x){ return s[x[0]]; }).map(function(x){ return x[1]; });
+      if (s.can_delete) r.push('Удаляет инструмент (с одобрения)');
+      return '<div class="pr-card c-' + c + '">' +
+        '<div class="pr-card-h"><b>' + esc(s.name || s.email) + '</b><span class="pr-badge ' + c + '">' + esc(owStaffSt(s)) + '</span></div>' +
+        (s.name ? '<div class="small muted">' + esc(s.email) + '</div>' : '<div class="small muted">Имя появится, когда сотрудник примет приглашение</div>') +
+        '<div class="small">Пункты: <b>' + esc(pts.join(', ') || 'без пункта') + '</b></div>' +
+        '<div class="small muted">' + esc(r.join(' · ') || 'Без прав') + '</div>' +
+        (tel ? '<div class="small"><a href="tel:+' + esc(tel) + '">' + esc(stTel(tel)) + '</a></div>' : '') +
+        '<div class="acts"><button type="button" class="btn sm sec" data-ow-staff="' + esc(s.id) + '">Изменить</button></div>' +
+      '</div>';
+    }).join('') + '</div>';
+  }
+
+  /* ---- комиссия: одна формула с приложением ----
+     Сначала iva_fee_balance (SQL 20261127: сумма order_parts.fee по всем своим заявкам минус подтверждённые оплаты).
+     Нет функции в базе — та же формула, что у приложения: все свои строки order_parts (поле fee, без лимита 150 и без
+     фильтра по статусу) и подтверждённые fee_payments. Раньше сайт брал только закрытые из последних 150 и не показывал
+     переплату — у eclipsik.ru@mail.ru выходило «0 ₽», а в приложении «Переплата 93 ₽». */
+  let FEE_BAL = null, FEE_ROWS = null, FEE_ROWS_ERR = '', PAY_INFO = null, PAY_POLL = null;
+  const PAY_MAX = 100000, PAY_OVER_MAX = 5000;
+  function feeN(x){ const n = Number(x); return isFinite(n) ? n : 0; }
+  async function loadFeeBal(){
+    try {
+      const r = await api('/rest/v1/rpc/iva_fee_balance', 'POST', {});
+      const j = r && r.iva_fee_balance ? r.iva_fee_balance : r;
+      if (j && typeof j === 'object' && j.fee != null){
+        FEE_BAL = { fee: feeN(j.fee), paid: feeN(j.paid), pending: feeN(j.pending), pct: j.pct != null ? feeN(j.pct) : 5,
+                    debt: feeN(j.debt), over: feeN(j.over), orders: feeN(j.orders), src: 'db' };
+        return true;
+      }
+    } catch(e){ /* нет функции (SQL 20261127 не применён) или нет связи — считаем по формуле приложения */ }
+    try {
+      const me = encodeURIComponent(owLow(A.me));
+      const r = await Promise.all([
+        api('/rest/v1/order_parts?select=fee&owner_email=eq.' + me),
+        api('/rest/v1/fee_payments?select=amount,status&admin_email=eq.' + me)
+      ]);
+      const fee = (r[0] || []).reduce(function(a, x){ return a + feeN(x.fee); }, 0);
+      const pays = r[1] || [];
+      const paid = pays.filter(function(x){ return x.status === 'confirmed'; }).reduce(function(a, x){ return a + feeN(x.amount); }, 0);
+      const pending = pays.filter(function(x){ return x.status === 'pending'; }).reduce(function(a, x){ return a + feeN(x.amount); }, 0);
+      const ad = A.admin || {};
+      FEE_BAL = { fee: fee, paid: paid, pending: pending, pct: ad.fee_pct != null ? feeN(ad.fee_pct) : 5,
+                  debt: Math.max(0, fee - paid), over: Math.max(0, paid - fee),
+                  orders: (r[0] || []).filter(function(x){ return feeN(x.fee) !== 0; }).length, src: 'calc' };
+      return true;
+    } catch(e){ return false; }
+  }
+  /* «Платные ресурсы» → «Комиссия с аренды»: все начисления по заявкам (все свои строки с комиссией) */
+  async function loadFeeRows(){
+    const me = encodeURIComponent(owLow(A.me));
+    const base = 'id,order_id,created_at,status,rent_sum,fee,tools_text';
+    for (const sel of [base + ',fee_pct', base]){
+      try {
+        FEE_ROWS = await api('/rest/v1/order_parts?select=' + sel + '&owner_email=eq.' + me + '&fee=neq.0&order=created_at.desc,id.desc&limit=1000') || [];
+        FEE_ROWS_ERR = '';
+        return;
+      } catch(e){ if (!owColErr(e)) { FEE_ROWS_ERR = e.message || 'Нет связи с сервером'; return; } }
+    }
+  }
+  function feeResSheet(){
+    const s = computeFeeStats();
+    const body = function(){
+      if (!FEE_ROWS) return FEE_ROWS_ERR ? '<div class="sw-err show">Не загрузилось: ' + esc(FEE_ROWS_ERR) + '</div>' : '<p class="small muted">Загружаем начисления…</p>';
+      const sum = FEE_ROWS.reduce(function(a, p){ return a + feeN(p.fee); }, 0);
+      const rent = FEE_ROWS.reduce(function(a, p){ return a + feeN(p.rent_sum); }, 0);
+      let h = '<div class="kpis pr-kpis fee-res-k">' +
+        '<div class="kpi"><div class="lb">Ставка</div><div class="vl">' + s.feePct + '%</div><div class="sub">от суммы аренды</div></div>' +
+        '<div class="kpi"><div class="lb">Начислено</div><div class="vl">' + rub(sum) + '</div><div class="sub">' + FEE_ROWS.length + ' ' + plural(FEE_ROWS.length, 'аренда', 'аренды', 'аренд') + ' · выручка ' + rub(rent) + '</div></div>' +
+      '</div>';
+      if (!FEE_ROWS.length) return h + '<p class="small muted">Начислений пока нет. Комиссия начисляется сама, когда заявка закрыта («Вернули»).</p>';
+      const td = function(l, v, cls){ return '<td data-l="' + l + '"' + (cls ? ' class="' + cls + '"' : '') + '>' + v + '</td>'; };
+      h += '<div class="tbl-wrap tcw"><table class="tbl tc fee-res-tbl"><thead><tr><th>Заявка</th><th>Дата</th><th>Пункт</th><th class="num">Аренда</th><th class="num">Ставка</th><th class="num">Комиссия</th></tr></thead><tbody>' +
+        FEE_ROWS.map(function(p){
+          const k = LCARDS ? LCARDS[String(p.id)] : null, pt = k && k.p.point;
+          return '<tr><td><b>№' + esc(p.order_id) + '</b> <span class="small">' + esc(p.tools_text || 'Инструмент') + '</span></td>' +
+            td('Дата', niceDate(p.created_at), 'small muted') +
+            td('Пункт', esc((pt && pt.name) || '—'), 'small') +
+            td('Аренда', rub(p.rent_sum || 0), 'num') +
+            td('Ставка', (p.fee_pct != null ? p.fee_pct : s.feePct) + '%', 'num') +
+            td('Комиссия', rub(p.fee || 0), 'num fee-res-v') + '</tr>';
+        }).join('') + '</tbody></table></div>' +
+        (FEE_BAL && FEE_BAL.src === 'db' && Math.round(sum) === Math.round(FEE_BAL.fee)
+          ? '<p class="small muted" style="margin-top:8px">Сумма совпадает с карточкой «Комиссия и оплата» и с приложением — одна формула в базе.</p>' : '');
+      return h;
+    };
+    owWin('Комиссия с аренды', '<div id="feeResBody">' + body() + '</div>', '<button type="button" class="btn sec" style="flex:1" id="feeResOk">Закрыть</button>', true);
+    $('feeResOk').onclick = closeSheet;
+    if (!FEE_ROWS || FEE_ROWS_ERR) loadFeeRows().then(function(){ const b = $('feeResBody'); if (b) b.innerHTML = body(); });
+  }
+
+  /* ---- «Внести платёж»: сумма, «QR-код СБП» (сканировать телефоном) и «Картой онлайн» (страница ЮKassa в новой вкладке:
+     карта, SberPay, T-Pay, ЮMoney). Те же правила, что в приложении (IvaPayPatch): от 1 до 100 000 ₽ за раз, переплата —
+     не больше 5 000 ₽. Онлайн-оплата не подключена (функция iva-pay без ключей) — перевод по номеру и запрос, как раньше. */
+  function payAmt(str){
+    const t = String(str == null ? '' : str).replace(/[\s\u00a0]/g, '').replace(',', '.');
+    if (!/^\d{1,6}(\.\d{1,2})?$/.test(t)) return null;
+    const v = Math.round(parseFloat(t) * 100) / 100;
+    return v >= 1 && v <= PAY_MAX ? v : null;
+  }
+  function payTxt(v){ const k = Math.round(v * 100); return k % 100 === 0 ? String(k / 100) : (k / 100).toFixed(2); }
+  function payRub(v){ const k = Math.round(v * 100); return (k / 100).toLocaleString('ru-RU', { minimumFractionDigits: k % 100 ? 2 : 0, maximumFractionDigits: 2 }) + ' ₽'; }   // с копейками — без округления
+  function payMaxOf(s){ return Math.min(Math.floor((s.feeAll - s.paidAll + PAY_OVER_MAX) * 100 + 1e-6) / 100, PAY_MAX); }
+  function payLimitTxt(max){ return max >= PAY_MAX ? 'От 1 до 100 000 ₽ за один раз' : 'От 1 до ' + payRub(max) + ' — переплата не больше 5 000 ₽'; }
+  async function payInfo(){
+    if (PAY_INFO && Date.now() - PAY_INFO.at < 600000) return PAY_INFO;
+    try {
+      const r = await api('/functions/v1/iva-pay', 'GET');
+      PAY_INFO = { ready: !!(r && r.ready), test: !!(r && r.test), at: Date.now() };
+    } catch(e){ PAY_INFO = { ready: false, test: false, at: Date.now(), off: true }; }
+    return PAY_INFO;
+  }
+  function payErrTxt(e){
+    const st = e && e.status, m = String(e && e.message || '');
+    if (st === 503 || /not_ready/.test(m)) return 'Онлайн-оплата пока не подключена — переведите по номеру ниже и отправьте запрос.';
+    if (st === 401) return 'Сессия завершилась — войдите снова.';
+    if (st === 403) return 'Оплата комиссии — только для владельца проката.';
+    if (st === 429) return 'Слишком много попыток — подождите 10 минут.';
+    if (st === 400) return 'Проверьте сумму: от 1 до 100 000 ₽.';
+    if (st === 502) return 'ЮKassa не создала платёж' + (m && !/yookassa/i.test(m) ? ': ' + m : '') + '. Попробуйте ещё раз или переведите по номеру.';
+    if (!st) return 'Нет связи с сервером. Проверьте интернет.';
+    return 'Не получилось: ' + m;
+  }
+  function payQrLib(){
+    if (window.qrcode) return Promise.resolve(window.qrcode);
+    return new Promise(function(ok, bad){
+      const s = document.createElement('script');
+      s.src = 'assets/qrcode.js?v=20261106-cabinet';
+      s.onload = function(){ window.qrcode ? ok(window.qrcode) : bad(new Error('QR')); };
+      s.onerror = function(){ bad(new Error('QR')); };
+      document.head.appendChild(s);
+    });
+  }
+  function payStop(){ if (PAY_POLL){ clearInterval(PAY_POLL); PAY_POLL = null; } }
+  async function payDone(msg){
+    payStop();
+    await Promise.allSettled([loadFeeBal(), loadMyFeePayments().then(function(r){ FEES = r || []; })]);
+    FEE_ROWS = null;
+    if ($('sheet') && $('payWin')) closeSheet();
+    toast(msg);
+    if (TAB === 'fee' || TAB === 'home') render();
+  }
+  /* ждём итог ЮKassa: раз в 5 секунд, до 15 минут, пока окно открыто */
+  function payWatch(id, note){
+    payStop();
+    const t0 = Date.now();
+    PAY_POLL = setInterval(async function(){
+      if (!$('payWin') || Date.now() - t0 > 15 * 60000){ payStop(); return; }
+      try {
+        const r = await api('/functions/v1/iva-pay', 'POST', { a: 'check', id: id });
+        const row = r && Array.isArray(r.rows) ? r.rows[0] : null;
+        if (row && row.status === 'succeeded') payDone('Оплата получена — спасибо! Комиссия обновлена');
+        else if (row && row.status === 'canceled'){ payStop(); if (note) note.textContent = 'Платёж отменён или не прошёл. Можно попробовать ещё раз.'; }
+      } catch(e){}
+    }, 5000);
+  }
+  function openPayModal(){
+    const s = computeFeeStats(), max = payMaxOf(s);
+    const sumLine = s.debt > 0 ? 'К оплате ' + rub(s.debt) : s.over > 0 ? 'Переплата ' + rub(s.over) : 'К оплате 0 ₽';
+    const def = s.debt > 0 ? payTxt(Math.ceil(s.debt * 100 - 1e-6) / 100) : '';
+    const body = '<div class="pay-win" id="payWin">' +
+      '<div class="pay-sum' + (s.debt > 0 ? ' due' : ' ok') + '">' + sumLine + (s.pendingPaid > 0 ? '<small>ждёт подтверждения ' + rub(s.pendingPaid) + '</small>' : '') + '</div>' +
+      (max < 1 ? '<div class="sw-err show">Переплата больше 5 000 ₽ — вносить оплату пока не нужно: комиссия с новых аренд спишется из переплаты.</div>' :
+      '<div class="sw-fld"><label class="sw-l" for="payAmt">Сумма, ₽</label>' +
+        '<input class="inp" id="payAmt" inputmode="decimal" autocomplete="off" maxlength="10" value="' + esc(def) + '" placeholder="Например, 500">' +
+        '<div class="ow-hint" id="payLim">' + esc(payLimitTxt(max)) + '</div></div>' +
+      '<div class="pay-btns">' +
+        '<button type="button" class="btn" id="payQr" disabled>QR-код СБП</button>' +
+        '<button type="button" class="btn sec" id="payCard" disabled>Картой онлайн</button>' +
+      '</div>' +
+      '<div class="ow-hint" id="payMode">Проверяем онлайн-оплату…</div>' +
+      '<div class="pay-qr" id="payQrBox" hidden></div>' +
+      '<div class="sw-err" id="payErr"></div>') +
+      '<details class="pay-manual" id="payManual"><summary>Перевести по номеру телефона</summary>' +
+        '<div class="fee-req">' +
+          '<div><span>Перевод по СБП на телефон</span><b>+7 (908) 173-14-10 <button type="button" class="mini-btn" id="payCopy">Копировать</button></b></div>' +
+          '<div><span>Получатель</span><b>Илья Игоревич Г. (Т-Банк / Сбербанк)</b></div>' +
+          '<div><span>Назначение</span><b>Комиссия Ива (' + esc(A.me) + ')</b></div>' +
+        '</div>' +
+        '<p class="small muted">После перевода нажмите «Я перевёл» — платёж уйдёт на подтверждение владельцу площадки.</p>' +
+        '<button type="button" class="btn sec" id="payManualGo"' + (max < 1 ? ' disabled' : '') + '>Я перевёл — отправить запрос</button>' +
+      '</details>' +
+    '</div>';
+    owWin('Внести платёж', body, '<button type="button" class="btn sec" style="flex:1" id="payClose">Закрыть</button>');
+    $('payClose').onclick = function(){ payStop(); closeSheet(); };
+    $('payCopy').onclick = function(){ copyToClipboard('89081731410', 'Номер телефона получателя скопирован'); };
+    const err = function(m){ owErr('payErr', m); };
+    const read = function(){
+      const v = payAmt($('payAmt') ? $('payAmt').value : '');
+      if (v === null){ err('Введите сумму от 1 до ' + rub(max)); return null; }
+      if (v > max + 0.004){ err(max >= PAY_MAX ? 'Не больше 100 000 ₽ за один раз' : 'Не больше ' + payRub(max) + ' — переплата не может быть больше 5 000 ₽'); return null; }
+      err(''); return v;
+    };
+    $('payManualGo').onclick = async function(){
+      const v = read(); if (v === null) return;
+      const b = this; b.disabled = true; b.textContent = 'Отправляем…';
+      try {
+        await addFee({ admin_email: A.me, amount: v, status: 'pending', note: 'Оплата комиссии (перевод по номеру)' });
+        payDone('Запрос отправлен — владелец площадки подтвердит перевод');
+      } catch(e){ b.disabled = false; b.textContent = 'Я перевёл — отправить запрос'; err('Не удалось отправить: ' + (e.message || e)); }
+    };
+    if (max < 1) return;
+    const amt = $('payAmt');
+    amt.addEventListener('keydown', function(e){ if (e.key === 'Enter'){ e.preventDefault(); $('payQr').click(); } });
+    const go = async function(sbp, btn){
+      const v = read(); if (v === null) return;
+      const other = sbp ? $('payCard') : $('payQr'), label = btn.textContent;
+      /* новая вкладка — сразу по нажатию, иначе браузер её заблокирует; адрес ЮKassa подставим, когда придёт */
+      const w = sbp ? null : window.open('', '_blank');
+      if (w){ try { w.opener = null; w.document.title = 'Оплата комиссии — ЮKassa'; w.document.body.innerHTML = '<p style="font:16px sans-serif;padding:24px">Открываем страницу оплаты ЮKassa…</p>'; } catch(x){} }
+      btn.disabled = other.disabled = true; btn.textContent = 'Создаём платёж…';
+      try {
+        const r = await api('/functions/v1/iva-pay', 'POST', sbp ? { a: 'new', amount: payTxt(v), method: 'sbp' } : { a: 'new', amount: payTxt(v) });
+        const url = r && /^https:\/\//.test(String(r.url || '')) ? String(r.url) : '';
+        if (!url) throw Object.assign(new Error('нет ссылки на оплату'), { status: 502 });
+        const box = $('payQrBox');
+        if (!box) return;
+        box.hidden = false;
+        if (sbp){
+          let svg = '';
+          try { const q = await payQrLib(); const qr = q(0, 'M'); qr.addData(url); qr.make(); svg = qr.createSvgTag({ cellSize: 4, margin: 2, scalable: true }); } catch(x){}
+          box.innerHTML = (svg ? '<div class="pay-qr-img" role="img" aria-label="QR-код для оплаты ' + esc(payRub(v)) + '">' + svg + '</div>' : '') +
+            '<div class="pay-qr-t"><b>' + esc(payRub(v)) + '</b>' +
+              '<span>' + (svg ? 'Наведите камеру телефона на QR-код — откроется оплата в приложении банка.' : 'QR-код не построился — откройте ссылку на телефоне или в этой вкладке.') + '</span>' +
+              (r.fallback ? '<span class="muted">СБП в ЮKassa пока не включена — откроется обычная страница оплаты.</span>' : '') +
+              '<a href="' + esc(url) + '" target="_blank" rel="noopener">Открыть страницу оплаты</a>' +
+              '<span class="muted" id="payWait">Ждём оплату — окно обновится само.</span></div>';
+        } else {
+          if (w){ try { w.location.replace(url); } catch(x){ w.location = url; } }
+          box.innerHTML = '<div class="pay-qr-t"><b>' + esc(payRub(v)) + '</b>' +
+            '<span>' + (w ? 'Страница ЮKassa открыта в новой вкладке: карта, SberPay, T-Pay или ЮMoney.' : 'Откройте страницу ЮKassa: карта, SberPay, T-Pay или ЮMoney.') + '</span>' +
+            '<a href="' + esc(url) + '" target="_blank" rel="noopener">Открыть страницу оплаты</a>' +
+            '<span class="muted" id="payWait">Ждём оплату — окно обновится само.</span></div>';
+        }
+        if (r.test) box.insertAdjacentHTML('beforeend', '<div class="ow-hint">Тестовый режим ЮKassa — настоящие деньги не списываются.</div>');
+        btn.textContent = label; btn.disabled = other.disabled = false;
+        if (r.id) payWatch(r.id, $('payWait'));
+      } catch(e){
+        if (w) try { w.close(); } catch(x){}
+        btn.textContent = label; btn.disabled = other.disabled = false;
+        err(payErrTxt(e));
+        if (e && (e.status === 503 || !e.status)){ const d = $('payManual'); if (d) d.open = true; }
+      }
+    };
+    $('payQr').onclick = function(){ go(true, this); };
+    $('payCard').onclick = function(){ go(false, this); };
+    payInfo().then(function(i){
+      if (!$('payWin')) return;
+      const m = $('payMode');
+      if (i.ready){
+        $('payQr').disabled = $('payCard').disabled = false;
+        if (m) m.textContent = 'QR-код — отсканируйте телефоном и оплатите в приложении банка (СБП). «Картой онлайн» — страница ЮKassa в новой вкладке. ' +
+          'Долг уменьшится сам, как только ЮKassa подтвердит оплату.' + (i.test ? ' Тестовый режим — деньги не списываются.' : '');
+      } else {
+        if (m) m.textContent = 'Онлайн-оплата пока не подключена — переведите по номеру и отправьте запрос.';
+        const d = $('payManual'); if (d) d.open = true;
+      }
+    });
+    setTimeout(function(){ if (amt) amt.focus(); }, 60);
   }
   /* кабинет «Прокат»: основное — как было, по бокам — окна «Сотрудники» и «Пункты выдачи» (раскладка «Работы») */
   function prRender(inner){
@@ -3224,7 +3647,8 @@
         ? '<div class="sw-fld"><label class="sw-l" for="owSfEmail">Почта сотрудника</label><input class="inp" id="owSfEmail" type="email" maxlength="254" autocomplete="off" placeholder="ivan@mail.ru">' +
           '<div class="ow-hint">Под этой почтой он входит в «Иву» и там увидит приглашение «Принять / Отказаться».</div></div>'
         : '<div class="ow-who"><span class="small muted">' + esc(s.email) + '</span><span class="ow-st ow-st-' + esc(s.status) + '">' + esc(owStaffSt(s)) + '</span></div>') +
-      '<div class="sw-fld"><label class="sw-l" for="owSfName">Имя и фамилия</label><input class="inp" id="owSfName" maxlength="80" autocomplete="off" value="' + esc(s.name || '') + '" placeholder="Иван Петров"></div>' +
+      /* 06.11.2026 (просьба владельца №11): без «Имя и фамилия» — имя берётся из профиля сотрудника, когда он примет приглашение */
+      (isNew ? '<div class="ow-hint ow-gap">Имя появится само из профиля сотрудника, когда он примет приглашение. До этого в списке — его почта.</div>' : '') +
       '<div class="sw-fld"><label class="sw-l" for="owSfTel">Телефон <span class="muted">— необязательно</span></label><input class="inp" id="owSfTel" type="tel" maxlength="30" autocomplete="off" value="' + esc(s.tel || '') + '" placeholder="+7 900 123-45-67">' +
         '<div class="ow-hint">Клиенты имён и телефонов сотрудников не видят — только телефон пункта.</div></div>' +
       '<div class="sw-l">Права — можно выбрать оба набора или отметить по одному</div>' +
@@ -3272,28 +3696,35 @@
         paintSets();
       };
     });
-    const f = isNew ? $('owSfEmail') : $('owSfName'); if (f) f.focus();
+    const f = isNew ? $('owSfEmail') : $('owSfTel'); if (f) f.focus();
     $('owSfSave').onclick = async function(){
       const email = isNew ? owLow($('owSfEmail').value) : s.email;
-      const name = $('owSfName').value.trim().replace(/\s+/g, ' '), tel = $('owSfTel').value.trim();
+      const tel = $('owSfTel').value.trim();
       const pids = pts.length > 1 ? Array.prototype.map.call(box.querySelectorAll('[data-ow-p]:checked'), function(x){ return x.getAttribute('data-ow-p'); }) : [String(pts[0].id)];
       let err = '';
       if (isNew && !/^[^@\s]+@[^@\s]+\.[^@\s]{2,}$/.test(email)) err = 'Похоже, в почте ошибка (пример: ivan@mail.ru)';
       else if (isNew && email === owLow(A.me)) err = 'Это ваша почта — владельца проката добавлять не нужно';
-      else if (!name || name.length > 80) err = 'Укажите имя сотрудника (до 80 символов)';
       else if (tel && (!/^\+?[0-9() .-]+$/.test(tel) || tel.replace(/\D/g, '').length < 10 || tel.replace(/\D/g, '').length > 15)) err = 'Проверьте телефон: 10–15 цифр, например +7 900 123-45-67';
       else if (!(R('can_issue') || R('can_catalog') || R('can_chat') || R('can_notify'))) err = 'Отметьте хотя бы одно право';
       else if (!pids.length) err = 'Отметьте хотя бы один пункт выдачи';
       owErr('owSfErr', err);
       if (err) return;
       const btn = this; btn.disabled = true; btn.textContent = '…';
-      const p = { p_id: isNew ? null : s.id, p_email: email, p_name: name, p_tel: tel, p_points: pids,
+      const p = { p_id: isNew ? null : s.id, p_email: email, p_name: isNew ? null : (s.name || null), p_tel: tel, p_points: pids,   // ФИО в окне нет: у нового — из профиля после «Принять», при правке — прежнее
         p_issue: R('can_issue'), p_catalog: R('can_catalog'), p_chat: R('can_chat'), p_notify: R('can_notify'), p_self: R('self_issue'), p_delete: R('can_delete') };
       try {
-        try { await api('/rest/v1/rpc/iva_staff_save', 'POST', p); }
-        catch(e){ if (!apiMissing(e)) throw e; delete p.p_delete; await api('/rest/v1/rpc/iva_staff_save', 'POST', p); }   // база до SQL 10.122
+        const save = async function(){
+          try { await api('/rest/v1/rpc/iva_staff_save', 'POST', p); }
+          catch(e){ if (!apiMissing(e)) throw e; delete p.p_delete; await api('/rest/v1/rpc/iva_staff_save', 'POST', p); }   // база до SQL 10.122
+        };
+        try { await save(); }
+        catch(e){   // база до SQL 20261127 требует имя: прежнее имя, а новому — часть почты до «@» (после «Принять» не обновится)
+          if (!/Укажите имя/i.test(String(e && e.message || ''))) throw e;
+          p.p_name = (s.name || email.split('@')[0]).slice(0, 80);
+          await save();
+        }
         closeSheet();
-        toast(isNew ? 'Приглашение отправлено: «' + name + '» увидит его в «Иве»' : 'Сохранено');
+        toast(isNew ? 'Приглашение отправлено: ' + email + ' увидит его в «Иве»' : 'Сохранено');
         await owAfter('staff');
       } catch(e){
         btn.disabled = false; btn.textContent = isNew ? 'Пригласить' : 'Сохранить';
@@ -3616,11 +4047,9 @@
     { const pm = /^prof-(me|org|app)$/.exec(TAB); if (pm){ PROF_SUB = pm[1]; TAB = 'prof'; } }
     if (TAB === 'prof' && !isAdmin()){ location.replace('profile.html'); return; }
     if (isAdmin()){
-      /* вкладка другого режима (ссылка из уведомления, #orders и т. п.) — режим переключается сам, без перехода */
-      const LEND = ['home', 'orders', 'ads', 'fee', 'reviews'], RENT = ['sent', 'fav'];
-      if (LEND.indexOf(TAB) >= 0 && lordMode() !== 'lend') lordMode('lend');
-      else if (RENT.indexOf(TAB) >= 0 && lordMode() !== 'rent') lordMode('rent');
-      if (!TAB) TAB = lordMode() === 'rent' ? 'sent' : 'home';
+      /* 06.11.2026 (просьба владельца №11): у владельца проката только «Сдаю» — без переключателя «Арендую / Сдаю» */
+      if (!TAB) TAB = 'home';
+      prPtFix();
     } else if (!TAB || TAB === 'home') TAB = STAFF ? 'staff' : 'orders';
     let inner;
     if (TAB === 'fee')           inner = viewFee();
@@ -3633,10 +4062,12 @@
     else if (TAB === 'prof')     inner = viewProf();
     else if (TAB === 'home' && isAdmin()) inner = viewHome();
     else if (TAB === 'ads' && isAdmin())  inner = viewAds();
+    else if (TAB === 'points' && isAdmin()) inner = viewPoints();
+    else if (TAB === 'team' && isAdmin())   inner = viewTeam();
     else                         inner = isAdmin() ? viewHome() : viewFav();
 
     if (TAB === 'staff' && stWorkMode()) stRender();
-    else if (isAdmin() && lordMode() === 'lend' && ['home', 'orders', 'ads', 'fee', 'reviews'].indexOf(TAB) >= 0) prRender(inner);   // 06.11.2026: окна «Сотрудники» и «Пункты выдачи»
+    else if (isAdmin()) prRender(inner);   // 06.11.2026: шапка как у «Работы», окна «Сотрудники» и «Пункты выдачи»
     else { $('root').className = 'wrap'; $('root').innerHTML = shell(inner); }
     paintFavCount();
     /* выбранная вкладка видна и на узком экране (строка вкладок прокручивается) */
@@ -3893,7 +4324,7 @@
       render(); return;
     }
     const oPt = e.target.closest('[data-ord-pt]');
-    if (oPt){ O_PT = oPt.getAttribute('data-ord-pt'); render(); return; }
+    if (oPt){ O_PT = oPt.getAttribute('data-ord-pt'); try { localStorage.setItem('iva_pr_pt', O_PT); } catch(x){} render(); return; }
     if (e.target.closest('[data-ord-reload]')){
       oReload().then(function(f){ oRepaint(); toast(f.length ? 'Новых заявок: ' + f.length : 'Обновлено'); })
         .catch(function(err){ toast('Не удалось обновить: ' + err.message); });
@@ -4139,7 +4570,8 @@
           loadLandlordReviews(A.me),
           loadClientOrders(),
           loadClientCards(),
-          loadLordCards()
+          loadLordCards(),
+          loadFeeBal()          // 06.11.2026: комиссия — одна формула с приложением (iva_fee_balance)
         ]);
         SENT = mySent.status === 'fulfilled' ? (mySent.value || []) : [];
         MY = myTools.status === 'fulfilled' ? (myTools.value || []) : [];

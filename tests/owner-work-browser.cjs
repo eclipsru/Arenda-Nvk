@@ -100,12 +100,12 @@ let sv=calls.filter(x=>x.path.endsWith('/rpc/iva_staff_save')).pop();
 assert.equal(sv.body.p_id,'s1');assert.deepEqual(sv.body.p_points.sort(),[P1,P2].sort());assert.equal(sv.body.p_catalog,true);assert.equal(sv.body.p_issue,true);
 // новый сотрудник без пунктов — ошибка базы видна в окне, окно не закрывается
 await p.locator('#prStaffCol [data-ow-staff=new]').click();await p.waitForSelector('#owSfEmail');
-await p.fill('#owSfEmail','petr@example.invalid');await p.fill('#owSfName','Пётр');
+await p.fill('#owSfEmail','petr@example.invalid');assert.equal(await p.locator('#owSfName').count(),0,'ФИО в окне нет (06.11.2026: имя — из профиля сотрудника)');
 for(const id of [P1,P2]){const el=p.locator('#owSf [data-ow-p="'+id+'"]');if(await el.isChecked())await el.uncheck();}
 await p.locator('#owSfSave').click();await p.waitForSelector('#owSfErr.show');
 assert((await p.locator('#owSfErr').textContent()).includes('пункт'));
 await p.locator('#owSf [data-ow-p="'+P2+'"]').check();await p.locator('#owSfSave').click();await p.waitForFunction(()=>!document.getElementById('owSf'));
-sv=calls.filter(x=>x.path.endsWith('/rpc/iva_staff_save')).pop();assert.equal(sv.body.p_id,null);assert.equal(sv.body.p_email,'petr@example.invalid');
+sv=calls.filter(x=>x.path.endsWith('/rpc/iva_staff_save')).pop();assert.equal(sv.body.p_id,null);assert.equal(sv.body.p_email,'petr@example.invalid');assert.equal(sv.body.p_name,null);
 await p.waitForFunction(()=>document.querySelectorAll('#prStaffCol .st-si').length===3);
 
 // 3) пункт: график по дням, телефон, «сразу, без одобрения»; PATCH только своих полей

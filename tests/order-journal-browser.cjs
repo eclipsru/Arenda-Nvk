@@ -45,9 +45,9 @@ t=await txt(34);assert(!t.includes('Выдал:'),t);
 // поиск по сотруднику
 await p.locator('#ordQ').fill('пётр');await p.waitForFunction(()=>document.querySelectorAll('#ordList .order-card').length===3);
 await p.locator('#ordQ').fill('иван');await p.waitForFunction(()=>document.querySelectorAll('#ordList .order-card').length===2);
-// база без функции: прежняя строка «Выдан …», без ошибок, повторно не спрашиваем
+// база без функции: 06.11.2026 (просьба владельца №11) — владельцу всё равно «Выдал: — · дата и время» (время из заявки), без ошибок, повторно не спрашиваем
 noJournal=true;calls=0;await open('?a=2');
-t=await txt(31);assert(/Выдан \d/.test(t),t);assert(!t.includes('Выдал:'));assert(!t.includes('принял'));
+t=await txt(31);assert(/Выдал: — · \d/.test(t),t);assert(!/Выдан \d/.test(t),t);assert(!t.includes('принял'));
 await p.locator('[data-ord-reload]').click();await p.waitForTimeout(400);assert.equal(calls,1);
 assert.deepEqual(errors,[]);
 console.log('PASS: order journal — «Выдал / Принял» on owner cards, per-item receivers for split returns, one batched RPC (rented+closed only), search by staff name, graceful without SQL 20261118');

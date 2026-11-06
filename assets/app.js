@@ -917,7 +917,9 @@ function paintLordChrome(lord){
    (каталог, избранное), в режиме «Сдаю» — меню арендодателя (заявки, «+ Добавить»).
    Это только вид меню: права по-прежнему проверяет база. Клиенту переключатель не показывается. */
 const MODE_KEY = 'iva_mode';
-function ivaMode(){ try { return localStorage.getItem(MODE_KEY) === 'rent' ? 'rent' : 'lend'; } catch(e){ return 'lend'; } }
+/* 06.11.2026 (просьба владельца №11): у владельца проката только «Сдаю» — переключателя больше нет, режим всегда «Сдаю».
+   Функции оставлены, чтобы старые вызовы не ломались. */
+function ivaMode(){ return 'lend'; }
 function setIvaMode(m, go){
   try { localStorage.setItem(MODE_KEY, m === 'rent' ? 'rent' : 'lend'); } catch(e){}
   paintLordChrome(lordHint());
@@ -939,13 +941,7 @@ function ivaTabsFade(tb){
   if (!tb._ivaFade){ tb._ivaFade = true; tb.addEventListener('scroll', upd, { passive: true }); window.addEventListener('resize', upd); }
   upd();
 }
-function modeSwitchHTML(){
-  const m = ivaMode();
-  return '<div class="acct-mode" role="group" aria-label="Режим">' +
-    '<button type="button" data-mode="rent" class="' + (m === 'rent' ? 'on' : '') + '" aria-pressed="' + (m === 'rent') + '">Арендую</button>' +
-    '<button type="button" data-mode="lend" class="' + (m === 'lend' ? 'on' : '') + '" aria-pressed="' + (m === 'lend') + '">Сдаю</button>' +
-  '</div>';
-}
+function modeSwitchHTML(){ return ''; }   // 06.11.2026: без «Арендую / Сдаю»
 document.addEventListener('click', function(e){
   const mb = e.target.closest ? e.target.closest('[data-mode]') : null;
   if (!mb || mb.classList.contains('on')) return;
@@ -1368,7 +1364,6 @@ function acctMenuHTML(){
   let h = '<div class="acct-head"><span class="acct-ava" data-ava="' + esc(me) + '">' + esc(initials(name)) + '</span>' +
     '<span style="min-width:0"><b>' + esc(name) + '</b><small>' + esc(me) + '</small>' +
     '<span class="acct-role">' + role + '</span></span></div>';
-  if (lord) h += modeSwitchHTML();
   if (lend){
     h += a('account.html#home', 'Сводка') + a('account.html#orders', 'Заявки на мой инструмент') + a('account.html#ads', 'Мои объявления') +
          a('account.html#fee', 'Комиссия и оплата') + a('account.html#reviews', 'Отзывы') +
