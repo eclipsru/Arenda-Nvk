@@ -9,7 +9,7 @@
 <link rel="icon" href="assets/favicon-32.png" type="image/png" sizes="32x32">
 <link rel="icon" href="assets/icon-192.png" type="image/png" sizes="192x192">
 <link rel="apple-touch-icon" href="assets/apple-touch-icon.png">
-<link rel="stylesheet" href="assets/theme.css?v=20261106-switch">
+<link rel="stylesheet" href="assets/theme.css?v=20261106-owner">
 <style>
 /* ---------- Шаги ---------- */
 .steps{display:flex;gap:6px;margin:18px 0 22px;flex-wrap:wrap}
@@ -110,12 +110,12 @@ body.emb .emb-done .btn{margin-top:6px}
 
 <script src="assets/data.js"></script>
 <script src="assets/geo.js?v=20260923-photon"></script>
-<script src="assets/sb.js?v=20261106-switch"></script>
+<script src="assets/sb.js?v=20261106-owner"></script>
 <script src="assets/kind-guess.js?v=20261016-kind"></script>
 <script src="assets/models.js?v=20261020-power"></script>
 <script src="assets/model-form.js?v=20261020-power"></script>
 <script src="assets/app-release.js?v=20261009-rel"></script>
-<script src="assets/app.js?v=20261106-switch"></script>
+<script src="assets/app.js?v=20261106-owner"></script>
 <script>
 (function(){
   /* 05.11.2026: форма внутри «Работы» сотрудника (account.html, левая колонка): new.html?embed=1&point=<пункт>.
@@ -980,12 +980,14 @@ body.emb .emb-done .btn{margin-top:6px}
       dropDraft();
       if (EMBED){
         const wait = !!(t && t.review === 'pending') || verdict.status === 'moderation';
+        const own = !!(STF && STF.owner);       // владелец: ждёт не одобрения, а автопроверки площадки
         embSend({ iva: 'emb-added', id: t && t.id ? String(t.id) : '' });
         $('root').innerHTML = '<div class="empty emb-done">' +
           (wait ? '<svg viewBox="0 0 24 24" style="stroke:var(--yel)"><circle cx="12" cy="12" r="10"/><path d="M12 7v6l3 2"/></svg>'
                 : '<svg viewBox="0 0 24 24" style="stroke:var(--grn)"><circle cx="12" cy="12" r="10"/><path d="m8 12 3 3 5-6"/></svg>') +
-          '<b>' + (wait ? 'Отправлено владельцу на одобрение' : 'Инструмент добавлен') + '</b>' +
-          '<p>«' + esc(F.name) + '» ' + (wait ? 'появится в каталоге, когда владелец проката одобрит. Статус — в списке инструмента пункта.' : 'уже в каталоге.') + '</p>' +
+          '<b>' + (wait ? (own ? 'Отправлено на проверку' : 'Отправлено владельцу на одобрение') : 'Инструмент добавлен') + '</b>' +
+          '<p>«' + esc(F.name) + '» ' + (wait ? (own ? 'появится в каталоге после проверки. Статус — в списке инструмента пункта.'
+            : 'появится в каталоге, когда владелец проката одобрит. Статус — в списке инструмента пункта.') : 'уже в каталоге.') + '</p>' +
           '<button type="button" class="btn wide" id="embMore">Добавить ещё</button></div>';
         $('embMore').onclick = function(){ location.reload(); };
         embSend({ iva: 'emb-top' });
@@ -1069,6 +1071,20 @@ body.emb .emb-done .btn{margin-top:6px}
       }
       if (!STF){ screenAuth(staff ? 'staff' : A.admin ? 'paused' : 'client'); return; }
       document.title = (EDIT_ID ? 'Изменить инструмент' : 'Добавить инструмент') + ' — ' + (STF.company || 'прокат') + ' — Ива';
+    } else if (EMBED && EMB_PT && !EDIT_ID){
+      /* 06.11.2026: «Работа» владельца проката — форма для выбранного пункта; адрес, город и координаты база берёт из пункта
+         (триггер trg_iva_tool_point, SQL 10.97), одобрение не нужно — это сам владелец */
+      let pt = null, bad = false;
+      try { const r = await api('/rest/v1/iva_pickup_points?select=id,name,address,city&id=eq.' + encodeURIComponent(EMB_PT)); pt = Array.isArray(r) ? r[0] : null; }
+      catch(e){ bad = !(typeof apiMissing === 'function' && apiMissing(e)); }
+      if (!pt){
+        $('root').innerHTML = '<div class="empty" style="padding:30px 10px">' + (bad
+          ? '<b>Нет связи с сервером</b><p>Форма не загрузилась. Проверьте интернет и нажмите «Повторить».</p><button type="button" class="btn" id="bRetry">Повторить</button>'
+          : '<b>Пункт не найден</b><p>Выберите пункт в списке «Пункт выдачи» в кабинете.</p>') + '</div>';
+        if ($('bRetry')) $('bRetry').onclick = function(){ location.reload(); };
+        return;
+      }
+      STF = { owner: true, status: 'active', can_catalog: true, company: (A.admin && (A.admin.company || A.admin.full_name)) || 'Прокат', points: [pt] };
     }
 
     try {

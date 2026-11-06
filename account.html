@@ -10,7 +10,7 @@
 <link rel="icon" href="assets/favicon-32.png" type="image/png" sizes="32x32">
 <link rel="icon" href="assets/icon-192.png" type="image/png" sizes="192x192">
 <link rel="apple-touch-icon" href="assets/apple-touch-icon.png">
-<link rel="stylesheet" href="assets/theme.css?v=20261106-switch">
+<link rel="stylesheet" href="assets/theme.css?v=20261106-owner">
 <link rel="stylesheet" href="assets/profile.css?v=20260923-rental-profile">
 <style>
 .tabs{display:flex;gap:4px;border-bottom:1px solid var(--line);margin-bottom:18px;
@@ -149,9 +149,9 @@
 
 <script src="assets/data.js"></script>
 <script src="assets/geo.js?v=20260923-photon"></script>
-<script src="assets/email-guard.js?v=20260926-email"></script><script src="assets/sb.js?v=20261106-switch"></script>
+<script src="assets/email-guard.js?v=20260926-email"></script><script src="assets/sb.js?v=20261106-owner"></script>
 <script src="assets/app-release.js?v=20261009-rel"></script>
-<script src="assets/app.js?v=20261106-switch"></script>
+<script src="assets/app.js?v=20261106-owner"></script>
 <script src="assets/profile.js?v=20261022-a"></script>
 <script>
 (function(){
@@ -1001,6 +1001,11 @@
       try { fresh = await oReload(); } catch(e){ sessLost(); return; }
       if (sessLost()) return;
       if (fresh.length) liveNew(fresh.length, fresh[0].tools_text || '');
+      if (TAB === 'staff' && STAFF && STAFF.owner){   // открыта «Работа» владельца: заодно переписка и одобрения
+        await Promise.allSettled([owLoadChats(), owLoadTools()]);
+        if (sessLost()) return;
+        ST_UPD = Date.now(); stRepaint(); return;
+      }
       if (oSig() === s0){ const u = $('ordUpd'); if (u) u.textContent = oUpdTxt(); return; }
       if (TAB === 'orders') oRepaint();
       else if (TAB === 'home') liveRender();
@@ -1665,6 +1670,7 @@
      базы («вы не сотрудник» или функции нет — SQL не применён). Возвращает true, если ответ базы получен. */
   let STAFF_OK = false;      // был ли хоть один ответ iva_staff_me (а не сбой связи)
   async function loadStaff(){
+    if (isAdmin()) return owLoad();                  // 06.11.2026: «Работа» владельца проката — его же данные (owLoad)
     let me;
     try {
       const r = await api('/rest/v1/rpc/iva_staff_me', 'POST', {});
@@ -1734,6 +1740,23 @@
   }
   /* открыт ли пункт сейчас — по графику пункта (open_min / close_min), время устройства */
   function stOpen(pt){
+    /* 06.11.2026: база отдаёт график массивом Пн…Вс (выходной — -1), а не одним числом — раньше строка «Открыт до …»
+       с настоящими данными не показывалась */
+    if (pt && Array.isArray(pt.open_min) && Array.isArray(pt.close_min)){
+      const d = new Date(), i = (d.getDay() + 6) % 7, m = d.getHours() * 60 + d.getMinutes();
+      const o = Number(pt.open_min[i]), c = Number(pt.close_min[i]);
+      if (isNaN(o) || isNaN(c)) return '';
+      if (o < 0){
+        for (let k = 1; k <= 7; k++){ const j = (i + k) % 7, oj = Number(pt.open_min[j]);
+          if (oj >= 0) return '<span class="st-shut">Сегодня выходной · откроется ' + (k === 1 ? 'завтра' : OW_DAYS[j]) + ' в ' + stHM(oj) + '</span>'; }
+        return '';
+      }
+      if (m >= o && m < c) return '<span class="st-open">Открыт до ' + stHM(c) + '</span>';
+      if (m < o) return '<span class="st-shut">Закрыт · откроется в ' + stHM(o) + '</span>';
+      for (let k = 1; k <= 7; k++){ const j = (i + k) % 7, oj = Number(pt.open_min[j]);
+        if (oj >= 0) return '<span class="st-shut">Закрыт · откроется ' + (k === 1 ? 'завтра' : OW_DAYS[j]) + ' в ' + stHM(oj) + '</span>'; }
+      return '';
+    }
     const o = Number(pt && pt.open_min), c = Number(pt && pt.close_min);
     if (!pt || pt.open_min == null || pt.close_min == null || isNaN(o) || isNaN(c) || o === c) return '';
     const n = new Date(), m = n.getHours() * 60 + n.getMinutes();
@@ -1753,7 +1776,8 @@
     return { st: st, late: late, today: st === 'rented' && !!end && !late && end <= t1.getTime(), end: end };
   }
   function stScope(){
-    return SPARTS.filter(function(p){ return ST_PT === 'all' || String(p.point_id || '') === ST_PT; });
+    /* у владельца заявки без пункта (старые, с сайта) видны в каждом его пункте */
+    return SPARTS.filter(function(p){ return ST_PT === 'all' || String(p.point_id || '') === ST_PT || (STAFF && STAFF.owner && !p.point_id); });
   }
   function stCounts(list){
     const c = { new: 0, today: 0, late: 0, rented: 0 };
@@ -1823,9 +1847,16 @@
      своих пунктов — что в каталоге, что ждёт одобрения владельца, что отклонено; с правом «Удаляет» — отправляет запрос на удаление.
      Добавление и правка — пока в приложении. Функции базы: iva_staff_tools, iva_staff_tool_delete (SQL 10.122). */
   function stToolScope(){
-    return (STOOLS || []).filter(function(t){ return ST_PT === 'all' || String(t.point_id || '') === ST_PT; });
+    return (STOOLS || []).filter(function(t){ return ST_PT === 'all' || String(t.point_id || '') === ST_PT || (STAFF && STAFF.owner && !t.point_id); });
   }
   function stToolState(t){
+    if (STAFF && STAFF.owner){
+      const by = t.staff_name ? 'Сотрудник «' + t.staff_name + '»' : 'Сотрудник';
+      if (t.edit_state === 'delete') return { k: 'wait', cls: 'mod', title: 'Просят удалить', note: by + ' просит удалить — решите: удалить или оставить.' };
+      if (t.review === 'pending') return { k: 'wait', cls: 'mod', title: 'Ждёт вашего одобрения', note: by + ' добавил — инструмент появится в каталоге после вашего одобрения.' };
+      if (t.edit_state === 'pending') return { k: 'wait', cls: 'mod', title: 'Правка ждёт вас', note: by + ' изменил описание — в каталоге прежнее, пока вы не одобрите.' };
+      if (t.review === 'rejected') return { k: 'rej', cls: 'off', title: 'Отклонён', note: 'Вы не одобрили публикацию.' };
+    }
     if (t.edit_state === 'delete') return { k: 'wait', cls: 'mod', title: 'Удаление ждёт владельца', note: 'Вы или другой сотрудник попросили удалить — ждём решения владельца.' };
     if (t.review === 'pending') return { k: 'wait', cls: 'mod', title: 'На одобрении', note: 'Новый инструмент появится в каталоге после одобрения владельцем.' };
     if (t.review === 'rejected') return { k: 'rej', cls: 'off', title: 'Отклонён', note: 'Владелец не одобрил публикацию.' };
@@ -1858,6 +1889,11 @@
       const ph = (okImg ? '<img src="' + esc(img) + '" alt="" loading="lazy">' : '<span class="ad-noimg">нет фото</span>') +
         '<span class="ad-st"><span class="badge ' + s.cls + '">' + esc(s.title) + '</span></span>';
       let acts = '';
+      if (STAFF && STAFF.owner && s.k === 'wait'){    // владелец: одобрить / отклонить (как «На одобрении» в приложении)
+        const kd = t.edit_state === 'delete' ? 'delete' : t.review === 'pending' ? 'new' : 'pending';
+        acts += '<button type="button" class="btn sm" data-ow-trev="' + esc(t.id) + '" data-ok="1" data-kind="' + kd + '">' + (kd === 'delete' ? 'Удалить' : 'Одобрить') + '</button>' +
+          '<button type="button" class="btn sec sm" data-ow-trev="' + esc(t.id) + '" data-ok="0" data-kind="' + kd + '">' + (kd === 'delete' ? 'Оставить' : 'Отклонить') + '</button>';
+      }
       if (t.edit_state !== 'delete') acts += '<a class="btn sec sm" href="new.html?edit=' + encodeURIComponent(t.id) + '">Изменить</a>';
       if (inCat) acts += '<a class="btn sec sm" href="tool.html?id=' + encodeURIComponent(t.id) + '">Открыть</a>';
       if (t.can_delete && t.edit_state !== 'delete') acts += '<button type="button" class="btn sec sm st-del" data-st-tdel="' + esc(t.id) + '">Удалить</button>';
@@ -1878,7 +1914,7 @@
     const all = stToolScope();
     const cnt = function(k){ return all.filter(function(t){ return k === 'all' || stToolState(t).k === k; }).length; };
     let h = '<div class="chips st-tf">' +
-      [['all', 'Весь'], ['on', 'В каталоге'], ['wait', 'Ждут владельца'], ['rej', 'Отклонены'], ['off', 'Сняты']].map(function(c){
+      [['all', 'Весь'], ['on', 'В каталоге'], ['wait', STAFF && STAFF.owner ? 'Ждут вас' : 'Ждут владельца'], ['rej', 'Отклонены'], ['off', 'Сняты']].map(function(c){
         const n = cnt(c[0]);
         if (c[0] !== 'all' && c[0] !== 'on' && !n && ST_TF !== c[0]) return '';
         return '<button class="chip' + (ST_TF === c[0] ? ' on' : '') + '" data-st-tf="' + c[0] + '"' +
@@ -1889,7 +1925,8 @@
         '<input class="inp" id="stTq" type="search" autocomplete="off" placeholder="Название, бренд, модель" value="' + esc(ST_TQ) + '">' +
         '<button class="btn sec sm" data-staff-reload="1">Обновить</button>' +
       '</div>' +
-      '<div class="st-tadd"><span class="small muted">Новый инструмент и правки опубликованного клиенты увидят после одобрения владельцем проката.</span>' +
+      '<div class="st-tadd"><span class="small muted">' + (STAFF && STAFF.owner ? 'Инструмент ваших пунктов. Добавленное сотрудниками ждёт здесь вашего одобрения.'
+        : 'Новый инструмент и правки опубликованного клиенты увидят после одобрения владельцем проката.') + '</span>' +
         (stWorkMode() ? '<button type="button" class="btn sm" data-st-addgo="1">+ Добавить инструмент</button>' : '<a class="btn sm" href="new.html">+ Добавить инструмент</a>') + '</div>';
     h += '<div id="stTList" class="st-tlist">' + stToolListHTML() + '</div>';
     return h;
@@ -1926,6 +1963,7 @@
   function stChatScope(){
     if (!STCHATS) return [];
     if (ST_PT === 'all') return STCHATS;
+    if (STAFF && STAFF.owner) return STCHATS.filter(function(c){ return !c.point_id || String(c.point_id) === ST_PT; });   // владелец: без пункта — в каждом
     const pt = stPts().find(function(p){ return String(p.id) === ST_PT; });
     return STCHATS.filter(function(c){ return c.kind === 'p' ? String(c.point_id) === ST_PT : !!pt && c.point_name === pt.name; });
   }
@@ -1934,8 +1972,9 @@
     if (!STCHATS) return '<div class="empty"><b>Переписки не загрузились</b><p>Нажмите «Обновить». Если не поможет — ответьте в приложении «Ива».</p>' +
       '<button class="btn sec sm" data-staff-reload="1">Обновить</button></div>';
     const list = stChatScope();
-    let h = '<div class="small muted st-upd" style="margin:0 2px 10px">Переписки клиентов с вашими пунктами за 90 дней — где клиент писал сам. ' +
-      'Отвечаете от имени проката; владелец видит переписку.</div>';
+    let h = '<div class="small muted st-upd" style="margin:0 2px 10px">' + (STAFF && STAFF.owner
+      ? 'Ваши переписки с клиентами по инструменту и пунктам этого пункта; без пункта — в каждом. Сотрудники с правом «Отвечает в чате» видят переписки своих пунктов.'
+      : 'Переписки клиентов с вашими пунктами за 90 дней — где клиент писал сам. Отвечаете от имени проката; владелец видит переписку.') + '</div>';
     if (!list.length) return h + '<div class="empty"><b>Сообщений нет</b><p>Когда клиент напишет про инструмент вашего пункта или в чат пункта, переписка появится здесь.</p></div>';
     return h + '<div class="st-chats">' + list.map(function(c){
       const n = Number(c.unread) || 0;
@@ -1984,22 +2023,41 @@
     if (w.last && w.last.name) parts.push('последним ответил' + (w.last.me ? 'и вы' : ' ' + esc(w.last.name)) + ' ' + esc(stWhen(Date.parse(w.last.at))));
     return parts.join(' · ');
   }
+  /* сотрудник — функции базы iva_staff_*; владелец — своя переписка напрямую (OW_CHAT_IO, 06.11.2026) */
+  const ST_CHAT_IO = {
+    thread: function(c){ return c.kind + ':' + c.key + ':' + c.peer; },
+    load: async function(ch){
+      const p = ch.kind === 't' ? { p_tool: ch.key, p_peer: ch.peer } : { p_point: ch.key, p_peer: ch.peer };
+      return await api('/rest/v1/rpc/' + (ch.kind === 't' ? 'iva_staff_chat' : 'iva_staff_point_chat'), 'POST', p) || [];
+    },
+    read: function(ch){
+      const p = ch.kind === 't' ? { p_tool: ch.key, p_peer: ch.peer } : { p_point: ch.key, p_peer: ch.peer };
+      return api('/rest/v1/rpc/' + (ch.kind === 't' ? 'iva_staff_chat' : 'iva_staff_point_chat') + '_read', 'POST', p);
+    },
+    send: function(ch, t, img){
+      const p = ch.kind === 't' ? { p_tool: ch.key, p_peer: ch.peer, p_text: t } : { p_point: ch.key, p_peer: ch.peer, p_text: t };
+      if (img) p.p_img = img;
+      return api('/rest/v1/rpc/' + (ch.kind === 't' ? 'iva_staff_chat_send' : 'iva_staff_point_chat_send'), 'POST', p);
+    },
+    reload: function(){ return stLoadChats(); }
+  };
+  function stChatIO(){ return STAFF && STAFF.owner ? OW_CHAT_IO : ST_CHAT_IO; }
   async function stChatPoll(first){
     const ch = ST_CH;
     if (!ch || !$('sheet') || !$('stChBody')) return;
-    const p = ch.kind === 't' ? { p_tool: ch.key, p_peer: ch.peer } : { p_point: ch.key, p_peer: ch.peer };
-    const fn = ch.kind === 't' ? 'iva_staff_chat' : 'iva_staff_point_chat';
+    const io = stChatIO();
     try {
-      const ms = await api('/rest/v1/rpc/' + fn, 'POST', p) || [];
+      const ms = await io.load(ch);
       if (ST_CH !== ch || !$('stChBody')) return;
       const sig = JSON.stringify(ms.map(function(m){ return [m.id, m.is_read]; }));
       if (sig !== ch.sig){
         const b = $('stChBody'), atEnd = first || b.scrollHeight - b.scrollTop - b.clientHeight < 60;
         ch.sig = sig; b.innerHTML = stChatMsgsHTML(ms);
         if (atEnd) b.scrollTop = b.scrollHeight;
-        if (ms.some(function(m){ return !m.mine && !m.is_read; })) api('/rest/v1/rpc/' + fn + '_read', 'POST', p).catch(function(){});
+        if (ms.some(function(m){ return !m.mine && !m.is_read; })) Promise.resolve(io.read(ch)).catch(function(){});
       }
     } catch(e){ if (first && $('stChBody')) $('stChBody').innerHTML = '<div class="empty" style="padding:30px 10px"><b>Не удалось открыть</b><p>' + esc(e.message) + '</p></div>'; }
+    if (!ch.thread){ if ($('stChWho')) $('stChWho').textContent = ''; return; }   // общий чат владельца — без «кто отвечает»
     try {
       const w = await api('/rest/v1/rpc/iva_chat_who', 'POST', { p_thread: ch.thread });
       if (ST_CH === ch && $('stChWho')){
@@ -2009,14 +2067,15 @@
   }
   function stOpenChat(id){
     const m = String(id).split(':');
-    const c = (STCHATS || []).find(function(x){ return x.kind === m[0] && String(x.key) === m[1] && x.peer === m[2]; });
+    const c = (STCHATS || []).find(function(x){ return x.kind === m[0] && String(x.key) === m[1] && x.peer === m.slice(2).join(':'); });
     if (!c) return;
-    const ch = { kind: c.kind, key: c.key, peer: c.peer, thread: c.kind + ':' + c.key + ':' + c.peer, sig: '', claim: false };
+    const io = stChatIO();
+    const ch = { kind: c.kind, key: c.key, peer: c.peer, thread: io.thread(c), sig: '', claim: false };
     ST_CH = ch;
-    openSheet(String(c.client_name || 'Клиент') + ' · ' + (c.kind === 't' ? (c.tool_name || 'Инструмент') : 'чат пункта'),
-      '<div class="st-ch-head"><span class="small muted">' + esc(c.point_name || 'Пункт') + '</span>' +
+    openSheet(String(c.client_name || 'Клиент') + ' · ' + (c.kind === 't' ? (c.tool_name || 'Инструмент') : c.kind === 'g' ? 'чат проката' : 'чат пункта'),
+      '<div class="st-ch-head"><span class="small muted">' + esc(c.point_name || (c.kind === 'g' ? 'Без пункта' : 'Пункт')) + '</span>' +
         '<span class="small st-ch-who" id="stChWho">…</span>' +
-        '<button type="button" class="btn sec sm" id="stChClaim">Отвечу я</button></div>' +
+        (ch.thread ? '<button type="button" class="btn sec sm" id="stChClaim">Отвечу я</button>' : '') + '</div>' +
       '<div class="th-body st-ch-body" id="stChBody"><div class="empty" style="padding:30px 10px">Загрузка…</div></div>',
       '<div class="st-ch-draft" id="stChDraft" hidden></div>' +
       '<label class="btn sec st-ch-ph" title="Приложить фото" aria-label="Приложить фото">' +
@@ -2025,7 +2084,8 @@
       '<textarea class="inp st-ch-inp" id="stChTxt" rows="1" maxlength="2000" placeholder="Ответ клиенту"></textarea>' +
       '<button class="btn" id="stChSend">Отправить</button>');
     const sh = $('sheet'); sh.classList.add('st-ch-sheet');
-    api('/rest/v1/rpc/iva_chat_mark', 'POST', { p_thread: ch.thread, p_state: 'open' }).catch(function(){});
+    const mark = function(st){ if (ch.thread) api('/rest/v1/rpc/iva_chat_mark', 'POST', { p_thread: ch.thread, p_state: st }).catch(function(){}); };
+    mark('open');
     stChatPoll(true);
     const tm = setInterval(function(){
       if (ST_CH !== ch || !document.body.contains(sh)){ clearInterval(tm); return; }
@@ -2034,12 +2094,12 @@
     const mo = new MutationObserver(function(){
       if (document.body.contains(sh)) return;
       mo.disconnect(); clearInterval(tm);
-      api('/rest/v1/rpc/iva_chat_mark', 'POST', { p_thread: ch.thread, p_state: 'close' }).catch(function(){});
+      mark('close');
       if (ST_CH === ch) ST_CH = null;
-      stLoadChats().then(function(){ if (TAB === 'staff' && ST_VIEW === 'chats') stRepaint(); else render(); });
+      Promise.resolve(io.reload()).then(function(){ if (TAB === 'staff') stRepaint(); else render(); });
     });
     mo.observe(document.body, { childList: true });
-    $('stChClaim').onclick = function(){
+    if ($('stChClaim')) $('stChClaim').onclick = function(){
       ch.claim = !ch.claim;
       this.textContent = ch.claim ? 'Не буду отвечать' : 'Отвечу я';
       api('/rest/v1/rpc/iva_chat_mark', 'POST', { p_thread: ch.thread, p_state: ch.claim ? 'claim' : 'unclaim' })
@@ -2049,7 +2109,7 @@
     const ta = $('stChTxt');
     ta.oninput = function(){
       ta.style.height = '46px'; ta.style.height = Math.min(Math.max(ta.scrollHeight, 46), 140) + 'px';
-      if (Date.now() - typT > 5000){ typT = Date.now(); api('/rest/v1/rpc/iva_chat_mark', 'POST', { p_thread: ch.thread, p_state: 'typing' }).catch(function(){}); }
+      if (Date.now() - typT > 5000){ typT = Date.now(); mark('typing'); }
     };
     ta.onkeydown = function(e){ if (e.key === 'Enter' && !e.shiftKey && !e.isComposing){ e.preventDefault(); $('stChSend').click(); } };
     /* фото к ответу: сжимается до 1280 px и загружается в хранилище (как у клиента), отправляется вместе с текстом */
@@ -2072,10 +2132,8 @@
       const t = ta.value.trim();
       if (!t && !img) { ta.focus(); return; }
       const btn = this; btn.disabled = true;
-      const p = ch.kind === 't' ? { p_tool: ch.key, p_peer: ch.peer, p_text: t } : { p_point: ch.key, p_peer: ch.peer, p_text: t };
-      if (img) p.p_img = img;
       try {
-        await api('/rest/v1/rpc/' + (ch.kind === 't' ? 'iva_staff_chat_send' : 'iva_staff_point_chat_send'), 'POST', p);
+        await io.send(ch, t, img);
         ta.value = ''; ta.style.height = '46px'; img = ''; draft();
         await stChatPoll(true);
       } catch(e){
@@ -2183,7 +2241,7 @@
   const ST_PT_KEY = 'iva_st_pt', ST_VIEW_KEY = 'iva_st_view';
   let ST_STATS = {}, ST_SD = 7, PUBTOOLS = {};
   try { const v = sessionStorage.getItem(ST_VIEW_KEY); if (/^(tools|orders|chats|stats|add)$/.test(v || '') && ST_VIEW === 'orders') ST_VIEW = v; } catch(e){}
-  function stWorkMode(){ return !isAdmin() && !!STAFF && STAFF.status === 'active'; }
+  function stWorkMode(){ return isAdmin() ? !!(STAFF && STAFF.owner) : !!STAFF && STAFF.status === 'active'; }
   function stCanOrd(){ return !!(STAFF && (STAFF.can_issue || STAFF.can_notify)); }
   /* выбранный пункт: всегда конкретный (форма слева и список справа — для одного пункта); запоминается на устройстве */
   function stPickPt(){
@@ -2228,7 +2286,7 @@
   function stHeadHTML(){
     const ad = A.admin || {};
     const who = esc(A.uname || ad.full_name || 'Сотрудник');
-    const meta = (STAFF.company ? '«' + esc(STAFF.company) + '» · ' : '') + 'сотрудник проката · ' + esc(A.me);
+    const meta = (STAFF.company ? '«' + esc(STAFF.company) + '» · ' : '') + (STAFF.owner ? 'владелец проката · ' : 'сотрудник проката · ') + esc(A.me);
     const pts = stPts();
     const cur = pts.find(function(p){ return String(p.id) === ST_PT; }) || pts[0];
     const sel = pts.length ? '<div class="st-ptsel"><span class="st-ptsel-l" id="stPtSelL">Пункт выдачи</span>' +
@@ -2248,7 +2306,8 @@
       const tel = String(cur.tel || '').replace(/\D/g, ''), open = stOpen(cur), m = [];
       if (open) m.push(open);
       if (tel) m.push('<a href="tel:+' + esc(tel) + '">' + esc(stTel(tel)) + '</a>');
-      m.push('<button type="button" class="st-rights-btn" data-st-rights="1" aria-haspopup="dialog">' + ST_SHIELD + 'Ваши права</button>');   // окно с правами
+      if (STAFF.owner) m.push('<button type="button" class="st-rights-btn" data-ow-pt="' + esc(cur.id) + '" aria-haspopup="dialog">' + ST_SHIELD + 'Изменить пункт</button>');   // владелец: правка пункта
+      else m.push('<button type="button" class="st-rights-btn" data-st-rights="1" aria-haspopup="dialog">' + ST_SHIELD + 'Ваши права</button>');   // окно с правами
       info = '<div class="st-pinfo"><h3>«' + esc(cur.name || 'Пункт') + '»</h3>' +
         (addr ? '<div class="st-pinfo-a" title="' + esc(addr) + '">' + esc(addr) + '</div>' : '') +
         '<div class="st-pinfo-m">' + m.map(function(x){ return '<span class="st-pinfo-i">' + x + '</span>'; }).join('') + '</div></div>';
@@ -2263,6 +2322,11 @@
   /* выбранный пункт — по центру: название, адрес, график, телефон и счётчики */
   /* под шапкой — счётчики выбранного пункта во всю ширину (название, адрес и телефон — в шапке по центру) */
   function stPtCardHTML(cur){
+    if (!cur && STAFF && STAFF.owner) return OW_PT_ERR && OW_PT_ERR !== 'nodb'
+      ? '<div class="empty"><b>Нет связи с сервером</b><p>Пункты выдачи не загрузились.</p><button type="button" class="btn sec sm" data-staff-reload="1">Повторить</button></div>'
+      : '<div class="empty"><b>Пунктов выдачи пока нет</b><p>' + (OW_PT_ERR === 'nodb' ? 'Пункты выдачи заработают после обновления базы (SQL 10.95).' :
+          'Добавьте первый пункт: название, адрес, телефон и график — заявки, инструмент и чаты собираются по пунктам.') + '</p>' +
+        (OW_PT_ERR === 'nodb' ? '' : '<button type="button" class="btn" data-ow-pt="new">+ Добавить пункт выдачи</button>') + '</div>';
     if (!cur) return '<div class="empty"><b>Пункт выдачи не назначен</b><p>Попросите владельца проката добавить вас в пункт выдачи.</p></div>';
     const ord = stCanOrd(), c = stCounts(ord ? stScope() : []), tl = stPtTools(cur.id);
     const st = function(cls, lb, v){ return '<div class="st-pst ' + cls + (v ? ' has' : '') + '"><b>' + v + '</b><span>' + lb + '</span></div>'; };
@@ -2443,7 +2507,8 @@
     const addr = [cur.city, cur.address].filter(Boolean).join(', ');
     return '<div class="st-add-pt"><span>Добавить инструмент в пункт</span><b>«' + esc(cur.name || 'Пункт') + '»</b>' + (addr ? '<small>' + esc(addr) + '</small>' : '') + '</div>' +
       '<div class="st-add-frame" id="stAddFrame"></div>' +
-      '<p class="small muted st-add-note">Новый инструмент появится в каталоге после одобрения владельцем проката.</p>';
+      '<p class="small muted st-add-note">' + (STAFF.owner ? 'Адрес выдачи в объявлении — адрес пункта. Сохраняется как из «Мои объявления».'
+        : 'Новый инструмент появится в каталоге после одобрения владельцем проката.') + '</p>';
   }
   function stAddMount(){
     const box = $('stAddFrame');
@@ -2530,7 +2595,10 @@
       if (r.top < hh) window.scrollBy(0, r.top - hh - 12);
     }
     else if (d.iva === 'emb-toast'){ if (d.m) toast(String(d.m).slice(0, 300)); }
-    else if (d.iva === 'emb-added'){ loadStaff().then(function(){ ST_UPD = Date.now(); stRepaint(); }); }
+    else if (d.iva === 'emb-added'){
+      if (isAdmin()) loadMyTools().then(function(r){ if (Array.isArray(r)) MY = r; }).catch(function(){});   // и «Мои объявления» владельца
+      loadStaff().then(function(){ ST_UPD = Date.now(); stRepaint(); });
+    }
   });
 
   /* ---------- «Статистика»: по выбранному пункту за 7 / 30 / 90 дней — только числа, без денег и данных клиентов ---------- */
@@ -2569,6 +2637,11 @@
   async function stStatsLoad(cur, force){
     if (!cur || !stCanOrd()) return;
     const k = ST_PT + '|' + ST_SD, s = ST_STATS[k];
+    if (STAFF && STAFF.owner){             // владелец: по заявкам проката, которые кабинет уже загрузил (iva_staff_stats — только сотрудникам)
+      ST_STATS[k] = Object.assign(owStats(cur), { at: Date.now() });
+      if (TAB === 'staff' && ST_VIEW === 'stats'){ const b = $('stStats'); if (b) b.innerHTML = stStatsBody(cur); }
+      return;
+    }
     if (s && (s.busy || (!force && Date.now() - s.at < 60000))) return;
     ST_STATS[k] = Object.assign({}, s || {}, { busy: true, at: Date.now() });
     let res;
@@ -2591,6 +2664,8 @@
     const k = function(lb, v, sub, cls){ return '<div class="kpi' + (cls ? ' ' + cls : '') + '"><div class="lb">' + lb + '</div><div class="vl">' + n(v) + '</div><div class="sub">' + sub + '</div></div>'; };
     const per = { 7: 'за 7 дней', 30: 'за 30 дней', 90: 'за 90 дней' }[ST_SD] || 'за период';
     let h = '';
+    if (s.owner) h += '<div class="st-note">Только числа, без денег (доходы и комиссия — во вкладке «Комиссия и оплата» кабинета «Прокат»).' +
+      (s.capped ? ' Считается по последним 150 заявкам проката.' : '') + ' Заявки без пункта учитываются в каждом пункте.</div>';
     if (s.local) h += '<div class="st-note">Сейчас — по заявкам, которые видны во вкладке «Заявки» (активные и закрытые за 7 дней). ' +
       'Полная статистика за 30 и 90 дней и «Мой вклад» появятся, когда владелец площадки обновит базу (SQL 20261125).</div>';
     h += '<div class="st-sh">Заявки ' + per + '</div><div class="kpis st-skpis">' +
@@ -2599,8 +2674,8 @@
     h += '<div class="st-sh">Сейчас</div><div class="kpis st-skpis">' +
       k('В аренде', s.rented_now, 'выдано сейчас') + k('Просрочены', s.late_now, s.late_now ? 'свяжитесь с клиентом' : 'всё в срок', s.late_now ? 'st-k-late' : '') +
       k('Средний срок', s.avg_days == null ? null : String(s.avg_days).replace('.', ','), s.avg_days == null ? 'нет закрытых' : 'суток на аренду') + '</div>';
-    h += '<div class="st-sh">Мой вклад ' + per + '</div>';
-    h += s.local || s.journal === false
+    if (!s.owner) h += '<div class="st-sh">Мой вклад ' + per + '</div>';
+    if (!s.owner) h += s.local || s.journal === false
       ? '<div class="st-note">Кто выдал и кто принял, база запоминает с журнала заявок (SQL 20261101)' + (s.local ? ' — посчитаем после SQL 20261125.' : ' — его в базе пока нет.') + '</div>'
       : '<div class="kpis st-skpis">' + k('Выдал лично', s.my_issued, 'отметки «Выдал»') + k('Принял лично', s.my_returned, 'отметки «Вернули»') + '</div>';
     const dl = Array.isArray(s.daily) ? s.daily : [];
@@ -2683,6 +2758,7 @@
     Object.keys(keep).forEach(function(id){ const el = $(id); if (el) el.scrollTop = keep[id]; });
   }
   function stRender(){
+    if (isAdmin()) owSync();                 // «Работа» владельца — свежие заявки и переписка из кабинета
     const root = $('root'), cur = stPickPt();
     const key = ST_PT + '|' + (STAFF.can_catalog ? 1 : 0);
     const keep = stSideScroll();
@@ -2728,7 +2804,7 @@
     ST_TIMER = setInterval(stTick, 30000);
   }
   async function stTick(){
-    if (ST_BUSY || !STAFF || STAFF.status !== 'active' || $('sheet')) return;
+    if (ST_BUSY || !STAFF || STAFF.owner || isAdmin() || STAFF.status !== 'active' || $('sheet')) return;   // владельца обновляет oTick
     ST_BUSY = true;
     try { await stTick1(); } finally { ST_BUSY = false; }
   }
@@ -2758,6 +2834,653 @@
       }
     }
   }
+  /* ---------- Кабинет владельца проката (просьба владельца 06.11.2026) ----------
+     1) «Работа» владельца — та же страница, что у сотрудника: в «Пункте выдачи» все его пункты, права — все (выдаёт и принимает,
+        добавляет инструмент и одобряет инструмент сотрудников, отвечает в чатах), «Статистика» — только числа, без денег.
+        Данные — то, что кабинет владельца и так читает: заявки (order_parts + iva_order_cards('admin')), свои пункты
+        (iva_pickup_points), свой инструмент (tools + iva_tools_pending), своя переписка (app_messages). Действия — функции владельца:
+        «Выдал» / «Вернули» — те же, что в «Заявках»; одобрение — iva_tool_review / iva_tool_delete_review; ответ — от своего имени.
+     2) «Прокат» (кабинет владельца): слева окно «Сотрудники» — добавить, права и пункты, убрать (iva_staff_list / iva_staff_save /
+        iva_staff_remove / iva_staff_link), справа «Пункты выдачи» — добавить и изменить: название, адрес с подсказками, телефон,
+        график по дням, «Инструменты сотрудников» (таблица iva_pickup_points — как в приложении, IvaPickupPatch).
+     Новых функций и таблиц в базе нет. */
+  let OW_PTS = null, OW_PCOL = { tel: true, pub: true }, OW_PT_ERR = '';
+  let OW_TOOLS = null, OW_MSGS = null, OW_MSG_PT = true, OW_STAFF = null, OW_STAFF_ERR = '';
+  const OW_DAYS = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];
+  const OW_RIGHTS = [
+    ['can_issue', 'Выдаёт и принимает', 'Отмечает «Выдал» и «Вернули» по заявкам своего пункта'],
+    ['can_catalog', 'Выкладывает инструмент', 'Добавляет инструмент в свой пункт'],
+    ['can_chat', 'Отвечает в чате', 'Переписывается с клиентами своего пункта'],
+    ['can_notify', 'Получает уведомления', '«Новая заявка» в своём пункте']
+  ];
+  function owLow(x){ return String(x || '').trim().toLowerCase(); }
+  function owColErr(e){ return /42703|PGRST204|does not exist|Could not find the '?[a-z_]+'? column/i.test(String((e && e.message) || '')); }
+  /* md5 почты клиента — ключ переписки для «кто отвечает» (iva_chat_mark / iva_chat_who: «t:<инструмент>:<md5>») */
+  function owMd5(str){
+    const s = unescape(encodeURIComponent(String(str || '')));
+    const K = [], S = [7, 12, 17, 22, 5, 9, 14, 20, 4, 11, 16, 23, 6, 10, 15, 21];
+    for (let i = 0; i < 64; i++) K[i] = Math.floor(Math.abs(Math.sin(i + 1)) * 4294967296) | 0;
+    const n = ((s.length + 8) >> 6) + 1, w = new Array(n * 16).fill(0);
+    for (let i = 0; i < s.length; i++) w[i >> 2] |= s.charCodeAt(i) << ((i % 4) * 8);
+    w[s.length >> 2] |= 0x80 << ((s.length % 4) * 8);
+    w[n * 16 - 2] = s.length * 8;
+    let a0 = 0x67452301, b0 = 0xefcdab89 | 0, c0 = 0x98badcfe | 0, d0 = 0x10325476;
+    for (let j = 0; j < w.length; j += 16){
+      let a = a0, b = b0, c = c0, d = d0;
+      for (let i = 0; i < 64; i++){
+        const r = i >> 4;
+        let f, g;
+        if (r === 0){ f = (b & c) | (~b & d); g = i; }
+        else if (r === 1){ f = (d & b) | (~d & c); g = (5 * i + 1) % 16; }
+        else if (r === 2){ f = b ^ c ^ d; g = (3 * i + 5) % 16; }
+        else { f = c ^ (b | ~d); g = (7 * i) % 16; }
+        const t = d; d = c; c = b;
+        const x = (a + f + K[i] + w[j + g]) | 0, sh = S[r * 4 + (i % 4)];
+        b = (b + ((x << sh) | (x >>> (32 - sh)))) | 0; a = t;
+      }
+      a0 = (a0 + a) | 0; b0 = (b0 + b) | 0; c0 = (c0 + c) | 0; d0 = (d0 + d) | 0;
+    }
+    return [a0, b0, c0, d0].map(function(v){
+      let h = ''; for (let i = 0; i < 4; i++) h += ((v >>> (i * 8)) & 255).toString(16).padStart(2, '0'); return h;
+    }).join('');
+  }
+
+  /* ---- загрузка ---- */
+  async function owLoadPts(){
+    const base = 'id,name,address,city,lat,lng,open_min,close_min,email,created_at';
+    const tries = [[base + ',tel,staff_publish', true, true], [base + ',tel', true, false], [base, false, false]];
+    for (let i = 0; i < tries.length; i++){
+      try {
+        const r = await api('/rest/v1/iva_pickup_points?select=' + tries[i][0] + '&owner_email=eq.' + encodeURIComponent(owLow(A.me)) +
+          '&order=created_at.asc,id.asc&limit=50');
+        OW_PTS = Array.isArray(r) ? r : []; OW_PCOL = { tel: tries[i][1], pub: tries[i][2] }; OW_PT_ERR = '';
+        return true;
+      } catch(e){
+        if (owColErr(e) && i < tries.length - 1) continue;
+        if (apiMissing(e) || /42P01|PGRST205/i.test(String(e.message || ''))){ OW_PTS = []; OW_PT_ERR = 'nodb'; return true; }
+        OW_PT_ERR = e.message || 'Нет связи с сервером';
+        return false;
+      }
+    }
+    return false;
+  }
+  async function owLoadTools(){
+    const me = encodeURIComponent(owLow(A.me));
+    const sels = ['id,name,price,imgs,img,status,active,point_id,review,cat', 'id,name,price,imgs,img,status,active,point_id,cat'];
+    let rows = null;
+    for (let i = 0; i < sels.length && !rows; i++){
+      try { rows = await api('/rest/v1/tools?select=' + sels[i] + '&owner_email=eq.' + me + '&order=created_at.desc&limit=500') || []; }
+      catch(e){ if (!owColErr(e)) return false; }
+    }
+    if (!rows) return false;
+    let pend = [];
+    try { pend = await api('/rest/v1/rpc/iva_tools_pending', 'POST', {}) || []; } catch(e){}
+    const pm = {};
+    (Array.isArray(pend) ? pend : []).forEach(function(x){ if (x && x.id) pm[String(x.id)] = x; });
+    OW_TOOLS = rows.map(function(t){
+      const p = pm[String(t.id)];
+      return Object.assign({}, t, { edit_state: p ? (p.del ? 'delete' : p.edit ? 'pending' : null) : null, staff_name: p ? (p.staff_name || '') : '' });
+    });
+    return true;
+  }
+  async function owLoadChats(){
+    const me = encodeURIComponent(A.me || '');
+    const F = 'id,from_email,to_email,text,img,audio,is_read,created_at,tool_id';
+    const q = function(f){ return api('/rest/v1/app_messages?select=' + f + '&or=(from_email.eq.' + me + ',to_email.eq.' + me + ')&order=created_at.desc&limit=600'); };
+    let ms;
+    try { ms = await q(F + ',point_id'); OW_MSG_PT = true; }
+    catch(e){
+      if (!owColErr(e)) return false;
+      try { ms = await q(F); OW_MSG_PT = false; } catch(e2){ return false; }
+    }
+    OW_MSGS = Array.isArray(ms) ? ms : [];
+    return true;
+  }
+  async function owLoadStaff(){
+    try {
+      const r = await api('/rest/v1/rpc/iva_staff_list', 'POST', {});
+      OW_STAFF = Array.isArray(r) ? r : []; OW_STAFF_ERR = '';
+      return true;
+    } catch(e){
+      if (apiMissing(e)){ OW_STAFF = []; OW_STAFF_ERR = 'nodb'; return true; }
+      OW_STAFF_ERR = e.message || 'Нет связи с сервером';
+      return false;
+    }
+  }
+  /* «Обновить» в «Работе» владельца (и после «Добавить»): заявки, пункты, инструмент, переписка, сотрудники */
+  async function owLoad(){
+    let ok = true;
+    const r = await Promise.allSettled([oReload(), owLoadPts(), owLoadTools(), owLoadChats(), owLoadStaff()]);
+    if (r[0].status !== 'fulfilled') ok = false;
+    owSync();
+    return ok;
+  }
+  /* имена клиентов — из заявок (почта → имя в заявке), иначе часть почты до «@» */
+  function owNames(){
+    const m = {};
+    ORDERS.forEach(function(p){ const o = p.orders || {}, e = owLow(o.user_email); if (e && o.name && !m[e]) m[e] = String(o.name); });
+    return m;
+  }
+  function owGroup(ms){
+    const me = owLow(A.me), names = owNames(), tools = {}, pts = {}, map = {}, unr = {};
+    (OW_TOOLS || MY || []).forEach(function(t){ tools[String(t.id)] = t; });
+    (OW_PTS || []).forEach(function(p){ pts[String(p.id)] = p; });
+    ms.forEach(function(m){
+      const from = owLow(m.from_email), to = owLow(m.to_email), mine = from === me, peer = mine ? to : from;
+      if (!peer || peer === me) return;
+      const kind = m.tool_id ? 't' : m.point_id ? 'p' : 'g', key = String(m.tool_id || m.point_id || '-');
+      const id = kind + ':' + key + ':' + peer;
+      let c = map[id];
+      if (!c){
+        const t = kind === 't' ? tools[key] : null;
+        const pid = kind === 'p' ? key : (t && t.point_id ? String(t.point_id) : '');
+        c = map[id] = { kind: kind, key: key, peer: peer, client_name: names[peer] || peer.split('@')[0],
+          tool_name: t ? (t.name || 'Инструмент') : (kind === 't' ? 'Инструмент' : ''),
+          tool_img: t ? ((Array.isArray(t.imgs) && t.imgs[0]) || t.img || '') : '',
+          point_id: pid, point_name: pid && pts[pid] ? (pts[pid].name || 'Пункт') : '',
+          last_text: '', last_at: m.created_at, last_mine: mine, unread: 0, _at: -1 };
+      }
+      const at = Date.parse(m.created_at) || 0;
+      if (at >= c._at){ c._at = at; c.last_at = m.created_at; c.last_mine = mine; c.last_text = msgPreview(m); }
+      if (!mine && !m.is_read){ c.unread++; if (!unr[id] || at < unr[id]) unr[id] = at; }
+    });
+    ST_UNR = unr;
+    return Object.keys(map).map(function(k){ return map[k]; }).sort(function(a, b){ return b._at - a._at; });
+  }
+  /* данные владельца → в том виде, в каком их показывает «Работа» сотрудника */
+  function owSync(){
+    if (!isAdmin()) return;
+    const ad = A.admin || {};
+    const pts = (OW_PTS || []).map(function(p){ return Object.assign({}, p); });
+    const pn = {};
+    pts.forEach(function(p){ pn[String(p.id)] = p.name || 'Пункт'; });
+    STAFF = { id: null, owner: true, status: 'active', company: ad.company || ad.full_name || 'Прокат',
+      can_issue: true, can_catalog: true, can_chat: true, can_notify: true, self_issue: true, can_delete: false, points: pts };
+    SCARDS = LCARDS;
+    const week = Date.now() - 7 * 86400000;
+    SPARTS = ORDERS.filter(function(p){ return !p.archived; }).map(function(p){
+      const k = LCARDS ? LCARDS[String(p.id)] : null, kp = k ? k.p : {}, o = p.orders || {}, pt = kp.point || null;
+      const pid = pt && pt.id != null ? String(pt.id) : '';
+      return { part_id: String(p.id), order_id: String(p.order_id || ''), point_id: pid, point_name: pid ? (pt.name || pn[pid] || 'Пункт') : '',
+        tools_text: p.tools_text || kp.tools_text || '', status: p.status || 'new', created_at: p.created_at, rented_at: kp.rented_at || null,
+        days: Number(o.days) || 1, client_name: o.name || (k && k.c && k.c.client_name) || '', client_tel: o.phone || '',
+        get_method: o.get_method || '', comment: o.comment || '', mine: false, can_act: true, _row: p };
+    }).filter(function(x){ return x.status === 'new' || x.status === 'rented' || (Date.parse(x.created_at) || 0) >= week; });
+    STOOLS = OW_TOOLS ? OW_TOOLS.map(function(t){
+      const pid = t.point_id ? String(t.point_id) : '';
+      return Object.assign({}, t, { point_name: pid ? (pn[pid] || 'Пункт') : 'Без пункта', can_delete: false, mine: false });
+    }) : null;
+    STCHATS = OW_MSGS ? owGroup(OW_MSGS) : null;
+  }
+
+  /* ---- «Статистика» владельца: по заявкам проката, только числа ---- */
+  function owStats(cur){
+    const id = String(cur.id), since = Date.now() - ST_SD * 86400000;
+    const inPt = function(p){ const k = LCARDS ? LCARDS[String(p.id)] : null, pt = k && k.p.point; return pt && pt.id != null ? String(pt.id) === id : true; };
+    const list = ORDERS.filter(inPt);
+    const kp = function(p){ const k = LCARDS ? LCARDS[String(p.id)] : null; return k ? k.p : {}; };
+    const inP = function(t){ const ms = Date.parse(t || ''); return !!ms && ms >= since; };
+    const c = stCounts(SPARTS.filter(function(p){ return !p.point_id || p.point_id === id; }));
+    const top = {}, daily = {}, days = [];
+    for (let i = ST_SD - 1; i >= 0; i--){
+      const d = new Date(); d.setHours(0, 0, 0, 0); d.setDate(d.getDate() - i);
+      const k = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+      daily[k] = { d: k, n: 0, i: 0 }; days.push(k);
+    }
+    const dk = function(t){ const d = new Date(Date.parse(t)); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); };
+    let closedN = 0, closedDays = 0;
+    list.forEach(function(p){
+      const st = p.status || 'new', ra = kp(p).rented_at;
+      if (inP(p.created_at)){
+        if (daily[dk(p.created_at)]) daily[dk(p.created_at)].n++;
+        if (st !== 'cancelled') String(p.tools_text || '').split(/\s*,\s*/).filter(Boolean).forEach(function(n){ top[n] = (top[n] || 0) + 1; });
+        if (st === 'closed'){ closedN++; closedDays += Number((p.orders || {}).days) || 1; }
+      }
+      if (inP(ra) && daily[dk(ra)]) daily[dk(ra)].i++;
+    });
+    return {
+      days: ST_SD, owner: true, capped: ORDERS.length >= 150,
+      orders: list.filter(function(p){ return inP(p.created_at); }).length,
+      issued: list.filter(function(p){ return inP(kp(p).rented_at); }).length,
+      returned: list.filter(function(p){ return p.status === 'closed' && inP(p.created_at); }).length,
+      cancelled: list.filter(function(p){ return p.status === 'cancelled' && inP(p.created_at); }).length,
+      rented_now: c.rented, late_now: c.late, avg_days: closedN ? Math.round(closedDays / closedN * 10) / 10 : null,
+      top: Object.keys(top).map(function(k){ return { name: k, n: top[k] }; }).sort(function(a, b){ return b.n - a.n || a.name.localeCompare(b.name, 'ru'); }).slice(0, 5),
+      daily: days.map(function(k){ return daily[k]; })
+    };
+  }
+
+  /* ---- переписка владельца в нижней панели «Работы»: те же вид и «кто отвечает», что у сотрудника ---- */
+  function owChatFlt(ch){
+    if (ch.kind === 't') return '&tool_id=eq.' + encodeURIComponent(ch.key);
+    if (ch.kind === 'p') return '&point_id=eq.' + encodeURIComponent(ch.key);
+    return '&tool_id=is.null' + (OW_MSG_PT ? '&point_id=is.null' : '');
+  }
+  const OW_CHAT_IO = {
+    thread: function(c){ return c.kind === 'g' ? '' : c.kind + ':' + c.key + ':' + owMd5(c.peer); },
+    load: async function(ch){
+      const me = encodeURIComponent(A.me || ''), w = encodeURIComponent(ch.peer);
+      const r = await api('/rest/v1/app_messages?select=id,from_email,to_email,text,img,audio,is_read,created_at,tool_id' +
+        '&or=(and(from_email.eq.' + me + ',to_email.eq.' + w + '),and(from_email.eq.' + w + ',to_email.eq.' + me + '))' + owChatFlt(ch) +
+        '&order=created_at.asc&limit=500') || [];
+      const my = owLow(A.me);
+      return r.map(function(m){ return Object.assign({}, m, { mine: owLow(m.from_email) === my, by_me: false }); });
+    },
+    read: function(ch){
+      return api('/rest/v1/app_messages?to_email=eq.' + encodeURIComponent(A.me || '') + '&from_email=eq.' + encodeURIComponent(ch.peer) +
+        '&is_read=eq.false' + owChatFlt(ch), 'PATCH', { is_read: true }, { Prefer: 'return=minimal' });
+    },
+    send: function(ch, text, img){
+      const row = { from_email: A.me, to_email: ch.peer, text: text || '', img: img || '', audio: '', audio_dur: 0 };
+      if (ch.kind === 't') row.tool_id = ch.key;
+      if (ch.kind === 'p') row.point_id = ch.key;
+      return api('/rest/v1/app_messages', 'POST', row, { Prefer: 'return=minimal' });
+    },
+    reload: async function(){ await owLoadChats(); owSync(); }
+  };
+
+  /* ---- одобрение инструмента сотрудников (как «На одобрении» в приложении) ---- */
+  async function owToolReview(id, ok, kind){
+    const fn = kind === 'delete' ? 'iva_tool_delete_review' : 'iva_tool_review';
+    await api('/rest/v1/rpc/' + fn, 'POST', { p_id: id, p_ok: !!ok });
+  }
+
+  /* ---- «Прокат»: окна «Сотрудники» (слева) и «Пункты выдачи» (справа) ---- */
+  function owPtName(id){ const p = (OW_PTS || []).find(function(x){ return String(x.id) === String(id); }); return p ? (p.name || 'Пункт') : ''; }
+  function owStaffSt(s){ return s.status === 'active' ? 'Работает' : s.status === 'declined' ? 'Отказался' : 'Ждёт ответа'; }
+  function owRightsTxt(s){
+    const r = OW_RIGHTS.filter(function(x){ return s[x[0]]; }).map(function(x){ return x[1]; });
+    return r.length ? r.join(' · ') : 'Без прав';
+  }
+  function owHM(m){ m = Number(m); return String(Math.floor(m / 60)).padStart(2, '0') + ':' + String(m % 60).padStart(2, '0'); }
+  /* «Пн–Пт 09:00–19:00 · Сб 10:00–16:00 · Вс выходной» — подряд идущие одинаковые дни вместе (как в приложении) */
+  function owHoursTxt(o, c){
+    if (!Array.isArray(o) || !Array.isArray(c) || o.length !== 7 || c.length !== 7) return '';
+    const v = o.map(function(x, i){ return Number(x) < 0 ? 'выходной' : owHM(x) + '–' + owHM(c[i]); });
+    const out = [];
+    for (let i = 0; i < 7;){
+      let j = i; while (j + 1 < 7 && v[j + 1] === v[i]) j++;
+      out.push((i === j ? OW_DAYS[i] : OW_DAYS[i] + '–' + OW_DAYS[j]) + ' ' + v[i]);
+      i = j + 1;
+    }
+    return out.join(' · ');
+  }
+  function owSideScroll(){
+    const r = {};
+    ['prStaffList', 'prPtList'].forEach(function(id){ const el = $(id); if (el) r[id] = el.scrollTop; });
+    return r;
+  }
+  function prStaffColHTML(){
+    const list = OW_STAFF || [], nodb = OW_STAFF_ERR === 'nodb' || OW_PT_ERR === 'nodb';
+    let h = '<div class="cats-head st-side-h"><h2 id="prStaffTitle">Сотрудники</h2>' + (OW_STAFF && !nodb ? '<span class="st-side-c">' + list.length + '</span>' : '') +
+      (!nodb && OW_STAFF ? '<button type="button" class="btn sec sm pr-add" data-ow-staff="new">+ Добавить</button>' : '') + '</div><div class="st-side-card">';
+    if (nodb) return h + '<p class="small muted st-side-e">Сотрудники заработают после обновления базы (SQL 10.103).</p></div>';
+    if (!OW_STAFF) return h + '<p class="small muted st-side-e">' + (OW_STAFF_ERR ? 'Список не загрузился. <button type="button" class="st-link" data-ow-reload="1">Повторить</button>' : 'Загружаем…') + '</p></div>';
+    const n = function(st){ return list.filter(function(s){ return s.status === st; }).length; };
+    h += '<div class="st-side-lg"><span class="g">Работают ' + n('active') + '</span><span class="y">Ждут ответа ' + n('invited') + '</span>' +
+      (n('declined') ? '<span>Отказались ' + n('declined') + '</span>' : '') + '</div>';
+    if (!list.length) return h + '<p class="small muted st-side-e">Сотрудников пока нет. «+ Добавить» — почта, имя, права и пункты; человек увидит приглашение, когда войдёт в «Иву» под этой почтой.</p></div>';
+    const ord = { active: 0, invited: 1, declined: 2 };
+    return h + '<div class="st-slist" id="prStaffList">' + list.slice().sort(function(a, b){
+      return (ord[a.status] || 0) - (ord[b.status] || 0) || String(a.name || '').localeCompare(String(b.name || ''), 'ru');
+    }).map(function(s){
+      const c = s.status === 'active' ? 'g' : s.status === 'invited' ? 'y' : 'n';
+      const pts = (s.point_ids || []).map(owPtName).filter(Boolean);
+      return '<button type="button" class="st-si c-' + c + '" data-ow-staff="' + esc(s.id) + '">' +
+        '<span class="st-si-t"><b>' + esc(s.name || s.email) + '</b><small>' + esc(owStaffSt(s)) + '</small></span>' +
+        '<span class="st-si-s">' + esc(pts.join(', ') || 'без пункта') + '</span>' +
+        '<span class="st-si-l">' + esc(owRightsTxt(s)) + '</span>' +
+      '</button>';
+    }).join('') + '</div></div>';
+  }
+  function owOpenTxt(p){
+    if (!Array.isArray(p.open_min) || !Array.isArray(p.close_min)) return '';
+    const d = new Date(), i = (d.getDay() + 6) % 7, m = d.getHours() * 60 + d.getMinutes(), o = Number(p.open_min[i]), c = Number(p.close_min[i]);
+    if (o < 0) return 'сегодня выходной';
+    return m >= o && m < c ? 'открыт до ' + owHM(c) : m < o ? 'откроется в ' + owHM(o) : 'закрыт';
+  }
+  function prPtColHTML(){
+    const list = OW_PTS || [], nodb = OW_PT_ERR === 'nodb';
+    let h = '<div class="cats-head st-side-h"><h2 id="prPtTitle">Пункты выдачи</h2>' + (OW_PTS && !nodb ? '<span class="st-side-c">' + list.length + '</span>' : '') +
+      (!nodb && OW_PTS && list.length < 20 ? '<button type="button" class="btn sec sm pr-add" data-ow-pt="new">+ Добавить</button>' : '') + '</div><div class="st-side-card">';
+    if (nodb) return h + '<p class="small muted st-side-e">Пункты выдачи заработают после обновления базы (SQL 10.95).</p></div>';
+    if (!OW_PTS) return h + '<p class="small muted st-side-e">' + (OW_PT_ERR ? 'Список не загрузился. <button type="button" class="st-link" data-ow-reload="1">Повторить</button>' : 'Загружаем…') + '</p></div>';
+    if (!list.length) return h + '<p class="small muted st-side-e">Пунктов пока нет. «+ Добавить» — название, адрес, телефон и график; инструмент и заявки распределяются по пунктам.</p></div>';
+    const sc = {}, tc = {};
+    (OW_STAFF || []).forEach(function(s){ (s.point_ids || []).forEach(function(id){ sc[id] = (sc[id] || 0) + 1; }); });
+    (OW_TOOLS || []).forEach(function(t){ if (t.point_id) tc[t.point_id] = (tc[t.point_id] || 0) + 1; });
+    return h + '<div class="st-slist" id="prPtList">' + list.map(function(p, i){
+      const op = owOpenTxt(p), c = /^открыт/.test(op) ? 'g' : 'n';
+      const tel = String(p.tel || '').replace(/\D/g, '');
+      return '<button type="button" class="st-si c-' + c + '" data-ow-pt="' + esc(p.id) + '">' +
+        '<span class="st-si-t"><b>' + esc(p.name || 'Пункт') + '</b><small>' + esc(i === 0 && list.length > 1 ? 'первый · ' + op : op) + '</small></span>' +
+        '<span class="st-si-s">' + esc([p.city && String(p.address || '').indexOf(p.city) < 0 ? p.city : '', p.address].filter(Boolean).join(', ')) + '</span>' +
+        '<span class="st-si-l">' + esc([tel ? stTel(tel) : 'телефон не указан', 'сотрудников ' + (sc[p.id] || 0), 'инструмента ' + (tc[p.id] || 0)].join(' · ')) + '</span>' +
+      '</button>';
+    }).join('') + '</div></div>';
+  }
+  function prSidePaint(keep){
+    const a = $('prStaffCol'), b = $('prPtCol');
+    if (!a || !b) return;
+    keep = keep || owSideScroll();
+    a.innerHTML = prStaffColHTML();
+    b.innerHTML = prPtColHTML();
+    Object.keys(keep).forEach(function(id){ const el = $(id); if (el) el.scrollTop = keep[id]; });
+  }
+  /* кабинет «Прокат»: основное — как было, по бокам — окна «Сотрудники» и «Пункты выдачи» (раскладка «Работы») */
+  function prRender(inner){
+    const root = $('root'), keep = owSideScroll();
+    root.className = 'wrap catalog-wide';
+    root.innerHTML = '<div class="st-layout pr-layout" id="stLayout" data-key="pr">' +
+      '<section class="st-main pr-main" id="prMain">' + shell(inner) + '</section>' +
+      '<div class="st-side" id="prSide">' +
+        '<aside class="st-scol st-ocol" id="prStaffCol" aria-labelledby="prStaffTitle"></aside>' +
+        '<aside class="st-scol st-ccol" id="prPtCol" aria-labelledby="prPtTitle"></aside>' +
+      '</div></div>';
+    stTopVar();
+    prSidePaint(keep);
+  }
+  /* после правки сотрудника или пункта — перечитать и перерисовать окна (и «Работу», если открыта) */
+  async function owAfter(what){
+    await Promise.allSettled(what === 'pt' ? [owLoadPts(), owLoadStaff(), owLoadTools()] : [owLoadStaff()]);
+    owSync();
+    if (TAB === 'staff') stRepaint(); else prSidePaint();
+  }
+  function owWin(title, body, foot, wide){
+    openSheet(title, body, foot);
+    const sh = $('sheet');
+    if (!sh) return null;
+    sh.classList.add('st-rsheet', 'ow-sheet');
+    if (wide) sh.classList.add('ow-wide');
+    sh.setAttribute('role', 'dialog'); sh.setAttribute('aria-modal', 'true'); sh.setAttribute('aria-label', title);
+    return sh;
+  }
+  function owErr(id, msg){ const e = $(id); if (!e) return; e.textContent = msg || ''; e.classList.toggle('show', !!msg); if (msg) e.scrollIntoView({ block: 'nearest' }); }
+  function owDbMsg(e){
+    const m = String((e && e.message) || e || '');
+    if (/23503|foreign key|violates/i.test(m)) return 'В этом пункте есть инструмент — сначала перенесите его в другой пункт или удалите.';
+    if (/iva_pickup_hours|check constraint/i.test(m)) return 'Проверьте график: открытие раньше закрытия, хотя бы один рабочий день.';
+    if (/Failed to fetch|NetworkError|Нет связи/i.test(m)) return 'Нет связи с сервером — попробуйте ещё раз.';
+    return m || 'Не удалось сохранить';
+  }
+
+  /* сотрудник: форма как в приложении (IvaStaffPatch): почта (у нового), имя, телефон, наборы «Выдача» / «Каталог», четыре права,
+     «Может удалять инструмент — с вашего одобрения», «Может выдавать заявки самому себе», пункты (если их два и больше) */
+  function owStaffSheet(id, prePoint){
+    const pts = OW_PTS || [];
+    if (!pts.length){ toast('Сначала добавьте пункт выдачи — окно «Пункты выдачи» справа'); return; }
+    const isNew = id === 'new';
+    const s = isNew ? { name: '', email: '', tel: '', status: 'invited', point_ids: prePoint ? [prePoint] : (pts.length === 1 ? [pts[0].id] : []),
+      can_issue: true, can_chat: true, can_notify: true, can_catalog: false, can_delete: false, self_issue: false }
+      : (OW_STAFF || []).find(function(x){ return String(x.id) === String(id); });
+    if (!s) return;
+    const sel = (s.point_ids || []).map(String);
+    const chk = function(key, title, sub, on, dis){
+      return '<label class="chk ow-chk' + (dis ? ' dis' : '') + '"><input type="checkbox" data-ow-r="' + key + '"' + (on ? ' checked' : '') + (dis ? ' disabled' : '') + '>' +
+        '<span><b>' + esc(title) + '</b><small>' + esc(sub) + '</small></span></label>';
+    };
+    const body = '<form class="ow-form" id="owSf" novalidate>' +
+      (isNew
+        ? '<div class="sw-fld"><label class="sw-l" for="owSfEmail">Почта сотрудника</label><input class="inp" id="owSfEmail" type="email" maxlength="254" autocomplete="off" placeholder="ivan@mail.ru">' +
+          '<div class="ow-hint">Под этой почтой он входит в «Иву» и там увидит приглашение «Принять / Отказаться».</div></div>'
+        : '<div class="ow-who"><span class="small muted">' + esc(s.email) + '</span><span class="ow-st ow-st-' + esc(s.status) + '">' + esc(owStaffSt(s)) + '</span></div>') +
+      '<div class="sw-fld"><label class="sw-l" for="owSfName">Имя и фамилия</label><input class="inp" id="owSfName" maxlength="80" autocomplete="off" value="' + esc(s.name || '') + '" placeholder="Иван Петров"></div>' +
+      '<div class="sw-fld"><label class="sw-l" for="owSfTel">Телефон <span class="muted">— необязательно</span></label><input class="inp" id="owSfTel" type="tel" maxlength="30" autocomplete="off" value="' + esc(s.tel || '') + '" placeholder="+7 900 123-45-67">' +
+        '<div class="ow-hint">Клиенты имён и телефонов сотрудников не видят — только телефон пункта.</div></div>' +
+      '<div class="sw-l">Права — можно выбрать оба набора или отметить по одному</div>' +
+      '<div class="chips ow-sets"><button type="button" class="chip" data-ow-set="issue">Выдача</button><button type="button" class="chip" data-ow-set="catalog">Каталог</button></div>' +
+      OW_RIGHTS.map(function(r){ return chk(r[0], r[1], r[2], !!s[r[0]]); }).join('') +
+      chk('can_delete', 'Может удалять инструмент — с вашего одобрения', s.can_catalog ? 'У инструментов его пункта появится «Удалить»; уберётся из каталога, только когда вы одобрите.' : 'Сначала включите «Выкладывает инструмент» — удалять можно только вместе с ним', !!s.can_delete && !!s.can_catalog, !s.can_catalog) +
+      chk('self_issue', 'Может выдавать заявки самому себе', 'Если сотрудник сам берёт инструмент в аренду. Выключено — «Выдал» и «Вернули» по его заявке отмечает другой', !!s.self_issue) +
+      (pts.length > 1
+        ? '<div class="sw-l ow-gap">Пункты выдачи</div>' + pts.map(function(p){
+            return '<label class="chk"><input type="checkbox" data-ow-p="' + esc(p.id) + '"' + (sel.indexOf(String(p.id)) >= 0 ? ' checked' : '') + '><span>' + esc(p.name || 'Пункт') +
+              (p.address ? ' <small class="muted">' + esc(p.address) + '</small>' : '') + '</span></label>';
+          }).join('')
+        : '<div class="ow-hint ow-gap">Пункт выдачи: «' + esc(pts[0].name || 'Пункт') + '»</div>') +
+      '<div class="sw-err" id="owSfErr" role="alert"></div>' +
+      '</form>';
+    const foot = (isNew ? '' : '<button type="button" class="btn sec" id="owSfDel">Убрать из сотрудников</button>') +
+      '<button type="button" class="btn" id="owSfSave" style="margin-left:auto">' + (isNew ? 'Пригласить' : 'Сохранить') + '</button>';
+    const sh = owWin(isNew ? 'Новый сотрудник' : (s.name || 'Сотрудник'), body, foot);
+    if (!sh) return;
+    const box = $('owSf');
+    const R = function(k){ const el = box.querySelector('[data-ow-r="' + k + '"]'); return !!(el && el.checked); };
+    const setR = function(k, v){ const el = box.querySelector('[data-ow-r="' + k + '"]'); if (el && !el.disabled) el.checked = !!v; };
+    const paintSets = function(){
+      const iss = R('can_issue') && R('can_chat') && R('can_notify'), cat = R('can_catalog');
+      box.querySelectorAll('[data-ow-set]').forEach(function(b){
+        const on = b.getAttribute('data-ow-set') === 'issue' ? iss : cat;
+        b.classList.toggle('on', on); b.setAttribute('aria-pressed', String(on));
+      });
+      const del = box.querySelector('[data-ow-r="can_delete"]');
+      if (del){
+        del.disabled = !cat; if (!cat) del.checked = false;
+        del.closest('label').classList.toggle('dis', !cat);
+        del.closest('label').querySelector('small').textContent = cat ? 'У инструментов его пункта появится «Удалить»; уберётся из каталога, только когда вы одобрите.'
+          : 'Сначала включите «Выкладывает инструмент» — удалять можно только вместе с ним';
+      }
+    };
+    paintSets();
+    box.addEventListener('change', paintSets);
+    box.addEventListener('submit', function(e){ e.preventDefault(); $('owSfSave').click(); });
+    box.querySelectorAll('[data-ow-set]').forEach(function(b){
+      b.onclick = function(){
+        const issue = b.getAttribute('data-ow-set') === 'issue', on = !b.classList.contains('on');
+        if (issue){ setR('can_issue', on); setR('can_chat', on); setR('can_notify', on); }
+        else setR('can_catalog', on);
+        paintSets();
+      };
+    });
+    const f = isNew ? $('owSfEmail') : $('owSfName'); if (f) f.focus();
+    $('owSfSave').onclick = async function(){
+      const email = isNew ? owLow($('owSfEmail').value) : s.email;
+      const name = $('owSfName').value.trim().replace(/\s+/g, ' '), tel = $('owSfTel').value.trim();
+      const pids = pts.length > 1 ? Array.prototype.map.call(box.querySelectorAll('[data-ow-p]:checked'), function(x){ return x.getAttribute('data-ow-p'); }) : [String(pts[0].id)];
+      let err = '';
+      if (isNew && !/^[^@\s]+@[^@\s]+\.[^@\s]{2,}$/.test(email)) err = 'Похоже, в почте ошибка (пример: ivan@mail.ru)';
+      else if (isNew && email === owLow(A.me)) err = 'Это ваша почта — владельца проката добавлять не нужно';
+      else if (!name || name.length > 80) err = 'Укажите имя сотрудника (до 80 символов)';
+      else if (tel && (!/^\+?[0-9() .-]+$/.test(tel) || tel.replace(/\D/g, '').length < 10 || tel.replace(/\D/g, '').length > 15)) err = 'Проверьте телефон: 10–15 цифр, например +7 900 123-45-67';
+      else if (!(R('can_issue') || R('can_catalog') || R('can_chat') || R('can_notify'))) err = 'Отметьте хотя бы одно право';
+      else if (!pids.length) err = 'Отметьте хотя бы один пункт выдачи';
+      owErr('owSfErr', err);
+      if (err) return;
+      const btn = this; btn.disabled = true; btn.textContent = '…';
+      const p = { p_id: isNew ? null : s.id, p_email: email, p_name: name, p_tel: tel, p_points: pids,
+        p_issue: R('can_issue'), p_catalog: R('can_catalog'), p_chat: R('can_chat'), p_notify: R('can_notify'), p_self: R('self_issue'), p_delete: R('can_delete') };
+      try {
+        try { await api('/rest/v1/rpc/iva_staff_save', 'POST', p); }
+        catch(e){ if (!apiMissing(e)) throw e; delete p.p_delete; await api('/rest/v1/rpc/iva_staff_save', 'POST', p); }   // база до SQL 10.122
+        closeSheet();
+        toast(isNew ? 'Приглашение отправлено: «' + name + '» увидит его в «Иве»' : 'Сохранено');
+        await owAfter('staff');
+      } catch(e){
+        btn.disabled = false; btn.textContent = isNew ? 'Пригласить' : 'Сохранить';
+        owErr('owSfErr', owDbMsg(e));
+      }
+    };
+    if ($('owSfDel')) $('owSfDel').onclick = function(){
+      askSheet('Убрать «' + (s.name || s.email) + '» из сотрудников?',
+        '<div class="st-ask"><p>Доступ к пунктам пропадёт сразу. Пригласить снова можно в любой момент.</p></div>', 'Убрать').then(async function(yes){
+        if (!yes){ owStaffSheet(id); return; }
+        try { await api('/rest/v1/rpc/iva_staff_remove', 'POST', { p_id: s.id }); toast('«' + (s.name || s.email) + '» больше не сотрудник'); }
+        catch(e){ toast('Не удалось: ' + owDbMsg(e)); }
+        await owAfter('staff');
+      });
+    };
+  }
+
+  /* пункт выдачи: форма как в приложении (IvaPickupPatch): название, адрес (подсказки), телефон, график Пн…Вс, «Инструменты сотрудников»;
+     внизу — сотрудники пункта («Убрать из пункта» — из последнего пункта человек перестаёт быть сотрудником) */
+  function owPtSheet(id){
+    const pts = OW_PTS || [], isNew = id === 'new';
+    if (isNew && pts.length >= 20){ toast('Не больше 20 пунктов выдачи'); return; }
+    const p = isNew ? { name: pts.length ? '' : 'Основной пункт', address: '', city: '', lat: null, lng: null, tel: '', staff_publish: 'approve',
+      open_min: [540, 540, 540, 540, 540, 540, 540], close_min: [1140, 1140, 1140, 1140, 1140, 1140, 1140] }
+      : pts.find(function(x){ return String(x.id) === String(id); });
+    if (!p) return;
+    const geo = { lat: p.lat, lng: p.lng, city: p.city || '' };
+    const op = Array.isArray(p.open_min) && p.open_min.length === 7 ? p.open_min : [540, 540, 540, 540, 540, 540, 540];
+    const cl = Array.isArray(p.close_min) && p.close_min.length === 7 ? p.close_min : [1140, 1140, 1140, 1140, 1140, 1140, 1140];
+    const staff = isNew ? [] : (OW_STAFF || []).filter(function(s){ return (s.point_ids || []).map(String).indexOf(String(p.id)) >= 0; });
+    const body = '<form class="ow-form" id="owPf" novalidate data-point="' + esc(isNew ? 'new' : p.id) + '">' +
+      '<div class="sw-fld"><label class="sw-l" for="owPfName">Название</label><input class="inp" id="owPfName" maxlength="80" autocomplete="off" value="' + esc(p.name || '') + '" placeholder="Например: Склад на Маресьева"></div>' +
+      '<div class="sw-fld"><label class="sw-l" for="owPfAddr">Адрес</label><input class="inp" id="owPfAddr" name="point-address" maxlength="300" value="' + esc(p.address || '') + '" placeholder="Новочеркасск, ул. Маресьева, д. 36">' +
+        '<input type="hidden" name="point-city" id="owPfCity" value="' + esc(p.city || '') + '">' +
+        '<div class="ow-hint">Полный адрес: город, улица, дом. Выберите подсказку — тогда и расстояние до клиента посчитается точно.</div></div>' +
+      (OW_PCOL.tel ? '<div class="sw-fld"><label class="sw-l" for="owPfTel">Телефон пункта выдачи <span class="muted">— необязательно</span></label><input class="inp" id="owPfTel" type="tel" maxlength="30" value="' + esc(p.tel || '') + '" placeholder="+7 900 123-45-67">' +
+        '<div class="ow-hint">Клиенты видят его в карточке инструмента. Пусто — звонки идут на ваш номер.</div></div>' : '') +
+      '<div class="sw-l">График</div><div class="ow-hours">' + OW_DAYS.map(function(d, i){
+        const on = Number(op[i]) >= 0;
+        return '<div class="ow-hr' + (on ? '' : ' off') + '" data-ow-d="' + i + '"><b>' + d + '</b>' +
+          '<input class="inp" type="time" step="300" aria-label="' + d + ': открытие" data-ow-o value="' + (on ? owHM(op[i]) : '09:00') + '"' + (on ? '' : ' disabled') + '>' +
+          '<span class="muted">–</span>' +
+          '<input class="inp" type="time" step="300" aria-label="' + d + ': закрытие" data-ow-c value="' + (on ? owHM(cl[i]) : '19:00') + '"' + (on ? '' : ' disabled') + '>' +
+          '<label class="chk"><input type="checkbox" data-ow-w' + (on ? ' checked' : '') + '><span>рабочий</span></label></div>';
+      }).join('') + '</div>' +
+      (OW_PCOL.pub ? '<label class="chk ow-chk ow-gap"><input type="checkbox" id="owPfPub"' + (p.staff_publish === 'now' ? ' checked' : '') + '>' +
+        '<span><b>Инструменты сотрудников — сразу, без одобрения</b><small>Выключено — новый инструмент сотрудников этого пункта появится в каталоге после вашего одобрения.</small></span></label>' : '') +
+      (!isNew ? '<div class="sw-l ow-gap">Сотрудники пункта · ' + staff.length + '</div>' +
+        (staff.length ? '<div class="ow-pstaff">' + staff.map(function(s){
+          return '<div class="ow-ps"><span><b>' + esc(s.name || s.email) + '</b><small>' + esc(owStaffSt(s) + ' · ' + owRightsTxt(s)) + '</small></span>' +
+            '<button type="button" class="btn sec sm" data-ow-unlink="' + esc(s.id) + '">Убрать из пункта</button></div>';
+        }).join('') + '</div>' : '<div class="ow-hint">В этом пункте сотрудников нет.</div>') +
+        '<button type="button" class="btn sec sm ow-gap" data-ow-staff-in="' + esc(p.id) + '">+ Добавить сотрудника в пункт</button>' : '') +
+      '<div class="sw-err" id="owPfErr" role="alert"></div>' +
+      '</form>';
+    const foot = (isNew ? '' : '<button type="button" class="btn sec" id="owPfDel">Удалить пункт</button>') +
+      '<button type="button" class="btn" id="owPfSave" style="margin-left:auto">' + (isNew ? 'Добавить пункт' : 'Сохранить') + '</button>';
+    const sh = owWin(isNew ? 'Новый пункт выдачи' : '«' + (p.name || 'Пункт') + '»', body, foot, true);
+    if (!sh) return;
+    const box = $('owPf'), addr = $('owPfAddr');
+    if (window.IvaGeo && typeof IvaGeo.attach === 'function') IvaGeo.attach(addr, 'address');
+    addr.addEventListener('input', function(){ geo.lat = null; geo.lng = null; geo.city = ''; });
+    addr.addEventListener('geo:select', function(e){
+      const r = (e && e.detail) || {}, co = Array.isArray(r.coordinates) ? r.coordinates : null;
+      geo.city = r.city || ''; geo.lat = co ? Number(co[1]) : null; geo.lng = co ? Number(co[0]) : null;
+    });
+    box.querySelectorAll('[data-ow-w]').forEach(function(w){
+      w.onchange = function(){
+        const row = w.closest('.ow-hr');
+        row.classList.toggle('off', !w.checked);
+        row.querySelectorAll('input[type=time]').forEach(function(t){ t.disabled = !w.checked; });
+      };
+    });
+    box.addEventListener('submit', function(e){ e.preventDefault(); $('owPfSave').click(); });
+    $('owPfName').focus();
+    box.querySelectorAll('[data-ow-unlink]').forEach(function(b){
+      b.onclick = function(){
+        const s = staff.find(function(x){ return String(x.id) === b.getAttribute('data-ow-unlink'); });
+        if (!s) return;
+        const others = (s.point_ids || []).filter(function(x){ return String(x) !== String(p.id); });
+        askSheet('Убрать «' + (s.name || s.email) + '» из пункта «' + (p.name || 'Пункт') + '»?',
+          '<div class="st-ask"><p>' + (others.length
+            ? 'В других пунктах (' + esc(others.map(owPtName).filter(Boolean).join(', ')) + ') он останется, права — прежние.'
+            : 'Это его единственный пункт — «' + esc(s.name || s.email) + '» перестанет быть сотрудником, доступ пропадёт сразу. Пригласить снова можно в любой момент.') + '</p></div>', 'Убрать').then(async function(yes){
+          if (!yes){ owPtSheet(p.id); return; }
+          try {
+            try { await api('/rest/v1/rpc/iva_staff_link', 'POST', { p_id: s.id, p_point: p.id, p_on: false }); }
+            catch(e){
+              if (!apiMissing(e)) throw e;   // база до SQL 10.115 — как приложение: пересохранить без этого пункта или убрать
+              if (others.length) await api('/rest/v1/rpc/iva_staff_save', 'POST', { p_id: s.id, p_email: s.email, p_name: s.name, p_tel: s.tel || '', p_points: others,
+                p_issue: !!s.can_issue, p_catalog: !!s.can_catalog, p_chat: !!s.can_chat, p_notify: !!s.can_notify, p_self: !!s.self_issue });
+              else await api('/rest/v1/rpc/iva_staff_remove', 'POST', { p_id: s.id });
+            }
+            toast(others.length ? 'Убран из пункта «' + (p.name || 'Пункт') + '»' : '«' + (s.name || s.email) + '» больше не сотрудник');
+          } catch(e){ toast('Не удалось: ' + owDbMsg(e)); }
+          await owAfter('pt');
+          owPtSheet(p.id);
+        });
+      };
+    });
+    $('owPfSave').onclick = async function(){
+      const name = $('owPfName').value.trim().replace(/\s+/g, ' '), address = addr.value.trim().replace(/\s+/g, ' ');
+      const tel = $('owPfTel') ? $('owPfTel').value.trim() : '';
+      const o = [], c = [];
+      let err = '';
+      box.querySelectorAll('.ow-hr').forEach(function(row){
+        const on = row.querySelector('[data-ow-w]').checked;
+        if (!on){ o.push(-1); c.push(-1); return; }
+        const tm = function(sel){ const v = row.querySelector(sel).value, m = /^(\d\d):(\d\d)/.exec(v || ''); return m ? Number(m[1]) * 60 + Number(m[2]) : NaN; };
+        const a = tm('[data-ow-o]'), b = tm('[data-ow-c]');
+        if (isNaN(a) || isNaN(b) || a >= b) err = err || OW_DAYS[Number(row.getAttribute('data-ow-d'))] + ': время открытия должно быть раньше закрытия';
+        o.push(a); c.push(Math.min(b, 1439));
+      });
+      if (!name) err = 'Введите название пункта';
+      else if (name.length > 80) err = 'Название — не длиннее 80 символов';
+      else if (address.length < 5) err = 'Введите полный адрес: город, улица, дом';
+      else if (address.length > 300) err = 'Адрес — не длиннее 300 символов';
+      else if (tel && (!/^\+?[0-9() .-]+$/.test(tel) || tel.replace(/\D/g, '').length < 10 || tel.replace(/\D/g, '').length > 15)) err = 'Проверьте номер: 10–15 цифр, например +7 900 123-45-67';
+      else if (!err && o.every(function(x){ return x < 0; })) err = 'Отметьте хотя бы один рабочий день';
+      owErr('owPfErr', err);
+      if (err) return;
+      const city = geo.city || (window.IvaGeo && IvaGeo.addressCity ? IvaGeo.addressCity(address) : '') || (address === p.address ? p.city || '' : '');
+      const keepGeo = address === (p.address || '') && geo.lat == null && p.lat != null;
+      const row = { name: name, address: address, city: city || '', lat: keepGeo ? p.lat : geo.lat, lng: keepGeo ? p.lng : geo.lng, open_min: o, close_min: c };
+      if (row.lat == null || row.lng == null || isNaN(row.lat) || isNaN(row.lng)){ row.lat = null; row.lng = null; }
+      if (OW_PCOL.tel) row.tel = tel;
+      if (OW_PCOL.pub) row.staff_publish = $('owPfPub') && $('owPfPub').checked ? 'now' : 'approve';
+      else row.email = p.email || owLow(A.me);          // база до SQL 10.113: email пункта обязателен — как приложение, свой
+      const btn = this; btn.disabled = true; btn.textContent = '…';
+      try {
+        const r = isNew ? await api('/rest/v1/iva_pickup_points', 'POST', row, { Prefer: 'return=representation' })
+                        : await api('/rest/v1/iva_pickup_points?id=eq.' + encodeURIComponent(p.id), 'PATCH', row, { Prefer: 'return=representation' });
+        if (!Array.isArray(r) || !r.length) throw new Error('Пункт не найден или доступ к нему изменился — обновите страницу');
+        closeSheet();
+        toast(isNew ? 'Пункт «' + name + '» добавлен' : 'Пункт «' + name + '» сохранён');
+        await owAfter('pt');
+      } catch(e){
+        btn.disabled = false; btn.textContent = isNew ? 'Добавить пункт' : 'Сохранить';
+        owErr('owPfErr', owDbMsg(e));
+      }
+    };
+    if ($('owPfDel')) $('owPfDel').onclick = function(){
+      const first = pts.length > 1 && String(pts[0].id) === String(p.id);
+      askSheet('Удалить пункт «' + (p.name || 'Пункт') + '»?', '<div class="st-ask"><p>' +
+          [first ? 'Это первый пункт — «Срок аренды» станет считаться по графику следующего.' : '',
+           staff.length ? 'Сотрудники этого пункта потеряют к нему доступ.' : '',
+           'Пункт с инструментом удалить нельзя — сначала перенесите инструмент.'].filter(Boolean).join(' ') + '</p></div>', 'Удалить').then(async function(yes){
+        if (!yes){ owPtSheet(p.id); return; }
+        try {
+          await api('/rest/v1/iva_pickup_points?id=eq.' + encodeURIComponent(p.id), 'DELETE', null, { Prefer: 'return=minimal' });
+          toast('Пункт удалён');
+        } catch(e){ toast(owDbMsg(e)); }
+        await owAfter('pt');
+      });
+    };
+  }
+  document.addEventListener('click', function(e){
+    const t = e.target && e.target.closest ? e.target : null;
+    if (!t || !isAdmin()) return;
+    const sf = t.closest('[data-ow-staff]');
+    if (sf){ owStaffSheet(sf.getAttribute('data-ow-staff')); return; }
+    const si = t.closest('[data-ow-staff-in]');
+    if (si){ owStaffSheet('new', si.getAttribute('data-ow-staff-in')); return; }
+    const pf = t.closest('[data-ow-pt]');
+    if (pf){ owPtSheet(pf.getAttribute('data-ow-pt')); return; }
+    if (t.closest('[data-ow-reload]')){
+      Promise.allSettled([owLoadPts(), owLoadStaff(), owLoadTools()]).then(function(){ owSync(); if (TAB === 'staff') stRepaint(); else prSidePaint(); });
+      return;
+    }
+    const tr = t.closest('[data-ow-trev]');
+    if (tr){
+      const tid = tr.getAttribute('data-ow-trev'), ok = tr.getAttribute('data-ok') === '1', kind = tr.getAttribute('data-kind') || '';
+      const tool = (STOOLS || []).find(function(x){ return String(x.id) === tid; }) || {};
+      const what = kind === 'delete' ? (ok ? 'Удалить инструмент?' : 'Оставить инструмент?') : kind === 'pending' ? (ok ? 'Принять правку?' : 'Отклонить правку?') : (ok ? 'Опубликовать инструмент?' : 'Отклонить инструмент?');
+      const txt = kind === 'delete' ? (ok ? 'Инструмент уберётся из каталога насовсем.' : 'Инструмент останется в каталоге, запрос сотрудника снимется.')
+        : kind === 'pending' ? (ok ? 'В каталоге появится новое описание.' : 'В каталоге останется прежнее описание.')
+        : (ok ? 'Инструмент сразу появится в каталоге.' : 'Инструмент не появится в каталоге; сотрудник увидит «Отклонён».');
+      askSheet(what, '<div class="st-ask"><b>' + esc(tool.name || 'Инструмент') + '</b>' + (tool.staff_name ? '<div class="small muted">Сотрудник: ' + esc(tool.staff_name) + '</div>' : '') +
+        '<p>' + txt + '</p></div>', ok ? (kind === 'delete' ? 'Удалить' : 'Одобрить') : (kind === 'delete' ? 'Оставить' : 'Отклонить')).then(async function(yes){
+        if (!yes) return;
+        try { await owToolReview(tid, ok, kind); toast('Готово'); }
+        catch(err){ toast('Не удалось: ' + owDbMsg(err)); }
+        await owLoadTools(); owSync(); stRepaint();
+      });
+    }
+  });
+
   /* подтверждение в нижней панели (вместо окна браузера) */
   function askSheet(title, body, okLabel){
     return new Promise(function(res){
@@ -2774,6 +3497,10 @@
     });
   }
   function staffPartCard(p){
+    if (STAFF && STAFF.owner && p._row){     // владелец: карточка и кнопки — как в его «Заявках» («Выдал», «Вернули», «В архив»)
+      const ok = LCARDS && LCARDS[String(p.part_id)];
+      return ok ? lcCardHTML(p._row, ok, false) : oPlainCardHTML(p._row);
+    }
     const sk = SCARDS && SCARDS[String(p.part_id)];
     if (sk) return lcCardHTML(p, sk, true);
     const i = stInfo(p), st = i.st;
@@ -2909,13 +3636,14 @@
     else                         inner = isAdmin() ? viewHome() : viewFav();
 
     if (TAB === 'staff' && stWorkMode()) stRender();
+    else if (isAdmin() && lordMode() === 'lend' && ['home', 'orders', 'ads', 'fee', 'reviews'].indexOf(TAB) >= 0) prRender(inner);   // 06.11.2026: окна «Сотрудники» и «Пункты выдачи»
     else { $('root').className = 'wrap'; $('root').innerHTML = shell(inner); }
     paintFavCount();
     /* выбранная вкладка видна и на узком экране (строка вкладок прокручивается) */
     (function(){ const tb = document.querySelector('.tabs'), on = tb && tb.querySelector('button.on');
       if (on && tb.scrollWidth > tb.clientWidth) tb.scrollLeft = on.offsetLeft - tb.offsetLeft - (tb.clientWidth - on.offsetWidth) / 2; })();
 
-    if (STAFF && STAFF.status === 'active') stAuto();      // 24.10.2026: на любой вкладке кабинета
+    if (STAFF && STAFF.status === 'active' && !isAdmin()) stAuto();      // 24.10.2026: на любой вкладке кабинета (владельца обновляет oAuto)
     if (isAdmin()) oAuto();
     if (typeof IvaLive !== 'undefined' && ((TAB === 'staff' && STAFF) || (TAB === 'orders' && isAdmin()))) IvaLive.seen();
     if (typeof paintWork === 'function') paintWork();
@@ -3337,7 +4065,7 @@
   async function liveTick(){
     if (!isAuthed()) return;
     if (isAdmin()) await oTick();
-    if (STAFF && STAFF.status === 'active') await stTick();
+    if (STAFF && STAFF.status === 'active' && !isAdmin()) await stTick();
     /* свои заявки клиента (и «Я арендую» арендодателя): статус, «Выдал», отмена */
     const mine = isAdmin() ? TAB === 'sent' : (TAB === 'orders' || TAB === 'staff');
     if (!mine || $('sheet')) return;
@@ -3402,6 +4130,7 @@
     }
     const showcase = hydrateShowcase(); // Избранное берём из живой витрины, а не демо-данных.
     if (isAdmin()){
+      const owP = Promise.allSettled([owLoadPts(), owLoadTools(), owLoadStaff(), owLoadChats()]);   // 06.11.2026: «Работа» и окна «Прокат»
       try {
         const [myTools, myParts, myFees, myReviews, mySent] = await Promise.allSettled([
           loadMyTools(),
@@ -3422,6 +4151,8 @@
         MY = []; ORDERS = []; FEES = []; REVIEWS = [];
         toast('Не удалось загрузить данные: ' + e.message);
       }
+      await owP;
+      owSync();
     } else if (isAuthed()){
       try {
         const both = await Promise.all([loadClientOrders(), loadClientCards()]);

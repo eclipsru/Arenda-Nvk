@@ -386,6 +386,10 @@ select.inp{cursor:pointer;appearance:none;
   background:var(--or);color:#fff;border-radius:8px;font-size:10px;font-weight:700;
   display:flex;align-items:center;justify-content:center}
 @media (max-width:760px){ .work-mob:not(.hide){display:flex !important} }
+/* у владельца проката (06.11.2026): «Работа» и справа «Прокат»; на телефоне подпись логотипа сжимается, строка не переносится */
+.prok-link .acct-ini,.prok-mob .acct-ini{box-shadow:0 0 0 1.5px var(--line-2)}
+.prok-link.on .acct-ini,.prok-mob.on .acct-ini{box-shadow:0 0 0 2px var(--or)}
+@media (max-width:760px){ html.iva-prok .head-in > .logo{flex:1 1 0} }
 /* «Сменить» и кружок «Владелец» (06.11.2026): видны, только когда база знает прокат (классы на <html> ставит IvaSwitch) */
 .own-link,.own-mob,.sw-btn,.acct-menu .acct-sw{display:none !important}
 html.iva-sw .sw-btn{display:inline-flex !important}
@@ -1520,3 +1524,53 @@ textarea.inp.st-ch-inp{height:46px;padding:12px 14px}
 body.emb{background:transparent}
 body.emb .page{padding:0;min-height:0}
 body.emb #root.wrap{max-width:none;padding:0}
+/* 06.11.2026: кабинет владельца проката — окна «Сотрудники» и «Пункты выдачи» на странице «Прокат» (раскладка «Работы»)
+   и окна правки сотрудника и пункта (openSheet + .st-rsheet: на компьютере — окошко по центру, на телефоне — шторка) */
+.pr-layout .pr-main > .sect:first-child{padding-top:20px}
+.cats-head.st-side-h .pr-add{margin-left:auto}
+.btn.sm.pr-add{padding:5px 10px;font-size:12.5px;white-space:nowrap;flex:0 0 auto}
+.pr-layout .st-side-h{gap:6px}
+.pr-layout .st-side-h h2{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;font-size:18px}
+@media (min-width:861px) and (max-width:1024px){ .pr-layout .st-side-h .st-side-c{display:none} }   /* колонка 260px: без счётчика заголовок помещается */
+.pr-layout .st-si-t b{flex:0 1 auto}
+.pr-layout .st-si-t small{flex:1 1 0;min-width:0;text-align:right;overflow:hidden;text-overflow:ellipsis}
+.st-si .ow-tag{font-size:12px}
+@media (min-width:760px){
+  .sheet.st-rsheet.ow-sheet{width:min(560px,calc(100vw - 32px));max-height:min(760px,90vh)}
+  .sheet.st-rsheet.ow-sheet.ow-wide{width:min(640px,calc(100vw - 32px))}
+}
+.ow-form{display:flex;flex-direction:column}
+.ow-form .chk{align-items:flex-start}
+.ow-form .chk input{margin-top:2px;flex:0 0 auto}
+.ow-chk span{display:flex;flex-direction:column;gap:2px;min-width:0}
+.ow-chk b{font-weight:600;color:var(--tx)}
+.ow-chk small,.ow-form .chk small{font-size:12.5px;line-height:1.45;color:var(--g2)}
+.ow-chk.dis{cursor:default}
+.ow-chk.dis b{color:var(--g2)}
+.ow-chk.dis input{cursor:default}
+.ow-sets{margin:0 0 6px}
+.chip.on{background:rgba(255,143,31,.14);border-color:var(--or);color:var(--or)}
+.ow-hint{font-size:12.5px;line-height:1.45;color:var(--g2);margin-top:6px}
+.ow-gap{margin-top:14px}
+.ow-who{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:14px}
+.ow-st{font-size:12px;font-weight:700;padding:3px 9px;border-radius:999px;border:1px solid var(--line);color:var(--g2);background:var(--field)}
+.ow-st-active{color:var(--grn);border-color:rgba(76,175,80,.5);background:rgba(76,175,80,.12)}
+.ow-st-invited{color:var(--yel);border-color:rgba(255,193,7,.45);background:rgba(255,193,7,.1)}
+.ow-st-declined{color:var(--red);border-color:rgba(255,107,107,.45);background:rgba(255,107,107,.1)}
+.ow-hours{display:flex;flex-direction:column;gap:6px;margin-bottom:4px}
+.ow-hr{display:grid;grid-template-columns:30px minmax(0,1fr) 12px minmax(0,1fr) auto;align-items:center;gap:8px}
+.ow-hr b{font-size:13px}
+.ow-hr .inp{padding:8px 10px;min-width:0;color-scheme:dark}
+.ow-hr .chk{padding:0;font-size:13px;white-space:nowrap}
+.ow-hr.off b,.ow-hr.off .inp{opacity:.45}
+.ow-pstaff{display:flex;flex-direction:column;gap:8px}
+.ow-ps{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:9px 11px;background:var(--card);border:1px solid var(--line);border-radius:var(--r-s)}
+.ow-ps > span{display:flex;flex-direction:column;min-width:0}
+.ow-ps b{font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ow-ps small{font-size:12px;color:var(--g2);line-height:1.4}
+.ow-ps .btn{flex:0 0 auto}
+@media (max-width:480px){
+  .ow-hr{grid-template-columns:26px minmax(0,1fr) 10px minmax(0,1fr);row-gap:4px}
+  .ow-hr .chk{grid-column:2 / -1}
+  .ow-ps{flex-direction:column;align-items:stretch}
+}

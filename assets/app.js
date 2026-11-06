@@ -451,6 +451,9 @@ function headerHTML(active, q){
     '</button>' +
     '<a class="work-mob hide" id="workMob" href="account.html" aria-label="Работа">' +
       '<span class="acct-ini work-ini">П</span><span class="work-mob-dot work-count" style="display:none">0</span></a>' +
+    /* «Прокат» у владельца проката (06.11.2026): справа от его «Работы» — кабинет проката (сводка, заявки, сотрудники, пункты) */
+    '<a class="work-mob prok-mob hide" id="prokMob" href="account.html#home" aria-label="Прокат">' +
+      '<span class="acct-ini prok-ini">П</span><span class="work-mob-dot work-count" style="display:none">0</span></a>' +
     /* «Владелец» у сотрудника (06.11.2026): вход в кабинет владельца проката по его паролю — см. IvaSwitch */
     '<a class="own-mob" id="ownMob" href="account.html" data-iva-owner="1" aria-label="Владелец" title="Владелец">' +
       '<span class="acct-ini own-ini">' + IvaSwitchLock() + '</span></a>' +
@@ -480,6 +483,10 @@ function headerHTML(active, q){
       '<a class="hlink work-link hide" id="workLink" href="account.html">' +
         '<span class="acct-ic"><span class="acct-ini work-ini">П</span></span><span class="work-t">Работа</span>' +
         '<span class="dot work-count" style="display:none">0</span></a>' +
+      /* 06.11.2026: у владельца проката — «Работа» (как у сотрудника, все его пункты) и справа «Прокат» (кабинет проката) */
+      '<a class="hlink work-link prok-link hide" id="prokLink" href="account.html#home">' +
+        '<span class="acct-ic"><span class="acct-ini prok-ini">П</span></span><span>Прокат</span>' +
+        '<span class="dot work-count" style="display:none">0</span></a>' +
       '<div class="acct" id="acct">' +
         '<a class="hlink' + (active === 'cab' ? ' on' : '') + '" id="acctBtn" href="account.html">' +
           '<span class="acct-ic">' + IC.user + '</span><span>Кабинет</span></a>' +
@@ -491,9 +498,8 @@ function headerHTML(active, q){
       /* Пункт «Управление» дорисовывается после проверки роли — см. paintChiefLink */
       '<a class="hlink chief-link hide' + (active === 'chief' ? ' on' : '') + '" href="chief.html">' +
         IC.chief + '<span>Управление</span></a>' +
-      /* 20.10.2026 (решение владельца): размещать могут только арендодатели, которых добавил владелец.
-         Клиенту и гостю кнопки нет вовсе; у арендодателя она появляется после проверки роли — см. paintChiefLink */
-      '<a class="btn sm lord-only' + (lordHint() && ivaMode() === 'lend' ? '' : ' hide') + '" href="new.html" style="margin-left:6px">+ Добавить</a>' +
+      /* «+ Добавить» справа в шапке убран (просьба владельца 06.11.2026): добавляют из «Работы» (вкладка «Добавить»),
+         из «Сводки» проката и оранжевым «+» нижнего меню на телефоне */
     '</nav>' +
   '</div></header>';
 }
@@ -967,7 +973,12 @@ const IvaLive = (function(){
   }
   function paintDot(){
     const n = count();
-    $$('.work-count').forEach(function(el){ el.textContent = n > 9 ? '9+' : String(n); el.style.display = n ? '' : 'none'; });
+    /* 06.11.2026: у владельца два кружка — число новых заявок только на «Прокат» (там «Заявки»), на «Работе» без дубля */
+    const own = lord();
+    $$('.work-count').forEach(function(el){
+      const skip = own && !(el.closest && el.closest('#prokLink, #prokMob'));
+      el.textContent = n > 9 ? '9+' : String(n); el.style.display = n && !skip ? '' : 'none';
+    });
   }
   function start(){
     if (typeof subscribeTable !== 'function' || typeof isAuthed !== 'function' || !isAuthed()) return;
@@ -1085,17 +1096,42 @@ async function workGet(){
   try { w = JSON.parse(sessionStorage.getItem(WORK_KEY) || 'null'); } catch(e){ w = null; }
   return w;
 }
+/* 06.11.2026 (просьба владельца): у владельца проката два кружка — «Работа» (та же страница, что у сотрудника, со всеми его
+   пунктами и всеми правами) и справа «Прокат» (кабинет проката: сводка, заявки, сотрудники и пункты выдачи) */
+function paintProk(on){
+  const els = [$('prokLink'), $('prokMob')].filter(Boolean);
+  try { document.documentElement.classList.toggle('iva-prok', !!on); } catch(e){}
+  els.forEach(function(el){
+    el.classList.toggle('hide', !on);
+    if (!on) return;
+    const ad = A.admin || {}, name = ad.company || ad.full_name || 'Прокат';
+    el.setAttribute('href', (Number(sessionStorage.getItem('iva_live_new')) || 0) > 0 ? 'account.html#orders' : 'account.html#home');
+    el.setAttribute('title', 'Прокат · ' + name);
+    el.setAttribute('aria-label', 'Прокат · ' + name);
+    el.classList.toggle('on', /(^|\/)account\.html$/.test(location.pathname) && location.hash !== '#staff' &&
+      !/^#(sent|fav|msg|prof)/.test(location.hash));
+    const ini = el.querySelector('.prok-ini');
+    if (ini && ini.getAttribute('data-work') !== 'org'){
+      ini.textContent = initials(name);
+      ini.setAttribute('data-ava-org', '1');
+      ini.setAttribute('data-work', 'org');
+    }
+    if (typeof IvaAva !== 'undefined') IvaAva.paint(el);
+  });
+}
 async function paintWork(){
   const els = [$('workLink'), $('workMob')].filter(Boolean);
   if (!els.length) return;
   const hide = function(){ els.forEach(function(el){ el.classList.add('hide'); }); };
-  if (typeof isAuthed !== 'function' || !isAuthed()){ IvaSwitch.sync(null); return hide(); }
+  if (typeof isAuthed !== 'function' || !isAuthed()){ paintProk(false); IvaSwitch.sync(null); return hide(); }
   let kind, name, attr, link;
   if (typeof isAdmin === 'function' && isAdmin()){
     const ad = A.admin || {};
-    kind = 'Прокат'; name = ad.company || ad.full_name || 'Прокат'; attr = ['data-ava-org', '1'];
-    link = (Number(sessionStorage.getItem('iva_live_new')) || 0) > 0 ? 'account.html#orders' : 'account.html#home';
+    kind = 'Работа'; name = ad.company || ad.full_name || 'Прокат'; attr = ['data-ava-org', '1'];
+    link = 'account.html#staff';
+    paintProk(true);
   } else {
+    paintProk(false);
     const w = await workGet();
     paintCabLabel();
     if (!w || !w.on){ IvaSwitch.sync(null); return hide(); }
@@ -1106,8 +1142,7 @@ async function paintWork(){
     el.setAttribute('href', link);
     el.setAttribute('title', kind + ' · ' + name);
     el.setAttribute('aria-label', kind + ' · ' + name);
-    el.classList.toggle('on', /(^|\/)account\.html$/.test(location.pathname) &&
-      (location.hash === '#staff' || (kind === 'Прокат' && /^#(home|orders)?$/.test(location.hash))));
+    el.classList.toggle('on', /(^|\/)account\.html$/.test(location.pathname) && location.hash === '#staff');
     const t = el.querySelector('.work-t'); if (t) t.textContent = kind;
     const ini = el.querySelector('.work-ini');
     if (ini){
@@ -1123,7 +1158,7 @@ async function paintWork(){
     }
   });
   IvaLive.paintDot();
-  IvaSwitch.sync(kind);
+  IvaSwitch.sync(isAdmin() ? 'Прокат' : kind);
 }
 
 /* Быстрая смена аккаунта в «Работе» (просьба владельца 06.11.2026, SQL 20261126_staff_switch).

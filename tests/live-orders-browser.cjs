@@ -36,10 +36,12 @@ const part=(id,st,tool)=>({id,order_id:String(500+id),owner_email:'qa-owner@exam
  await p.goto('http://127.0.0.1:8000/account.html#ads',{waitUntil:'domcontentloaded'});await p.waitForSelector('.tabs button[data-tab=orders]');
  await c.clock.runFor(200);
  assert.equal(await p.evaluate(()=>window.__rt.sent.filter(d=>d.event==='phx_join'&&d.topic==='realtime:public:iva_order_ping').length),1,'одна подписка на iva_order_ping');
- // кружок «Прокат» слева от аватарки
- const wl=p.locator('#workLink');assert(!(await wl.getAttribute('class')).includes('hide'));assert.equal((await wl.locator('.work-t').textContent()),'Прокат');
- assert.equal(await wl.locator('.work-ini').getAttribute('data-ava-org'),'1');assert.equal(await wl.getAttribute('title'),'Прокат · Прокат у дома');
- assert.equal(await p.evaluate(()=>{const w=document.getElementById('workLink'),a=document.getElementById('acct');return w.nextElementSibling===a;}),true,'кружок прямо слева от аватарки');
+ // кружок «Прокат» слева от аватарки; 06.11.2026: левее — кружок «Работа» владельца
+ const wl=p.locator('#prokLink');assert(!(await wl.getAttribute('class')).includes('hide'));assert.equal((await wl.locator('.acct-ic + span').textContent()).trim(),'Прокат');
+ assert.equal(await wl.locator('.prok-ini').getAttribute('data-ava-org'),'1');assert.equal(await wl.getAttribute('title'),'Прокат · Прокат у дома');
+ assert.equal(await p.evaluate(()=>{const w=document.getElementById('prokLink'),a=document.getElementById('acct');return w.nextElementSibling===a;}),true,'кружок прямо слева от аватарки');
+ assert.equal(await p.locator('#workLink .work-t').textContent(),'Работа');assert.equal(await p.locator('#workLink').getAttribute('href'),'account.html#staff');
+ assert.equal(await p.evaluate(()=>document.getElementById('workLink').nextElementSibling===document.getElementById('prokLink')),true,'«Работа» слева от «Прокат»');
  const r0=o.reloads;o.parts=[part(2,'new','Бетономешалка'),part(1,'rented','Дрель')];
  await p.evaluate(()=>window.__rt.push({email:'qa-owner@example.invalid',kind:'new',part_id:2}));
  await c.clock.runFor(1500);await p.waitForFunction(()=>/Бетономешалка/.test((document.getElementById('toast')||{}).textContent||''));
@@ -53,16 +55,17 @@ const part=(id,st,tool)=>({id,order_id:String(500+id),owner_email:'qa-owner@exam
  await p.locator('.tabs button[data-tab=ads]').click();const r1=o.reloads;o.parts=[part(3,'new','Плиткорез')].concat(o.parts);
  await c.clock.fastForward(31000);await p.waitForFunction(()=>/Плиткорез/.test((document.getElementById('toast')||{}).textContent||''));assert(o.reloads>r1);
  // другая страница: сигнал «new» → сообщение и число на кружке; «Заявки» — число сбрасывается
- await p.goto('http://127.0.0.1:8000/catalog.html',{waitUntil:'domcontentloaded'});await p.waitForSelector('#workLink:not(.hide)');await c.clock.runFor(200);
+ await p.goto('http://127.0.0.1:8000/catalog.html',{waitUntil:'domcontentloaded'});await p.waitForSelector('#prokLink:not(.hide)');await c.clock.runFor(200);
  await p.evaluate(()=>window.__rt.push({email:'qa-owner@example.invalid',kind:'new',part_id:4}));
  await p.waitForFunction(()=>/Новая заявка — откройте «Прокат» вверху/.test((document.getElementById('toast')||{}).textContent||''));
- assert.equal((await p.locator('#workLink .work-count').textContent()).trim(),'1');assert.equal(await p.locator('#workLink').getAttribute('href'),'account.html#orders');
+ assert.equal((await p.locator('#prokLink .work-count').textContent()).trim(),'1');assert.equal(await p.locator('#prokLink').getAttribute('href'),'account.html#orders');
+ assert.equal(await p.locator('#workLink .work-count').isVisible(),false,'число новых — только на «Прокат»');
  await p.evaluate(()=>window.__rt.push({email:'someone@else',kind:'new',part_id:5}));await c.clock.runFor(300);
- assert.equal((await p.locator('#workLink .work-count').textContent()).trim(),'1','чужая строка не считается');
+ assert.equal((await p.locator('#prokLink .work-count').textContent()).trim(),'1','чужая строка не считается');
  await p.evaluate(()=>window.__rt.push({email:'qa-owner@example.invalid',kind:'upd',part_id:4}));await c.clock.runFor(300);
- assert.equal((await p.locator('#workLink .work-count').textContent()).trim(),'1','«upd» — без числа');
+ assert.equal((await p.locator('#prokLink .work-count').textContent()).trim(),'1','«upd» — без числа');
  await p.goto('http://127.0.0.1:8000/account.html?x=1#orders',{waitUntil:'domcontentloaded'});await p.waitForSelector('#ordUpdLine');
- assert.equal(await p.locator('#workLink .work-count').isVisible(),false);
+ assert.equal(await p.locator('#prokLink .work-count').isVisible(),false);
  assert.deepEqual(errors,[]);await c.close();}
 
 // 2. Сотрудник: кружок «Работа» с логотипом проката (по пункту), на телефоне — в шапке справа; сигнал → «Работа» перечитана
