@@ -5,6 +5,7 @@
 //   • приложение админа (ключ входа пользователя в Authorization):
 //       POST {a: "new", amount, method?} — создать платёж в ЮKassa на любую сумму 1–100 000 ₽ → {id, url, sbp, fallback}
 //                                 (страница оплаты ЮKassa; method "sbp" — 10.135: сразу страница СБП, не вышло — обычная);
+//                                 отказ ЮKassa → 502 {error: "yookassa", message (по-русски), code, eid, shop?};
 //       POST {a: "check", id?}   — спросить у ЮKassa статус своих незавершённых оплат (после возврата со страницы оплаты);
 //   • ЮKassa — HTTP-уведомление {type: "notification", event: "payment.succeeded" | "payment.canceled", object: {id}};
 //   • GET без параметров — проверка выкладки и «подключено ли»: {ok, ready, test} (без ключей и сумм).
@@ -87,6 +88,53 @@ export function outcome(p: any): { id: string; status: string; amount: number; p
     method: String(p.payment_method?.type ?? ""),
     reason: String(p.cancellation_details?.reason ?? ""),
   };
+}
+
+/** Настройки магазина ЮKassa (GET /v3/me) — только то, что нужно для подсказки: включён ли и какие способы оплаты.
+ *  Номер магазина, ИНН и прочее не берём. Не похоже на ответ — null. */
+export function shopInfo(j: any): { status: string; test: boolean; methods: string[] } | null {
+  if (!j || typeof j.status !== "string" || j.type === "error") return null;
+  const st = /^[a-z_]{1,20}$/.test(j.status) ? j.status : "other";
+  const methods = Array.isArray(j.payment_methods) ? j.payment_methods.filter((x: unknown) => typeof x === "string" && /^[a-z_]{1,30}$/.test(x)).slice(0, 20) : [];
+  return { status: st, test: j.test === true, methods };
+}
+
+/** 06.11.2026 (владелец: «ЮKassa не создала платёж: Unspecified error. Transaction forbidden…» — по-английски и без
+ *  номера для поддержки): отказ ЮKassa → понятная причина по-русски (text — человеку; сайт и приложение показывают её
+ *  как есть), номер ошибки ЮKassa (eid — его просит поддержка) и строка для базы и журнала (log, ≤200 знаков).
+ *  Коды и HTTP-статусы — по документации ЮKassa «Обработка ответов: коды HTTP». */
+export function ykWhy(status: number, j: any, shop: { status: string; test: boolean; methods: string[] } | null = null): { text: string; code: string; eid: string; log: string } {
+  const err = j && j.type === "error";
+  const code = err && typeof j.code === "string" && /^[a-z_]{1,40}$/.test(j.code) ? j.code : "";
+  const eid = err && typeof j.id === "string" && /^[0-9a-f-]{8,64}$/i.test(j.id) ? j.id : "";
+  const desc = err && typeof j.description === "string" ? j.description.replace(/\s+/g, " ").trim() : "";
+  const param = err && typeof j.parameter === "string" && /^[A-Za-z0-9_.\[\]]{1,60}$/.test(j.parameter) ? j.parameter : "";
+  let text: string;
+  if (code === "forbidden" || status === 403) {
+    text = "ЮKassa запретила платежи в магазине площадки «Ива»";
+    if (shop && shop.status === "disabled") text += " — магазин отключён в ЮKassa. Владельцу площадки: включите магазин в кабинете ЮKassa или напишите в поддержку ЮKassa";
+    else if (shop && shop.status === "enabled" && !shop.methods.length) text += " — в магазине не включён ни один способ оплаты. Владельцу площадки: включите карты и СБП в кабинете ЮKassa";
+    else if (shop && shop.status === "enabled") text += " — магазин включён, но операции запрещены. Владельцу площадки: напишите в поддержку ЮKassa";
+    else text += ". Владельцу площадки: проверьте магазин в кабинете ЮKassa или напишите в поддержку ЮKassa";
+  } else if (code === "invalid_credentials" || status === 401) {
+    text = "ЮKassa не приняла ключи магазина. Владельцу площадки: проверьте YOOKASSA_SHOP_ID и YOOKASSA_SECRET_KEY — ключ должен быть выпущен в этом же магазине";
+  } else if (code === "too_many_requests" || status === 429) {
+    text = "ЮKassa просит подождать — попробуйте через минуту";
+  } else if (code === "not_found" || status === 404) {
+    text = "ЮKassa не нашла магазин. Владельцу площадки: проверьте YOOKASSA_SHOP_ID";
+  } else if (code === "invalid_request" || status === 400) {
+    text = "ЮKassa отклонила платёж" + (param ? " (поле " + param + ")" : "") + " — попробуйте другую сумму или способ оплаты";
+  } else if (status >= 500 || status === 0) {
+    text = "ЮKassa временно не отвечает — попробуйте через несколько минут";
+  } else if (status >= 200 && status < 300) {
+    text = "ЮKassa не прислала ссылку на оплату — попробуйте ещё раз";
+  } else {
+    text = "ЮKassa не создала платёж (HTTP " + status + ")";
+  }
+  if (eid) text += " (номер ошибки ЮKassa: " + eid + ")";
+  const log = ((code || "http") + " " + status + (desc ? ": " + desc : "") + (eid ? " · " + eid : "") +
+    (shop ? " · магазин " + shop.status + (shop.test ? " test" : "") + (shop.methods.length ? " [" + shop.methods.join(",") + "]" : " [нет способов]") : "")).slice(0, 200);
+  return { text, code, eid, log };
 }
 
 /** Ошибка базы → понятный ответ приложению. */
@@ -209,16 +257,21 @@ async function route(req: Request): Promise<Response> {
     let r = await yk("/payments", auth, { method: "POST", body: createBody(id, amount, wantSbp), key: idemKey(id, wantSbp) });
     if (wantSbp && !r.ok && r.status >= 400 && r.status < 500) {
       // СБП не включена в магазине или ЮKassa отказала именно в СБП — обычная страница со всеми способами
-      console.error(`iva-pay: СБП для платежа ${id} не создана (HTTP ${r.status}: ${String(r.j?.description ?? r.j?.code ?? "").slice(0, 120)}) — обычная страница`);
+      console.error(`iva-pay: СБП для платежа ${id} не создана (${ykWhy(r.status, r.j).log}) — обычная страница`);
       viaSbp = false;
       r = await yk("/payments", auth, { method: "POST", body: createBody(id, amount, false), key: idemKey(id, false) });
     }
     const url = String(r.j?.confirmation?.confirmation_url ?? "");
     if (!r.ok || typeof r.j?.id !== "string" || !/^https:\/\//.test(url)) {
-      const why = String(r.j?.description ?? r.j?.code ?? `HTTP ${r.status}`).slice(0, 200);
-      await db("iva_yk_fail", { p_id: id, p_reason: why }).catch(() => null);
-      console.error(`iva-pay: ЮKassa не создала платёж ${id}: ${why}`);
-      return json({ error: "yookassa", message: why }, 502);
+      // 403 «запрещено» — спросим у ЮKassa, включён ли магазин и какие способы оплаты в нём есть (подсказка владельцу)
+      let shop = null;
+      if (r.status === 403) {
+        try { const info = await yk("/me", auth); if (info.ok) shop = shopInfo(info.j); } catch { /* без подсказки */ }
+      }
+      const why = r.ok ? ykWhy(r.status, {}, null) : ykWhy(r.status, r.j, shop);
+      await db("iva_yk_fail", { p_id: id, p_reason: why.log }).catch(() => null);
+      console.error(`iva-pay: ЮKassa не создала платёж ${id}: ${why.log}`);
+      return json({ error: "yookassa", message: why.text, code: why.code, eid: why.eid, ...(shop ? { shop } : {}) }, 502);
     }
     await db("iva_yk_set", { p_id: id, p_yk_id: r.j.id, p_url: url });
     return json({ id, url, test: r.j.test === true, sbp: viaSbp, fallback: wantSbp && !viaSbp });

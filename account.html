@@ -10,7 +10,7 @@
 <link rel="icon" href="assets/favicon-32.png" type="image/png" sizes="32x32">
 <link rel="icon" href="assets/icon-192.png" type="image/png" sizes="192x192">
 <link rel="apple-touch-icon" href="assets/apple-touch-icon.png">
-<link rel="stylesheet" href="assets/theme.css?v=20261106-cabinet">
+<link rel="stylesheet" href="assets/theme.css?v=20261106-yookassa">
 <link rel="stylesheet" href="assets/profile.css?v=20260923-rental-profile">
 <style>
 .tabs{display:flex;gap:4px;border-bottom:1px solid var(--line);margin-bottom:18px;
@@ -149,9 +149,9 @@
 
 <script src="assets/data.js"></script>
 <script src="assets/geo.js?v=20260923-photon"></script>
-<script src="assets/email-guard.js?v=20260926-email"></script><script src="assets/sb.js?v=20261106-cabinet"></script>
+<script src="assets/email-guard.js?v=20260926-email"></script><script src="assets/sb.js?v=20261106-yookassa"></script>
 <script src="assets/app-release.js?v=20261009-rel"></script>
-<script src="assets/app.js?v=20261106-cabinet"></script>
+<script src="assets/app.js?v=20261106-yookassa"></script>
 <script src="assets/profile.js?v=20261022-a"></script>
 <script>
 (function(){
@@ -1499,7 +1499,7 @@
       '</button></div></div>';
 
     // История оплат комиссии
-    h += '<div class="home-sec"><h3>История оплат' + (FEES.length ? ' · ' + FEES.length : '') + '</h3>';
+    h += '<div class="home-sec"><h3>История оплат' + (FEES.length ? ' · ' + FEES.length : '') + '</h3>' + payFailHTML();
     if (!FEES.length){
       h += '<div class="empty" style="padding:24px 20px"><b>Платежей по комиссии пока нет</b>' +
         '<p>«Внести платёж» — QR-код СБП, оплата картой онлайн или перевод по номеру.</p></div>';
@@ -3238,6 +3238,9 @@
     if (PR_DD && !t.closest('#prPtDd')) prDdSet(false);
     const res = t.closest('[data-fee-res]');
     if (res){ feeResSheet(); return; }
+    const ce = t.closest('[data-copy-eid]');
+    if (ce){ copyToClipboard(ce.getAttribute('data-copy-eid'), 'Номер ошибки скопирован — отправьте его в поддержку ЮKassa'); return; }
+    if (t.closest('[data-pay-fail-hide]')){ payFailSet(null); const n = $('payFailNote'); if (n) n.remove(); return; }
   });
   document.addEventListener('keydown', function(e){
     const dd = $('prPtDd');
@@ -3442,6 +3445,33 @@
     } catch(e){ PAY_INFO = { ready: false, test: false, at: Date.now(), off: true }; }
     return PAY_INFO;
   }
+  /* 06.11.2026 (владелец: ошибка ЮKassa была по-английски и без номера): номер ошибки ЮKassa — из ответа функции;
+     последняя неудачная попытка запоминается на этом устройстве и видна над «Историей оплат», пока не пройдёт оплата
+     или пока её не скроют. В базе причина тоже остаётся (iva_yk_pay.cancel_reason) — для владельца площадки. */
+  const PAY_EID_RE = /\s*\(номер ошибки ЮKassa: ([0-9a-f-]{8,64})\)\s*$/i;
+  const PAY_FAIL_KEY = 'iva_pay_fail';
+  function payEidOf(e){ const x = PAY_EID_RE.exec(String(e && e.message || '')); return x ? x[1] : ''; }
+  function payFailGet(){
+    try {
+      const v = JSON.parse(localStorage.getItem(PAY_FAIL_KEY) || 'null');
+      return v && v.me === A.me && typeof v.text === 'string' ? v : null;
+    } catch(e){ return null; }
+  }
+  function payFailSet(v){ try { if (v) localStorage.setItem(PAY_FAIL_KEY, JSON.stringify(v)); else localStorage.removeItem(PAY_FAIL_KEY); } catch(e){} }
+  function payEidHTML(eid){
+    return 'Номер ошибки для поддержки ЮKassa: <code class="pay-eid-c">' + esc(eid) + '</code> ' +
+      '<button type="button" class="mini-btn" data-copy-eid="' + esc(eid) + '">Копировать</button>';
+  }
+  function payFailHTML(){
+    const f = payFailGet();
+    if (!f) return '';
+    return '<div class="pay-fail" id="payFailNote" role="status">' +
+      '<div class="pay-fail-h"><b>Онлайн-оплата не прошла</b><span>' + esc(niceDate(f.at)) + (f.amt ? ' · ' + esc(payRub(f.amt)) : '') + '</span></div>' +
+      '<div class="pay-fail-t">' + esc(f.text) + '</div>' +
+      (f.eid ? '<div class="pay-fail-e">' + payEidHTML(f.eid) + '</div>' : '') +
+      '<button type="button" class="mini-btn" data-pay-fail-hide>Скрыть</button>' +
+    '</div>';
+  }
   function payErrTxt(e){
     const st = e && e.status, m = String(e && e.message || '');
     if (st === 503 || /not_ready/.test(m)) return 'Онлайн-оплата пока не подключена — переведите по номеру ниже и отправьте запрос.';
@@ -3449,7 +3479,11 @@
     if (st === 403) return 'Оплата комиссии — только для владельца проката.';
     if (st === 429) return 'Слишком много попыток — подождите 10 минут.';
     if (st === 400) return 'Проверьте сумму: от 1 до 100 000 ₽.';
-    if (st === 502) return 'ЮKassa не создала платёж' + (m && !/yookassa/i.test(m) ? ': ' + m : '') + '. Попробуйте ещё раз или переведите по номеру.';
+    if (st === 502){
+      /* 06.11.2026: функция присылает причину по-русски и номер ошибки ЮKassa — номер показываем отдельно (с «Копировать») */
+      if (/^ЮKassa /.test(m)) return m.replace(PAY_EID_RE, '').trim().replace(/[.\s]*$/, '') + '. Пока можно перевести по номеру телефона — ниже.';
+      return 'ЮKassa не создала платёж' + (m && !/yookassa/i.test(m) ? ': ' + m : '') + '. Попробуйте ещё раз или переведите по номеру.';
+    }
     if (!st) return 'Нет связи с сервером. Проверьте интернет.';
     return 'Не получилось: ' + m;
   }
@@ -3457,7 +3491,7 @@
     if (window.qrcode) return Promise.resolve(window.qrcode);
     return new Promise(function(ok, bad){
       const s = document.createElement('script');
-      s.src = 'assets/qrcode.js?v=20261106-cabinet';
+      s.src = 'assets/qrcode.js?v=20261106-yookassa';
       s.onload = function(){ window.qrcode ? ok(window.qrcode) : bad(new Error('QR')); };
       s.onerror = function(){ bad(new Error('QR')); };
       document.head.appendChild(s);
@@ -3481,7 +3515,7 @@
       try {
         const r = await api('/functions/v1/iva-pay', 'POST', { a: 'check', id: id });
         const row = r && Array.isArray(r.rows) ? r.rows[0] : null;
-        if (row && row.status === 'succeeded') payDone('Оплата получена — спасибо! Комиссия обновлена');
+        if (row && row.status === 'succeeded'){ payFailSet(null); payDone('Оплата получена — спасибо! Комиссия обновлена'); }
         else if (row && row.status === 'canceled'){ payStop(); if (note) note.textContent = 'Платёж отменён или не прошёл. Можно попробовать ещё раз.'; }
       } catch(e){}
     }, 5000);
@@ -3502,7 +3536,8 @@
       '</div>' +
       '<div class="ow-hint" id="payMode">Проверяем онлайн-оплату…</div>' +
       '<div class="pay-qr" id="payQrBox" hidden></div>' +
-      '<div class="sw-err" id="payErr"></div>') +
+      '<div class="sw-err" id="payErr"></div>' +
+      '<div class="pay-eid" id="payEid" hidden></div>') +
       '<details class="pay-manual" id="payManual"><summary>Перевести по номеру телефона</summary>' +
         '<div class="fee-req">' +
           '<div><span>Перевод по СБП на телефон</span><b>+7 (908) 173-14-10 <button type="button" class="mini-btn" id="payCopy">Копировать</button></b></div>' +
@@ -3547,6 +3582,7 @@
         if (!url) throw Object.assign(new Error('нет ссылки на оплату'), { status: 502 });
         const box = $('payQrBox');
         if (!box) return;
+        err(''); if ($('payEid')){ $('payEid').hidden = true; $('payEid').innerHTML = ''; }
         box.hidden = false;
         if (sbp){
           let svg = '';
@@ -3571,7 +3607,10 @@
         if (w) try { w.close(); } catch(x){}
         btn.textContent = label; btn.disabled = other.disabled = false;
         err(payErrTxt(e));
-        if (e && (e.status === 503 || !e.status)){ const d = $('payManual'); if (d) d.open = true; }
+        const eid = e && e.status === 502 ? payEidOf(e) : '', eb = $('payEid');
+        if (eb){ eb.hidden = !eid; eb.innerHTML = eid ? payEidHTML(eid) : ''; }
+        if (e && (e.status === 503 || e.status === 502 || !e.status)){ const d = $('payManual'); if (d) d.open = true; }
+        if (e && e.status === 502) payFailSet({ me: A.me, at: new Date().toISOString(), amt: v, text: payErrTxt(e).replace(/\s*Пока можно перевести.*$/, ''), eid: eid });
       }
     };
     $('payQr').onclick = function(){ go(true, this); };
