@@ -3182,7 +3182,19 @@ try {
       && sq.includes('CREATE OR REPLACE FUNCTION public.iva_fee_balance()'),
       '10.138: комиссия сначала из iva_fee_balance (SQL 20261127), потом — прежние три запроса');
     assert.ok((tp.match(/eq\("10\.138: /g) || []).length >= 9 && tp.includes('v138();'), 'IvaPatchTest: проверки 10.138');
-    assert.ok(/NEW_NAME: '10\.138'/.test(wf) && /NEW_CODE: '212'/.test(wf), 'сборка 10.138 (212)');
+    assert.ok(Number((/NEW_CODE: '(\d+)'/.exec(wf) || [])[1]) >= 212, 'сборка 10.138 (212) или новее');
+  }
+  // 10.139 (просьба владельца 07.11.2026): пузырь голосового шире — волна 140dp + 4dp/с, не шире 250dp и 58% экрана;
+  // та же формула — у пузыря на сайте (assets/app.js → IvaVoice.wavePx)
+  {
+    const wf = R('.github/workflows/build-apk.yml'), tp = R('android/patches/test/IvaPatchTest.java');
+    const ch = R('android/patches/IvaChatPatch.java'), js = R('assets/app.js');
+    assert.ok(ch.includes('VOICE_WAVE_MIN_DP = 140, VOICE_WAVE_PER_SEC_DP = 4, VOICE_WAVE_MAX_DP = 250') && ch.includes('VOICE_WAVE_MAX_SCREEN = 0.58f'),
+      '10.139: волна голосового 140dp + 4dp/с, до 250dp и 58% экрана');
+    assert.ok(js.includes('Math.max(140, Math.min(250, Math.round(w * 0.58)))') && js.includes('Math.round(140 + 4 * Math.max(0, sec || 0))'),
+      '10.139: на сайте та же ширина волны, что в приложении');
+    assert.ok(tp.includes('eq("голосовые 10.139: волна растёт с длительностью') && tp.includes('"385|495|626"') && tp.includes('"250|174|140"'), 'IvaPatchTest: проверки 10.139');
+    assert.ok(/NEW_NAME: '10\.139'/.test(wf) && /NEW_CODE: '213'/.test(wf), 'сборка 10.139 (213)');
   }
   // 10.75 (просьба владельца 14.10.2026): в «Настройках» — кнопка «Уведомления» (с 10.97 — открывает отдельную страницу);
   // внутри сверху «Открыть настройки уведомлений Android», потом какие присылать, потом расписание, потом всё остальное

@@ -10,7 +10,7 @@
 <link rel="icon" href="assets/favicon-32.png" type="image/png" sizes="32x32">
 <link rel="icon" href="assets/icon-192.png" type="image/png" sizes="192x192">
 <link rel="apple-touch-icon" href="assets/apple-touch-icon.png">
-<link rel="stylesheet" href="assets/theme.css?v=20261106-yookassa">
+<link rel="stylesheet" href="assets/theme.css?v=20261107-voice">
 <link rel="stylesheet" href="assets/profile.css?v=20260923-rental-profile">
 <style>
 .tabs{display:flex;gap:4px;border-bottom:1px solid var(--line);margin-bottom:18px;
@@ -149,9 +149,9 @@
 
 <script src="assets/data.js"></script>
 <script src="assets/geo.js?v=20260923-photon"></script>
-<script src="assets/email-guard.js?v=20260926-email"></script><script src="assets/sb.js?v=20261106-yookassa"></script>
+<script src="assets/email-guard.js?v=20260926-email"></script><script src="assets/sb.js?v=20261107-voice"></script>
 <script src="assets/app-release.js?v=20261009-rel"></script>
-<script src="assets/app.js?v=20261106-yookassa"></script>
+<script src="assets/app.js?v=20261107-voice"></script>
 <script src="assets/profile.js?v=20261022-a"></script>
 <script>
 (function(){
@@ -1960,10 +1960,12 @@
       if (dl !== day){ h += '<div class="th-day">' + esc(dl) + '</div>'; day = dl; }
       let inner = '';
       if (/^https:\/\//.test(m.img || '')) inner += '<a href="' + esc(m.img) + '" target="_blank" rel="noopener"><img class="bimg" src="' + esc(m.img) + '" alt="фото"></a>';
-      if (/^https:\/\//.test(m.audio || '')) inner += '<audio controls preload="none" src="' + esc(m.audio) + '"></audio>';
+      const vb = /^https:\/\//.test(m.audio || '') && typeof IvaVoice !== 'undefined' ? IvaVoice.html(m) : '';   // голосовое — как в приложении
+      if (vb) inner += vb;
+      else if (/^https:\/\//.test(m.audio || '')) inner += '<audio controls preload="none" src="' + esc(m.audio) + '"></audio>';
       if (m.text) inner += esc(m.text);
       const hm = String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
-      h += '<div class="bub ' + (m.mine ? 'me' : 'they') + '">' +
+      h += '<div class="bub ' + (m.mine ? 'me' : 'they') + (vb ? ' vbub' : '') + '">' +
         (m.mine ? '<div class="st-by">' + (m.by_me ? 'Вы' : 'Прокат') + '</div>' : '') + inner +
         '<div class="btime">' + hm + (m.mine ? '<span>' + (m.is_read ? '✓✓' : '✓') + '</span>' : '') + '</div></div>';
     });
@@ -3491,7 +3493,7 @@
     if (window.qrcode) return Promise.resolve(window.qrcode);
     return new Promise(function(ok, bad){
       const s = document.createElement('script');
-      s.src = 'assets/qrcode.js?v=20261106-yookassa';
+      s.src = 'assets/qrcode.js?v=20261107-voice';
       s.onload = function(){ window.qrcode ? ok(window.qrcode) : bad(new Error('QR')); };
       s.onerror = function(){ bad(new Error('QR')); };
       document.head.appendChild(s);

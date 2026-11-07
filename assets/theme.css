@@ -1671,3 +1671,20 @@ body.emb #root.wrap{max-width:none;padding:0}
 .pay-fail-h b{color:var(--red)}
 .pay-fail-h span,.pay-fail-e{color:var(--g2);font-size:12.5px}
 .pay-fail-t{color:var(--tx)}
+/* 07.11.2026: голосовое сообщение — пузырь как в приложении: тёмный, свой — оранжевой рамкой; кнопка-кружок «рамкой»,
+   волна по громкости (прослушанное — оранжевым), под волной — длительность */
+.bub.vbub{padding:8px 14px 6px 8px;white-space:normal;max-width:100%}
+.bub.vbub.me{background:var(--card);color:var(--tx);border:1.5px solid var(--or)}
+.bub.vbub.me .btime{color:var(--or)}
+.vb{display:flex;align-items:center;gap:10px;cursor:pointer;user-select:none;-webkit-user-select:none}
+.vb-btn{flex:0 0 40px;width:40px;height:40px;border-radius:50%;border:1.5px solid var(--or);background:transparent;color:var(--or);
+  display:flex;align-items:center;justify-content:center;padding:0;cursor:pointer}
+.vb-btn svg{width:22px;height:22px;fill:currentColor}
+.vb-btn:hover{background:rgba(255,143,31,.1)}
+.vb-btn:focus-visible{outline:2px solid var(--or);outline-offset:2px}
+.vb-spin{animation:vbSpin 1s linear infinite}
+@keyframes vbSpin{to{transform:rotate(360deg)}}
+.vb-col{display:flex;flex-direction:column;gap:2px;min-width:0}
+.vb-wave{display:block;max-width:100%;cursor:pointer}
+.vb-t{font-size:12px;line-height:1.2;color:var(--g2);font-variant-numeric:tabular-nums}
+.bub.vbub.me .vb-t{color:var(--or);opacity:.85}

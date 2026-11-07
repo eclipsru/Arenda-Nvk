@@ -9,7 +9,7 @@
 <link rel="icon" href="assets/favicon-32.png" type="image/png" sizes="32x32">
 <link rel="icon" href="assets/icon-192.png" type="image/png" sizes="192x192">
 <link rel="apple-touch-icon" href="assets/apple-touch-icon.png">
-<link rel="stylesheet" href="assets/theme.css?v=20261106-yookassa">
+<link rel="stylesheet" href="assets/theme.css?v=20261107-voice">
 <link rel="stylesheet" href="assets/geo.css?v=20260923-photon">
 </head>
 <body>
@@ -27,9 +27,9 @@
 
 <script src="assets/data.js"></script>
 <script src="assets/geo.js?v=20260923-photon"></script>
-<script src="assets/sb.js?v=20261106-yookassa"></script>
+<script src="assets/sb.js?v=20261107-voice"></script>
 <script src="assets/app-release.js?v=20261009-rel"></script>
-<script src="assets/app.js?v=20261106-yookassa"></script>
+<script src="assets/app.js?v=20261107-voice"></script>
 <script>
 (function(){
   mountChrome('chat', '');
@@ -233,10 +233,13 @@
 
       let inner = '';
       if (m.img)   inner += '<img class="bimg" src="' + esc(m.img) + '" alt="фото" data-big="' + esc(m.img) + '">';
-      if (m.audio) inner += '<audio controls preload="none" src="' + esc(m.audio) + '"></audio>';
+      /* голосовое — пузырь как в приложении (assets/app.js → IvaVoice); без него — плеер браузера, как раньше */
+      const vb = m.audio && typeof IvaVoice !== 'undefined' ? IvaVoice.html(m) : '';
+      if (vb) inner += vb;
+      else if (m.audio) inner += '<audio controls preload="none" src="' + esc(m.audio) + '"></audio>';
       if (m.text)  inner += esc(m.text);
 
-      body += '<div class="bub ' + (mine ? 'me' : 'they') + '">' + inner +
+      body += '<div class="bub ' + (mine ? 'me' : 'they') + (vb ? ' vbub' : '') + '">' + inner +
         '<div class="btime">' + hhmm(m.created_at) +
           (mine ? '<span>' + (m.is_read ? '✓✓' : '✓') + '</span>' : '') +
         '</div></div>';
