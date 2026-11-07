@@ -36,6 +36,7 @@ async function ctx(o){
       sp(4,P1,'rented','Болгарка',90000e3,30*60e3),sp(5,P1,'rented','Шуруповёрт',99000e3,-2*3600e3),sp(3,P2,'new','Пила',600e3)];
     else if(p.endsWith('/rpc/iva_staff_point_chats'))data=o.chats||[];
     else if(p.endsWith('/rpc/iva_staff_chats'))data=[];
+    else if(p.endsWith('/rpc/iva_staff_point_chat'))data=o.msgs||[];
     else if(p.endsWith('/rpc/iva_staff_chat_unread')){if(o.nounr)return route.fulfill({status:404,json:{code:'PGRST202',message:'Could not find the function'}});data=o.unr||[];}
     else if(p.endsWith('/rpc/iva_staff_tools'))data=[tl(1,P1,'Перфоратор Makita'),tl(2,P1,'Дрель Bosch'),tl(3,P2,'Пила циркулярная')];
     else if(p.endsWith('/rpc/iva_staff_stats')){if(o.nostats)return route.fulfill({status:404,json:{code:'PGRST202',message:'Could not find the function public.iva_staff_stats'}});data=stats;}
@@ -51,12 +52,14 @@ const LEND='Хотите сдавать свой инструмент';
 const pc=(peer,un,mine,agoH,name)=>({point_id:P1,peer,client_name:name,point_name:'Маресьева',last_text:'Здравствуйте',last_at:iso(now-agoH*3600e3),last_mine:mine,unread:un,last_client_id:'m'+peer});
 const CHATS=[pc('pc4',0,true,0.2,'Отвечено'),pc('pc3',1,false,3,'Старое'),pc('pc2',0,false,0.5,'Ждёт'),pc('pc1',2,false,1,'Новое')];
 const UNR=[{kind:'p',key:P1,peer:'pc3',first_unread_at:iso(now-50*3600e3)},{kind:'p',key:P1,peer:'pc1',first_unread_at:iso(now-3600e3)}];
+const pm=(id,mine,text,agoM,byMe)=>({id,mine,by_me:!!byMe,text,img:'',audio:'',is_read:true,created_at:iso(now-agoM*60e3)});
+const MSGS=[pm(1,false,'Здравствуйте!',30),pm(2,false,'Перфоратор свободен на завтра?',29),pm(3,true,'Да, свободен. Заберёте после 10:00?',20,true),pm(4,true,'Залог 3000 ₽, паспорт с собой',19,true),pm(5,false,'Хорошо, буду',5)];
 const cls=async(pg,sel)=>pg.locator(sel).evaluateAll(a=>a.map(x=>(x.className.match(/c-([a-z])/)||[])[1]));
 
 // 1. Раскладка: слева заявки, в центре основное, справа чаты; названия и окна — на тех же линиях, что на главной;
 //    пункт — свой выпадающий список справа от ФИО (клик, стрелки, Esc, клик мимо); шапка и окна — на месте при прокрутке;
 //    пункт по центру, ниже права, ниже 5 разделов; «Главная» в шапке
-{const o={staff:Object.assign({},staff,{can_chat:true}),chats:CHATS,unr:UNR};const {c,pg,errors}=await ctx(o);
+{const o={staff:Object.assign({},staff,{can_chat:true}),chats:CHATS,unr:UNR,msgs:MSGS};const {c,pg,errors}=await ctx(o);
  await pg.goto(BASE+'/account.html#staff',{waitUntil:'domcontentloaded'});await pg.waitForSelector('#stLayout #stPtSel');await pg.waitForSelector('#stChatList .st-si');
  const box=async s=>(await pg.locator(s).first().boundingBox());
  const L=await box('#stOrdCol'),M=await box('#stMain'),R=await box('#stChatCol');
@@ -160,7 +163,30 @@ const cls=async(pg,sel)=>pg.locator(sel).evaluateAll(a=>a.map(x=>(x.className.ma
  assert.equal(await pg.locator('.st-tabs button.on').getAttribute('data-st-view'),'orders');
  assert.equal(await pg.locator('#stList .st-wrap.st-flash').getAttribute('data-part'),'2');
  // нажали чат справа — переписка
- await pg.click('#stChatList .st-si.c-g');await pg.waitForSelector('#stChBody');await pg.click('#sheet .x');await pg.waitForSelector('#sheet',{state:'detached'});
+ await pg.click('#stChatList .st-si.c-g');await pg.waitForSelector('#stChBody');
+ // 07.11.2026: окно переписки как в VK — поле одной карточкой, ⊕ и стрелка «Отправить» без заливки (подпись — для экранного диктора)
+ const vf=await pg.evaluate(()=>{const f=document.querySelector('#sheet .sheet-f'),s=document.getElementById('stChSend'),cs=getComputedStyle(s);
+   return {r:getComputedStyle(f).borderTopLeftRadius,bg:cs.backgroundColor,w:Math.round(s.getBoundingClientRect().width),label:s.getAttribute('aria-label'),
+     plus:getComputedStyle(document.querySelector('.st-ch-ph .ic-d')).display,cam:getComputedStyle(document.querySelector('.st-ch-ph .ic-m')).display,body:getComputedStyle(document.querySelector('#sheet .sheet-b')).backgroundColor};});
+ const bb=await pg.evaluate(()=>Array.from(document.querySelectorAll('#stChBody .bub')).map(e=>[e.classList.contains('me')?'me':'they',e.classList.contains('cont'),getComputedStyle(e).marginTop,getComputedStyle(e).borderTopLeftRadius,getComputedStyle(e.querySelector('.btime')).position,!!e.querySelector('.st-by')&&getComputedStyle(e.querySelector('.st-by')).display!=='none']));
+ assert.deepEqual(bb,[['they',false,'10px','14px','absolute',false],['they',true,'3px','14px','absolute',false],['me',false,'10px','14px','absolute',true],['me',true,'3px','14px','absolute',false],['they',false,'10px','14px','absolute',false]],JSON.stringify(bb));
+ if(process.env.SHOTS)await pg.screenshot({path:process.env.SHOTS+'/vk-work-sheet.png'});
+ assert.deepEqual(vf,{r:'12px',bg:'rgba(0, 0, 0, 0)',w:38,label:'Отправить',plus:'block',cam:'none',body:'rgb(16, 18, 23)'},JSON.stringify(vf));
+ await pg.click('#sheet .x');await pg.waitForSelector('#sheet',{state:'detached'});
+ // 07.11.2026: «Сообщения» — поиск по диалогам и та же подсветка, что в колонке «Чаты» (непрочитанные / без ответа / больше суток)
+ await pg.click('[data-st-view=chats]');await pg.waitForSelector('#stChList .st-chat');
+ assert.ok(await pg.locator('#stCq').isVisible(),'поиск по диалогам');
+ assert.deepEqual((await cls(pg,'#stChList .st-chat')).sort(),['g','n','r','y'],'цвета как в колонке «Чаты»');
+ const cg=await pg.evaluate(()=>[getComputedStyle(document.querySelector('#stChList .st-chat.c-g')).borderLeftColor,getComputedStyle(document.querySelector('#stChatList .st-si.c-g')).borderLeftColor]);
+ assert.equal(cg[0],cg[1],'тот же зелёный');
+ await pg.locator('#stCq').pressSequentially('стар');await pg.waitForTimeout(300);
+ assert.equal(await pg.locator('#stChList .st-chat').count(),1);assert.match(await pg.locator('#stChList .st-chat').innerText(),/Старое/);
+ assert.equal(await pg.evaluate(()=>document.activeElement.id),'stCq','фокус остаётся в поиске');
+ await pg.fill('#stCq','нет такого');await pg.waitForTimeout(300);
+ assert.match(await pg.locator('#stChList').innerText(),/Ничего не найдено/);
+ assert.equal(await pg.locator('#stChatList .st-si').count(),4,'колонка «Чаты» справа не фильтруется');
+ await pg.fill('#stCq','');await pg.waitForTimeout(300);assert.equal(await pg.locator('#stChList .st-chat').count(),4);
+ if(process.env.SHOTS)await pg.screenshot({path:process.env.SHOTS+'/vk-work-list.png'});
  // «Добавить»: форма для выбранного пункта; не перезагружается при обновлении и переходах между разделами
  await pg.click('[data-st-view=add]');await pg.waitForSelector('#stAddFrame iframe');
  assert.match(await pg.locator('#stAddFrame iframe').getAttribute('src'),new RegExp('embed=1&point='+P1));
@@ -265,6 +291,10 @@ const cls=async(pg,sel)=>pg.locator(sel).evaluateAll(a=>a.map(x=>(x.className.ma
  await pg.keyboard.press('Escape');await pg.evaluate(()=>window.scrollTo({top:0,behavior:'instant'}));
  await pg.$eval('[data-st-view=add]',e=>e.scrollIntoView({block:'center'}));await pg.click('[data-st-view=add]');await pg.waitForSelector('#stAddFrame iframe');
  const sw=await pg.evaluate(()=>document.documentElement.scrollWidth);assert(sw<=392,'нет прокрутки вбок: '+sw);
+ // 07.11.2026: вид VK — только на компьютере; на телефоне «Сообщения» как было: без поиска и без цветной полосы
+ await pg.$eval('[data-st-view=chats]',e=>e.scrollIntoView({block:'center'}));await pg.click('[data-st-view=chats]');await pg.waitForSelector('#stChList .st-chat');
+ assert.equal(await pg.locator('#stCq').isVisible(),false,'на телефоне поиска нет');
+ assert.equal(await pg.evaluate(()=>getComputedStyle(document.querySelector('#stChList .st-chat.c-g')).borderLeftWidth),'1px','на телефоне список прежний');
  assert.deepEqual(errors,[]);await c.close();}
 
 // 7. п.4 правок: сотрудник с прежней строкой арендодателя (admins.active = false) — форма, а не «Размещение приостановлено»

@@ -1797,11 +1797,15 @@ final class IvaChatPatch {
         int total;                       // секунды, 0 — пока не знаем
     }
 
-    /** Ширина волны, как в ВК: длиннее запись — длиннее волна. 72dp + 3dp/с, но не шире 190dp и 42% экрана. */
+    /** Ширина волны, как в ВК: длиннее запись — длиннее волна.
+     *  10.139 (просьба владельца 07.11.2026 «сделать длиннее / шире»): 140dp + 4dp/с, но не шире 250dp и 58% экрана
+     *  (было 72dp + 3dp/с, не шире 190dp и 42%). Та же формула — у пузыря на сайте (assets/app.js → IvaVoice.wavePx). */
+    static final int VOICE_WAVE_MIN_DP = 140, VOICE_WAVE_PER_SEC_DP = 4, VOICE_WAVE_MAX_DP = 250;
+    static final float VOICE_WAVE_MAX_SCREEN = 0.58f;
     static int voiceWavePx(int sec, int screenW, float density) {
-        int min = Math.round(72 * density);
-        int max = Math.max(min, Math.min(Math.round(190 * density), Math.round(screenW * 0.42f)));
-        return Math.max(min, Math.min(max, Math.round((72 + 3 * Math.max(0, sec)) * density)));
+        int min = Math.round(VOICE_WAVE_MIN_DP * density);
+        int max = Math.max(min, Math.min(Math.round(VOICE_WAVE_MAX_DP * density), Math.round(screenW * VOICE_WAVE_MAX_SCREEN)));
+        return Math.max(min, Math.min(max, Math.round((VOICE_WAVE_MIN_DP + VOICE_WAVE_PER_SEC_DP * Math.max(0, sec)) * density)));
     }
 
     /** Сколько столбиков влезает в ширину. */

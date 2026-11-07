@@ -1960,3 +1960,253 @@ const IvaAva = (function(){
   return { paint: paint, of: of, mine: mine, prokat: prokat, myOrg: myOrg, pick: pick,
            saveMine: saveMine, saveOrg: saveOrg, reset: reset };
 })();
+
+/* ---------- Голосовое сообщение — пузырь как в приложении (07.11.2026, просьба владельца) ----------
+   Как IvaChatPatch.voiceBubble: слева круглая кнопка «рамкой» (▶ / ❚❚ / кольцо, пока грузится), справа волна по настоящей
+   громкости записи (64 уровня, как в приложении: блоки ~10 мс → максимум модуля → среднее по участкам → 0…1, степень 0,7),
+   прослушанная часть — оранжевая, под волной — длительность, во время воспроизведения — сколько прошло. Нажатие на волну —
+   перемотка. Ширина волны растёт с длительностью: 200 + 6 на секунду, не шире 400 и 62% окна (шире, чем в приложении,
+   — вторая просьба владельца 07.11.2026; в приложении — voiceWavePx: 140 + 4 на секунду, до 250 и 58% экрана). Волна считается один раз, когда пузырь виден, и запоминается на этом устройстве.
+   Играет одно голосовое за раз; перерисовка переписки не останавливает запись, уход из переписки — останавливает. */
+const IvaVoice = (function(){
+  const PEAKS = 64, BAR = 2, GAP = 1.5, WAVE_H = 24, MIN_H = 2, REST = 'rgba(255,255,255,.35)';
+  const LS = 'iva_vpk:';
+  const peaks = {}, durs = {}, asked = {};
+  let au = null, cur = '', loading = false, seekTo = -1, raf = 0, mo = null, io = null, queue = [], busy = false;
+
+  function durLabel(sec){ const s = Math.max(0, Math.floor(sec || 0)); return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0'); }
+  /* 07.11.2026 (вторая просьба владельца): на сайте пузырь шире, чем в приложении — 200 + 6 на секунду, до 400 и 62% окна */
+  function wavePx(sec, screenW){
+    const w = screenW || window.innerWidth || 1000;
+    const max = Math.max(200, Math.min(400, Math.round(w * 0.62)));
+    return Math.max(200, Math.min(max, Math.round(200 + 6 * Math.max(0, sec || 0))));
+  }
+  function barCount(w){ return w > 0 ? Math.max(1, Math.floor((w + GAP) / (BAR + GAP))) : 0; }
+  function bars(pk, n){
+    const r = new Array(Math.max(0, n)).fill(0);
+    if (!pk || !pk.length || n <= 0) return r;
+    for (let i = 0; i < n; i++){
+      const from = Math.floor(i * pk.length / n); let to = Math.floor((i + 1) * pk.length / n);
+      if (to <= from) to = from + 1;
+      let m = 0; for (let k = from; k < to && k < pk.length; k++) m = Math.max(m, pk[k]);
+      r[i] = m;
+    }
+    return r;
+  }
+  function peaksOf(blocks, n){
+    const r = new Array(n).fill(0);
+    if (!blocks || !blocks.length) return r;
+    let max = 0;
+    for (let i = 0; i < n; i++){
+      const from = Math.floor(i * blocks.length / n); let to = Math.floor((i + 1) * blocks.length / n);
+      if (to <= from) to = from + 1;
+      let s = 0, c = 0; for (let k = from; k < to && k < blocks.length; k++){ s += Math.abs(blocks[k]); c++; }
+      r[i] = c ? s / c : 0; max = Math.max(max, r[i]);
+    }
+    if (max <= 0) return new Array(n).fill(0);
+    return r.map(function(v){ return Math.pow(v / max, 0.7); });
+  }
+  function key(url){ let h = 0; for (let i = 0; i < url.length; i++) h = (h * 31 + url.charCodeAt(i)) | 0; return LS + (h >>> 0).toString(16); }
+  function loadSaved(url){
+    try {
+      const s = localStorage.getItem(key(url));
+      if (!s || s.length !== PEAKS * 2 + 1 || s[0] !== 'v') return null;
+      const p = []; for (let i = 0; i < PEAKS; i++) p.push(parseInt(s.substr(1 + i * 2, 2), 16) / 255);
+      return p.some(isNaN) ? null : p;
+    } catch(e){ return null; }
+  }
+  function save(url, p){
+    try { localStorage.setItem(key(url), 'v' + p.map(function(v){ return ('0' + Math.round(Math.max(0, Math.min(1, v)) * 255).toString(16)).slice(-2); }).join('')); } catch(e){}
+  }
+  function safe(url){ return /^https:\/\//.test(String(url || '')) ? String(url) : ''; }
+  function escA(s){ return String(s).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+
+  const ICON = {
+    play: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6.8v10.4c0 .8.9 1.3 1.6.8l7.6-5.2c.6-.4.6-1.2 0-1.6l-7.6-5.2C9.9 5.5 9 6 9 6.8z"/></svg>',
+    pause: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="7.6" y="6.4" width="2.8" height="11.2" rx=".9"/><rect x="13.6" y="6.4" width="2.8" height="11.2" rx=".9"/></svg>',
+    load: '<svg viewBox="0 0 24 24" aria-hidden="true" class="vb-spin"><path d="M12 6.2a5.8 5.8 0 1 1-5.8 5.8" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg>'
+  };
+
+  /* разметка пузыря; m — сообщение ({audio, audio_dur}) */
+  function html(m){
+    const url = safe(m && m.audio);
+    if (!url) return '';
+    start();
+    const d = Math.max(0, Math.round(Number(m.audio_dur) || durs[url] || 0));
+    return '<div class="vb" data-vb="' + escA(url) + '" data-dur="' + d + '">' +
+      '<button type="button" class="vb-btn" aria-label="Слушать голосовое">' + ICON.play + '</button>' +
+      '<div class="vb-col"><canvas class="vb-wave" width="0" height="0" style="width:' + wavePx(d) + 'px;height:' + WAVE_H + 'px" ' +
+        'role="slider" aria-label="Перемотка голосового" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" tabindex="-1"></canvas>' +
+      '<span class="vb-t">' + (d > 0 ? durLabel(d) : '') + '</span></div></div>';
+  }
+
+  function orange(){ try { return getComputedStyle(document.documentElement).getPropertyValue('--or').trim() || '#FF8F1F'; } catch(e){ return '#FF8F1F'; } }
+  function draw(el, progress){
+    const cv = el.querySelector('.vb-wave'); if (!cv) return;
+    const url = el.getAttribute('data-vb'), dpr = window.devicePixelRatio || 1;
+    const w = cv.clientWidth || parseFloat(cv.style.width) || 0, h = WAVE_H;
+    if (cv.width !== Math.round(w * dpr) || cv.height !== Math.round(h * dpr)){ cv.width = Math.round(w * dpr); cv.height = Math.round(h * dpr); }
+    const c = cv.getContext && cv.getContext('2d'); if (!c) return;
+    c.setTransform(dpr, 0, 0, dpr, 0, 0); c.clearRect(0, 0, w, h);
+    const n = barCount(w), b = bars(peaks[url], n), cy = h / 2, or = orange();
+    for (let i = 0; i < n; i++){
+      const bh = Math.max(MIN_H, b[i] * h), x = i * (BAR + GAP);
+      c.fillStyle = (i + 0.5) / n <= progress ? or : REST;
+      const r = BAR / 2;
+      c.beginPath();
+      if (c.roundRect) c.roundRect(x, cy - bh / 2, BAR, bh, r); else c.rect(x, cy - bh / 2, BAR, bh);
+      c.fill();
+    }
+    cv.setAttribute('aria-valuenow', String(Math.round(progress * 100)));
+  }
+  function els(url){ return Array.prototype.filter.call(document.querySelectorAll('.vb[data-vb]'), function(e){ return e.getAttribute('data-vb') === url; }); }
+  function totalOf(el){ const url = el.getAttribute('data-vb'); return Number(el.getAttribute('data-dur')) || durs[url] || 0; }
+  function paint(el){
+    const url = el.getAttribute('data-vb'), on = url === cur && au;
+    const st = on ? (loading ? 'load' : (au.paused ? 'play' : 'pause')) : 'play';
+    const btn = el.querySelector('.vb-btn');
+    if (btn && btn.getAttribute('data-st') !== st){
+      btn.setAttribute('data-st', st); btn.innerHTML = ICON[st];
+      btn.setAttribute('aria-label', st === 'pause' ? 'Пауза' : st === 'load' ? 'Загружается' : 'Слушать голосовое');
+    }
+    const total = totalOf(el), pos = on ? au.currentTime || 0 : 0, d = on && isFinite(au.duration) && au.duration > 0 ? au.duration : total;
+    const t = el.querySelector('.vb-t');
+    if (t){ const s = pos > 0 ? durLabel(pos) : (total > 0 ? durLabel(total) : ''); if (t.textContent !== s) t.textContent = s; }
+    draw(el, on && d > 0 && pos > 0 ? Math.min(1, pos / d) : 0);
+  }
+  function paintCur(){ els(cur).forEach(paint); }
+  function tick(){ raf = 0; paintCur(); if (au && !au.paused) raf = requestAnimationFrame(tick); }
+  function stop(){
+    const was = cur;
+    if (au){ try { au.pause(); } catch(e){} au.removeAttribute('src'); try { au.load(); } catch(e){} }
+    au = null; cur = ''; loading = false; seekTo = -1;
+    if (raf){ cancelAnimationFrame(raf); raf = 0; }
+    if (was) els(was).forEach(paint);
+  }
+  function play(url, frac){
+    if (cur === url && au){
+      if (frac >= 0){
+        if (isFinite(au.duration) && au.duration > 0) au.currentTime = Math.min(frac * au.duration, Math.max(0, au.duration - 0.1));
+        else seekTo = frac;
+        if (au.paused) au.play().catch(function(){});
+      } else if (loading){ /* ждём */ }
+      else if (au.paused) au.play().catch(function(){});
+      else au.pause();
+      paintCur(); return;
+    }
+    stop();
+    cur = url; loading = true; seekTo = frac;
+    au = new Audio(); au.preload = 'auto'; au.src = url;
+    const me = au;
+    me.addEventListener('loadedmetadata', function(){
+      if (me !== au) return;
+      if (isFinite(me.duration) && me.duration > 0){ durs[url] = me.duration; if (seekTo >= 0){ me.currentTime = Math.min(seekTo * me.duration, Math.max(0, me.duration - 0.1)); seekTo = -1; } }
+    });
+    me.addEventListener('playing', function(){ if (me !== au) return; loading = false; paintCur(); if (!raf) raf = requestAnimationFrame(tick); });
+    me.addEventListener('pause', function(){ if (me === au) paintCur(); });
+    me.addEventListener('ended', function(){ if (me === au) stop(); });
+    me.addEventListener('error', function(){ if (me !== au) return; stop(); if (typeof toast === 'function') toast('Не удалось воспроизвести голосовое'); });
+    me.play().catch(function(e){ if (me === au && e && e.name !== 'AbortError'){ stop(); } });
+    paintCur();
+  }
+
+  /* волна: файл скачивается один раз, когда пузырь виден; не получилось — ровная линия */
+  function want(url){
+    if (peaks[url] || asked[url]) return;
+    const s = loadSaved(url); if (s){ peaks[url] = s; els(url).forEach(paint); return; }
+    asked[url] = 1; queue.push(url); pump();
+  }
+  async function pump(){
+    if (busy || !queue.length) return;
+    busy = true;
+    const url = queue.shift();
+    try {
+      const Ctx = window.OfflineAudioContext || window.webkitOfflineAudioContext;
+      if (!Ctx) throw new Error('нет Web Audio');
+      const r = await fetch(url, { mode: 'cors' });
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      const buf = await r.arrayBuffer();
+      const ctx = new Ctx(1, 1, 44100);
+      const ab = await new Promise(function(ok, bad){ const p = ctx.decodeAudioData(buf, ok, bad); if (p && p.then) p.then(ok, bad); });
+      const ch = ab.getChannelData(0), block = Math.max(1, Math.floor(ab.sampleRate / 100)), blocks = [];
+      for (let i = 0; i < ch.length; i += block){ let m = 0; const e = Math.min(ch.length, i + block); for (let k = i; k < e; k++){ const v = ch[k] < 0 ? -ch[k] : ch[k]; if (v > m) m = v; } blocks.push(m); }
+      if (blocks.length){ peaks[url] = peaksOf(blocks, PEAKS); save(url, peaks[url]); }
+      if (ab.duration > 0 && !durs[url]) durs[url] = ab.duration;
+      els(url).forEach(function(el){
+        if (!(Number(el.getAttribute('data-dur')) > 0) && durs[url]){
+          el.setAttribute('data-dur', String(Math.round(durs[url])));
+          const cv = el.querySelector('.vb-wave'); if (cv) cv.style.width = wavePx(Math.round(durs[url])) + 'px';
+        }
+        paint(el);
+      });
+    } catch(e){ /* ровная линия */ }
+    busy = false;
+    if (queue.length) setTimeout(pump, 50);
+  }
+
+  function scan(){
+    const list = document.querySelectorAll('.vb[data-vb]');
+    let curSeen = false;
+    list.forEach(function(el){
+      const url = el.getAttribute('data-vb');
+      if (url === cur) curSeen = true;
+      if (!el.__vb){
+        el.__vb = 1;
+        if (!peaks[url]){ const s = loadSaved(url); if (s) peaks[url] = s; }
+        if (io && !peaks[url]) io.observe(el); else if (!peaks[url]) want(url);
+      }
+      paint(el);
+    });
+    if (cur && !curSeen) stop();                 // переписку закрыли или сменили — голосовое замолкает
+  }
+  let scanT = 0;
+  function start(){
+    if (mo || typeof MutationObserver === 'undefined') return;
+    mo = new MutationObserver(function(){ if (!scanT) scanT = setTimeout(function(){ scanT = 0; scan(); }, 30); });
+    mo.observe(document.body || document.documentElement, { childList: true, subtree: true });
+    if ('IntersectionObserver' in window){
+      io = new IntersectionObserver(function(es){ es.forEach(function(e){ if (e.isIntersecting){ io.unobserve(e.target); want(e.target.getAttribute('data-vb')); } }); }, { rootMargin: '200px' });
+    }
+    document.addEventListener('click', function(e){
+      const t = e.target && e.target.closest ? e.target : null; if (!t) return;
+      const el = t.closest('.vb[data-vb]'); if (!el) return;
+      e.preventDefault();
+      const url = el.getAttribute('data-vb'), cv = t.closest('.vb-wave');
+      if (cv){ const r = cv.getBoundingClientRect(); play(url, Math.max(0, Math.min(1, (e.clientX - r.left) / Math.max(1, r.width)))); }
+      else play(url, -1);
+    });
+    window.addEventListener('resize', function(){
+      document.querySelectorAll('.vb[data-vb]').forEach(function(el){ const cv = el.querySelector('.vb-wave'); if (cv) cv.style.width = wavePx(totalOf(el) | 0) + 'px'; paint(el); });
+    });
+    setTimeout(scan, 0);
+  }
+
+  return { html: html, wavePx: wavePx, barCount: barCount, bars: bars, peaksOf: peaksOf, durLabel: durLabel, stop: stop, scan: scan };
+})();
+
+/* ---------- «Позвонить» — для раздела «Обращения» владельца проката (просьба владельца 07.11.2026) ----------
+   Сам звонок сайт не видит — считаем нажатие «Позвонить» (и «Показать телефон») на странице инструмента: база
+   (SQL 20261128_appeals.sql, iva_call_tap) по инструменту сама находит прокат и пункт выдачи и пишет только
+   «прокат, пункт, сайт, время» — без данных человека. Один раз за показ страницы; ошибки и отсутствие SQL — молча. */
+const IvaCallTap = (function(){
+  const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  const sent = {};
+  function body(o){
+    o = o || {};
+    const tool = UUID.test(String(o.tool || '')) ? String(o.tool) : null, point = UUID.test(String(o.point || '')) ? String(o.point) : null;
+    const owner = String(o.owner || '').trim().toLowerCase() || null;
+    return (tool || point || owner) ? { p_point: point, p_tool: tool, p_owner: owner, p_src: 'site' } : null;
+  }
+  function send(o){
+    const b = body(o); if (!b) return false;
+    const key = [b.p_tool, b.p_point, b.p_owner].join('|');
+    if (sent[key]) return false;
+    sent[key] = 1;
+    try {
+      fetch(SB + '/rest/v1/rpc/iva_call_tap', { method: 'POST', keepalive: true,
+        headers: { apikey: KEY, 'Content-Type': 'application/json' }, body: JSON.stringify(b) }).catch(function(){});
+    } catch(e){}
+    return true;
+  }
+  return { send: send, body: body };
+})();

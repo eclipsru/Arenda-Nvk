@@ -784,8 +784,9 @@ public class IvaPatchTest {
             eq("удаление 10.63: пузыри 50dp, углы 14/20dp, ширина до 360dp", IvaClientPatch.CHOICE_BUBBLE_DP + "|" + IvaClientPatch.CHOICE_RADIUS_DP + "|" + IvaClientPatch.CHOICE_CARD_RADIUS_DP
                 + "|" + IvaClientPatch.CHOICE_MAX_DP + "|" + IvaClientPatch.CHOICE_CANCEL, "50|14|20|360|Отмена");
             // 10.60: голосовые как в ВК — кнопка, волна по громкости, длительность; цвета приложения
-            eq("голосовые 10.60: волна растёт с длительностью (1080 px, 2.75)", IvaChatPatch.voiceWavePx(0, 1080, 2.75f) + "|" + IvaChatPatch.voiceWavePx(10, 1080, 2.75f) + "|" + IvaChatPatch.voiceWavePx(120, 1080, 2.75f), "198|281|454");
-            eq("голосовые 10.60: волна не шире 190dp и 42% экрана, не уже 72dp", IvaChatPatch.voiceWavePx(600, 3000, 1f) + "|" + IvaChatPatch.voiceWavePx(600, 300, 1f) + "|" + IvaChatPatch.voiceWavePx(-5, 100, 1f), "190|126|72");
+            eq("голосовые 10.139: волна растёт с длительностью (1080 px, 2.75)", IvaChatPatch.voiceWavePx(0, 1080, 2.75f) + "|" + IvaChatPatch.voiceWavePx(10, 1080, 2.75f) + "|" + IvaChatPatch.voiceWavePx(120, 1080, 2.75f), "385|495|626");
+            eq("голосовые 10.139: волна не шире 250dp и 58% экрана, не уже 140dp", IvaChatPatch.voiceWavePx(600, 3000, 1f) + "|" + IvaChatPatch.voiceWavePx(600, 300, 1f) + "|" + IvaChatPatch.voiceWavePx(-5, 100, 1f), "250|174|140");
+            eq("голосовые 10.139: шире, чем в 10.138 (было 198|281|454 → не уже 140dp)", IvaChatPatch.voiceWavePx(0, 1080, 2.75f) > 198 && IvaChatPatch.voiceWavePx(10, 1080, 2.75f) > 281, true);
             eq("голосовые 10.60: столбиков влезает (2dp + 1,5dp)", IvaChatPatch.voiceBarCount(198, 5.5f, 4.125f) + "|" + IvaChatPatch.voiceBarCount(0, 2f, 1f) + "|" + IvaChatPatch.voiceBarCount(1, 2f, 1f), "21|0|1");
             eq("голосовые 10.60: столбики — максимум по участку", java.util.Arrays.toString(IvaChatPatch.voiceBars(new float[]{0.9f, 0.1f, 0.4f, 0.2f}, 2)), "[0.9, 0.4]");
             eq("голосовые 10.60: столбиков больше, чем уровней", java.util.Arrays.toString(IvaChatPatch.voiceBars(new float[]{0.5f, 1f}, 4)), "[0.5, 0.5, 1.0, 1.0]");
@@ -2612,6 +2613,7 @@ public class IvaPatchTest {
         v121();                                                       // 10.121: первый пункт, правки на одобрение, заявки целиком
         v122();                                                       // 10.122: удаление сотрудником, «Мой инструмент», чат, отмена заявки
         v138();                                                       // 10.138: ФИО из профиля, комиссия из базы
+        v140();                                                       // 10.140: «Обращения», звонки, «Написать в чат»
         v123();                                                       // 10.123: доставка по наибольшей цене, «обратно» за каждым сроком, карточки
         v124();                                                       // 10.124: подсветка карточек заявок
         v125();                                                       // 10.125: телефон пункта в карточке, другой пункт проката
@@ -3472,6 +3474,33 @@ public class IvaPatchTest {
         eq("10.121: число из базы", IvaOrderViewPatch.intOf("3", 0) + "|" + IvaOrderViewPatch.intOf(null, 7) + "|" + IvaOrderViewPatch.intOf("x", 1) + "|"
             + IvaOrderViewPatch.intOf(2.6, 0), "3|7|1|3");
         eq("10.121: адрес функции заявок", IvaOrderViewPatch.RPC, "/rest/v1/rpc/iva_order_cards");
+    }
+
+    /** 10.140: «Обращения» и нажатия «Позвонить» (разбор без org.json). */
+    static void v140() {
+        String P = "11111111-2222-3333-4444-555555555555", T = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee";
+        eq("10.140: тело — пункт или все", IvaAppealsPatch.body(P.toUpperCase()) + "|" + IvaAppealsPatch.body("") + "|" + IvaAppealsPatch.body("x"),
+            "{\"p_point\":\"" + P + "\"}|{\"p_point\":null}|{\"p_point\":null}");
+        String j = "{\"point\":null,\"orders\":{\"day\":1,\"week\":2,\"month\":3,\"all\":4},\"calls\":{\"day\":0,\"week\":5,\"month\":6,\"all\":7},"
+            + "\"msgs\":{\"day\":2,\"week\":2,\"month\":9,\"all\":-1}}";
+        int[][] r = IvaAppealsPatch.parse(j);
+        eq("10.140: разбор счётчиков", r == null ? "null" : r[0][0] + "," + r[1][1] + "," + r[2][2] + "," + r[2][3], "1,5,9,0");
+        eq("10.140: всего за период", IvaAppealsPatch.total(r, 0) + "|" + IvaAppealsPatch.total(r, 1) + "|" + IvaAppealsPatch.total(r, 3) + "|" + IvaAppealsPatch.total(null, 0), "3|9|11|0");
+        int[][] w = IvaAppealsPatch.parse("[{\"iva_appeals\":" + j + "}]");
+        eq("10.140: обёрнутый ответ", w == null ? "null" : String.valueOf(w[1][3]), "7");
+        eq("10.140: плохой ответ — null", String.valueOf(IvaAppealsPatch.parse("{\"orders\":{\"day\":1}}")) + "|" + IvaAppealsPatch.parse("{\"code\":\"PGRST202\"}") + "|" + IvaAppealsPatch.parse(null), "null|null|null");
+        eq("10.140: нет SQL", IvaAppealsPatch.noDb("404", "") + "|" + IvaAppealsPatch.noDb("400", "{\"code\":\"PGRST202\"}") + "|" + IvaAppealsPatch.noDb("400", "{\"message\":\"Это не ваш пункт выдачи\"}"), "true|true|false");
+        eq("10.140: склонение", IvaAppealsPatch.word(1) + "|" + IvaAppealsPatch.word(3) + "|" + IvaAppealsPatch.word(5) + "|" + IvaAppealsPatch.word(11) + "|" + IvaAppealsPatch.word(21) + "|" + IvaAppealsPatch.word(0),
+            "обращение|обращения|обращений|обращений|обращение|обращений");
+        eq("10.140: периоды", String.join(",", IvaAppealsPatch.PERIODS) + "|" + String.join(",", IvaAppealsPatch.KEYS), "Сегодня,Неделя,Месяц,Всё время|day,week,month,all");
+        eq("10.140: с какого времени", IvaAppealsPatch.since(1) + "|" + IvaAppealsPatch.since(2), "с понедельника|с 1-го числа");
+        eq("10.140: нажатие «Позвонить» — тело", IvaAppealsPatch.tapBody(P, null, null),
+            "{\"p_point\":\"" + P + "\",\"p_tool\":null,\"p_owner\":null,\"p_src\":\"app\"}");
+        eq("10.140: по прокату, кривые данные отброшены", IvaAppealsPatch.tapBody("x", T, " Shop@Mail.RU ") + "|" + IvaAppealsPatch.tapBody("", "", "a\"b@c.ru") + "|" + IvaAppealsPatch.tapBody(null, null, null),
+            "{\"p_point\":null,\"p_tool\":\"" + T + "\",\"p_owner\":\"shop@mail.ru\",\"p_src\":\"app\"}|null|null");
+        IvaPickupPatch.Point pt = new IvaPickupPatch.Point();
+        pt.name = "Склад"; pt.city = "Бердск";
+        eq("10.140: подпись пункта", IvaAppealsPatch.pointName(pt) + "|" + IvaAppealsPatch.pointName(null), "Склад · Бердск|Все пункты");
     }
 
     /** 10.138 (просьба владельца №11): ФИО сотрудника — из профиля; комиссия — из базы (iva_fee_balance), как на сайте. */

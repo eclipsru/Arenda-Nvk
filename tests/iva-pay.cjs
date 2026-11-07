@@ -67,6 +67,7 @@ try {
         const cr = typeof yk.create === 'function' ? yk.create(JSON.parse(c.body)) : yk.create;
         return res(cr.status, cr.j);
       }
+      if (c.url === 'https://api.yookassa.ru/v3/me') { const g = yk.me || { status: 404, j: {} }; return res(g.status, g.j); }
       const m = c.url.match(/^https:\/\/api\.yookassa\.ru\/v3\/payments\/([^/]+)$/);
       if (m) { const g = yk.get[decodeURIComponent(m[1])]; return g ? res(g.status, g.j) : res(404, {}); }
       return res(599, {});
@@ -121,6 +122,36 @@ try {
     out.ykRefused = await run('POST', { a: 'new', amount: 100 }, 'Bearer eyJgood');
     out.failArgs = JSON.parse((calls.find((c) => c.url.endsWith('/rpc/iva_yk_fail')) || { body: 'null' }).body);
     out.failSet = calls.some((c) => c.url.endsWith('/rpc/iva_yk_set'));
+    out.refusedMe = calls.filter((c) => c.url.endsWith('/v3/me')).map((c) => [c.method, c.headers.Authorization.startsWith('Basic ')]);
+
+    // 06.11.2026: случай владельца — СБП и обычная страница, обе 403 «Transaction forbidden»; магазин отключён
+    const EID = '1f2e3d4c-0000-4000-8000-0123456789ab';
+    const FORB = { status: 403, j: { type: 'error', id: EID, code: 'forbidden', description: 'Unspecified error. Transaction forbidden. Contact the Support Service' } };
+    yk.create = FORB;
+    yk.me = { status: 200, j: { account_id: '123456', test: false, status: 'disabled', payment_methods: ['bank_card', 'sbp'], itn: '7700000000' } };
+    out.forbOff = await run('POST', { a: 'new', amount: 5, method: 'sbp' }, 'Bearer eyJgood');
+    out.forbOffPosts = calls.filter((c) => c.url === 'https://api.yookassa.ru/v3/payments').length;
+    out.forbOffFail = JSON.parse((calls.find((c) => c.url.endsWith('/rpc/iva_yk_fail')) || { body: 'null' }).body);
+    yk.me = { status: 200, j: { account_id: '123456', test: false, status: 'enabled', payment_methods: ['bank_card', 'sbp'] } };
+    out.forbOn = await run('POST', { a: 'new', amount: 5 }, 'Bearer eyJgood');
+    yk.me = { status: 200, j: { account_id: '123456', test: false, status: 'enabled', payment_methods: [] } };
+    out.forbNoMethods = await run('POST', { a: 'new', amount: 5 }, 'Bearer eyJgood');
+    yk.me = { status: 403, j: { type: 'error', code: 'forbidden' } };
+    out.forbNoMe = await run('POST', { a: 'new', amount: 5 }, 'Bearer eyJgood');
+    yk.me = undefined;
+    yk.create = { status: 401, j: { type: 'error', id: EID, code: 'invalid_credentials', description: 'Login has not been found' } };
+    out.badKeys = await run('POST', { a: 'new', amount: 5 }, 'Bearer eyJgood');
+    out.badKeysMe = calls.some((c) => c.url.endsWith('/v3/me'));
+    yk.create = { status: 200, j: { id: EID, status: 'pending' } };
+    out.noUrl = await run('POST', { a: 'new', amount: 5 }, 'Bearer eyJgood');
+    out.why = [
+      m.ykWhy(429, { type: 'error', code: 'too_many_requests' }).text,
+      m.ykWhy(400, { type: 'error', code: 'invalid_request', parameter: 'amount.value', id: 'x y' }).text,
+      m.ykWhy(400, { type: 'error', code: 'invalid_request', parameter: '<script>' }).text,
+      m.ykWhy(500, {}).text,
+      m.ykWhy(403, { type: 'error', code: 'forbidden', id: EID, description: 'x'.repeat(400) }).log.length,
+    ];
+    out.shop = [m.shopInfo({ status: 'enabled', test: true, payment_methods: ['bank_card', 1, 'Evil<b>'], account_id: '1', itn: '2' }), m.shopInfo({ type: 'error', status: 'x' }), m.shopInfo(null)];
 
     dbFail = { iva_yk_new: '{"code":"P0001","message":"IVA_TOO_MANY"}' };
     out.tooMany = await run('POST', { a: 'new', amount: 100 }, 'Bearer eyJgood');
@@ -215,8 +246,24 @@ try {
     confirmation: { type: 'redirect', return_url: 'https://eclipsru.github.io/Arenda-Nvk/pay-done.html?p=17' },
     description: 'Комиссия площадки «Ива», платёж №17', metadata: { iva_id: '17' } }, 'тело платежа: сумма, сразу списать, возврат на сайт; без чека и почты');
   eq(o.setArgs, { p_id: 17, p_yk_id: PID, p_url: 'https://yoomoney.ru/checkout/payments/v2/contract?orderId=2f6a' }, 'номер ЮKassa записан в базу');
-  eq(o.ykRefused, { s: 502, j: { error: 'yookassa', message: 'Магазин не активирован' } }, 'ЮKassa отказала — причина в ответе');
-  ok(o.failArgs && o.failArgs.p_reason === 'Магазин не активирован' && !o.failSet, 'отказ ЮKassa → iva_yk_fail, без iva_yk_set');
+  eq(o.ykRefused, { s: 502, j: { error: 'yookassa', message: 'ЮKassa запретила платежи в магазине площадки «Ива». Владельцу площадки: проверьте магазин в кабинете ЮKassa или напишите в поддержку ЮKassa', code: 'forbidden', eid: '' } },
+    'ЮKassa отказала (403) — причина по-русски; настройки магазина не узнать — общая подсказка');
+  ok(o.failArgs && o.failArgs.p_reason === 'forbidden 403: Магазин не активирован' && !o.failSet, 'отказ ЮKassa → iva_yk_fail с кодом и описанием ЮKassa, без iva_yk_set');
+  eq(o.refusedMe, [['GET', true]], '403 — один раз спросили у ЮKassa настройки магазина (GET /v3/me, ключ магазина)');
+  const EID = '1f2e3d4c-0000-4000-8000-0123456789ab';
+  eq(o.forbOff, { s: 502, j: { error: 'yookassa', message: 'ЮKassa запретила платежи в магазине площадки «Ива» — магазин отключён в ЮKassa. Владельцу площадки: включите магазин в кабинете ЮKassa или напишите в поддержку ЮKassa (номер ошибки ЮKassa: ' + EID + ')',
+    code: 'forbidden', eid: EID, shop: { status: 'disabled', test: false, methods: ['bank_card', 'sbp'] } } }, '06.11: «Transaction forbidden», магазин отключён — так и сказано, с номером ошибки; ИНН и номер магазина не отдаются');
+  eq(o.forbOffPosts, 2, '06.11: СБП отказана — вторая попытка обычной страницей, как раньше');
+  eq(o.forbOffFail && o.forbOffFail.p_reason, 'forbidden 403: Unspecified error. Transaction forbidden. Contact the Support Service · ' + EID + ' · магазин disabled [bank_card,sbp]', '06.11: в базе — код, описание ЮKassa, номер ошибки и состояние магазина');
+  ok(/магазин включён, но операции запрещены/.test(o.forbOn.j.message) && o.forbOn.j.message.endsWith('(номер ошибки ЮKassa: ' + EID + ')'), 'магазин включён, но 403 — «напишите в поддержку» и номер ошибки');
+  ok(/не включён ни один способ оплаты/.test(o.forbNoMethods.j.message), 'магазин без способов оплаты — подсказка включить карты и СБП');
+  ok(/проверьте магазин в кабинете ЮKassa/.test(o.forbNoMe.j.message) && !('shop' in o.forbNoMe.j) && o.forbNoMe.j.eid === EID, 'настройки магазина ЮKassa не отдала — общая подсказка, номер ошибки на месте');
+  ok(o.badKeys.s === 502 && /не приняла ключи магазина/.test(o.badKeys.j.message) && o.badKeys.j.code === 'invalid_credentials' && !o.badKeysMe, '401 — «проверьте ключи», настройки не спрашиваем');
+  ok(o.noUrl.s === 502 && /не прислала ссылку/.test(o.noUrl.j.message) && o.noUrl.j.eid === '', 'ЮKassa ответила без ссылки — понятная ошибка; номер платежа не выдаётся за номер ошибки');
+  ok(o.why[0] === 'ЮKassa просит подождать — попробуйте через минуту' && o.why[1] === 'ЮKassa отклонила платёж (поле amount.value) — попробуйте другую сумму или способ оплаты'
+    && !/script/.test(o.why[2]) && /временно не отвечает/.test(o.why[3]) && o.why[4] === 200, 'причины 429 / 400 / 5xx по-русски; поле — только безопасное; запись в базу ≤200 знаков');
+  eq(o.shop, [{ status: 'enabled', test: true, methods: ['bank_card'] }, null, null], 'настройки магазина — только статус, тест и способы оплаты');
+  ok(/временно не отвечает/.test(o.sbpDown.j.message), 'ЮKassa недоступна — «временно не отвечает»');
   ok(o.tooMany.s === 429 && o.tooMany.j.error === 'too_many' && !o.tooManyYk, '«слишком часто» из базы — 429, в ЮKassa не идём');
   eq(o.notAdmin, { s: 403, j: { error: 'not_admin' } }, 'не админ — 403');
   eq(o.noSql, { s: 503, j: { error: 'not_ready' } }, 'ключи есть, SQL 1123 не выполнен — «не подключено»');

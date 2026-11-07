@@ -28,8 +28,8 @@ const card=p=>({order_id:p.order_id,created_at:p.created_at,get_method:'Само
     point:p._pt,rent_mode:'day',close_min:WC,tz:'Europe/Moscow',items:[{id:'t'+p.id,name:p.tools_text,price:500,days:1,img:'',returned_at:p._ret?iso(p._ret):null}],change:null,cancel:null}]});
 // баланс из базы — как в приложении: начислено 7 ₽, оплачено 100 ₽ → переплата 93 ₽ (сайт раньше показывал 0)
 const bal={email,pct:1,fee:7,paid:100,pending:0,debt:0,over:93,rent:700,orders:2,at:iso(T0)};
-let payNew=null,payChecks=0,feeBalCalls=0;const calls=[];
-await c.route('https://*.supabase.co/**',async route=>{const r=route.request(),u=new URL(r.url()),m=r.method(),body=JSON.parse(r.postData()||'null');let data=[];
+let payNew=null,payChecks=0,feeBalCalls=0,payFail=false;const calls=[];
+await c.route('https://*.supabase.co/**',async route=>{const r=route.request(),u=new URL(r.url()),m=r.method(),body=JSON.parse(r.postData()||'null');let data=[],st=200;
   const path=u.pathname;if(path!=='/auth/v1/user')calls.push({m,path,q:u.search,body});
   if(path==='/auth/v1/user')data={id:'30000000-0000-4000-8000-000000000002',email,email_confirmed_at:'2026-01-01T00:00:00.000Z',user_metadata:{}};
   else if(path.endsWith('/admins'))data=[{email,role:'admin',active:true,fee_pct:1,debt_limit:5000,company:'Прокат у дома',full_name:'Владелец Прокатов',phone:'+79001112233'}];
@@ -49,10 +49,12 @@ await c.route('https://*.supabase.co/**',async route=>{const r=route.request(),u
   else if(path.endsWith('/rpc/iva_chat_who'))data=null;
   else if(path.endsWith('/functions/v1/iva-pay')){
     if(m==='GET')data={ready:true,test:true};
+    else if(body&&body.a==='new'&&payFail){payNew=body;st=502;data={error:'yookassa',code:'forbidden',eid:'1f2e3d4c-0000-4000-8000-0123456789ab',
+      message:'ЮKassa запретила платежи в магазине площадки «Ива» — магазин отключён в ЮKassa. Владельцу площадки: включите магазин в кабинете ЮKassa или напишите в поддержку ЮKassa (номер ошибки ЮKassa: 1f2e3d4c-0000-4000-8000-0123456789ab)'};}
     else if(body&&body.a==='new'){payNew=body;data={id:'pay-1',url:body.method==='sbp'?'https://qr.nspk.ru/AS1000TEST':'https://yoomoney.ru/checkout/payments/v2/contract?orderId=test',test:true,sbp:body.method==='sbp',fallback:false};}
     else if(body&&body.a==='check'){payChecks++;data={rows:[{id:'pay-1',status:payChecks>=2?'succeeded':'pending'}]};}
   }
-  await route.fulfill({json:data});});
+  await route.fulfill({status:st,json:data});});
 await c.clock.install({time:T0});
 const p=await c.newPage();const errors=[];p.on('pageerror',e=>errors.push(e.message));
 p.on('dialog',d=>{errors.push('native dialog: '+d.message());d.dismiss();});
@@ -129,8 +131,28 @@ await p.waitForFunction(()=>!document.getElementById('payQr').disabled);
 assert((await p.locator('.pay-sum').innerText()).includes('Переплата'));
 await p.fill('#payAmt','0');await p.locator('#payQr').click();await p.waitForSelector('#payErr.show');
 await p.fill('#payAmt','6000');await p.locator('#payQr').click();assert(/5 000/.test(await p.locator('#payErr').innerText()));   // переплата ≤ 5 000 ₽
+// 06.11: ЮKassa отказала («Transaction forbidden») — причина по-русски, номер ошибки с «Копировать», открыт перевод по номеру,
+// над «Историей оплат» — «Онлайн-оплата не прошла» (до удачной оплаты или «Скрыть»)
+payFail=true;await p.fill('#payAmt','5');await p.locator('#payQr').click();await p.waitForSelector('#payErr.show');
+const pe=await p.locator('#payErr').innerText();
+assert(/^ЮKassa запретила платежи/.test(pe)&&/магазин отключён/.test(pe)&&/Пока можно перевести по номеру/.test(pe)&&!/номер ошибки|Transaction|forbidden/i.test(pe),pe);
+assert(await p.locator('#payEid').isVisible());assert((await p.locator('#payEid').innerText()).includes('1f2e3d4c-0000-4000-8000-0123456789ab'));
+assert(await p.evaluate(()=>document.getElementById('payManual').open),'перевод по номеру раскрыт');
+await c.grantPermissions(['clipboard-read','clipboard-write'],{origin:BASE});
+await p.locator('#payEid [data-copy-eid]').click();await p.waitForFunction(()=>/Номер ошибки скопирован/.test(document.body.innerText),null,{timeout:4000});
+assert.equal(await p.evaluate(()=>navigator.clipboard.readText()),'1f2e3d4c-0000-4000-8000-0123456789ab');
+const pf=await p.evaluate(()=>JSON.parse(localStorage.getItem('iva_pay_fail')));
+assert(pf&&pf.amt===5&&pf.eid==='1f2e3d4c-0000-4000-8000-0123456789ab'&&!/Пока можно/.test(pf.text),JSON.stringify(pf));
+await shot('pay-forbidden');
+await p.locator('#payClose').click();await p.waitForFunction(()=>!document.getElementById('payWin'));
+await tab('team');await tab('fee');await p.waitForSelector('#payFailNote');
+const fn=await p.locator('#payFailNote').innerText();assert(/Онлайн-оплата не прошла/.test(fn)&&/5 ₽/.test(fn)&&fn.includes('1f2e3d4c'),fn);
+await shot('pay-fail-note');
+await p.locator('#btnPayFeeTop').click();await p.waitForSelector('#payWin');await p.waitForFunction(()=>!document.getElementById('payQr').disabled);
+payFail=false;
 await p.fill('#payAmt','150,5');await p.locator('#payQr').click();
-await p.waitForSelector('#payQrBox .pay-qr-img svg',{timeout:8000});await shot('owner11-pay-qr');
+await p.waitForSelector('#payQrBox .pay-qr-img svg',{timeout:8000});
+assert(await p.locator('#payEid').isHidden(),'после удачной попытки номер ошибки скрыт');await shot('owner11-pay-qr');
 assert.deepEqual(payNew,{a:'new',amount:'150.50',method:'sbp'});
 const [pop]=await Promise.all([c.waitForEvent('page'),p.locator('#payCard').click()]);
 await p.waitForFunction(()=>/новой вкладке/.test(document.getElementById('payQrBox').textContent));
@@ -138,6 +160,8 @@ assert.deepEqual(payNew,{a:'new',amount:'150.50'});await pop.close().catch(()=>{
 // ЮKassa подтвердила — окно закрывается само, баланс перечитан
 const n0=feeBalCalls;await c.clock.runFor(11000);await p.waitForFunction(()=>!document.getElementById('payWin'),null,{timeout:8000});
 assert(feeBalCalls>n0,'после оплаты баланс перечитан');
+assert(await p.evaluate(()=>localStorage.getItem('iva_pay_fail')===null),'оплата прошла — неудачная попытка забыта');
+await p.waitForSelector('#feeHero');assert.equal(await p.locator('#payFailNote').count(),0);
 
 // 6) окно сотрудника — без «Имя и фамилия»
 await tab('team');await p.locator('.pr-cards [data-ow-staff="s1"]').first().click();await p.waitForSelector('#owSf');

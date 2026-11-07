@@ -17,7 +17,7 @@
 <link rel="icon" href="assets/icon-192.png" type="image/png" sizes="192x192">
 <link rel="apple-touch-icon" href="assets/apple-touch-icon.png">
 <link rel="manifest" href="manifest.webmanifest">
-<link rel="stylesheet" href="assets/theme.css?v=20261106-cabinet">
+<link rel="stylesheet" href="assets/theme.css?v=20261107-vk">
 <link rel="stylesheet" href="assets/geo.css?v=20260923-photon">
 <script type="application/ld+json">
 {"@context":"https://schema.org","@type":"SoftwareApplication","name":"Ива — аренда инструмента","operatingSystem":"Android 5.0+","applicationCategory":"LifestyleApplication","url":"https://eclipsru.github.io/Arenda-Nvk/app.html","image":"https://eclipsru.github.io/Arenda-Nvk/assets/logo.png","offers":{"@type":"Offer","price":"0","priceCurrency":"RUB"},"publisher":{"@type":"Organization","name":"Ива","url":"https://eclipsru.github.io/Arenda-Nvk/"}}
@@ -47,6 +47,8 @@
 .ap-st span{display:block;font-size:12px;color:var(--gr);margin-top:2px;white-space:nowrap}
 .ap-st.click{cursor:pointer}
 .ap-st svg{width:13px;height:13px;fill:currentColor}
+/* Счётчик скачиваний «10+ / 50+ / 100+» (как в Google Play) — только в мобильной версии (просьба владельца 07.11.2026) */
+@media(min-width:1000px){.ap-st-dl{display:none!important}}
 
 .ap-cta{display:flex;gap:10px;margin-top:20px;flex-wrap:wrap;align-items:center}
 .ap-install{flex:1 1 100%;font-size:16px;padding:13px 18px;border-radius:12px;text-align:center}
@@ -213,6 +215,7 @@ body.ap-body{padding-bottom:0}
       <!-- Цифры: оценка, версия, размер, Android -->
       <div class="ap-stats" id="apStats">
         <button type="button" class="ap-st click" id="stRate" data-go="reviews"><b id="stRateV">—</b><span id="stRateN">нет оценок</span></button>
+        <div class="ap-st ap-st-dl" id="stDl" hidden><b id="stDlV">—</b><span>скачиваний</span></div>
         <div class="ap-st"><b id="stSize">APK</b><span id="stSizeL">файл с сайта</span></div>
         <div class="ap-st"><b data-app-ver>10.14</b><span>версия</span></div>
         <div class="ap-st"><b>5.0+</b><span>Android</span></div>
@@ -355,9 +358,9 @@ body.ap-body{padding-bottom:0}
 <script src="assets/data.js"></script>
 <script src="assets/geo.js?v=20260923-photon"></script>
 <script src="assets/email-guard.js?v=20260926-email"></script>
-<script src="assets/sb.js?v=20261106-cabinet"></script>
+<script src="assets/sb.js?v=20261107-vk"></script>
 <script src="assets/app-release.js?v=20261009-rel"></script>
-<script src="assets/app.js?v=20261106-cabinet"></script>
-<script src="assets/app-page.js?v=20261102-play"></script>
+<script src="assets/app.js?v=20261107-vk"></script>
+<script src="assets/app-page.js?v=20261107-vk"></script>
 </body>
 </html>
