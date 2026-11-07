@@ -9,7 +9,7 @@
 <link rel="icon" href="assets/favicon-32.png" type="image/png" sizes="32x32">
 <link rel="icon" href="assets/icon-192.png" type="image/png" sizes="192x192">
 <link rel="apple-touch-icon" href="assets/apple-touch-icon.png">
-<link rel="stylesheet" href="assets/theme.css?v=20261107-appeals">
+<link rel="stylesheet" href="assets/theme.css?v=20261107-vk">
 <link rel="stylesheet" href="assets/geo.css?v=20260923-photon">
 </head>
 <body>
@@ -27,9 +27,9 @@
 
 <script src="assets/data.js"></script>
 <script src="assets/geo.js?v=20260923-photon"></script>
-<script src="assets/sb.js?v=20261107-appeals"></script>
+<script src="assets/sb.js?v=20261107-vk"></script>
 <script src="assets/app-release.js?v=20261009-rel"></script>
-<script src="assets/app.js?v=20261107-appeals"></script>
+<script src="assets/app.js?v=20261107-vk"></script>
 <script>
 (function(){
   mountChrome('chat', '');
@@ -38,6 +38,9 @@
   let sub = null, poll = null;
   let rec = null, recChunks = [], recStart = 0, recTimer = null;
   let pendingImg = '';
+  /* 07.11.2026: на компьютере — вид как в VK Мессенджере (две колонки, поиск, «Только непрочитанные», пузыри-блоки) */
+  let DQ = '', DUNR = false;
+  const VK = window.matchMedia ? window.matchMedia('(min-width:861px)') : { matches: true };
 
   const P = new URLSearchParams(location.search);
   /* 20.10.2026: «Написать владельцу» (?who=владелец&lend=1) — единственный путь клиента к сдаче инструмента.
@@ -65,6 +68,25 @@
     const diff = (now - d) / 86400000;
     if (diff < 7) return ['вс','пн','вт','ср','чт','пт','сб'][d.getDay()];
     return d.toLocaleDateString('ru-RU', {day:'2-digit', month:'2-digit'});
+  }
+
+  /* время в списке, как в VK: «сейчас», «5м», «3ч», «вчера», «7 ноя» */
+  function vkAgo(s){
+    const d = new Date(s), now = new Date(), min = Math.floor((now - d) / 60000);
+    if (!(min >= 0)) return hhmm(s);
+    if (min < 1) return 'сейчас';
+    if (min < 60) return min + 'м';
+    if (d.toDateString() === now.toDateString()) return Math.floor(min / 60) + 'ч';
+    const y = new Date(now); y.setDate(y.getDate() - 1);
+    if (d.toDateString() === y.toDateString()) return 'вчера';
+    const m = ['янв','фев','мар','апр','мая','июн','июл','авг','сен','окт','ноя','дек'][d.getMonth()];
+    return d.getDate() + ' ' + m + (d.getFullYear() === now.getFullYear() ? '' : ' ' + d.getFullYear());
+  }
+  function dlgMatch(d){
+    const q = DQ.trim().toLowerCase();
+    if (DUNR && !d.unread && d.who !== WHO) return false;
+    if (!q) return true;
+    return [whoTitle(d.who), d.who, d.fresh ? '' : msgPreview(d.last)].join(' ').toLowerCase().indexOf(q) !== -1;
   }
 
   /* ---------- Нужен вход ---------- */
@@ -102,23 +124,34 @@
 
   /* ---------- Каркас ---------- */
   function render(){
+    saveDraft();
     const inThread = !!WHO;
     $('root').innerHTML =
-      '<div class="sect" style="padding-bottom:0"><div class="sect-h">' +
+      '<div class="sect chat-sect" style="padding-bottom:0"><div class="sect-h">' +
         '<h2>Сообщения</h2>' +
         '<span class="cnt" id="unreadLb"></span>' +
       '</div></div>' +
-      '<div class="chat-wrap' + (inThread ? ' in-thread' : '') + '">' +
-        '<div class="dlg-list" id="dlgList"></div>' +
+      '<div class="chat-wrap vk' + (inThread ? ' in-thread' : '') + '">' +
+        '<div class="dlg-list" id="dlgList">' +
+          '<div class="vk-lh"><b>Чаты</b><span id="vkUnread"></span></div>' +
+          '<label class="vk-search"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="m16 16 4 4"/></svg>' +
+            '<input id="dlgQ" type="search" placeholder="Поиск" autocomplete="off" aria-label="Поиск по диалогам" value="' + esc(DQ) + '"></label>' +
+          '<div class="vk-dlgs" id="dlgItems"></div>' +
+          '<label class="vk-only"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 12a8 8 0 1 1-2.3-5.6M20 4v5h-5"/></svg>' +
+            '<span>Только непрочитанные</span><input type="checkbox" id="dlgUnr"' + (DUNR ? ' checked' : '') + '><i class="vk-sw"></i></label>' +
+        '</div>' +
         '<div class="thread" id="thread"></div>' +
       '</div>';
     paintDialogs();
     paintThread();
+    const q = $('dlgQ'), u = $('dlgUnr');
+    if (q) q.addEventListener('input', function(){ DQ = this.value; paintDialogs(); });
+    if (u) u.addEventListener('change', function(){ DUNR = this.checked; paintDialogs(); });
   }
 
   /* ---------- Список диалогов ---------- */
   function paintDialogs(){
-    const box = $('dlgList');
+    const box = $('dlgItems') || $('dlgList');
     if (!box) return;
 
     if (!DLGS.length && !WHO){
@@ -137,19 +170,24 @@
                      unread:0, count:0, fresh:true });
     }
 
-    box.innerHTML = list.map(function(d){
-      return '<div class="dlg' + (d.who === WHO ? ' on' : '') + '" data-who="' + esc(d.who) + '">' +
+    const shown = list.filter(dlgMatch);
+    /* на компьютере (как в VK): «Вы: » перед своим последним сообщением, время после текста, ✓ / ✓✓ справа */
+    box.innerHTML = shown.map(function(d){
+      const mine = !d.fresh && (d.last.from_email || '').toLowerCase() === A.me;
+      return '<div class="dlg' + (d.who === WHO ? ' on' : '') + (d.unread ? ' unr' : '') + '" data-who="' + esc(d.who) + '">' +
         '<div class="ava" data-ava="' + esc(d.who) + '">' + esc(initials(whoTitle(d.who))) + '</div>' +
         '<div class="dmid">' +
           '<div class="dnm">' + esc(whoTitle(d.who)) + '</div>' +
-          '<div class="dlast">' + esc(d.fresh ? 'Новый диалог' : msgPreview(d.last)) + '</div>' +
+          '<div class="dlast">' + (mine ? '<span class="dyou">Вы: </span>' : '') + '<span class="dtx">' + esc(d.fresh ? 'Новый диалог' : msgPreview(d.last)) + '</span>' +
+            (d.fresh ? '' : '<span class="dago"> · ' + esc(vkAgo(d.last.created_at)) + '</span>') + '</div>' +
         '</div>' +
         '<div class="dright">' +
           '<span class="dtime">' + (d.fresh ? '' : shortTime(d.last.created_at)) + '</span>' +
-          (d.unread ? '<span class="dunread">' + d.unread + '</span>' : '') +
+          (d.unread ? '<span class="dunread">' + d.unread + '</span>'
+            : mine ? '<span class="dread' + (d.last.is_read ? ' ok' : '') + '" title="' + (d.last.is_read ? 'Прочитано' : 'Доставлено') + '">' + (d.last.is_read ? '✓✓' : '✓') + '</span>' : '') +
         '</div>' +
       '</div>';
-    }).join('');
+    }).join('') || '<div class="vk-none">' + (DQ.trim() ? 'Ничего не найдено' : 'Непрочитанных нет') + '</div>';
 
     if (typeof IvaAva !== 'undefined') IvaAva.paint(box);   // аватарки собеседников (21.10.2026)
     box.onclick = function(e){
@@ -161,6 +199,8 @@
     const tot = DLGS.reduce(function(a,d){ return a + d.unread; }, 0);
     const lb = $('unreadLb');
     if (lb) lb.textContent = tot ? tot + ' ' + plural(tot,'непрочитанное','непрочитанных','непрочитанных') : '';
+    const vu = $('vkUnread');
+    if (vu) vu.textContent = tot ? String(tot) : '';
   }
 
   function threadToolId(who){
@@ -199,18 +239,30 @@
   function renderPendingImage(){
     const box = $('thDraft');
     if (!box) return;
-    if (!pendingImg){ box.innerHTML = ''; box.style.display = 'none'; return; }
+    if (!pendingImg){ box.innerHTML = ''; box.style.display = 'none'; inState(); return; }
     box.style.display = 'flex';
     box.innerHTML = '<img src="' + esc(pendingImg) + '" alt="Фото к отправке">' +
       '<span>Фото добавлено. Нажмите «Отправить»</span>' +
       '<button type="button" id="thDraftRemove" title="Убрать фото">×</button>';
     $('thDraftRemove').onclick = function(){ pendingImg = ''; renderPendingImage(); };
+    inState();
   }
 
   /* ---------- Переписка ---------- */
+  /* набранный текст не пропадает, когда приходит новое сообщение и переписка перерисовывается (07.11.2026);
+     в другую переписку черновик не переезжает */
+  let DRAFT_WHO = '', DRAFT_TX = '', DRAFT_FOCUS = false;
+  function saveDraft(){
+    const t = $('thText');
+    if (DRAFT_WHO !== WHO){ DRAFT_TX = ''; DRAFT_FOCUS = false; }
+    else if (t){ DRAFT_TX = t.value; DRAFT_FOCUS = document.activeElement === t; }
+    DRAFT_WHO = WHO;
+  }
   function paintThread(){
     const box = $('thread');
     if (!box) return;
+    saveDraft();
+    const keepTx = DRAFT_TX, keepFocus = DRAFT_FOCUS;
 
     if (!WHO){
       box.innerHTML = '<div class="empty" style="margin:auto;padding:40px 20px">' +
@@ -225,11 +277,16 @@
       return (f === A.me && t === WHO) || (f === WHO && t === A.me);
     }).sort(function(a,b){ return new Date(a.created_at) - new Date(b.created_at); });
 
-    let body = '', lastDay = '';
+    let body = '', lastDay = '', prev = null;
     ms.forEach(function(m){
       const dl = dayLabel(m.created_at);
-      if (dl !== lastDay){ body += '<div class="th-day">' + esc(dl) + '</div>'; lastDay = dl; }
+      let newDay = false;
+      if (dl !== lastDay){ body += '<div class="th-day">' + esc(dl) + '</div>'; lastDay = dl; newDay = true; }
       const mine = (m.from_email||'').toLowerCase() === A.me;
+      /* как в VK: подряд от одного человека (в пределах 10 минут) — блоки вплотную */
+      const cont = !newDay && prev && ((prev.from_email||'').toLowerCase() === A.me) === mine
+        && new Date(m.created_at) - new Date(prev.created_at) < 600000;
+      prev = m;
 
       let inner = '';
       if (m.img)   inner += '<img class="bimg" src="' + esc(m.img) + '" alt="фото" data-big="' + esc(m.img) + '">';
@@ -237,11 +294,11 @@
       const vb = m.audio && typeof IvaVoice !== 'undefined' ? IvaVoice.html(m) : '';
       if (vb) inner += vb;
       else if (m.audio) inner += '<audio controls preload="none" src="' + esc(m.audio) + '"></audio>';
-      if (m.text)  inner += esc(m.text);
+      if (m.text)  inner += '<span class="btxt">' + esc(m.text) + '</span>';
 
-      body += '<div class="bub ' + (mine ? 'me' : 'they') + (vb ? ' vbub' : '') + '">' + inner +
+      body += '<div class="bub ' + (mine ? 'me' : 'they') + (vb ? ' vbub' : '') + (m.text ? ' tx' : '') + (cont ? ' cont' : '') + '">' + inner +
         '<div class="btime">' + hhmm(m.created_at) +
-          (mine ? '<span>' + (m.is_read ? '✓✓' : '✓') + '</span>' : '') +
+          (mine ? '<span' + (m.is_read ? ' class="rd"' : '') + '>' + (m.is_read ? '✓✓' : '✓') + '</span>' : '') +
         '</div></div>';
     });
 
@@ -265,11 +322,12 @@
       '<div class="th-body" id="thBody">' + body + '</div>' +
       '<div class="th-foot">' +
         '<div class="th-draft" id="thDraft"></div>' +
-        '<div class="th-in" id="thIn">' +
+        '<div class="th-in no-tx" id="thIn">' +
           '<button class="icon-btn" id="bPhoto" title="Фотография">' +
-            '<svg viewBox="0 0 24 24"><path d="M3 9a2 2 0 0 1 2-2h2l1.5-2h7L17 7h2a2 2 0 0 1 2 2v9' +
-              'a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><circle cx="12" cy="13" r="3.4"/></svg></button>' +
-          '<textarea id="thText" rows="1" placeholder="' + (lendOn() ? 'Например: сдаю перфоратор и бетономешалку в Новочеркасске' : 'Сообщение') + '"></textarea>' +
+            '<svg class="ic-m" viewBox="0 0 24 24"><path d="M3 9a2 2 0 0 1 2-2h2l1.5-2h7L17 7h2a2 2 0 0 1 2 2v9' +
+              'a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><circle cx="12" cy="13" r="3.4"/></svg>' +
+            '<svg class="ic-d" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 8v8M8 12h8"/></svg></button>' +
+          '<textarea id="thText" rows="1" placeholder="' + (lendOn() ? 'Например: сдаю перфоратор и бетономешалку в Новочеркасске' : VK.matches ? 'Напишите сообщение...' : 'Сообщение') + '"></textarea>' +
           '<button class="icon-btn" id="bMic" title="Голосовое">' +
             '<svg viewBox="0 0 24 24"><rect x="9" y="2" width="6" height="11" rx="3"/>' +
               '<path d="M5 11a7 7 0 0 0 14 0M12 18v4"/></svg></button>' +
@@ -281,6 +339,8 @@
 
     if (typeof IvaAva !== 'undefined') IvaAva.paint(box.querySelector('.th-head'));
     bindThread();
+    if (keepTx && $('thText')){ $('thText').value = keepTx; $('thText').dispatchEvent(new Event('input')); }
+    if (keepFocus && $('thText')) $('thText').focus();
     renderPendingImage();
     scrollDown();
   }
@@ -304,6 +364,7 @@
     ta.addEventListener('input', function(){
       this.style.height = 'auto';
       this.style.height = Math.min(this.scrollHeight, 110) + 'px';
+      inState();
     });
     ta.addEventListener('keydown', function(e){
       if (e.key === 'Enter' && !e.shiftKey){ e.preventDefault(); doSend(); }
@@ -334,12 +395,18 @@
     });
   }
 
+  /* на компьютере, как в VK: поле пустое — микрофон, есть текст или фото — «Отправить» */
+  function inState(){
+    const bar = $('thIn'), ta = $('thText');
+    if (bar && ta) bar.classList.toggle('no-tx', !ta.value.trim() && !pendingImg);
+  }
+
   async function doSend(){
     const ta = $('thText');
     const t = ta.value.trim();
     if (!t && !pendingImg) return;
     const image = pendingImg;
-    ta.value = ''; ta.style.height = 'auto';
+    ta.value = ''; ta.style.height = 'auto'; inState();
     await pushMessage({ text:t, img:image });
   }
 

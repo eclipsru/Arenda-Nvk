@@ -10,7 +10,7 @@
 <link rel="icon" href="assets/favicon-32.png" type="image/png" sizes="32x32">
 <link rel="icon" href="assets/icon-192.png" type="image/png" sizes="192x192">
 <link rel="apple-touch-icon" href="assets/apple-touch-icon.png">
-<link rel="stylesheet" href="assets/theme.css?v=20261107-appeals">
+<link rel="stylesheet" href="assets/theme.css?v=20261107-vk">
 <link rel="stylesheet" href="assets/profile.css?v=20260923-rental-profile">
 <style>
 .tabs{display:flex;gap:4px;border-bottom:1px solid var(--line);margin-bottom:18px;
@@ -149,9 +149,9 @@
 
 <script src="assets/data.js"></script>
 <script src="assets/geo.js?v=20260923-photon"></script>
-<script src="assets/email-guard.js?v=20260926-email"></script><script src="assets/sb.js?v=20261107-appeals"></script>
+<script src="assets/email-guard.js?v=20260926-email"></script><script src="assets/sb.js?v=20261107-vk"></script>
 <script src="assets/app-release.js?v=20261009-rel"></script>
-<script src="assets/app.js?v=20261107-appeals"></script>
+<script src="assets/app.js?v=20261107-vk"></script>
 <script src="assets/profile.js?v=20261022-a"></script>
 <script>
 (function(){
@@ -165,6 +165,7 @@
   let SENT = [];
   let ST_DD = false;   // открыт ли список «Пункт выдачи» в шапке «Работы»
   let ST_PT = 'all', ST_F = 'all', ST_Q = '', ST_UPD = 0, ST_TIMER = null, ST_FRESH = {};   // «Смена» сотрудника (этап 1)
+  let ST_CQ = '';   // 07.11.2026: поиск по диалогам во вкладке «Сообщения» (на компьютере)
   let STOOLS = null, ST_VIEW = 'orders', ST_TF = 'all', ST_TQ = '';                          // инструмент пунктов (этап 2)
   if (TAB === 'staff-tools'){ TAB = 'staff'; ST_VIEW = 'tools'; history.replaceState(null, '', location.pathname + location.search + '#staff'); }   // возврат из формы инструмента
   let STCHATS = null;                                                                        // сообщения пунктов (этап 3)
@@ -1934,11 +1935,23 @@
       ? 'Ваши переписки с клиентами по инструменту и пунктам этого пункта; без пункта — в каждом. Сотрудники с правом «Отвечает в чате» видят переписки своих пунктов.'
       : 'Переписки клиентов с вашими пунктами за 90 дней — где клиент писал сам. Отвечаете от имени проката; владелец видит переписку.') + '</div>';
     if (!list.length) return h + '<div class="empty"><b>Сообщений нет</b><p>Когда клиент напишет про инструмент вашего пункта или в чат пункта, переписка появится здесь.</p></div>';
-    return h + '<div class="st-chats">' + list.map(function(c){
+    /* 07.11.2026: поиск по диалогам (на компьютере) и подсветка, как в колонке «Чаты»: непрочитанные — зелёные,
+       без ответа — жёлтые, непрочитанные больше суток — красные */
+    return h + '<label class="st-cq"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="m16 16 4 4"/></svg>' +
+      '<input id="stCq" type="search" autocomplete="off" placeholder="Поиск по диалогам" aria-label="Поиск по диалогам" value="' + esc(ST_CQ) + '"></label>' +
+      '<div class="st-chats" id="stChList">' + stChatItemsHTML(list) + '</div>';
+  }
+  function stChatItemsHTML(list){
+    const q = ST_CQ.trim().toLowerCase(), now = Date.now();
+    const rows = !q ? list : list.filter(function(c){
+      return [c.client_name, c.tool_name, c.point_name, c.last_text, c.kind === 'p' ? 'чат пункта' : ''].join(' ').toLowerCase().indexOf(q) !== -1;
+    });
+    if (!rows.length) return '<div class="small muted st-cq-none">Ничего не найдено</div>';
+    return rows.map(function(c){
       const n = Number(c.unread) || 0;
       const nm = String(c.client_name || 'Клиент');
       const img = /^https:\/\//.test(c.tool_img || '') ? '<img src="' + esc(c.tool_img) + '" alt="" loading="lazy">' : '<span>' + esc(nm.charAt(0).toUpperCase()) + '</span>';
-      return '<button type="button" class="st-chat' + (n ? ' unread' : '') + '" data-st-chat="' + esc(c.kind + ':' + c.key + ':' + c.peer) + '">' +
+      return '<button type="button" class="st-chat c-' + stChatCls(c, now) + (n ? ' unread' : '') + '" data-st-chat="' + esc(c.kind + ':' + c.key + ':' + c.peer) + '">' +
         '<span class="st-chat-ava">' + img + '</span>' +
         '<span class="st-chat-mid">' +
           '<span class="st-chat-top"><b>' + esc(nm) + '</b><small>' + esc(stWhen(Date.parse(c.last_at))) + '</small></span>' +
@@ -1947,27 +1960,30 @@
         '</span>' +
         (n ? '<span class="st-chat-n">' + n + '</span>' : '') +
       '</button>';
-    }).join('') + '</div>';
+    }).join('');
   }
   /* открытая переписка — в нижней панели; обновляется каждые 5 секунд, пока панель открыта */
   let ST_CH = null;
   function stChatMsgsHTML(ms){
     if (!ms.length) return '<div class="empty" style="padding:30px 10px"><b style="font-size:15px">Сообщений нет</b></div>';
-    let h = '', day = '';
+    let h = '', day = '', prev = null;
     ms.forEach(function(m){
       const d = new Date(m.created_at);
       const dl = stWhen(d.getTime()).replace(/ \d\d:\d\d$/, '');
-      if (dl !== day){ h += '<div class="th-day">' + esc(dl) + '</div>'; day = dl; }
+      let nd = false;
+      if (dl !== day){ h += '<div class="th-day">' + esc(dl) + '</div>'; day = dl; nd = true; }
+      const cont = !nd && prev && !!prev.mine === !!m.mine && d - new Date(prev.created_at) < 600000;   // как в VK: подряд — вплотную
+      prev = m;
       let inner = '';
       if (/^https:\/\//.test(m.img || '')) inner += '<a href="' + esc(m.img) + '" target="_blank" rel="noopener"><img class="bimg" src="' + esc(m.img) + '" alt="фото"></a>';
       const vb = /^https:\/\//.test(m.audio || '') && typeof IvaVoice !== 'undefined' ? IvaVoice.html(m) : '';   // голосовое — как в приложении
       if (vb) inner += vb;
       else if (/^https:\/\//.test(m.audio || '')) inner += '<audio controls preload="none" src="' + esc(m.audio) + '"></audio>';
-      if (m.text) inner += esc(m.text);
+      if (m.text) inner += '<span class="btxt">' + esc(m.text) + '</span>';
       const hm = String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
-      h += '<div class="bub ' + (m.mine ? 'me' : 'they') + (vb ? ' vbub' : '') + '">' +
-        (m.mine ? '<div class="st-by">' + (m.by_me ? 'Вы' : 'Прокат') + '</div>' : '') + inner +
-        '<div class="btime">' + hm + (m.mine ? '<span>' + (m.is_read ? '✓✓' : '✓') + '</span>' : '') + '</div></div>';
+      h += '<div class="bub ' + (m.mine ? 'me' : 'they') + (vb ? ' vbub' : '') + (m.text ? ' tx' : '') + (cont ? ' cont' : '') + '">' +
+        (m.mine && !cont ? '<div class="st-by">' + (m.by_me ? 'Вы' : 'Прокат') + '</div>' : m.mine ? '<div class="st-by st-by-c">' + (m.by_me ? 'Вы' : 'Прокат') + '</div>' : '') + inner +
+        '<div class="btime">' + hm + (m.mine ? '<span' + (m.is_read ? ' class="rd"' : '') + '>' + (m.is_read ? '✓✓' : '✓') + '</span>' : '') + '</div></div>';
     });
     return h;
   }
@@ -2039,10 +2055,11 @@
       '<div class="th-body st-ch-body" id="stChBody"><div class="empty" style="padding:30px 10px">Загрузка…</div></div>',
       '<div class="st-ch-draft" id="stChDraft" hidden></div>' +
       '<label class="btn sec st-ch-ph" title="Приложить фото" aria-label="Приложить фото">' +
-        '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h3l2-3h6l2 3h3v13H4z"/><circle cx="12" cy="13" r="4"/></svg>' +
+        '<svg class="ic-m" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h3l2-3h6l2 3h3v13H4z"/><circle cx="12" cy="13" r="4"/></svg>' +
+        '<svg class="ic-d" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 8v8M8 12h8"/></svg>' +
         '<input type="file" id="stChFile" accept="image/*" hidden></label>' +
       '<textarea class="inp st-ch-inp" id="stChTxt" rows="1" maxlength="2000" placeholder="Ответ клиенту"></textarea>' +
-      '<button class="btn" id="stChSend">Отправить</button>');
+      '<button class="btn" id="stChSend" aria-label="Отправить"><svg class="ic-d" viewBox="0 0 24 24" aria-hidden="true"><path d="M22 2 11 13M22 2l-7 20-4-9-9-4z"/></svg><span class="st-send-t">Отправить</span></button>');
     const sh = $('sheet'); sh.classList.add('st-ch-sheet');
     const mark = function(st){ if (ch.thread) api('/rest/v1/rpc/iva_chat_mark', 'POST', { p_thread: ch.thread, p_state: st }).catch(function(){}); };
     mark('open');
@@ -2753,6 +2770,7 @@
     if (TAB !== 'staff') { render(); return; }
     if (document.activeElement && document.activeElement.id === 'stQ') { stPaintList(); stSidePaint(); return; }
     if (document.activeElement && document.activeElement.id === 'stTq') { const l = $('stTList'); if (l) l.innerHTML = stToolListHTML(); stSidePaint(); return; }
+    if (document.activeElement && document.activeElement.id === 'stCq') { const l = $('stChList'); if (l) l.innerHTML = stChatItemsHTML(stChatScope()); stSidePaint(); return; }
     const y = window.scrollY; render(); window.scrollTo(0, y);
   }
   /* автообновление (24.10.2026): сразу по сигналу базы (IvaLive, SQL 20261119) и раз в 30 секунд — на любой вкладке
@@ -3493,7 +3511,7 @@
     if (window.qrcode) return Promise.resolve(window.qrcode);
     return new Promise(function(ok, bad){
       const s = document.createElement('script');
-      s.src = 'assets/qrcode.js?v=20261107-appeals';
+      s.src = 'assets/qrcode.js?v=20261107-vk';
       s.onload = function(){ window.qrcode ? ok(window.qrcode) : bad(new Error('QR')); };
       s.onerror = function(){ bad(new Error('QR')); };
       document.head.appendChild(s);
@@ -4127,6 +4145,13 @@
           oT = setTimeout(function(){ OQ = v; const l = $('ordList'); if (l) l.innerHTML = oListHTML(); }, 150);
         };
       }
+    }
+    if ($('stCq')){
+      let stT3 = null;
+      $('stCq').oninput = function(){
+        const v = this.value; clearTimeout(stT3);
+        stT3 = setTimeout(function(){ ST_CQ = v; const l = $('stChList'); if (l) l.innerHTML = stChatItemsHTML(stChatScope()); }, 150);
+      };
     }
     if ($('stTq')){
       let stT2 = null;

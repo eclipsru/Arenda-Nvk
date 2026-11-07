@@ -1688,3 +1688,121 @@ body.emb #root.wrap{max-width:none;padding:0}
 .vb-wave{display:block;max-width:100%;cursor:pointer}
 .vb-t{font-size:12px;line-height:1.2;color:var(--g2);font-variant-numeric:tabular-nums}
 .bub.vbub.me .vb-t{color:var(--or);opacity:.85}
+
+/* ===========================================================
+   Сообщения как в VK Мессенджере (просьба владельца 07.11.2026) — только компьютер (от 861px), цвета «Ивы».
+   chat.html: одна карточка в две колонки — слева «Чаты», поиск, список (аватар 48, «Вы: », время после текста,
+   счётчик / ✓✓), внизу «Только непрочитанные»; справа шапка, пузыри-блоки (подряд — вплотную, время внутри блока),
+   плашка даты, поле «Напишите сообщение...» с ⊕ слева и микрофоном, который сменяется «Отправить», когда есть текст.
+   «Работа» (account.html): окно переписки — те же блоки и поле; список диалогов прежний + поиск и подсветка.
+   На телефоне всё как было.
+   =========================================================== */
+.vk-lh,.vk-search,.vk-only,.dlast .dyou,.dlast .dago,.dright .dread,.icon-btn .ic-d,.st-ch-ph .ic-d,#stChSend .ic-d,.st-cq{display:none}
+.st-cq-none{padding:20px 4px;text-align:center}
+@media (min-width:861px){
+  /* — chat.html: каркас — */
+  .chat-sect{display:none}
+  .chat-wrap.vk{grid-template-columns:340px minmax(0,1fr);gap:0;align-items:stretch;padding:0;margin:20px 0 30px;
+    background:var(--card);border:1px solid var(--line);border-radius:var(--r);overflow:hidden;
+    height:calc(100vh - var(--head-h) - 52px);min-height:520px}
+  .chat-wrap.vk .dlg-list{display:flex;flex-direction:column;min-height:0;max-height:none;overflow:hidden;
+    border:0;border-right:1px solid var(--line);border-radius:0}
+  .vk-lh{display:flex;align-items:center;gap:8px;padding:16px 16px 12px}
+  .vk-lh b{font-size:16px;font-weight:700}
+  .vk-lh span:not(:empty){min-width:20px;height:20px;padding:0 6px;border-radius:10px;background:var(--or);color:#fff;
+    font-size:12px;font-weight:700;display:inline-flex;align-items:center;justify-content:center}
+  .vk-search,.st-cq{display:flex;align-items:center;gap:8px;height:36px;padding:0 10px;border-radius:8px;
+    background:var(--field);border:1px solid var(--line);color:var(--g2);cursor:text}
+  .vk-search{margin:0 12px 8px}
+  .vk-search:focus-within,.st-cq:focus-within{border-color:var(--or)}
+  .vk-search svg,.st-cq svg{width:16px;height:16px;flex:0 0 16px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round}
+  .vk-search input,.st-cq input{flex:1;min-width:0;height:100%;background:none;border:0;outline:none;color:var(--tx);font:inherit;font-size:14px}
+  .vk-dlgs{flex:1;min-height:0;overflow-y:auto;padding:0 8px 8px}
+  .chat-wrap.vk .dlg{gap:12px;padding:8px 10px;border:0;border-radius:10px}
+  .chat-wrap.vk .dlg:hover{background:var(--field)}
+  .chat-wrap.vk .dlg.on{background:var(--or-soft)}
+  .chat-wrap.vk .dlg.on .dnm{color:var(--tx)}
+  .chat-wrap.vk .dlg .ava{width:48px;height:48px;font-size:16px}
+  .chat-wrap.vk .dlg .dnm{font-size:14.5px;font-weight:600}
+  .chat-wrap.vk .dlg .dlast{display:flex;margin-top:3px;font-size:13.5px;color:var(--gr)}
+  .chat-wrap.vk .dlast .dtx{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .chat-wrap.vk .dlg.unr .dtx{color:var(--tx)}
+  .chat-wrap.vk .dlast .dyou,.chat-wrap.vk .dlast .dago{display:inline;flex:0 0 auto;white-space:pre;color:var(--g2)}
+  .chat-wrap.vk .dright{justify-content:center}
+  .chat-wrap.vk .dright .dtime{display:none}
+  .chat-wrap.vk .dlg .dunread{min-width:20px;height:20px;border-radius:10px;font-size:12px}
+  .chat-wrap.vk .dright .dread{display:block;font-size:12px;letter-spacing:-2px;color:var(--g2)}
+  .chat-wrap.vk .dright .dread.ok{color:var(--or)}
+  .vk-none{padding:30px 12px;text-align:center;color:var(--g2);font-size:13.5px}
+  .vk-only{display:flex;align-items:center;gap:10px;padding:12px 16px;border-top:1px solid var(--line);
+    font-size:13.5px;color:var(--gr);cursor:pointer;user-select:none;position:relative}
+  .vk-only svg{width:18px;height:18px;flex:0 0 18px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round}
+  .vk-only span{flex:1}
+  .vk-only input{position:absolute;opacity:0;width:1px;height:1px;pointer-events:none}
+  .vk-sw{flex:0 0 34px;width:34px;height:20px;border-radius:10px;background:var(--line-2);position:relative;transition:background .15s}
+  .vk-sw::after{content:"";position:absolute;top:3px;left:3px;width:14px;height:14px;border-radius:50%;background:var(--gr);transition:left .15s}
+  .vk-only input:checked + .vk-sw{background:var(--or)}
+  .vk-only input:checked + .vk-sw::after{left:17px;background:#fff}
+  .vk-only input:focus-visible + .vk-sw{outline:2px solid var(--or);outline-offset:2px}
+  .chat-wrap.vk .thread{height:auto;min-height:0;border:0;border-radius:0;background:var(--bg)}
+  .chat-wrap.vk .th-head{min-height:56px;padding:10px 16px;background:var(--card)}
+  .chat-wrap.vk .th-head .ava{width:36px;height:36px}
+  .chat-wrap.vk .th-head .thnm{font-size:14.5px;font-weight:600}
+  .chat-wrap.vk .th-head .thsub{font-size:12.5px}
+  .chat-wrap.vk .tool-context{background:var(--card)}
+
+  /* — блоки сообщений (chat.html и окно переписки «Работы») — */
+  :is(.chat-wrap.vk,.st-ch-sheet) .th-body{gap:0;padding:8px 20px 10px}
+  :is(.chat-wrap.vk,.st-ch-sheet) .th-day{position:sticky;top:0;z-index:1;margin:12px 0 2px;padding:4px 12px;border-radius:12px;
+    background:var(--card);color:var(--gr);font-size:12.5px}
+  :is(.chat-wrap.vk,.st-ch-sheet) .bub{margin-top:10px}
+  :is(.chat-wrap.vk,.st-ch-sheet) .bub:not(.vbub){max-width:min(70%,560px);padding:7px 12px;border-radius:14px;font-size:14px;line-height:1.42}
+  :is(.chat-wrap.vk,.st-ch-sheet) .bub.cont{margin-top:3px}
+  :is(.chat-wrap.vk,.st-ch-sheet) .bub.they:not(.vbub){background:var(--card);border:0;color:var(--tx)}
+  :is(.chat-wrap.vk,.st-ch-sheet) .bub.me:not(.vbub){background:var(--or-soft);border:0;color:var(--tx)}
+  :is(.chat-wrap.vk,.st-ch-sheet) .bub:not(.vbub) .btime{font-size:11px;opacity:1;color:var(--g2);margin-top:2px}
+  :is(.chat-wrap.vk,.st-ch-sheet) .bub.tx .btxt::after{content:"";display:inline-block;width:38px;height:1px}
+  :is(.chat-wrap.vk,.st-ch-sheet) .bub.me.tx .btxt::after{width:56px}
+  :is(.chat-wrap.vk,.st-ch-sheet) .bub.tx .btime{position:absolute;right:10px;bottom:6px;margin:0}
+  :is(.chat-wrap.vk,.st-ch-sheet) .bub.me:not(.vbub) .btime span{letter-spacing:-2px;color:var(--g2)}
+  :is(.chat-wrap.vk,.st-ch-sheet) .bub.me:not(.vbub) .btime span.rd{color:var(--or)}
+  :is(.chat-wrap.vk,.st-ch-sheet) .bub img.bimg{border-radius:10px;margin:-1px -5px 5px}
+  .st-ch-sheet .st-by{color:var(--or);opacity:1;font-size:12px}
+  .st-ch-sheet .st-by-c{display:none}
+
+  /* — поле ввода: одна строка-карточка, ⊕ слева, микрофон / «Отправить» справа — */
+  .chat-wrap.vk .th-foot{padding:6px 20px 16px;border-top:0;background:var(--bg)}
+  .chat-wrap.vk .th-draft{background:var(--card)}
+  .chat-wrap.vk .th-in{align-items:flex-end;gap:2px;padding:4px 6px;background:var(--card);border:1px solid var(--line);border-radius:12px}
+  .chat-wrap.vk .th-in:focus-within{border-color:var(--line-2)}
+  .chat-wrap.vk .th-in textarea{min-height:38px;padding:9px 6px;background:none;border:0;border-radius:0}
+  .chat-wrap.vk .icon-btn{width:38px;height:38px}
+  .chat-wrap.vk .icon-btn .ic-m{display:none}
+  .chat-wrap.vk .icon-btn .ic-d{display:block}
+  .chat-wrap.vk .icon-btn.send{background:none;color:var(--or)}
+  .chat-wrap.vk .icon-btn.send:hover{background:var(--field);color:var(--or)}
+  .chat-wrap.vk .th-in.no-tx #bSend,.chat-wrap.vk .th-in:not(.no-tx) #bMic{display:none}
+  .chat-wrap.vk .rec-bar{border-radius:10px}
+
+  /* — окно переписки «Работы» (шторка 720px) — */
+  .st-ch-sheet .sheet-b{background:var(--bg)}
+  .st-ch-sheet .st-ch-head{background:var(--card)}
+  .st-ch-sheet .sheet-f{margin:6px 20px 16px;padding:4px 6px;gap:2px;align-items:flex-end;background:var(--card);border:1px solid var(--line);border-radius:12px}
+  .st-ch-sheet .sheet-f:focus-within{border-color:var(--line-2)}
+  .st-ch-sheet .st-ch-draft{padding:6px 4px 4px}
+  .st-ch-sheet .st-ch-ph{flex:0 0 38px;width:38px;height:38px;border:0;border-radius:50%;background:none;color:var(--gr)}
+  .st-ch-sheet .st-ch-ph:hover{background:var(--field);color:var(--tx)}
+  .st-ch-sheet .st-ch-ph .ic-m{display:none}
+  .st-ch-sheet .st-ch-ph .ic-d{display:block}
+  .st-ch-sheet textarea.inp.st-ch-inp{height:38px;min-height:38px;padding:9px 6px;background:none;border:0;border-radius:0;box-shadow:none}
+  .st-ch-sheet #stChSend{flex:0 0 38px;width:38px;height:38px;min-height:0;padding:0;border:0;border-radius:50%;background:none;color:var(--or);display:flex;align-items:center;justify-content:center}
+  .st-ch-sheet #stChSend:hover{background:var(--field)}
+  .st-ch-sheet #stChSend .ic-d{display:block;width:21px;height:21px;fill:none;stroke:currentColor;stroke-width:1.9;stroke-linejoin:round}
+  .st-ch-sheet #stChSend .st-send-t{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+
+  /* — «Работа», вкладка «Сообщения»: поиск над списком и та же подсветка, что в колонке «Чаты» — */
+  .st-cq{margin:0 0 10px}
+  .st-chat.c-g{border-left:3px solid var(--grn);background:rgba(76,175,80,.08)}
+  .st-chat.c-y{border-left:3px solid var(--yel);background:rgba(255,183,77,.07)}
+  .st-chat.c-r{border-left:3px solid var(--red);background:rgba(255,138,128,.11)}
+}
