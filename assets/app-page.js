@@ -124,6 +124,7 @@ var IVA_APP_SHOTS = [
         return;
       }
       var dl = e.target.closest && e.target.closest('[data-app-dl]');
+      if (dl) hitDownload();
       if (dl && !$id('sheet')) setTimeout(installSheet, 500);
     });
     var sh = $id('apShare');
@@ -172,6 +173,44 @@ var IVA_APP_SHOTS = [
         '<li>Play Защита: <b>«Подробнее» → «Установить без проверки»</b>.</li>' +
       '</ol>' +
       '<p class="sh-note">Загрузка не началась? <a class="ap-link" href="' + esc(REL.apk) + '" data-app-dl="Скачать ещё раз" download>Скачать ещё раз</a></p>');
+  }
+
+  /* ---------- Счётчик скачиваний (просьба владельца 07.11.2026) ----------
+     Как в Google Play: «10+», «50+», «100+», «500+», «1 000+»… — база отдаёт уже округлённое число
+     (SQL supabase/migrations/20261128_appeals.sql: iva_download_count / iva_download_hit). Видно только в мобильной
+     версии (в app.html .ap-st-dl скрыт от 1000px). Нажатие «Установить» / «Скачать» — одно скачивание с этого браузера:
+     случайный номер браузера в localStorage, без IP, cookies и данных человека. Пока SQL не выполнен или скачиваний
+     ещё нет — счётчика просто нет. */
+  var DL_DEV = 'iva_dl_dev', DL_DONE = 'iva_dl_done', DL_RE = /^[A-Za-z0-9_-]{8,64}$/;
+  function dlLabel(n){
+    n = Math.floor(Number(n) || 0);
+    return n >= 1 ? String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ' ') + '+' : '';
+  }
+  function paintDownloads(n){
+    var box = $id('stDl'), v = $id('stDlV'); if (!box || !v) return;
+    var t = dlLabel(n);
+    if (!t){ box.hidden = true; return; }
+    v.textContent = t; box.hidden = false;
+  }
+  function loadDownloads(){ rpc('iva_download_count').then(paintDownloads).catch(function(){}); }
+  function dlDevice(){
+    try {
+      var d = localStorage.getItem(DL_DEV) || '';
+      if (!DL_RE.test(d)){
+        var a = new Uint8Array(12); (window.crypto || window.msCrypto).getRandomValues(a);
+        d = 'w' + Array.prototype.map.call(a, function(x){ return ('0' + x.toString(16)).slice(-2); }).join('');
+        localStorage.setItem(DL_DEV, d);
+      }
+      return d;
+    } catch(e){ return ''; }
+  }
+  function hitDownload(){
+    try { if (localStorage.getItem(DL_DONE) === '1') return; } catch(e){ return; }
+    var d = dlDevice(); if (!d) return;
+    rpc('iva_download_hit', { p_dev: d }).then(function(n){
+      try { localStorage.setItem(DL_DONE, '1'); } catch(e){}
+      paintDownloads(n);
+    }).catch(function(){});
   }
 
   /* ---------- Оценки и отзывы ---------- */
@@ -390,6 +429,7 @@ var IVA_APP_SHOTS = [
     paintRelease(REL);
     ivaReleased().then(function(rel){ if (rel && rel.apk !== REL.apk) paintRelease(rel); else REL = rel || REL; });
     loadReleaseDate();
+    loadDownloads();
     paintStats(); paintRate(); bindReviews();
     var sess = (typeof restoreSess === 'function') ? restoreSess().catch(function(){ return false; }) : Promise.resolve(false);
     sess.then(reloadAll).then(function(){

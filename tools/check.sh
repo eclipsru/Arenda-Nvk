@@ -328,7 +328,7 @@ else
   done
   if [ "$READY" = "1" ]; then
     ok "локальный сервер поднят: http://127.0.0.1:$PORT"
-    for t in photon staff-work-browser account-switch-browser owner-work-browser owner-cabinet-browser voice-bubble-browser home-filters-browser rental-profile new-tool-prefill order-and-fee owner-orders-browser order-journal-browser live-orders-browser app-page-browser order-consent-browser reviews-system app-banner chief-and-apk empty-states-browser kind-guess-browser model-form-browser model-stage4-browser spec-filter-browser power-src-browser; do
+    for t in photon staff-work-browser account-switch-browser owner-work-browser owner-cabinet-browser voice-bubble-browser appeals-site-browser home-filters-browser rental-profile new-tool-prefill order-and-fee owner-orders-browser order-journal-browser live-orders-browser app-page-browser order-consent-browser reviews-system app-banner chief-and-apk empty-states-browser kind-guess-browser model-form-browser model-stage4-browser spec-filter-browser power-src-browser; do
       if SITE_BASE_URL="http://127.0.0.1:$PORT" node "tests/$t.cjs" >"/tmp/iva-test-$t.log" 2>&1; then ok "tests/$t.cjs"
       else bad "tests/$t.cjs"; tail -6 "/tmp/iva-test-$t.log" | sed 's/^/      /'; fi
     done
@@ -611,6 +611,17 @@ if "$PG_PY" -c "import pgserver" >/dev/null 2>&1; then
   fi
 else
   skip "стенд «Кабинет владельца»: нет pgserver (PG_PY=<python с pgserver> bash tools/check.sh)"
+fi
+
+head_ "4.5.33. Стенд «Обращения» и счётчик скачиваний (локальный PostgreSQL, SQL 20261128)"
+if "$PG_PY" -c "import pgserver" >/dev/null 2>&1; then
+  if "$PG_PY" tools/appeals-stand.py >/tmp/iva-test-appeals.log 2>&1; then
+    ok "обращения: $(grep -c '✔' /tmp/iva-test-appeals.log) проверок SQL на PostgreSQL (скачивания — один браузер один раз, «10+ / 50+», накрутка; «Позвонить» — прокат и пункт из пункта / инструмента; заявки, звонки, сообщения за день / неделю / месяц / всё время по Москве; пункт; чужое — нельзя; откат)"
+  else
+    bad "стенд «Обращения»"; grep -E '✘|Error|ERROR' /tmp/iva-test-appeals.log | head -8 | sed 's/^/      /'
+  fi
+else
+  skip "стенд «Обращения»: нет pgserver (PG_PY=<python с pgserver> bash tools/check.sh)"
 fi
 
 head_ "Итог"

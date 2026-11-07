@@ -354,7 +354,7 @@ final class IvaProkatPatch {
     // ── 10.125: кнопка «Позвонить: 8 (908) …» в карточке инструмента — в приложении 10.14 номер вшит. У инструмента
     //  с пунктом — телефон пункта (как на странице проката: пункта, иначе проката); телефона нет — кнопку прячем
     //  (есть «Спросить»). Без пункта — как было (текст и номер приложения). Кнопку не переносим, только текст и нажатие.
-    static volatile String callTel = "", nativeCall = null;
+    static volatile String callTel = "", nativeCall = null, callPoint = "";   // 10.140: callPoint — пункт для «Обращений»
     static WeakReference<View> callView = new WeakReference<View>(null);
 
     /** «Позвонить: 8 (908) 173-24-75» → «tel:89081732475» (номер приложения — для инструментов без пункта). */
@@ -373,6 +373,7 @@ final class IvaProkatPatch {
                 @Override public void onClick(View x) {
                     String t = callTel.isEmpty() ? nativeTel(nativeCall) : telUri(callTel);
                     String shown = callTel.isEmpty() ? nativeCall : callTel;
+                    if (!callTel.isEmpty()) IvaAppealsPatch.tap(a, callPoint, null, null);   // 10.140: звонок в пункт (номер приложения не считаем)
                     try { a.startActivity(new Intent(Intent.ACTION_DIAL, Uri.parse(t))); }
                     catch (Throwable e) { Toast.makeText(a, "Нечем позвонить — наберите " + shown, Toast.LENGTH_LONG).show(); }
                 }
@@ -381,10 +382,12 @@ final class IvaProkatPatch {
         String tel = p == null ? "" : p.tel;
         if (p != null && telUri(tel).isEmpty()) {                             // у пункта телефона нет — только «Спросить»
             callTel = "";
+            callPoint = "";
             b.setVisibility(View.GONE);
             return;
         }
         callTel = p == null ? "" : tel.trim();
+        callPoint = p == null || p.id == null ? "" : p.id;
         b.setText(p == null ? nativeCall : callText(tel));
         b.setVisibility(View.VISIBLE);
     }
@@ -503,6 +506,7 @@ final class IvaProkatPatch {
             list.addView(call, new LinearLayout.LayoutParams(bl));
             call.setOnClickListener(new View.OnClickListener() {
                 @Override public void onClick(View v) {
+                    IvaAppealsPatch.tap(a, p.id, null, owner);                   // 10.140: «Обращения» — звонок в пункт
                     try { a.startActivity(new Intent(Intent.ACTION_DIAL, Uri.parse(tel))); }
                     catch (Throwable e) { Toast.makeText(a, "Нечем позвонить — наберите " + p.tel, Toast.LENGTH_LONG).show(); }
                 }

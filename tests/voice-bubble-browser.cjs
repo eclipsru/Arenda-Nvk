@@ -55,10 +55,11 @@ const WAV = wav();
   assert.notEqual(st.theyBg, 'rgb(255, 143, 31)', 'чужой — не оранжевый');
   assert.equal(st.btnW, 40); assert.equal(st.btnBorder, 'rgb(255, 143, 31)'); assert.equal(st.round, '50%');
 
-  // 2) ширина волны — как в приложении: 5 с → 160, 60 с → 250 (экран 1280)
+  // 2) ширина волны — на сайте шире, чем в приложении (07.11.2026): 200 + 6 на секунду, до 400 и 62% окна: 5 с → 230, 60 с → 400 (экран 1280)
   const widths = await p.evaluate(() => Array.from(document.querySelectorAll('.vb')).map(e => [e.getAttribute('data-dur'), Math.round(e.querySelector('.vb-wave').getBoundingClientRect().width)]));
-  assert.deepEqual(widths.sort(), [['5', 160], ['60', 250]].sort(), JSON.stringify(widths));
-  assert.deepEqual(await p.evaluate(() => [IvaVoice.wavePx(0, 1080 / 2.75), IvaVoice.wavePx(10, 1080 / 2.75), IvaVoice.wavePx(120, 1080 / 2.75)]), [140, 180, 228], 'формула = voiceWavePx приложения (в dp)');
+  assert.deepEqual(widths.sort(), [['5', 230], ['60', 400]].sort(), JSON.stringify(widths));
+  assert.deepEqual(await p.evaluate(() => [IvaVoice.wavePx(0, 1080 / 2.75), IvaVoice.wavePx(10, 1080 / 2.75), IvaVoice.wavePx(120, 1080 / 2.75)]), [200, 243, 243], 'формула сайта: от 200, до 62% окна');
+  assert.ok(await p.evaluate(() => IvaVoice.wavePx(0, 1280) > 140 && IvaVoice.wavePx(10, 1280) > 180 && IvaVoice.wavePx(120, 1280) > 250), 'шире, чем в приложении 10.139 (140 / 180 / 250)');
   assert.deepEqual(await p.evaluate(() => [...document.querySelectorAll('.vb-t')].map(e => e.textContent)).then(a => a.sort()), ['0:05', '1:00']);
 
   // 3) волна по громкости — посчитана из файла и запомнена на устройстве
@@ -89,11 +90,11 @@ const WAV = wav();
   assert.equal(await p.locator('.bub.vbub.they .vb-btn').getAttribute('data-st'), 'play', 'играет одно голосовое за раз');
   await p.waitForFunction(() => document.querySelector('.bub.vbub.me .vb-btn').getAttribute('data-st') === 'play', null, { timeout: 6000 });
 
-  // 6) телефон 390 px: волна не шире 58% экрана, без прокрутки вбок
+  // 6) телефон 390 px: волна не шире 62% экрана, без прокрутки вбок
   await p.setViewportSize({ width: 390, height: 844 });
   await p.waitForTimeout(150);
   const w390 = await p.evaluate(() => Math.round(document.querySelector('.bub.vbub.me .vb-wave').getBoundingClientRect().width));
-  assert.equal(w390, Math.round(390 * 0.58));
+  assert.equal(w390, Math.round(390 * 0.62));
   assert.ok(await p.evaluate(() => document.documentElement.scrollWidth <= innerWidth), 'нет прокрутки вбок');
   await shot('voice-390');
 
@@ -108,6 +109,6 @@ const WAV = wav();
   assert.ok(acc.includes("IvaVoice.html(m)") && acc.includes("(vb ? ' vbub' : '')"), 'account.html: голосовое — тот же пузырь');
 
   assert.deepEqual(errors, []);
-  console.log('PASS: voice bubble like the app — round outlined button, real waveform (cached), duration, own bubble dark with orange border, wave width = app 10.139 formula, play / pause / end, seek by tapping the wave, one at a time, 390px without horizontal scroll');
+  console.log('PASS: voice bubble like the app — round outlined button, real waveform (cached), duration, own bubble dark with orange border, wave wider than the app (200 + 6/s, up to 400 and 62%), play / pause / end, seek by tapping the wave, one at a time, 390px without horizontal scroll');
   await b.close();
 })().catch(e => { console.error(e); process.exit(1); });

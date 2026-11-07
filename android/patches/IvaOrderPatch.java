@@ -1888,6 +1888,7 @@ public final class IvaOrderPatch {
             if (!rich) try { admPicCard(a, cards.get(i), rows.get(i), drill); } catch (Throwable ignore) {}
             if (part != null) {   // 10.68: нажатие на заявку — подробности
                 try { admMore(a, cards.get(i), part); } catch (Throwable ignore) {}
+                try { IvaAppealsPatch.chatButton(a, cards.get(i), part); } catch (Throwable ignore) {}   // 10.140: «Написать в чат» рядом с «Позвонить»
                 try { IvaRentPatch.admCard(a, cards.get(i), part); } catch (Throwable ignore) {}   // 10.77
             }
         }
@@ -2425,6 +2426,7 @@ public final class IvaOrderPatch {
                 if (!adm) try { pt = IvaOrderViewPatch.pointTel(ordVal(r.get("id"))); } catch (Throwable ignore) {}   // 10.121: телефон пункта
                 String uri = dialUri(pt.isEmpty() ? ordContact(adm, r, owners, ordProkat)[1] : pt);
                 if (uri.isEmpty()) { Toast.makeText(a, adm ? CONTACT_NO_PHONE_CLIENT : CONTACT_NO_PHONE_PROKAT, Toast.LENGTH_LONG).show(); return; }
+                if (!adm) try { IvaAppealsPatch.tap(a, null, null, ordContact(adm, r, owners, ordProkat)[0]); } catch (Throwable ignore) {}   // 10.140: «Обращения»
                 try { a.startActivity(new android.content.Intent(android.content.Intent.ACTION_DIAL, android.net.Uri.parse(uri))); }
                 catch (Throwable e) { Toast.makeText(a, "Не удалось открыть набор номера", Toast.LENGTH_SHORT).show(); }
             }

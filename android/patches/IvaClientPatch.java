@@ -1552,6 +1552,7 @@ public final class IvaClientPatch {
         try { installClientNav(a); } catch (Throwable ignore) {}
         try { IvaLogoPatch.cabinet(a); } catch (Throwable ignore) {}   // 10.113: строка «Мои инструменты проката» — есть / нет
         try { IvaShopPatch.cabinet(a); } catch (Throwable ignore) {}   // 10.116: «Настройка проката» — первой строкой кабинета (админу)
+        try { IvaAppealsPatch.cabinet(a); } catch (Throwable ignore) {}   // 10.140: «Обращения» — под «Настройкой проката»
         // 10.117: строки, зависящие от роли, — после каждой перерисовки (роль при запуске приходит позже первого показа:
         // клиентский «Архив заявок» оставался рядом со штатным админским — архив «двоился»)
         try { IvaOrderPatch.profileArchiveRow(a); } catch (Throwable ignore) {}

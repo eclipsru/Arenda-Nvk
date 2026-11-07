@@ -1965,8 +1965,8 @@ const IvaAva = (function(){
    Как IvaChatPatch.voiceBubble: слева круглая кнопка «рамкой» (▶ / ❚❚ / кольцо, пока грузится), справа волна по настоящей
    громкости записи (64 уровня, как в приложении: блоки ~10 мс → максимум модуля → среднее по участкам → 0…1, степень 0,7),
    прослушанная часть — оранжевая, под волной — длительность, во время воспроизведения — сколько прошло. Нажатие на волну —
-   перемотка. Ширина волны растёт с длительностью — та же формула, что в приложении (voiceWavePx): 140 + 4 на секунду,
-   не шире 250 и 58% экрана. Волна считается один раз, когда пузырь виден, и запоминается на этом устройстве.
+   перемотка. Ширина волны растёт с длительностью: 200 + 6 на секунду, не шире 400 и 62% окна (шире, чем в приложении,
+   — вторая просьба владельца 07.11.2026; в приложении — voiceWavePx: 140 + 4 на секунду, до 250 и 58% экрана). Волна считается один раз, когда пузырь виден, и запоминается на этом устройстве.
    Играет одно голосовое за раз; перерисовка переписки не останавливает запись, уход из переписки — останавливает. */
 const IvaVoice = (function(){
   const PEAKS = 64, BAR = 2, GAP = 1.5, WAVE_H = 24, MIN_H = 2, REST = 'rgba(255,255,255,.35)';
@@ -1975,10 +1975,11 @@ const IvaVoice = (function(){
   let au = null, cur = '', loading = false, seekTo = -1, raf = 0, mo = null, io = null, queue = [], busy = false;
 
   function durLabel(sec){ const s = Math.max(0, Math.floor(sec || 0)); return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0'); }
+  /* 07.11.2026 (вторая просьба владельца): на сайте пузырь шире, чем в приложении — 200 + 6 на секунду, до 400 и 62% окна */
   function wavePx(sec, screenW){
     const w = screenW || window.innerWidth || 1000;
-    const max = Math.max(140, Math.min(250, Math.round(w * 0.58)));
-    return Math.max(140, Math.min(max, Math.round(140 + 4 * Math.max(0, sec || 0))));
+    const max = Math.max(200, Math.min(400, Math.round(w * 0.62)));
+    return Math.max(200, Math.min(max, Math.round(200 + 6 * Math.max(0, sec || 0))));
   }
   function barCount(w){ return w > 0 ? Math.max(1, Math.floor((w + GAP) / (BAR + GAP))) : 0; }
   function bars(pk, n){
@@ -2181,4 +2182,31 @@ const IvaVoice = (function(){
   }
 
   return { html: html, wavePx: wavePx, barCount: barCount, bars: bars, peaksOf: peaksOf, durLabel: durLabel, stop: stop, scan: scan };
+})();
+
+/* ---------- «Позвонить» — для раздела «Обращения» владельца проката (просьба владельца 07.11.2026) ----------
+   Сам звонок сайт не видит — считаем нажатие «Позвонить» (и «Показать телефон») на странице инструмента: база
+   (SQL 20261128_appeals.sql, iva_call_tap) по инструменту сама находит прокат и пункт выдачи и пишет только
+   «прокат, пункт, сайт, время» — без данных человека. Один раз за показ страницы; ошибки и отсутствие SQL — молча. */
+const IvaCallTap = (function(){
+  const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  const sent = {};
+  function body(o){
+    o = o || {};
+    const tool = UUID.test(String(o.tool || '')) ? String(o.tool) : null, point = UUID.test(String(o.point || '')) ? String(o.point) : null;
+    const owner = String(o.owner || '').trim().toLowerCase() || null;
+    return (tool || point || owner) ? { p_point: point, p_tool: tool, p_owner: owner, p_src: 'site' } : null;
+  }
+  function send(o){
+    const b = body(o); if (!b) return false;
+    const key = [b.p_tool, b.p_point, b.p_owner].join('|');
+    if (sent[key]) return false;
+    sent[key] = 1;
+    try {
+      fetch(SB + '/rest/v1/rpc/iva_call_tap', { method: 'POST', keepalive: true,
+        headers: { apikey: KEY, 'Content-Type': 'application/json' }, body: JSON.stringify(b) }).catch(function(){});
+    } catch(e){}
+    return true;
+  }
+  return { send: send, body: body };
 })();
