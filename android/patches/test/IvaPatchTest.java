@@ -3476,7 +3476,7 @@ public class IvaPatchTest {
         eq("10.121: адрес функции заявок", IvaOrderViewPatch.RPC, "/rest/v1/rpc/iva_order_cards");
     }
 
-    /** 10.138 (просьба владельца №11): ФИО сотрудника — из профиля; комиссия — из базы (iva_fee_balance), как на сайте. */
+    /** 10.140: «Обращения» и нажатия «Позвонить» (разбор без org.json). */
     static void v140() {
         String P = "11111111-2222-3333-4444-555555555555", T = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee";
         eq("10.140: тело — пункт или все", IvaAppealsPatch.body(P.toUpperCase()) + "|" + IvaAppealsPatch.body("") + "|" + IvaAppealsPatch.body("x"),
@@ -3498,99 +3498,12 @@ public class IvaPatchTest {
             "{\"p_point\":\"" + P + "\",\"p_tool\":null,\"p_owner\":null,\"p_src\":\"app\"}");
         eq("10.140: по прокату, кривые данные отброшены", IvaAppealsPatch.tapBody("x", T, " Shop@Mail.RU ") + "|" + IvaAppealsPatch.tapBody("", "", "a\"b@c.ru") + "|" + IvaAppealsPatch.tapBody(null, null, null),
             "{\"p_point\":null,\"p_tool\":\"" + T + "\",\"p_owner\":\"shop@mail.ru\",\"p_src\":\"app\"}|null|null");
-        IvaPickupPatch.Point pt = new IvaPickupPatch.Point();
-        pt.city = "Новосибирск"; pt.lat = 55.0; pt.lng = 82.9;
-        eq("10.121: тело iva_pickup_first", IvaPickupPatch.firstBody(" ул. Ленина, 1 ", pt, new int[][]{{540, 540, 540, 540, 540, -1, -1}, {1140, 1140, 1140, 1140, 1140, -1, -1}}),
-            "{\"p_address\":\"ул. Ленина, 1\",\"p_city\":\"Новосибирск\",\"p_lat\":55.0,\"p_lng\":82.9,\"p_open\":[540,540,540,540,540,-1,-1],\"p_close\":[1140,1140,1140,1140,1140,-1,-1]}");
-        eq("10.121: без подсказки и графика — null", IvaPickupPatch.firstBody("Ленина 1", new IvaPickupPatch.Point(), null),
-            "{\"p_address\":\"Ленина 1\",\"p_city\":\"\",\"p_lat\":null,\"p_lng\":null,\"p_open\":null,\"p_close\":null}");
-        eq("10.121: ответ — создан ли пункт", IvaPickupPatch.firstMade("\"0b7113d1-7e62-431a-8192-5f27b473843b\"") + "|" + IvaPickupPatch.firstMade("null")
-            + "|" + IvaPickupPatch.firstMade("") + "|" + IvaPickupPatch.firstMade(null), "true|false|false|false");
-        // правки сотрудников на одобрение
-        eq("10.121: состояние правки у сотрудника", IvaStaffToolsPatch.statusText("", true, "pending") + "|" + IvaStaffToolsPatch.statusText("", false, "rejected")
-            + "|" + IvaStaffToolsPatch.statusText("pending", true, "pending") + "|" + IvaStaffToolsPatch.statusText("", true, "") + "|" + IvaStaffToolsPatch.statusText("", false, null),
-            "Правка на одобрении|Правка отклонена|На одобрении|Опубликован|Скрыт");
-        eq("10.121: подсказки правки", IvaStaffToolsPatch.statusHint("", "pending") + "|" + IvaStaffToolsPatch.statusHint("", "rejected").startsWith("Владелец отклонил правку")
-            + "|" + IvaStaffToolsPatch.statusHint("rejected", "pending").equals(IvaStaffToolsPatch.statusHint("rejected")) + "|" + IvaStaffToolsPatch.statusHint("", ""),
-            "Клиенты видят прежний вариант, пока владелец не одобрит правку|true|true|");
-        eq("10.121: что изменилось — подписи карточки", IvaStaffToolsPatch.changedText(java.util.Arrays.asList("price", "imgs", "img", "cat_label", "cat", "descr")) + "|"
-            + IvaStaffToolsPatch.changedText(new java.util.ArrayList<String>()) + "|" + IvaStaffToolsPatch.changedLabels(null).size(),
-            "Правка опубликованного инструмента. Изменено: Категория, Цена, Описание, Фото|Правка опубликованного инструмента|0");
-        eq("10.121: «Отклонить» и итог — для правки свои слова", IvaStaffToolsPatch.rejectTitle(true) + "|" + IvaStaffToolsPatch.rejectTitle(false) + "|"
-            + IvaStaffToolsPatch.reviewDone(true, true) + "|" + IvaStaffToolsPatch.reviewDone(false, true) + "|" + IvaStaffToolsPatch.reviewDone(true, false),
-            "Отклонить правку?|Отклонить инструмент?|Правка опубликована — клиенты видят новый вариант|Опубликовано — клиенты видят|Правка отклонена — клиенты видят прежний вариант");
-        eq("10.121: второй раз тот же инструмент — понятная фраза", IvaStaffToolsPatch.dbPhrase("{\"message\":\"" + IvaStaffToolsPatch.DUP_PHRASE + "\"}") + "|"
-            + IvaStaffToolsPatch.dbPhrase("other") + "|" + IvaPatch.publishError("x " + IvaStaffToolsPatch.DUP_PHRASE).equals(IvaStaffToolsPatch.DUP_PHRASE)
-,
-            IvaStaffToolsPatch.DUP_PHRASE + "|null|true");
-        eq("10.121: форма «Добавить» очищает все поля", String.join(",", IvaFormPatch.FORM_TEXTS), "atName,atPrice,atDep,atDescr,atTerms,atDelPrice");
-        // переписка пункта без сотрудника — у владельца
-        IvaStaffPatch.Staff s1 = new IvaStaffPatch.Staff(), s2 = new IvaStaffPatch.Staff(), s3 = new IvaStaffPatch.Staff();
-        s1.status = "active"; s1.r = new boolean[]{true, false, true, false}; s1.points.add("aaa");
-        s2.status = "invited"; s2.r = new boolean[]{true, true, true, true}; s2.points.add("bbb");
-        s3.status = "active"; s3.r = new boolean[]{true, true, false, true}; s3.points.add("ccc");
-        java.util.Set<String> ans = IvaProkatPatch.answeredFrom(java.util.Arrays.asList(s1, s2, s3));
-        eq("10.121: кто отвечает в чате пункта", new java.util.TreeSet<String>(ans) + "|" + IvaProkatPatch.hideForOwner(ans, "AAA") + "|"
-            + IvaProkatPatch.hideForOwner(ans, "bbb") + "|" + IvaProkatPatch.hideForOwner(null, "bbb") + "|" + IvaProkatPatch.answeredFrom(null).size(),
-            "[aaa]|true|false|true|0");
-        // заявки целиком
-        eq("10.121: тело iva_order_cards", IvaOrderViewPatch.body("client") + "|" + IvaOrderViewPatch.body("staff") + "|" + IvaOrderViewPatch.body("x"),
-            "{\"p_scope\":\"client\"}|{\"p_scope\":\"staff\"}|null");
-        eq("10.121: сутки", IvaOrderViewPatch.days(1) + "|" + IvaOrderViewPatch.days(2) + "|" + IvaOrderViewPatch.days(5) + "|" + IvaOrderViewPatch.days(11)
-            + "|" + IvaOrderViewPatch.days(21), "1 сутки|2 суток|5 суток|11 суток|21 сутки");
-        eq("10.121: деньги", IvaOrderViewPatch.money(1200) + "|" + IvaOrderViewPatch.money(400) + "|" + IvaOrderViewPatch.money(1234567) + "|"
-            + IvaOrderViewPatch.money(99.5) + "|" + IvaOrderViewPatch.money(-1) + "|" + IvaOrderViewPatch.money(Double.NaN),
-            "1\u00a0200\u00a0₽|400\u00a0₽|1\u00a0234\u00a0567\u00a0₽|99,50\u00a0₽||");
-        eq("10.121: строка инструмента и сумма", IvaOrderViewPatch.itemLine(3, 400, 2000) + "|" + IvaOrderViewPatch.itemLine(1, 400, Double.NaN) + "|"
-            + IvaOrderViewPatch.itemLine(0, Double.NaN, 0) + "|" + IvaOrderViewPatch.itemSum(3, 400) + "|" + IvaOrderViewPatch.itemSum(0, 400),
-            "3 суток · 400\u00a0₽/сутки · залог 2\u00a0000\u00a0₽|1 сутки · 400\u00a0₽/сутки||1200.0|NaN");
-        long now = 1_000_000L;
-        eq("10.121: плашка состояния", IvaOrderViewPatch.kind("new", 0, now) + "|" + IvaOrderViewPatch.kind("rented", now + 1, now) + "|"
-            + IvaOrderViewPatch.kind("rented", now, now) + "|" + IvaOrderViewPatch.kind("closed", 0, now) + "|" + IvaOrderViewPatch.kind(null, 0, now)
-            + "|" + IvaOrderViewPatch.kind("rented", 0, now), "0|1|3|2|0|1");
-        eq("10.121: состояние заявки из частей", IvaOrderViewPatch.orderStatus(java.util.Arrays.asList("closed", "rented")) + "|"
-            + IvaOrderViewPatch.orderStatus(java.util.Arrays.asList("closed", "new", "rented")) + "|" + IvaOrderViewPatch.orderStatus(java.util.Arrays.asList("closed"))
-            + "|" + IvaOrderViewPatch.orderStatus(null), "rented|new|closed|new");
-        eq("10.121: пункт выдачи строкой", IvaOrderViewPatch.pointLine("Склад", "ул. Ленина, 1", "Новосибирск") + "|"
-            + IvaOrderViewPatch.pointLine("Склад", "Новосибирск, ул. Ленина, 1", "Новосибирск") + "|" + IvaOrderViewPatch.pointLine("", "Ленина 1", "") + "|"
-            + IvaOrderViewPatch.pointLine("Склад", "", ""), "Склад · Новосибирск, ул. Ленина, 1|Склад · Новосибирск, ул. Ленина, 1|Ленина 1|Склад");
-        int[] op = {540, 540, 540, 540, 540, 600, -1}, cl = {1140, 1140, 1140, 1140, 1140, 900, -1};
-        eq("10.121: график пункта на сегодня", IvaOrderViewPatch.today(op, cl, 0) + "|" + IvaOrderViewPatch.today(op, cl, 5) + "|" + IvaOrderViewPatch.today(op, cl, 6)
-            + "|" + IvaOrderViewPatch.today(null, cl, 0) + "|" + IvaOrderViewPatch.today(op, cl, 7), "сегодня 9:00–19:00|сегодня 10:00–15:00|сегодня выходной||");
-        eq("10.121: число из базы", IvaOrderViewPatch.intOf("3", 0) + "|" + IvaOrderViewPatch.intOf(null, 7) + "|" + IvaOrderViewPatch.intOf("x", 1) + "|"
-            + IvaOrderViewPatch.intOf(2.6, 0), "3|7|1|3");
-        eq("10.121: адрес функции заявок", IvaOrderViewPatch.RPC, "/rest/v1/rpc/iva_order_cards");
-    }
-
-    /** 10.138 (просьба владельца №11): ФИО сотрудника — из профиля; комиссия — из базы (iva_fee_balance), как на сайте. */
-    static void v140() {
-        String P = "11111111-2222-3333-4444-555555555555", T = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee";
-        eq("10.140: тело — пункт или все", IvaAppealsPatch.body(P.toUpperCase()) + "|" + IvaAppealsPatch.body("") + "|" + IvaAppealsPatch.body("x"),
-            "{\"p_point\":\"" + P + "\"}|{\"p_point\":null}|{\"p_point\":null}");
-        String j = "{\"point\":null,\"orders\":{\"day\":1,\"week\":2,\"month\":3,\"all\":4},\"calls\":{\"day\":0,\"week\":5,\"month\":6,\"all\":7},"
-            + "\"msgs\":{\"day\":2,\"week\":2,\"month\":9,\"all\":-1}}";
-        int[][] r = IvaAppealsPatch.parse(j);
-        eq("10.140: разбор счётчиков", r == null ? "null" : r[0][0] + "," + r[1][1] + "," + r[2][2] + "," + r[2][3], "1,5,9,0");
-        eq("10.140: всего за период", IvaAppealsPatch.total(r, 0) + "|" + IvaAppealsPatch.total(r, 1) + "|" + IvaAppealsPatch.total(r, 3) + "|" + IvaAppealsPatch.total(null, 0), "3|9|11|0");
-        int[][] w = IvaAppealsPatch.parse("[{\"iva_appeals\":" + j + "}]");
-        eq("10.140: обёрнутый ответ", w == null ? "null" : String.valueOf(w[1][3]), "7");
-        eq("10.140: плохой ответ — null", String.valueOf(IvaAppealsPatch.parse("{\"orders\":{\"day\":1}}")) + "|" + IvaAppealsPatch.parse("{\"code\":\"PGRST202\"}") + "|" + IvaAppealsPatch.parse(null), "null|null|null");
-        eq("10.140: нет SQL", IvaAppealsPatch.noDb("404", "") + "|" + IvaAppealsPatch.noDb("400", "{\"code\":\"PGRST202\"}") + "|" + IvaAppealsPatch.noDb("400", "{\"message\":\"Это не ваш пункт выдачи\"}"), "true|true|false");
-        eq("10.140: склонение", IvaAppealsPatch.word(1) + "|" + IvaAppealsPatch.word(3) + "|" + IvaAppealsPatch.word(5) + "|" + IvaAppealsPatch.word(11) + "|" + IvaAppealsPatch.word(21) + "|" + IvaAppealsPatch.word(0),
-            "обращение|обращения|обращений|обращений|обращение|обращений");
-        eq("10.140: периоды", String.join(",", IvaAppealsPatch.PERIODS) + "|" + String.join(",", IvaAppealsPatch.KEYS), "Сегодня,Неделя,Месяц,Всё время|day,week,month,all");
-        eq("10.140: с какого времени", IvaAppealsPatch.since(1) + "|" + IvaAppealsPatch.since(2), "с понедельника|с 1-го числа");
-        eq("10.140: нажатие «Позвонить» — тело", IvaAppealsPatch.tapBody(P, null, null),
-            "{\"p_point\":\"" + P + "\",\"p_tool\":null,\"p_owner\":null,\"p_src\":\"app\"}");
-        eq("10.140: по прокату, кривые данные отброшены", IvaAppealsPatch.tapBody("x", T, " Shop@Mail.RU ") + "|" + IvaAppealsPatch.tapBody("", "", "a\"b@c.ru") + "|" + IvaAppealsPatch.tapBody(null, null, null),
-            "{\"p_point\":null,\"p_tool\":\"" + T + "\",\"p_owner\":\"shop@mail.ru\",\"p_src\":\"app\"}|null|null");
-        eq("10.140: почта клиента заявки", IvaAppealsPatch.clientMail(js("{\"orders\":{\"user_email\":\" ivan@x.ru \"}}")) + "|" + IvaAppealsPatch.clientMail(js("{\"orders\":{\"user_email\":null}}"))
-            + "|" + IvaAppealsPatch.clientMail(js("{}")) + "|" + IvaAppealsPatch.clientMail(null), "ivan@x.ru|||");
         IvaPickupPatch.Point pt = new IvaPickupPatch.Point();
         pt.name = "Склад"; pt.city = "Бердск";
         eq("10.140: подпись пункта", IvaAppealsPatch.pointName(pt) + "|" + IvaAppealsPatch.pointName(null), "Склад · Бердск|Все пункты");
     }
 
+    /** 10.138 (просьба владельца №11): ФИО сотрудника — из профиля; комиссия — из базы (iva_fee_balance), как на сайте. */
     static void v138() {
         boolean[] ok = {true, false, false, false};
         eq("10.138: форма без ФИО — имя не проверяется",
